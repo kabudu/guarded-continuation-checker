@@ -108,6 +108,27 @@ The maximum width of eight is fixed before the runs. Recognition time is include
 in the reported break-even calculation. `agreement` and `witnesses_valid` must be
 true for every admitted row.
 
+## Exact composed transitions
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  4,6,8 10,100,1000 100 8 12345 \
+  results/reproduced-temporal-compositions-phase.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  5,7 37,333,2000 100 8 987654 \
+  results/reproduced-temporal-compositions-holdout.csv
+```
+
+The width-eight gate is fixed before both runs. Recognition time includes
+template verification, exhaustive determinism checking, and jump-table
+construction. All admitted rows must report `agreement=true`,
+`witnesses_valid=true`, and `status=ok`.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

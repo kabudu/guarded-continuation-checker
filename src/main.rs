@@ -8008,6 +8008,67 @@ fn temporal_vocabulary_formula(
     Ok((width * (horizon + 1), formula))
 }
 
+fn composed_transition_dependencies(
+    kind: &str,
+    width: usize,
+    output: usize,
+) -> Result<Vec<usize>, String> {
+    if width < 4 {
+        return Err("composed transitions require width at least 4".to_string());
+    }
+    let count = if kind == "cascade4" { 4 } else { 3 };
+    match kind {
+        "majority3" | "mux3" | "mixed3" | "cascade4" => {
+            Ok((0..count).map(|offset| (output + offset) % width).collect())
+        }
+        _ => Err(format!("unknown composed transition kind: {kind}")),
+    }
+}
+
+fn evaluate_composed_transition(kind: &str, values: &[bool]) -> bool {
+    match kind {
+        "majority3" => (values[0] & values[1]) | (values[0] & values[2]) | (values[1] & values[2]),
+        "mux3" => {
+            if values[0] {
+                values[1]
+            } else {
+                values[2]
+            }
+        }
+        "mixed3" => (values[0] ^ values[1]) & !values[2],
+        "cascade4" => (values[0] ^ values[1]) ^ (values[2] & values[3]),
+        _ => unreachable!("validated composed transition kind"),
+    }
+}
+
+fn temporal_composition_formula(
+    kind: &str,
+    width: usize,
+    horizon: usize,
+) -> Result<(usize, Vec<Clause>), String> {
+    let mut formula = Vec::new();
+    for time in 0..horizon {
+        let current = time * width;
+        let next = (time + 1) * width;
+        for output in 0..width {
+            let dependencies = composed_transition_dependencies(kind, width, output)?;
+            for pattern in 0..(1usize << dependencies.len()) {
+                let mut values = Vec::with_capacity(dependencies.len());
+                let mut literals = Vec::with_capacity(dependencies.len() + 1);
+                for (position, &dependency) in dependencies.iter().enumerate() {
+                    let value = (pattern >> position) & 1 == 1;
+                    values.push(value);
+                    literals.push((current + dependency, !value));
+                }
+                literals.push((next + output, evaluate_composed_transition(kind, &values)));
+                literals.sort_unstable();
+                formula.push(Clause(literals));
+            }
+        }
+    }
+    Ok((width * (horizon + 1), formula))
+}
+
 fn normalized_temporal_steps(
     formula: &[Clause],
     width: usize,
@@ -8152,7 +8213,6 @@ fn recognize_temporal_rules(
 struct RecognizedTemporalKernel {
     width: usize,
     horizon: usize,
-    rules: Vec<TemporalRule>,
     jumps: Vec<Vec<usize>>,
 }
 
@@ -8168,6 +8228,51 @@ impl RecognizedTemporalKernel {
                 }
             }
         }
+        Ok(Self::from_base(width, horizon, base))
+    }
+
+    fn recognize_exact_composition(
+        formula: &[Clause],
+        width: usize,
+        horizon: usize,
+    ) -> Result<Self, String> {
+        let steps = normalized_temporal_steps(formula, width, horizon)?;
+        let template = steps
+            .first()
+            .ok_or_else(|| "temporal horizon must be positive".to_string())?;
+        if steps.iter().skip(1).any(|step| step != template) {
+            return Err("transition template is not repeated exactly".to_string());
+        }
+        let states = 1usize << width;
+        let mut base = vec![0usize; states];
+        for current in 0..states {
+            let mut target = None;
+            for next in 0..states {
+                let satisfies = template.iter().all(|clause| {
+                    clause.iter().any(|&(variable, positive)| {
+                        let value = if variable < width {
+                            (current >> variable) & 1 == 1
+                        } else {
+                            (next >> (variable - width)) & 1 == 1
+                        };
+                        value == positive
+                    })
+                });
+                if satisfies {
+                    if target.replace(next).is_some() {
+                        return Err(format!(
+                            "transition is nondeterministic for state {current}"
+                        ));
+                    }
+                }
+            }
+            base[current] =
+                target.ok_or_else(|| format!("transition is incomplete for state {current}"))?;
+        }
+        Ok(Self::from_base(width, horizon, base))
+    }
+
+    fn from_base(width: usize, horizon: usize, base: Vec<usize>) -> Self {
         let levels = (usize::BITS - horizon.max(1).leading_zeros()) as usize;
         let mut jumps = vec![base];
         for level in 1..levels {
@@ -8175,12 +8280,11 @@ impl RecognizedTemporalKernel {
             let next = previous.iter().map(|&state| previous[state]).collect();
             jumps.push(next);
         }
-        Ok(Self {
+        Self {
             width,
             horizon,
-            rules,
             jumps,
-        })
+        }
     }
 
     fn advance(&self, mut state: usize, mut steps: usize) -> usize {
@@ -8216,13 +8320,7 @@ impl RecognizedTemporalKernel {
                 assignment.push((state >> bit) & 1 == 1);
             }
             if time < self.horizon {
-                let mut next = 0usize;
-                for (output, rule) in self.rules.iter().enumerate() {
-                    if rule.evaluate(state) {
-                        next |= 1usize << output;
-                    }
-                }
-                state = next;
+                state = self.jumps[0][state];
             }
         }
         Some(assignment)
@@ -8513,6 +8611,126 @@ fn benchmark_temporal_vocabulary(
                     .map_err(|error| format!("flush temporal vocabulary output: {error}"))?;
                 println!(
                     "temporal vocabulary kind={kind} width={width} horizon={horizon} vars={vars} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn benchmark_temporal_compositions(
+    kinds: &[&str],
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    max_width: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create temporal composition output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,max_width,admitted,recognition_ns,jump_table_states,kernel_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,break_even_queries,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write temporal composition header: {error}"))?;
+    for &kind in kinds {
+        for &width in widths {
+            for &horizon in horizons {
+                let vars = width * (horizon + 1);
+                if width > max_width {
+                    writeln!(file, "{kind},{width},{horizon},{vars},0,{query_count},{max_width},false,0,0,0,0,0,0,0,0,true,true,width_gate")
+                        .map_err(|error| format!("write composition rejection: {error}"))?;
+                    continue;
+                }
+                let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
+                let recognition_start = Instant::now();
+                let kernel = RecognizedTemporalKernel::recognize_exact_composition(
+                    &formula, width, horizon,
+                )?;
+                let recognition_ns = recognition_start.elapsed().as_nanos();
+                let jump_table_states: usize = kernel.jumps.iter().map(Vec::len).sum();
+                let mut rng =
+                    Rng(seed ^ (width as u64).rotate_left(11) ^ (horizon as u64).rotate_left(29));
+                let mut queries = Vec::with_capacity(query_count);
+                for query_index in 0..query_count {
+                    let mut assumptions = vec![None; vars];
+                    for _ in 0..(2 + query_index % 5) {
+                        let variable = rng.below(vars);
+                        assumptions[variable] = Some(rng.next() & 1 == 1);
+                    }
+                    queries.push(assumptions);
+                }
+                let kernel_start = Instant::now();
+                let kernel_answers: Vec<_> = queries
+                    .iter()
+                    .map(|assumptions| kernel.query(assumptions))
+                    .collect();
+                let kernel_ns = kernel_start.elapsed().as_nanos();
+
+                let mut solver = Solver::new();
+                add_to_varisat(&mut solver, &formula);
+                let varisat_start = Instant::now();
+                let varisat_answers: Vec<Option<Vec<bool>>> = queries
+                    .iter()
+                    .map(|assumptions| {
+                        let literals: Vec<_> = assumptions
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(variable, value)| {
+                                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                            })
+                            .collect();
+                        solver.assume(&literals);
+                        if !solver.solve().expect("temporal composition Varisat solve") {
+                            return None;
+                        }
+                        let mut assignment = vec![false; vars];
+                        for literal in solver.model().expect("temporal composition model") {
+                            if literal.var().index() < vars {
+                                assignment[literal.var().index()] = literal.is_positive();
+                            }
+                        }
+                        Some(assignment)
+                    })
+                    .collect();
+                let varisat_ns = varisat_start.elapsed().as_nanos();
+                let agreement = kernel_answers
+                    .iter()
+                    .zip(&varisat_answers)
+                    .all(|(left, right)| left.is_some() == right.is_some());
+                let witnesses_valid =
+                    kernel_answers
+                        .iter()
+                        .zip(&queries)
+                        .all(|(answer, assumptions)| {
+                            answer.as_ref().is_none_or(|assignment| {
+                                satisfies(&formula, assignment)
+                                    && assumptions.iter().enumerate().all(|(variable, required)| {
+                                        required.is_none_or(|value| assignment[variable] == value)
+                                    })
+                            })
+                        });
+                let sat_queries = kernel_answers
+                    .iter()
+                    .filter(|answer| answer.is_some())
+                    .count();
+                let unsat_queries = query_count - sat_queries;
+                let kernel_per_query = kernel_ns as f64 / query_count as f64;
+                let varisat_per_query = varisat_ns as f64 / query_count as f64;
+                let speedup = varisat_per_query / kernel_per_query.max(1.0);
+                let break_even = if varisat_per_query > kernel_per_query {
+                    (recognition_ns as f64 / (varisat_per_query - kernel_per_query)).ceil() as u128
+                } else {
+                    u128::MAX
+                };
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{max_width},true,{recognition_ns},{jump_table_states},{kernel_per_query:.3},{varisat_per_query:.3},{speedup:.6},{break_even},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                    .map_err(|error| format!("write temporal composition row: {error}"))?;
+                file.flush()
+                    .map_err(|error| format!("flush temporal composition output: {error}"))?;
+                println!(
+                    "temporal composition kind={kind} width={width} horizon={horizon} vars={vars} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
                 );
             }
         }
@@ -10009,6 +10227,37 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .parse::<u64>()
                 .map_err(|_| "invalid vocabulary seed".to_string())?;
             benchmark_temporal_vocabulary(
+                &kinds,
+                &widths,
+                &horizons,
+                queries,
+                max_width,
+                seed,
+                Path::new(&args[7]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-temporal-compositions" => {
+            if args.len() != 8 {
+                return Err("usage: continuation-quotient-sat benchmark-temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
+            }
+            let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
+            if kinds.is_empty() {
+                return Err("composition kind grid must not be empty".to_string());
+            }
+            let widths = parse_size_grid(&args[2], "width")?;
+            let horizons = parse_size_grid(&args[3], "horizon")?;
+            let queries = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid composition query count".to_string())?
+                .max(1);
+            let max_width = args[5]
+                .parse::<usize>()
+                .map_err(|_| "invalid composition width gate".to_string())?;
+            let seed = args[6]
+                .parse::<u64>()
+                .map_err(|_| "invalid composition seed".to_string())?;
+            benchmark_temporal_compositions(
                 &kinds,
                 &widths,
                 &horizons,
@@ -17469,5 +17718,53 @@ mod tests {
         let second_step_clause = 2 * width;
         formula[second_step_clause].0[0].1 = !formula[second_step_clause].0[0].1;
         assert!(RecognizedTemporalKernel::recognize(&formula, width, horizon).is_err());
+    }
+
+    #[test]
+    fn exact_composition_recognizer_handles_functions_outside_fixed_vocabulary() {
+        let mut rng = Rng(0xc0de_0517);
+        for kind in ["majority3", "mux3", "mixed3", "cascade4"] {
+            let width = 4;
+            let horizon = 6;
+            let (vars, formula) = temporal_composition_formula(kind, width, horizon).unwrap();
+            assert!(RecognizedTemporalKernel::recognize(&formula, width, horizon).is_err());
+            let kernel =
+                RecognizedTemporalKernel::recognize_exact_composition(&formula, width, horizon)
+                    .unwrap();
+            for _ in 0..50 {
+                let mut assumptions = vec![None; vars];
+                for _ in 0..5 {
+                    assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                }
+                let kernel_answer = kernel.query(&assumptions);
+                let mut constrained = formula.clone();
+                constrained.extend(assumptions.iter().enumerate().filter_map(
+                    |(variable, value)| value.map(|value| Clause(vec![(variable, value)])),
+                ));
+                let varisat_answer = solve_with_varisat(vars, &constrained);
+                assert_eq!(kernel_answer.is_some(), varisat_answer.is_some(), "{kind}");
+                if let Some(assignment) = kernel_answer {
+                    assert!(satisfies(&formula, &assignment), "{kind}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn exact_composition_recognizer_rejects_nondeterminism() {
+        let width = 4;
+        let horizon = 3;
+        let (_, mut formula) = temporal_composition_formula("majority3", width, horizon).unwrap();
+        let unconstrained_outputs: BTreeSet<_> = (1..=horizon).map(|time| time * width).collect();
+        formula.retain(|clause| {
+            !clause
+                .0
+                .iter()
+                .any(|(variable, _)| unconstrained_outputs.contains(variable))
+        });
+        assert!(
+            RecognizedTemporalKernel::recognize_exact_composition(&formula, width, horizon)
+                .is_err()
+        );
     }
 }
