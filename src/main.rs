@@ -7825,6 +7825,267 @@ fn benchmark_continuation_reuse(
     Ok(())
 }
 
+fn temporal_memory_formula(width: usize, horizon: usize) -> (usize, Vec<Clause>) {
+    let vars = width * (horizon + 1);
+    let mut formula = Vec::with_capacity(2 * width * horizon);
+    for time in 0..horizon {
+        for bit in 0..width {
+            let current = time * width + bit;
+            let next = (time + 1) * width + bit;
+            // next == current
+            formula.push(Clause(vec![(current, false), (next, true)]));
+            formula.push(Clause(vec![(current, true), (next, false)]));
+        }
+    }
+    (vars, formula)
+}
+
+fn compile_temporal_memory_continuation(width: usize, horizon: usize) -> CompiledContinuation {
+    assert!(width < usize::BITS as usize);
+    let vars = width * (horizon + 1);
+    let order: Vec<_> = (0..vars).collect();
+    let live_states = 1usize << width;
+    let contradiction = live_states;
+    let mut transitions = Vec::with_capacity(vars);
+
+    // The first frame chooses the remembered state.
+    for bit in 0..width {
+        let states = 1usize << bit;
+        let mut layer = Vec::with_capacity(states);
+        for state in 0..states {
+            layer.push([state, state | (1usize << bit)]);
+        }
+        transitions.push(layer);
+    }
+
+    // Every later frame must reproduce it. A mismatching observation enters the
+    // unique contradictory continuation, which remains contradictory forever.
+    for _time in 1..=horizon {
+        for bit in 0..width {
+            let mut layer = Vec::with_capacity(live_states + 1);
+            for state in 0..live_states {
+                let required = (state >> bit) & 1;
+                layer.push(if required == 0 {
+                    [state, contradiction]
+                } else {
+                    [contradiction, state]
+                });
+            }
+            layer.push([contradiction, contradiction]);
+            transitions.push(layer);
+        }
+    }
+    let mut terminal_sat = vec![true; live_states + 1];
+    terminal_sat[contradiction] = false;
+    CompiledContinuation {
+        order,
+        transitions,
+        residual_layers: Vec::new(),
+        terminal_sat,
+        peak_classes: live_states + 1,
+    }
+}
+
+fn query_temporal_memory_kernel(
+    width: usize,
+    horizon: usize,
+    assumptions: &[Option<bool>],
+) -> Option<Vec<bool>> {
+    let vars = width * (horizon + 1);
+    debug_assert_eq!(assumptions.len(), vars);
+    let mut state = vec![None; width];
+    for (variable, required) in assumptions.iter().enumerate() {
+        let Some(value) = required else {
+            continue;
+        };
+        let bit = variable % width;
+        if state[bit].is_some_and(|known| known != *value) {
+            return None;
+        }
+        state[bit] = Some(*value);
+    }
+    let state: Vec<_> = state
+        .into_iter()
+        .map(|value| value.unwrap_or(false))
+        .collect();
+    let mut assignment = Vec::with_capacity(vars);
+    for _ in 0..=horizon {
+        assignment.extend_from_slice(&state);
+    }
+    Some(assignment)
+}
+
+fn parse_size_grid(value: &str, name: &str) -> Result<Vec<usize>, String> {
+    let values: Result<Vec<_>, _> = value
+        .split(',')
+        .filter(|item| !item.is_empty())
+        .map(str::parse::<usize>)
+        .collect();
+    let values = values.map_err(|_| format!("invalid {name} grid"))?;
+    if values.is_empty() || values.contains(&0) {
+        return Err(format!("{name} grid must contain positive integers"));
+    }
+    Ok(values)
+}
+
+fn benchmark_continuation_temporal_phase(
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    max_bound_bits: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("create temporal output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "width,horizon,variables,clauses,queries,max_bound_bits,frontier_bound_bits,admitted,peak_classes,total_layer_states,compile_ns,quotient_ns_per_query,kernel_ns_per_query,incremental_varisat_ns_per_query,quotient_speedup_vs_incremental,kernel_speedup_vs_incremental,quotient_break_even_queries,sat_queries,unsat_queries,agreement,kernel_agreement,witnesses_valid,kernel_witnesses_valid")
+        .map_err(|error| format!("write temporal header: {error}"))?;
+
+    for &width in widths {
+        for &horizon in horizons {
+            let vars = width * (horizon + 1);
+            let clause_count = 2 * width * horizon;
+            let bound_bits = width + 1;
+            if bound_bits > max_bound_bits {
+                writeln!(file, "{width},{horizon},{vars},{clause_count},{query_count},{max_bound_bits},{bound_bits},false,0,0,0,0,0,0,0,0,0,0,true,true,true,true,true")
+                    .map_err(|error| format!("write rejected temporal row: {error}"))?;
+                continue;
+            }
+
+            let (_, formula) = temporal_memory_formula(width, horizon);
+            let compile_start = Instant::now();
+            let compiled = compile_temporal_memory_continuation(width, horizon);
+            let compile_ns = compile_start.elapsed().as_nanos();
+            let total_layer_states: usize =
+                compiled.transitions.iter().map(Vec::len).sum::<usize>()
+                    + compiled.terminal_sat.len();
+            let mut rng = Rng(seed ^ (width as u64).rotate_left(17) ^ horizon as u64);
+            let mut queries = Vec::with_capacity(query_count);
+            for query_index in 0..query_count {
+                let mut assumptions = vec![None; vars];
+                let observed_bits = 1 + query_index % width.min(4);
+                let mut chosen = BTreeSet::new();
+                while chosen.len() < observed_bits {
+                    chosen.insert(rng.below(width));
+                }
+                for bit in chosen {
+                    let first_time = rng.below(horizon + 1);
+                    let mut second_time = rng.below(horizon + 1);
+                    if horizon > 0 && second_time == first_time {
+                        second_time = (second_time + 1) % (horizon + 1);
+                    }
+                    assumptions[first_time * width + bit] = Some(rng.next() & 1 == 1);
+                    assumptions[second_time * width + bit] = Some(rng.next() & 1 == 1);
+                }
+                queries.push(assumptions);
+            }
+
+            let mut scratch = ContinuationScratch::new(&compiled);
+            let quotient_start = Instant::now();
+            let quotient_answers: Vec<_> = queries
+                .iter()
+                .map(|assumptions| query_continuation(&compiled, assumptions, &mut scratch))
+                .collect();
+            let quotient_ns = quotient_start.elapsed().as_nanos();
+
+            let kernel_start = Instant::now();
+            let kernel_answers: Vec<_> = queries
+                .iter()
+                .map(|assumptions| query_temporal_memory_kernel(width, horizon, assumptions))
+                .collect();
+            let kernel_ns = kernel_start.elapsed().as_nanos();
+
+            let mut solver = Solver::new();
+            add_to_varisat(&mut solver, &formula);
+            let varisat_start = Instant::now();
+            let varisat_answers: Vec<Option<Vec<bool>>> = queries
+                .iter()
+                .map(|assumptions| {
+                    let literals: Vec<_> = assumptions
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(variable, value)| {
+                            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                        })
+                        .collect();
+                    solver.assume(&literals);
+                    if !solver.solve().expect("temporal Varisat solve") {
+                        return None;
+                    }
+                    let mut assignment = vec![false; vars];
+                    for literal in solver.model().expect("temporal Varisat model") {
+                        if literal.var().index() < vars {
+                            assignment[literal.var().index()] = literal.is_positive();
+                        }
+                    }
+                    Some(assignment)
+                })
+                .collect();
+            let varisat_ns = varisat_start.elapsed().as_nanos();
+
+            let agreement = quotient_answers
+                .iter()
+                .zip(&varisat_answers)
+                .all(|(left, right)| left.is_some() == right.is_some());
+            let kernel_agreement = kernel_answers
+                .iter()
+                .zip(&varisat_answers)
+                .all(|(left, right)| left.is_some() == right.is_some());
+            let witnesses_valid =
+                quotient_answers
+                    .iter()
+                    .zip(&queries)
+                    .all(|(answer, assumptions)| {
+                        answer.as_ref().is_none_or(|assignment| {
+                            satisfies(&formula, assignment)
+                                && assumptions.iter().enumerate().all(|(variable, required)| {
+                                    required.is_none_or(|value| assignment[variable] == value)
+                                })
+                        })
+                    });
+            let kernel_witnesses_valid =
+                kernel_answers
+                    .iter()
+                    .zip(&queries)
+                    .all(|(answer, assumptions)| {
+                        answer.as_ref().is_none_or(|assignment| {
+                            satisfies(&formula, assignment)
+                                && assumptions.iter().enumerate().all(|(variable, required)| {
+                                    required.is_none_or(|value| assignment[variable] == value)
+                                })
+                        })
+                    });
+            let sat_queries = quotient_answers
+                .iter()
+                .filter(|answer| answer.is_some())
+                .count();
+            let unsat_queries = query_count - sat_queries;
+            let quotient_per_query = quotient_ns as f64 / query_count as f64;
+            let kernel_per_query = kernel_ns as f64 / query_count as f64;
+            let varisat_per_query = varisat_ns as f64 / query_count as f64;
+            let quotient_speedup = varisat_per_query / quotient_per_query.max(1.0);
+            let kernel_speedup = varisat_per_query / kernel_per_query.max(1.0);
+            let break_even = if varisat_per_query > quotient_per_query {
+                (compile_ns as f64 / (varisat_per_query - quotient_per_query)).ceil() as u128
+            } else {
+                u128::MAX
+            };
+            writeln!(file, "{width},{horizon},{vars},{},{query_count},{max_bound_bits},{bound_bits},true,{},{total_layer_states},{compile_ns},{quotient_per_query:.3},{kernel_per_query:.3},{varisat_per_query:.3},{quotient_speedup:.6},{kernel_speedup:.6},{break_even},{sat_queries},{unsat_queries},{agreement},{kernel_agreement},{witnesses_valid},{kernel_witnesses_valid}", formula.len(), compiled.peak_classes)
+                .map_err(|error| format!("write temporal row: {error}"))?;
+            file.flush()
+                .map_err(|error| format!("flush temporal output: {error}"))?;
+            println!(
+                "temporal phase width={width} horizon={horizon} vars={vars} admitted=true peak={} quotient_speedup={quotient_speedup:.3} kernel_speedup={kernel_speedup:.3} agreement={agreement} kernel_agreement={kernel_agreement} witnesses_valid={witnesses_valid} kernel_witnesses_valid={kernel_witnesses_valid}",
+                compiled.peak_classes
+            );
+        }
+    }
+    Ok(())
+}
+
 fn benchmark_continuation_dimacs(
     input: &Path,
     query_count: usize,
@@ -9264,6 +9525,32 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 queries,
                 max_assumptions,
                 Path::new(&args[7]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-continuation-temporal-phase" => {
+            if args.len() != 7 {
+                return Err("usage: continuation-quotient-sat benchmark-continuation-temporal-phase WIDTHS HORIZONS QUERIES MAX_BOUND_BITS SEED OUTPUT.csv (WIDTHS/HORIZONS are comma-separated)".to_string());
+            }
+            let widths = parse_size_grid(&args[1], "width")?;
+            let horizons = parse_size_grid(&args[2], "horizon")?;
+            let queries = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid temporal query count".to_string())?
+                .max(1);
+            let max_bound_bits = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid temporal bound".to_string())?;
+            let seed = args[5]
+                .parse::<u64>()
+                .map_err(|_| "invalid temporal seed".to_string())?;
+            benchmark_continuation_temporal_phase(
+                &widths,
+                &horizons,
+                queries,
+                max_bound_bits,
+                seed,
+                Path::new(&args[6]),
             )?;
             Ok(true)
         }
@@ -16614,6 +16901,66 @@ mod tests {
                 assert_eq!(cumulative_answer.is_some(), full_answer.is_some());
                 if let Some(assignment) = cumulative_answer {
                     assert!(satisfies(&formula, &assignment));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn temporal_memory_queries_preserve_state_across_horizon() {
+        let width = 3;
+        let horizon = 5;
+        let (vars, formula) = temporal_memory_formula(width, horizon);
+        let order: Vec<_> = (0..vars).collect();
+        let compiled = compile_continuation(&formula, &order);
+        let summarized = compile_temporal_memory_continuation(width, horizon);
+        let mut scratch = ContinuationScratch::new(&compiled);
+        let mut summarized_scratch = ContinuationScratch::new(&summarized);
+
+        let mut consistent = vec![None; vars];
+        consistent[1] = Some(true);
+        consistent[horizon * width + 1] = Some(true);
+        let assignment = query_continuation(&compiled, &consistent, &mut scratch).unwrap();
+        let summarized_assignment =
+            query_continuation(&summarized, &consistent, &mut summarized_scratch).unwrap();
+        let kernel_assignment = query_temporal_memory_kernel(width, horizon, &consistent).unwrap();
+        assert!(satisfies(&formula, &assignment));
+        assert!(satisfies(&formula, &summarized_assignment));
+        assert!(satisfies(&formula, &kernel_assignment));
+        assert!(assignment[1]);
+        assert!(assignment[horizon * width + 1]);
+
+        let mut conflicting = consistent;
+        conflicting[horizon * width + 1] = Some(false);
+        assert!(query_continuation(&compiled, &conflicting, &mut scratch).is_none());
+        assert!(query_continuation(&summarized, &conflicting, &mut summarized_scratch).is_none());
+        assert!(query_temporal_memory_kernel(width, horizon, &conflicting).is_none());
+    }
+
+    #[test]
+    fn temporal_kernel_matches_generic_continuations_on_small_grid() {
+        let mut rng = Rng(0x5eed_2024);
+        for width in 1..=4 {
+            for horizon in 1..=4 {
+                let (vars, formula) = temporal_memory_formula(width, horizon);
+                let order: Vec<_> = (0..vars).collect();
+                let generic = compile_continuation(&formula, &order);
+                let mut scratch = ContinuationScratch::new(&generic);
+                for _ in 0..100 {
+                    let mut assumptions = vec![None; vars];
+                    for _ in 0..4 {
+                        let variable = rng.below(vars);
+                        assumptions[variable] = Some(rng.next() & 1 == 1);
+                    }
+                    let generic_answer = query_continuation(&generic, &assumptions, &mut scratch);
+                    let kernel_answer = query_temporal_memory_kernel(width, horizon, &assumptions);
+                    assert_eq!(generic_answer.is_some(), kernel_answer.is_some());
+                    if let Some(assignment) = kernel_answer {
+                        assert!(satisfies(&formula, &assignment));
+                        assert!(assumptions.iter().enumerate().all(|(variable, required)| {
+                            required.is_none_or(|value| assignment[variable] == value)
+                        }));
+                    }
                 }
             }
         }

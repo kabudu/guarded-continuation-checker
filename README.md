@@ -24,6 +24,10 @@ Validated findings:
   multiplicity required for safe suffix-only deletion repair.
 - Automatic selector policies did not generalize out of sample; CDCL remains the
   default for unknown workloads.
+- On a temporal equality model, a repeated-transition kernel preserved the exact
+  quotient and full witness recovery without replaying identical layers. It beat
+  persistent Varisat at every admitted phase point; this is a deliberately narrow
+  model-checking subclass, not a generic SAT result.
 - All 40 bundled conventional SATLIB cases were rejected by the conservative
   gate. The technique therefore targets a narrow structured regime.
 
@@ -58,6 +62,18 @@ witness validity.
   benchmark-continuation-reuse \
   banded-planted 100 4 98302 20000 results/local-reuse.csv
 ```
+
+## Temporal phase experiment
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-continuation-temporal-phase \
+  2,4,6 10,100,1000,10000 100 12 424242 results/local-temporal.csv
+```
+
+This controlled family holds a `width`-bit state constant across a `horizon` of
+local CNF transitions. The benchmark reports both a dense quotient traversal and
+an exact repeated-transition kernel against persistent Varisat.
 
 ## Repository layout
 

@@ -64,6 +64,30 @@ Deletion rows intentionally rebuild from layer zero. Do not interpret the older
 v1 deletion summary from the historical experiment repository as a valid generic
 speed result; `continuation-repairs-summary-v2.csv` is authoritative.
 
+## Temporal bounded-width phase
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-continuation-temporal-phase \
+  2,4,6 10,100,1000,10000 100 12 424242 \
+  results/reproduced-temporal-long.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-continuation-temporal-phase \
+  8 10,100,1000 100 12 424242 \
+  results/reproduced-temporal-width8.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-continuation-temporal-phase \
+  10 10,100 100 12 424242 \
+  results/reproduced-temporal-width10.csv
+```
+
+The 12-bit limit is fixed for the complete sweep. Widths 12--20 are recorded as
+structurally rejected rather than trial-solved. The dense quotient and exact
+repeated-transition kernel use identical queries and are independently checked
+against persistent Varisat.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
