@@ -8210,6 +8210,150 @@ fn recognize_temporal_rules(
     Ok(rules)
 }
 
+#[derive(Clone)]
+struct LocalBooleanFunction {
+    dependencies: Vec<usize>,
+    table: Vec<bool>,
+}
+
+fn recover_local_transition(
+    formula: &[Clause],
+    width: usize,
+    horizon: usize,
+) -> Result<Vec<LocalBooleanFunction>, String> {
+    let steps = normalized_temporal_steps(formula, width, horizon)?;
+    let template = steps
+        .first()
+        .ok_or_else(|| "temporal horizon must be positive".to_string())?;
+    if steps.iter().skip(1).any(|step| step != template) {
+        return Err("transition template is not repeated exactly".to_string());
+    }
+    let mut output_clauses: Vec<Vec<&Vec<Literal>>> = vec![Vec::new(); width];
+    for clause in template {
+        let mut outputs: Vec<_> = clause
+            .iter()
+            .filter(|&&(variable, _)| variable >= width)
+            .map(|&(variable, _)| variable - width)
+            .collect();
+        outputs.sort_unstable();
+        outputs.dedup();
+        if outputs.len() != 1 {
+            return Err(
+                "local recovery requires every clause to constrain exactly one output".to_string(),
+            );
+        }
+        output_clauses[outputs[0]].push(clause);
+    }
+    output_clauses
+        .iter()
+        .enumerate()
+        .map(|(output, clauses)| {
+            if clauses.is_empty() {
+                return Err(format!("output {output} has no defining clauses"));
+            }
+            let output_variable = width + output;
+            let mut dependencies: Vec<_> = clauses
+                .iter()
+                .flat_map(|clause| clause.iter())
+                .filter_map(|&(variable, _)| (variable < width).then_some(variable))
+                .collect();
+            dependencies.sort_unstable();
+            dependencies.dedup();
+            let mut table = Vec::with_capacity(1usize << dependencies.len());
+            for pattern in 0..(1usize << dependencies.len()) {
+                let valid: Vec<_> = [false, true]
+                    .into_iter()
+                    .filter(|&output_value| {
+                        clauses.iter().all(|clause| {
+                            clause.iter().any(|&(variable, positive)| {
+                                let value = if variable == output_variable {
+                                    output_value
+                                } else {
+                                    let position = dependencies
+                                        .iter()
+                                        .position(|&dependency| dependency == variable)
+                                        .expect("local dependency");
+                                    (pattern >> position) & 1 == 1
+                                };
+                                value == positive
+                            })
+                        })
+                    })
+                    .collect();
+                if valid.len() != 1 {
+                    return Err(format!(
+                        "output {output} is not a total deterministic local function"
+                    ));
+                }
+                table.push(valid[0]);
+            }
+            Ok(LocalBooleanFunction {
+                dependencies,
+                table,
+            })
+        })
+        .collect()
+}
+
+struct SymbolicTemporalTransition {
+    width: usize,
+    horizon: usize,
+    functions: Vec<LocalBooleanFunction>,
+}
+
+impl SymbolicTemporalTransition {
+    fn recognize(formula: &[Clause], width: usize, horizon: usize) -> Result<Self, String> {
+        Ok(Self {
+            width,
+            horizon,
+            functions: recover_local_transition(formula, width, horizon)?,
+        })
+    }
+
+    fn next_state(&self, state: &[bool]) -> Vec<bool> {
+        self.functions
+            .iter()
+            .map(|function| {
+                let pattern = function.dependencies.iter().enumerate().fold(
+                    0usize,
+                    |pattern, (position, &dependency)| {
+                        pattern | (usize::from(state[dependency]) << position)
+                    },
+                );
+                function.table[pattern]
+            })
+            .collect()
+    }
+
+    fn query(&self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
+        let mut state: Vec<_> = assumptions
+            .iter()
+            .take(self.width)
+            .copied()
+            .collect::<Option<_>>()?;
+        let mut assignment = Vec::with_capacity(self.width * (self.horizon + 1));
+        for time in 0..=self.horizon {
+            if (0..self.width).any(|bit| {
+                assumptions[time * self.width + bit].is_some_and(|required| required != state[bit])
+            }) {
+                return None;
+            }
+            assignment.extend_from_slice(&state);
+            if time < self.horizon {
+                state = self.next_state(&state);
+            }
+        }
+        Some(assignment)
+    }
+
+    fn representation_entries(&self) -> usize {
+        self.functions
+            .iter()
+            .map(|function| function.dependencies.len() + function.table.len())
+            .sum()
+    }
+}
+
 struct RecognizedTemporalKernel {
     width: usize,
     horizon: usize,
@@ -8827,6 +8971,113 @@ fn benchmark_temporal_compositions(
                 println!(
                     "temporal composition recognizer={} kind={kind} width={width} horizon={horizon} vars={vars} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
                     if local_recovery { "local" } else { "exact" }
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_symbolic_temporal_compositions(
+    kinds: &[&str],
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    max_width: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create symbolic temporal output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,max_width,admitted,recognition_ns,representation_entries,symbolic_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write symbolic temporal header: {error}"))?;
+    for &kind in kinds {
+        for &width in widths {
+            for &horizon in horizons {
+                let vars = width * (horizon + 1);
+                if width > max_width {
+                    writeln!(file, "{kind},{width},{horizon},{vars},0,{query_count},{max_width},false,0,0,0,0,0,0,0,true,true,width_gate")
+                        .map_err(|error| format!("write symbolic rejection: {error}"))?;
+                    continue;
+                }
+                let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
+                let recognition_start = Instant::now();
+                let transition = SymbolicTemporalTransition::recognize(&formula, width, horizon)?;
+                let recognition_ns = recognition_start.elapsed().as_nanos();
+                let representation_entries = transition.representation_entries();
+                let mut rng =
+                    Rng(seed ^ (width as u64).rotate_left(17) ^ (horizon as u64).rotate_left(37));
+                let mut queries = Vec::with_capacity(query_count);
+                for query_index in 0..query_count {
+                    let mut assumptions = vec![None; vars];
+                    for value in assumptions.iter_mut().take(width) {
+                        *value = Some(rng.next() & 1 == 1);
+                    }
+                    for _ in 0..(1 + query_index % 4) {
+                        assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                    }
+                    queries.push(assumptions);
+                }
+                let symbolic_start = Instant::now();
+                let symbolic_answers: Vec<_> = queries
+                    .iter()
+                    .map(|assumptions| transition.query(assumptions))
+                    .collect();
+                let symbolic_ns = symbolic_start.elapsed().as_nanos();
+
+                let mut solver = Solver::new();
+                add_to_varisat(&mut solver, &formula);
+                let varisat_start = Instant::now();
+                let varisat_answers: Vec<_> = queries
+                    .iter()
+                    .map(|assumptions| {
+                        let literals: Vec<_> = assumptions
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(variable, value)| {
+                                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                            })
+                            .collect();
+                        solver.assume(&literals);
+                        solver.solve().expect("symbolic temporal Varisat solve")
+                    })
+                    .collect();
+                let varisat_ns = varisat_start.elapsed().as_nanos();
+                let agreement = symbolic_answers
+                    .iter()
+                    .zip(&varisat_answers)
+                    .all(|(answer, &sat)| answer.is_some() == sat);
+                let witnesses_valid =
+                    symbolic_answers
+                        .iter()
+                        .zip(&queries)
+                        .all(|(answer, assumptions)| {
+                            answer.as_ref().is_none_or(|assignment| {
+                                satisfies(&formula, assignment)
+                                    && assumptions.iter().enumerate().all(|(variable, required)| {
+                                        required.is_none_or(|value| assignment[variable] == value)
+                                    })
+                            })
+                        });
+                let sat_queries = symbolic_answers
+                    .iter()
+                    .filter(|answer| answer.is_some())
+                    .count();
+                let unsat_queries = query_count - sat_queries;
+                let symbolic_per_query = symbolic_ns as f64 / query_count as f64;
+                let varisat_per_query = varisat_ns as f64 / query_count as f64;
+                let speedup = varisat_per_query / symbolic_per_query.max(1.0);
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{max_width},true,{recognition_ns},{representation_entries},{symbolic_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                    .map_err(|error| format!("write symbolic temporal row: {error}"))?;
+                file.flush()
+                    .map_err(|error| format!("flush symbolic temporal output: {error}"))?;
+                println!(
+                    "symbolic temporal kind={kind} width={width} horizon={horizon} entries={representation_entries} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
                 );
             }
         }
@@ -10333,7 +10584,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
-        "benchmark-temporal-compositions" | "benchmark-local-temporal-compositions" => {
+        "benchmark-temporal-compositions"
+        | "benchmark-local-temporal-compositions"
+        | "benchmark-symbolic-temporal-compositions" => {
             if args.len() != 8 {
                 return Err("usage: continuation-quotient-sat benchmark-{local-}temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
             }
@@ -10353,16 +10606,28 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let seed = args[6]
                 .parse::<u64>()
                 .map_err(|_| "invalid composition seed".to_string())?;
-            benchmark_temporal_compositions(
-                &kinds,
-                &widths,
-                &horizons,
-                queries,
-                max_width,
-                seed,
-                Path::new(&args[7]),
-                args[0] == "benchmark-local-temporal-compositions",
-            )?;
+            if args[0] == "benchmark-symbolic-temporal-compositions" {
+                benchmark_symbolic_temporal_compositions(
+                    &kinds,
+                    &widths,
+                    &horizons,
+                    queries,
+                    max_width,
+                    seed,
+                    Path::new(&args[7]),
+                )?;
+            } else {
+                benchmark_temporal_compositions(
+                    &kinds,
+                    &widths,
+                    &horizons,
+                    queries,
+                    max_width,
+                    seed,
+                    Path::new(&args[7]),
+                    args[0] == "benchmark-local-temporal-compositions",
+                )?;
+            }
             Ok(true)
         }
         "benchmark-continuation-repairs" => {
@@ -17907,5 +18172,53 @@ mod tests {
             RecognizedTemporalKernel::recognize_local_composition(&formula, width, horizon)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn symbolic_transition_replays_without_exponential_state_table() {
+        let width = 24;
+        let horizon = 40;
+        let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let transition = SymbolicTemporalTransition::recognize(&formula, width, horizon).unwrap();
+        assert_eq!(transition.representation_entries(), width * (4 + 16));
+        let mut assumptions = vec![None; vars];
+        for (bit, value) in assumptions.iter_mut().take(width).enumerate() {
+            *value = Some(bit % 3 == 0);
+        }
+        let assignment = transition.query(&assumptions).unwrap();
+        assert!(satisfies(&formula, &assignment));
+    }
+
+    #[test]
+    fn symbolic_transition_matches_varisat_with_observations() {
+        let width = 7;
+        let horizon = 12;
+        let (vars, formula) = temporal_composition_formula("mux3", width, horizon).unwrap();
+        let transition = SymbolicTemporalTransition::recognize(&formula, width, horizon).unwrap();
+        let mut rng = Rng(0x5a8b_011c);
+        for _ in 0..50 {
+            let mut assumptions = vec![None; vars];
+            for value in assumptions.iter_mut().take(width) {
+                *value = Some(rng.next() & 1 == 1);
+            }
+            for _ in 0..4 {
+                assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+            }
+            let symbolic = transition.query(&assumptions);
+            let mut constrained = formula.clone();
+            constrained.extend(
+                assumptions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(variable, value)| {
+                        value.map(|value| Clause(vec![(variable, value)]))
+                    }),
+            );
+            let varisat = solve_with_varisat(vars, &constrained);
+            assert_eq!(symbolic.is_some(), varisat.is_some());
+            if let Some(assignment) = symbolic {
+                assert!(satisfies(&formula, &assignment));
+            }
+        }
     }
 }

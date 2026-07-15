@@ -136,6 +136,28 @@ This is a meaningful model-checking improvement for repeated deterministic
 systems with locally defined outputs. The next boundary is avoiding the explicit
 `2^width` state table, for example through a symbolic transition representation.
 
+## Symbolic local-function replay
+
+The next prototype removes the explicit `2^width` state table entirely. It keeps
+the recovered local truth tables as a symbolic transition circuit and evaluates
+only the requested trajectory. With bounded dependency size, representation is
+linear in width and independent of the total state-space size.
+
+The 24-case phase grid covered widths 16 and 32 and horizons 10, 100, and 500.
+All answers agreed with persistent Varisat and all complete trajectories
+validated, with query speedups from 12.87x to 100.37x. The unseen 36-case holdout
+covered widths 24, 48, and 64 and horizons 37, 333, and 1,000. It achieved 36/36
+agreement and witness validity, with speedups from 18.42x to 184.18x. The largest
+formula contained 64,064 variables. At width 64, representation used only 704
+entries for the three-input families or 1,280 for the four-input family; an
+explicit state table would require `2^64` states.
+
+This result applies to deterministic queries with a fully specified initial
+state, optionally plus observations at later times. It reconstructs the complete
+trajectory in `O(width * horizon)` time. It does not yet solve existential search
+over a partially specified initial state, nor provide logarithmic-horizon jumps.
+The next boundary is symbolic function composition or symbolic preimage search.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
