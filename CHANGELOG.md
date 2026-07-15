@@ -13,6 +13,8 @@
   width gate, including compositions outside the named rule vocabulary.
 - Recover separable output functions locally from repeated CNF, eliminating the
   exhaustive current/next state-pair scan while preserving complete witnesses.
+- Replay recovered local transition functions without an explicit `2^width`
+  state table for fully specified deterministic initial states.
 
 ## 0.1.0 - 2026-07-15
 

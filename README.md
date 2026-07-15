@@ -127,6 +127,19 @@ Semantic recovery costs roughly the sum of the local truth-table sizes rather
 than `2^(2*width)`. The explicit jump kernel still contains `2^width` states, so
 this removes one exponential factor but does not make unbounded-width SAT easy.
 
+To avoid that explicit state table for deterministic trajectory queries:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  16,32 10,100,500 50 32 4242001 results/symbolic-replay.csv
+```
+
+This representation stores only the recovered local functions and replays them
+directly. It scales linearly with width for bounded local dependency, but requires
+a fully specified initial state and takes linear time in the horizon.
+
 ## Repository layout
 
 - `src/main.rs`: solver, generators, benchmarks, and regression tests.

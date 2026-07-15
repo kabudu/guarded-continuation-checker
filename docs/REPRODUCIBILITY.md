@@ -148,6 +148,25 @@ construction. All admitted rows must report `agreement=true`,
 Both grids were fixed before their runs. Every one of the 72 data rows must
 report `agreement=true`, `witnesses_valid=true`, and `status=ok`.
 
+## Symbolic local-function replay
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  16,32 10,100,500 50 32 4242001 \
+  results/reproduced-symbolic-temporal-compositions-phase.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  24,48,64 37,333,1000 50 64 9001009 \
+  results/reproduced-symbolic-temporal-compositions-holdout.csv
+```
+
+Queries fully assign the initial frame and add up to four later observations.
+Every admitted row must report agreement and witness validity.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
