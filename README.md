@@ -36,6 +36,9 @@ Validated findings:
   enumerates the repeated one-step CNF relation, admits it only when every current
   state has exactly one successor, and rejects incomplete, nondeterministic, or
   changing transitions.
+- A local-cone recognizer removes that state-pair scan when every one-step clause
+  constrains exactly one output. It recovers each output truth table independently
+  and rejects cross-output clauses.
 - All 40 bundled conventional SATLIB cases were rejected by the conservative
   gate. The technique therefore targets a narrow structured regime.
 
@@ -110,6 +113,19 @@ This path recognizes the complete deterministic one-step relation rather than
 matching individual output functions to the fixed vocabulary. Its exhaustive
 recognition cost is exponential in twice the state width, so width eight remains
 an explicit hard gate.
+
+For separable output cones, use the cheaper recognizer:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-local-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  4,8,12 10,100,1000 100 12 24680 results/local-cones.csv
+```
+
+Semantic recovery costs roughly the sum of the local truth-table sizes rather
+than `2^(2*width)`. The explicit jump kernel still contains `2^width` states, so
+this removes one exponential factor but does not make unbounded-width SAT easy.
 
 ## Repository layout
 
