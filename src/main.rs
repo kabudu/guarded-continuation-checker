@@ -3798,7 +3798,7 @@ fn osmotic_helper_score(
     frequency: usize,
 ) -> f64 {
     let graph = primal_graph(vars, clauses);
-    let (a, b) = (pair.0 .0, pair.1 .0);
+    let (a, b) = (pair.0.0, pair.1.0);
     let shared = graph[a].intersection(&graph[b]).count();
     let pressure_difference = graph[a].len().abs_diff(graph[b].len());
     frequency as f64 * (shared + 1) as f64 / (pressure_difference + 1) as f64
@@ -3816,7 +3816,7 @@ fn warp_helper_score(
         rank[variable] = level;
     }
     let graph = primal_graph(vars, clauses);
-    let (a, b) = (pair.0 .0, pair.1 .0);
+    let (a, b) = (pair.0.0, pair.1.0);
     let forward_span = rank[a].abs_diff(rank[b]) + 1;
     let shared = graph[a].intersection(&graph[b]).count() + 1;
     frequency as f64 * forward_span as f64 * shared as f64
@@ -4045,7 +4045,7 @@ fn predicted_joint_expand(
         if !improves {
             break;
         }
-        if pair.0 .0 >= vars || pair.1 .0 >= vars {
+        if pair.0.0 >= vars || pair.1.0 >= vars {
             recursive_accepted += 1;
         }
         current = next;
@@ -4130,8 +4130,8 @@ fn scored_scent_candidates(
     let mut candidates: Vec<_> = recurring_pair_candidates(clauses)
         .into_iter()
         .map(|(pair, frequency)| {
-            let a = pair.0 .0;
-            let b = pair.1 .0;
+            let a = pair.0.0;
+            let b = pair.1.0;
             let shared = graph[a].intersection(&graph[b]).count();
             let distinct = graph[a].symmetric_difference(&graph[b]).count();
             let score =
@@ -4182,8 +4182,8 @@ fn helper_gate_features(
     let overlap = selected
         .iter()
         .map(|candidate| {
-            let a = candidate.0 .0 .0;
-            let b = candidate.0 .1 .0;
+            let a = candidate.0.0.0;
+            let b = candidate.0.1.0;
             graph[a].intersection(&graph[b]).count() as f64
                 / graph[a].union(&graph[b]).count().max(1) as f64
         })
@@ -4191,8 +4191,8 @@ fn helper_gate_features(
         / selected.len().max(1) as f64;
     let mut variable_uses = HashMap::new();
     for candidate in &selected {
-        *variable_uses.entry(candidate.0 .0 .0).or_insert(0usize) += 1;
-        *variable_uses.entry(candidate.0 .1 .0).or_insert(0usize) += 1;
+        *variable_uses.entry(candidate.0.0.0).or_insert(0usize) += 1;
+        *variable_uses.entry(candidate.0.1.0).or_insert(0usize) += 1;
     }
     let interacting_uses = variable_uses
         .values()
@@ -4330,20 +4330,20 @@ fn helper_graph_features_with_params(
     for (index, &(pair, frequency, score)) in candidates.iter().enumerate() {
         let node = candidate_offset + index;
         state[node][2] = 1.0;
-        state[node][3] = (scent[pair.0 .0] + scent[pair.1 .0]) / (2.0 * scent_mean.max(1e-9));
+        state[node][3] = (scent[pair.0.0] + scent[pair.1.0]) / (2.0 * scent_mean.max(1e-9));
         state[node][4] = frequency as f64 / max_frequency.max(1) as f64;
         state[node][5] = score / max_score.max(1e-9);
-        state[node][6] = f64::from(pair.0 .1 == pair.1 .1);
+        state[node][6] = f64::from(pair.0.1 == pair.1.1);
         state[node][7] = 1.0;
-        for variable in [pair.0 .0, pair.1 .0] {
+        for variable in [pair.0.0, pair.1.0] {
             adjacency[node].insert(variable);
             adjacency[variable].insert(node);
         }
     }
     for a in 0..candidates.len() {
         for b in a + 1..candidates.len() {
-            let a_vars = [candidates[a].0 .0 .0, candidates[a].0 .1 .0];
-            let b_vars = [candidates[b].0 .0 .0, candidates[b].0 .1 .0];
+            let a_vars = [candidates[a].0.0.0, candidates[a].0.1.0];
+            let b_vars = [candidates[b].0.0.0, candidates[b].0.1.0];
             if a_vars.iter().any(|variable| b_vars.contains(variable)) {
                 adjacency[candidate_offset + a].insert(candidate_offset + b);
                 adjacency[candidate_offset + b].insert(candidate_offset + a);
@@ -4594,8 +4594,8 @@ fn helper_features(
         rank[variable] = position;
     }
     let interaction: HashMap<_, _> = interactions.iter().copied().collect();
-    let a = pair.0 .0;
-    let b = pair.1 .0;
+    let a = pair.0.0;
+    let b = pair.1.0;
     let common = graph[a].intersection(&graph[b]).count();
     [
         1.0,
@@ -4604,7 +4604,7 @@ fn helper_features(
         (graph[a].len() + graph[b].len()) as f64 / (2 * vars.max(1)) as f64,
         common as f64 / vars.max(1) as f64,
         (interaction.get(&pair).copied().unwrap_or(0) as f64 + 1.0).ln(),
-        f64::from(pair.0 .1 == pair.1 .1),
+        f64::from(pair.0.1 == pair.1.1),
     ]
 }
 
@@ -4781,7 +4781,9 @@ fn choose_order(name: &str, vars: usize, clauses: &[Clause], seed: u64) -> Vec<u
         "min-degree" => min_degree_order(vars, clauses),
         "min-fill" => min_fill_order(vars, clauses),
         "flower-outside-in" => flower_outside_in_order(vars),
-        _ => panic!("unknown order: {name}; use natural, random, min-degree, min-fill, or flower-outside-in"),
+        _ => panic!(
+            "unknown order: {name}; use natural, random, min-degree, min-fill, or flower-outside-in"
+        ),
     }
 }
 
@@ -4902,7 +4904,7 @@ fn feedback_expand(
                     frequency as f64
                         + literal_scores.get(&pair.0).copied().unwrap_or(0.0)
                         + literal_scores.get(&pair.1).copied().unwrap_or(0.0)
-                        + if feedback_enabled && (pair.0 .0 >= vars || pair.1 .0 >= vars) {
+                        + if feedback_enabled && (pair.0.0 >= vars || pair.1.0 >= vars) {
                             0.5
                         } else {
                             0.0
@@ -4939,7 +4941,7 @@ fn feedback_expand(
         let Some((pair, next, next_result)) = best else {
             break;
         };
-        if pair.0 .0 >= vars || pair.1 .0 >= vars {
+        if pair.0.0 >= vars || pair.1.0 >= vars {
             recursive_accepted += 1;
         }
         let gain = (result.allocated_nodes - next_result.allocated_nodes) as f64
@@ -5015,7 +5017,7 @@ fn bdd_frontier_expand(
         let Some((pair, next, next_result)) = best else {
             break;
         };
-        if pair.0 .0 >= vars || pair.1 .0 >= vars {
+        if pair.0.0 >= vars || pair.1.0 >= vars {
             recursive_accepted += 1;
         }
         current = next;
@@ -5074,7 +5076,7 @@ fn greedy_expand(
         let Some((pair, next, next_result)) = best else {
             break;
         };
-        if pair.0 .0 >= vars || pair.1 .0 >= vars {
+        if pair.0.0 >= vars || pair.1.0 >= vars {
             recursive_accepted += 1;
         }
         current = next;
@@ -6468,7 +6470,10 @@ fn benchmark_width_strategy_search(
     }
     file.flush()
         .map_err(|error| format!("flush strategy output: {error}"))?;
-    println!("width strategy search family={family} strategies={strategy} original_width={original_width} output={}", output.display());
+    println!(
+        "width strategy search family={family} strategies={strategy} original_width={original_width} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -6653,7 +6658,10 @@ fn benchmark_frontier_width_strategies(
     }
     file.flush()
         .map_err(|error| format!("flush frontier output: {error}"))?;
-    println!("frontier width search family={family} seed={formula_seed} strategies={strategy} original_width={original_width} output={}", output.display());
+    println!(
+        "frontier width search family={family} seed={formula_seed} strategies={strategy} original_width={original_width} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -6878,7 +6886,10 @@ fn benchmark_direct_bdd_network_expansion(
     }
     file.flush()
         .map_err(|error| format!("flush direct network output: {error}"))?;
-    println!("direct BDD network expansion family={family} seed={formula_seed} strategies={strategy} original_width={original_width} output={}", output.display());
+    println!(
+        "direct BDD network expansion family={family} seed={formula_seed} strategies={strategy} original_width={original_width} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -6965,7 +6976,10 @@ fn benchmark_finite_domain_groupings(
     }
     file.flush()
         .map_err(|error| format!("flush grouping output: {error}"))?;
-    println!("finite-domain grouping family={family} seed={formula_seed} strategies={strategies} original_width={original_width} output={}", output.display());
+    println!(
+        "finite-domain grouping family={family} seed={formula_seed} strategies={strategies} original_width={original_width} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -7092,7 +7106,11 @@ fn benchmark_affine_basis_strategies(
     }
     file.flush()
         .map_err(|error| format!("flush affine output: {error}"))?;
-    println!("affine basis search family={family} seed={formula_seed} strategies={strategies} original_width={original_width} exact_graphs={} output={}", exact_cache.len(), output.display());
+    println!(
+        "affine basis search family={family} seed={formula_seed} strategies={strategies} original_width={original_width} exact_graphs={} output={}",
+        exact_cache.len(),
+        output.display()
+    );
     Ok(())
 }
 
@@ -7115,11 +7133,7 @@ fn tensor_flatten_rank(values: &[i64; 8], axis: usize) -> usize {
     let dependent = (0..4).all(|left| {
         (0..4).all(|right| rows[0][left] * rows[1][right] == rows[0][right] * rows[1][left])
     });
-    if dependent {
-        1
-    } else {
-        2
-    }
+    if dependent { 1 } else { 2 }
 }
 
 fn benchmark_holographic_tensor_strategies(
@@ -7209,7 +7223,10 @@ fn benchmark_holographic_tensor_strategies(
     }
     file.flush()
         .map_err(|error| format!("flush tensor output: {error}"))?;
-    println!("holographic tensor search family={family} seed={formula_seed} strategies={strategies} width={width} output={}", output.display());
+    println!(
+        "holographic tensor search family={family} seed={formula_seed} strategies={strategies} width={width} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -7311,7 +7328,10 @@ fn benchmark_holographic_network_cost(
         format!("family,formula_seed,strategy,clauses,variables,baseline_clause_nonzeros,transformed_clause_nonzeros,baseline_equality_nonzeros,transformed_equality_nonzeros,equality_dense_entries,max_equality_nonzeros,baseline_total_nonzeros,transformed_total_nonzeros,total_ratio\n{family},{formula_seed},{strategy},{},{vars},{baseline_clause_nonzeros},{clause_nonzeros},{baseline_equality_nonzeros},{equality_nonzeros},{equality_dense_entries},{max_equality_nonzeros},{baseline_total},{transformed_total},{:.6}\n", formula.len(), transformed_total as f64 / baseline_total.max(1) as f64),
     )
     .map_err(|error| format!("write network cost output: {error}"))?;
-    println!("holographic network cost family={family} seed={formula_seed} strategy={strategy} clause_nonzeros={clause_nonzeros} equality_nonzeros={equality_nonzeros} total_ratio={:.6}", transformed_total as f64 / baseline_total.max(1) as f64);
+    println!(
+        "holographic network cost family={family} seed={formula_seed} strategy={strategy} clause_nonzeros={clause_nonzeros} equality_nonzeros={equality_nonzeros} total_ratio={:.6}",
+        transformed_total as f64 / baseline_total.max(1) as f64
+    );
     Ok(())
 }
 
@@ -7797,7 +7817,11 @@ fn benchmark_continuation_reuse(
         format!("family,formula_seed,variables,queries,max_assumptions,sat_queries,unsat_queries,frontier_bound_bits,peak_classes,compile_ns,quotient_query_ns,fresh_varisat_query_ns,incremental_varisat_query_ns,quotient_ns_per_query,fresh_varisat_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_fresh,speedup_vs_incremental,break_even_fresh_queries,break_even_incremental_queries,agreement,incremental_agreement,witnesses_valid,incremental_witnesses_valid\n{family},{formula_seed},{vars},{query_count},{max_assumptions},{sat_queries},{unsat_queries},{bound_bits},{},{compile_ns},{quotient_query_ns},{varisat_query_ns},{incremental_query_ns},{quotient_per_query:.3},{varisat_per_query:.3},{incremental_per_query:.3},{:.6},{:.6},{break_even_queries},{incremental_break_even_queries},{agreement},{incremental_agreement},{witnesses_valid},{incremental_witnesses_valid}\n", compiled.peak_classes, varisat_per_query / quotient_per_query.max(1.0), incremental_per_query / quotient_per_query.max(1.0)),
     )
     .map_err(|error| format!("write reuse output: {error}"))?;
-    println!("continuation reuse family={family} seed={formula_seed} vars={vars} queries={query_count} max_assumptions={max_assumptions} sat={sat_queries} unsat={unsat_queries} peak={} agreement={agreement} incremental_agreement={incremental_agreement} witnesses_valid={witnesses_valid} incremental_witnesses_valid={incremental_witnesses_valid} output={}", compiled.peak_classes, output.display());
+    println!(
+        "continuation reuse family={family} seed={formula_seed} vars={vars} queries={query_count} max_assumptions={max_assumptions} sat={sat_queries} unsat={unsat_queries} peak={} agreement={agreement} incremental_agreement={incremental_agreement} witnesses_valid={witnesses_valid} incremental_witnesses_valid={incremental_witnesses_valid} output={}",
+        compiled.peak_classes,
+        output.display()
+    );
     Ok(())
 }
 
@@ -7916,7 +7940,13 @@ fn benchmark_continuation_dimacs(
         format!("{header}{},{vars},{},{query_count},{max_assumptions},min-fill,{order_ns},{bound_bits},{profile_state_bound},true,{},{total_layer_states},{transition_bytes},{repair_residual_bytes},{compile_ns},{quotient_per_query:.3},{varisat_per_query:.3},{:.6},{break_even_queries},{sat_queries},{unsat_queries},{agreement},{witnesses_valid}\n", input.display(), formula.len(), compiled.peak_classes, varisat_per_query / quotient_per_query.max(1.0)),
     )
     .map_err(|error| format!("write DIMACS output: {error}"))?;
-    println!("continuation DIMACS input={} admitted=true peak={} speedup={:.6} agreement={agreement} witnesses_valid={witnesses_valid} output={}", input.display(), compiled.peak_classes, varisat_per_query / quotient_per_query.max(1.0), output.display());
+    println!(
+        "continuation DIMACS input={} admitted=true peak={} speedup={:.6} agreement={agreement} witnesses_valid={witnesses_valid} output={}",
+        input.display(),
+        compiled.peak_classes,
+        varisat_per_query / quotient_per_query.max(1.0),
+        output.display()
+    );
     Ok(())
 }
 
@@ -8089,7 +8119,10 @@ fn benchmark_continuation_repairs(
     }
     file.flush()
         .map_err(|error| format!("flush repair output: {error}"))?;
-    println!("continuation repairs family={family} seed={formula_seed} vars={vars} updates={update_count} queries={query_count} output={}", output.display());
+    println!(
+        "continuation repairs family={family} seed={formula_seed} vars={vars} updates={update_count} queries={query_count} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -8343,7 +8376,11 @@ fn benchmark_continuation_hybrid(
         .map_err(|error| format!("write hybrid total: {error}"))?;
     file.flush()
         .map_err(|error| format!("flush hybrid output: {error}"))?;
-    println!("continuation hybrid family={family} seed={formula_seed} vars={vars} phases={phase_count} speedup={:.6} agreement={all_agree} witnesses_valid={all_valid} output={}", baseline_total_ns as f64 / hybrid_total_ns.max(1) as f64, output.display());
+    println!(
+        "continuation hybrid family={family} seed={formula_seed} vars={vars} phases={phase_count} speedup={:.6} agreement={all_agree} witnesses_valid={all_valid} output={}",
+        baseline_total_ns as f64 / hybrid_total_ns.max(1) as f64,
+        output.display()
+    );
     Ok(())
 }
 
@@ -8456,7 +8493,10 @@ fn benchmark_continuation_quotients(
     }
     file.flush()
         .map_err(|error| format!("flush quotient output: {error}"))?;
-    println!("continuation quotient search family={family} seed={formula_seed} strategies={strategies} reference_width={reference_width} reference_kind={reference_kind} output={}", output.display());
+    println!(
+        "continuation quotient search family={family} seed={formula_seed} strategies={strategies} reference_width={reference_width} reference_kind={reference_kind} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -8551,7 +8591,10 @@ fn benchmark_bdd_network_expansion(
     }
     file.flush()
         .map_err(|error| format!("flush network output: {error}"))?;
-    println!("BDD network expansion family={family} seed={formula_seed} strategies={strategy} original_width={original_width} output={}", output.display());
+    println!(
+        "BDD network expansion family={family} seed={formula_seed} strategies={strategy} original_width={original_width} output={}",
+        output.display()
+    );
     Ok(())
 }
 
@@ -8622,7 +8665,16 @@ fn benchmark_query_calibrated(
         ),
     )
     .map_err(|error| format!("write calibrated output: {error}"))?;
-    println!("calibrated selected={} helper_wins={} evaluation_completed={}/{} baseline_completed={}/{} worker_delta_ms={:.3}", selected, helper_wins, evaluation_completed, evaluation_queries, baseline_completed, total, (calibrated_worker_ns as i128 - baseline_worker_ns as i128) as f64 / 1e6);
+    println!(
+        "calibrated selected={} helper_wins={} evaluation_completed={}/{} baseline_completed={}/{} worker_delta_ms={:.3}",
+        selected,
+        helper_wins,
+        evaluation_completed,
+        evaluation_queries,
+        baseline_completed,
+        total,
+        (calibrated_worker_ns as i128 - baseline_worker_ns as i128) as f64 / 1e6
+    );
     Ok(())
 }
 
@@ -9778,9 +9830,16 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let start = Instant::now();
             let artifact = compile_safe_artifact(vars, &clauses, branch_cap, node_limit, time_ms);
             save_compiled_artifact(Path::new(&args[2]), &artifact)?;
-            println!("compiled vars={} core_vars={} removed={} seeds={} clauses={} core_clauses={} elapsed_ms={:.3}",
-                vars, artifact.core_vars, vars - artifact.core_vars, artifact.seeds.len(), clauses.len(),
-                artifact.core_clauses.len(), start.elapsed().as_secs_f64() * 1000.0);
+            println!(
+                "compiled vars={} core_vars={} removed={} seeds={} clauses={} core_clauses={} elapsed_ms={:.3}",
+                vars,
+                artifact.core_vars,
+                vars - artifact.core_vars,
+                artifact.seeds.len(),
+                clauses.len(),
+                artifact.core_clauses.len(),
+                start.elapsed().as_secs_f64() * 1000.0
+            );
             Ok(true)
         }
         "inspect" => {
@@ -9788,11 +9847,22 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: layered-sat inspect MODEL.lsat".to_string());
             }
             let artifact = load_compiled_artifact(Path::new(&args[1]))?;
-            println!("original_vars={} core_vars={} removed={} removed_fraction={:.6} original_clauses={} core_clauses={} seeds={} bdd_nodes={}",
-                artifact.original_vars, artifact.core_vars, artifact.original_vars - artifact.core_vars,
-                (artifact.original_vars - artifact.core_vars) as f64 / artifact.original_vars.max(1) as f64,
-                artifact.original_clauses.len(), artifact.core_clauses.len(), artifact.seeds.len(),
-                artifact.seeds.iter().map(|seed| seed.manager.nodes.len()).sum::<usize>());
+            println!(
+                "original_vars={} core_vars={} removed={} removed_fraction={:.6} original_clauses={} core_clauses={} seeds={} bdd_nodes={}",
+                artifact.original_vars,
+                artifact.core_vars,
+                artifact.original_vars - artifact.core_vars,
+                (artifact.original_vars - artifact.core_vars) as f64
+                    / artifact.original_vars.max(1) as f64,
+                artifact.original_clauses.len(),
+                artifact.core_clauses.len(),
+                artifact.seeds.len(),
+                artifact
+                    .seeds
+                    .iter()
+                    .map(|seed| seed.manager.nodes.len())
+                    .sum::<usize>()
+            );
             print!("retained_original_variables=");
             for (index, variable) in artifact.core_to_original.iter().enumerate() {
                 if index > 0 {
@@ -10038,120 +10108,216 @@ fn main() {
             "family,order,vars,clauses,seed,sat,bdd_solver_us,bdd_allocated_nodes,witness_valid"
         );
     } else if engine == "expand-bdd" {
-        println!("family,order,vars,clauses,seed,helpers,expanded_vars,expanded_clauses,original_us,expanded_us,original_nodes,expanded_nodes,node_ratio,sat_equivalent,projected_witness_valid");
+        println!(
+            "family,order,vars,clauses,seed,helpers,expanded_vars,expanded_clauses,original_us,expanded_us,original_nodes,expanded_nodes,node_ratio,sat_equivalent,projected_witness_valid"
+        );
     } else if engine == "greedy-expand-bdd" || engine == "aligned-greedy-expand" {
-        println!("family,order,vars,clauses,seed,budget,accepted,recursive_accepted,candidates_tested,beneficial_trials,expanded_vars,expanded_clauses,original_nodes,greedy_nodes,node_ratio,original_us,final_us,search_us,sat_equivalent,projected_witness_valid");
+        println!(
+            "family,order,vars,clauses,seed,budget,accepted,recursive_accepted,candidates_tested,beneficial_trials,expanded_vars,expanded_clauses,original_nodes,greedy_nodes,node_ratio,original_us,final_us,search_us,sat_equivalent,projected_witness_valid"
+        );
     } else if engine == "feedback-expand-bdd" || engine == "shortlist-expand-bdd" {
-        println!("family,order,vars,clauses,seed,budget,accepted,recursive_accepted,candidates_tested,beneficial_trials,expanded_vars,expanded_clauses,original_nodes,feedback_nodes,node_ratio,original_us,final_us,search_us,sat_equivalent,projected_witness_valid");
+        println!(
+            "family,order,vars,clauses,seed,budget,accepted,recursive_accepted,candidates_tested,beneficial_trials,expanded_vars,expanded_clauses,original_nodes,feedback_nodes,node_ratio,original_us,final_us,search_us,sat_equivalent,projected_witness_valid"
+        );
     } else if engine == "bdd-frontier-expand" {
-        println!("family,order,vars,clauses,seed,budget,accepted,recursive_accepted,candidates_tested,beneficial_trials,expanded_vars,expanded_clauses,original_nodes,frontier_nodes,node_ratio,original_us,final_us,search_us,sat_equivalent,projected_witness_valid");
+        println!(
+            "family,order,vars,clauses,seed,budget,accepted,recursive_accepted,candidates_tested,beneficial_trials,expanded_vars,expanded_clauses,original_nodes,frontier_nodes,node_ratio,original_us,final_us,search_us,sat_equivalent,projected_witness_valid"
+        );
     } else if engine == "bdd-order-sweep" {
-        println!("family,elimination_order,bdd_order,vars,clauses,seed,sat,bdd_us,allocated_nodes,witness_valid");
+        println!(
+            "family,elimination_order,bdd_order,vars,clauses,seed,sat,bdd_us,allocated_nodes,witness_valid"
+        );
     } else if engine == "music-order-sweep" {
-        println!("family,elimination_order,musical_characteristic,vars,clauses,seed,sat,bdd_us,allocated_nodes,node_ratio_vs_aligned,witness_valid");
+        println!(
+            "family,elimination_order,musical_characteristic,vars,clauses,seed,sat,bdd_us,allocated_nodes,node_ratio_vs_aligned,witness_valid"
+        );
     } else if engine == "learned-phrase" {
-        println!("family,vars,clauses,training_trials,test_seed,phrase_length,rule,training_mean_ratio,test_nodes,aligned_nodes,test_ratio,witness_valid");
+        println!(
+            "family,vars,clauses,training_trials,test_seed,phrase_length,rule,training_mean_ratio,test_nodes,aligned_nodes,test_ratio,witness_valid"
+        );
     } else if engine == "learned-scent" {
-        println!("family,vars,clauses,training_trials,test_seed,phrase_length,hops,direction,training_mean_ratio,test_nodes,aligned_nodes,test_ratio,witness_valid");
+        println!(
+            "family,vars,clauses,training_trials,test_seed,phrase_length,hops,direction,training_mean_ratio,test_nodes,aligned_nodes,test_ratio,witness_valid"
+        );
     } else if engine == "scent-universal" {
-        println!("test_family,train_vars,test_vars,density,test_seed,variant,phrase_length,hops,direction,training_mean_ratio,test_nodes,aligned_nodes,test_ratio,witness_valid");
+        println!(
+            "test_family,train_vars,test_vars,density,test_seed,variant,phrase_length,hops,direction,training_mean_ratio,test_nodes,aligned_nodes,test_ratio,witness_valid"
+        );
     } else if engine == "scent-gate" {
-        println!("family,train_vars,test_vars,density,test_seed,selector,predicted_log_ratio,learned_threshold,oof_ratio,oof_applied,applied,training_samples,gate_us,aligned_nodes,scent_nodes,final_nodes,final_ratio,oracle_applied,witness_valid");
+        println!(
+            "family,train_vars,test_vars,density,test_seed,selector,predicted_log_ratio,learned_threshold,oof_ratio,oof_applied,applied,training_samples,gate_us,aligned_nodes,scent_nodes,final_nodes,final_ratio,oracle_applied,witness_valid"
+        );
     } else if engine == "scent-helper" {
-        println!("family,train_vars,test_vars,density,test_seed,selector,gate_applied,predicted_log_ratio,threshold,budget,accepted,candidates_scored,discovery_us,final_us,baseline_nodes,final_nodes,node_ratio,sat_equivalent,witness_valid");
+        println!(
+            "family,train_vars,test_vars,density,test_seed,selector,gate_applied,predicted_log_ratio,threshold,budget,accepted,candidates_scored,discovery_us,final_us,baseline_nodes,final_nodes,node_ratio,sat_equivalent,witness_valid"
+        );
     } else if engine == "scent-helper-gate" {
-        println!("family,train_vars,test_vars,density,test_seed,selector,order_gate,helper_prediction,helper_threshold,helper_oof_ratio,helper_oof_applied,helper_applied,budget,accepted,feature_us,baseline_nodes,order_nodes,helper_nodes,final_nodes,final_ratio,witness_valid");
+        println!(
+            "family,train_vars,test_vars,density,test_seed,selector,order_gate,helper_prediction,helper_threshold,helper_oof_ratio,helper_oof_applied,helper_applied,budget,accepted,feature_us,baseline_nodes,order_nodes,helper_nodes,final_nodes,final_ratio,witness_valid"
+        );
     } else if engine == "helper-graph-memory" {
-        println!("family,train_vars,test_vars,density,test_seed,selector,order_gate,prediction,threshold,oof_ratio,oof_applied,helper_applied,budget,feature_us,baseline_nodes,order_nodes,helper_nodes,final_nodes,final_ratio,witness_valid");
+        println!(
+            "family,train_vars,test_vars,density,test_seed,selector,order_gate,prediction,threshold,oof_ratio,oof_applied,helper_applied,budget,feature_us,baseline_nodes,order_nodes,helper_nodes,final_nodes,final_ratio,witness_valid"
+        );
     } else if engine == "learned-message" {
-        println!("family,train_vars,test_vars,density,test_seed,selector,order_gate,self_weight,clause_weight,variable_weight,candidate_weight,memory_retention,prediction,threshold,oof_ratio,oof_applied,helper_applied,budget,feature_us,baseline_nodes,order_nodes,helper_nodes,final_nodes,final_ratio,witness_valid");
+        println!(
+            "family,train_vars,test_vars,density,test_seed,selector,order_gate,self_weight,clause_weight,variable_weight,candidate_weight,memory_retention,prediction,threshold,oof_ratio,oof_applied,helper_applied,budget,feature_us,baseline_nodes,order_nodes,helper_nodes,final_nodes,final_ratio,witness_valid"
+        );
     } else if engine == "math-tricks" {
-        println!("family,vars,input_clauses,seed,output_clauses,tautologies,subsumed,consensus_pairs,passes,preprocess_us,baseline_us,processed_us,baseline_nodes,processed_nodes,node_ratio,sat_equivalent,baseline_witness_valid,processed_witness_valid");
+        println!(
+            "family,vars,input_clauses,seed,output_clauses,tautologies,subsumed,consensus_pairs,passes,preprocess_us,baseline_us,processed_us,baseline_nodes,processed_nodes,node_ratio,sat_equivalent,baseline_witness_valid,processed_witness_valid"
+        );
     } else if engine == "incremental-pinch" {
-        println!("family,vars,clauses,seed,changed_clause,earliest_layer,reused_layers,recomputed_layers,checkpoint_factors,cache_build_us,incremental_us,full_us,speedup,incremental_new_nodes,full_nodes,node_work_ratio,sat_equivalent,incremental_witness_valid,full_witness_valid");
+        println!(
+            "family,vars,clauses,seed,changed_clause,earliest_layer,reused_layers,recomputed_layers,checkpoint_factors,cache_build_us,incremental_us,full_us,speedup,incremental_new_nodes,full_nodes,node_work_ratio,sat_equivalent,incremental_witness_valid,full_witness_valid"
+        );
     } else if engine == "checkpoint-compression" {
-        println!("family,vars,clauses,seed,stride,checkpoints,checkpoint_factors,memory_ratio_vs_dense,earliest_layer,restored_layer,replayed_layers,recomputed_layers,cache_build_us,incremental_us,full_us,speedup,new_nodes,full_nodes,node_work_ratio,sat_equivalent,witness_valid");
+        println!(
+            "family,vars,clauses,seed,stride,checkpoints,checkpoint_factors,memory_ratio_vs_dense,earliest_layer,restored_layer,replayed_layers,recomputed_layers,cache_build_us,incremental_us,full_us,speedup,new_nodes,full_nodes,node_work_ratio,sat_equivalent,witness_valid"
+        );
     } else if engine == "branch-reuse" {
-        println!("family,vars,clauses,seed,branch_percent,branch_level,branch_variable,stride,checkpoint_factors,false_sat,true_sat,cache_false_us,incremental_true_us,fresh_false_us,fresh_true_us,pair_speedup,sibling_speedup,new_nodes,fresh_true_nodes,node_work_ratio,true_equivalent,false_witness_valid,true_witness_valid");
+        println!(
+            "family,vars,clauses,seed,branch_percent,branch_level,branch_variable,stride,checkpoint_factors,false_sat,true_sat,cache_false_us,incremental_true_us,fresh_false_us,fresh_true_us,pair_speedup,sibling_speedup,new_nodes,fresh_true_nodes,node_work_ratio,true_equivalent,false_witness_valid,true_witness_valid"
+        );
     } else if engine == "joint-branch" {
-        println!("family,vars,clauses,test_seed,selector,learned_alpha,branch_level,branch_variable,branches,sat,reuse_us,fresh_us,time_speedup,reuse_nodes,fresh_nodes,node_ratio,valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,learned_alpha,branch_level,branch_variable,branches,sat,reuse_us,fresh_us,time_speedup,reuse_nodes,fresh_nodes,node_ratio,valid"
+        );
     } else if engine == "supervised-branch" {
-        println!("family,vars,clauses,test_seed,selector,branch_level,branch_variable,predicted_log_work,inference_us,branches,sat,reuse_us,fresh_us,time_speedup,reuse_nodes,oracle_nodes,work_vs_oracle,fresh_nodes,node_ratio,valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,branch_level,branch_variable,predicted_log_work,inference_us,branches,sat,reuse_us,fresh_us,time_speedup,reuse_nodes,oracle_nodes,work_vs_oracle,fresh_nodes,node_ratio,valid"
+        );
     } else if engine == "branch-portfolio"
         || engine == "cheap-branch-portfolio"
         || engine == "three-action-portfolio"
         || engine == "portfolio-generalization"
     {
-        println!("family,vars,clauses,test_seed,selector,structure_prediction,policy,branch_level,branch_variable,branches,sat,decision_us,solve_us,total_us,direct_us,speed_vs_direct,work_nodes,direct_nodes,work_vs_direct,oracle_nodes,work_vs_oracle,valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,structure_prediction,policy,branch_level,branch_variable,branches,sat,decision_us,solve_us,total_us,direct_us,speed_vs_direct,work_nodes,direct_nodes,work_vs_direct,oracle_nodes,work_vs_oracle,valid"
+        );
     } else if engine == "robust-reuse-portfolio"
         || engine == "external-reuse-portfolio"
         || engine == "external-ablation"
     {
-        println!("family,vars,clauses,test_seed,selector,predicted_log_ratio,support_distance,prediction_threshold,distance_threshold,policy,branches,sat,decision_us,solve_us,total_us,direct_us,speed_vs_direct,work_nodes,direct_nodes,work_vs_direct,valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,predicted_log_ratio,support_distance,prediction_threshold,distance_threshold,policy,branches,sat,decision_us,solve_us,total_us,direct_us,speed_vs_direct,work_nodes,direct_nodes,work_vs_direct,valid"
+        );
     } else if engine == "replay-metrics" {
-        println!("family,vars,clauses,test_seed,sat,first_sat,branches,direct_us,reuse_us,speedup,cache_build_us,sibling_us,cache_nodes,sibling_new_nodes,checkpoints,restored_layer,replayed_layers,direct_nodes,reuse_nodes,node_ratio,valid");
+        println!(
+            "family,vars,clauses,test_seed,sat,first_sat,branches,direct_us,reuse_us,speedup,cache_build_us,sibling_us,cache_nodes,sibling_new_nodes,checkpoints,restored_layer,replayed_layers,direct_nodes,reuse_nodes,node_ratio,valid"
+        );
     } else if engine == "direct-provenance-portfolio" {
-        println!("family,vars,clauses,test_seed,selector,predicted_log_ratio,policy,sat,decision_us,solve_us,total_us,direct_us,speed_vs_direct,nodes,direct_nodes,node_ratio,valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,predicted_log_ratio,policy,sat,decision_us,solve_us,total_us,direct_us,speed_vs_direct,nodes,direct_nodes,node_ratio,valid"
+        );
     } else if engine == "direct-layout-ablation" {
-        println!("family,vars,clauses,test_seed,selector,solve_us,direct_us,speed_vs_direct,nodes,direct_nodes,node_ratio,sat,valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,solve_us,direct_us,speed_vs_direct,nodes,direct_nodes,node_ratio,sat,valid"
+        );
     } else if engine == "kernel-scaling" {
         println!("family,vars,clauses,seed,kernel,solve_us,nodes,sat,valid");
     } else if engine == "structure-scaling" {
         println!("family,vars,clauses,seed,min_fill_width,estimated_work,solve_us,nodes,sat,valid");
     } else if engine == "helper-width-scaling" {
-        println!("family,original_vars,original_clauses,seed,variant,budget,accepted,expanded_vars,expanded_clauses,min_fill_width,estimated_work,solve_us,nodes,sat,sat_equivalent,witness_valid");
+        println!(
+            "family,original_vars,original_clauses,seed,variant,budget,accepted,expanded_vars,expanded_clauses,min_fill_width,estimated_work,solve_us,nodes,sat,sat_equivalent,witness_valid"
+        );
     } else if engine == "exact-width-helper" {
-        println!("family,vars,clauses,seed,selector,candidates,helper_added,original_treewidth,final_treewidth,width_change,original_nodes,final_nodes,node_ratio,sat_equivalent,witness_valid");
+        println!(
+            "family,vars,clauses,seed,selector,candidates,helper_added,original_treewidth,final_treewidth,width_change,original_nodes,final_nodes,node_ratio,sat_equivalent,witness_valid"
+        );
     } else if engine == "coordinated-width-helper" {
-        println!("family,vars,clauses,seed,selector,first_candidates,pairs_tested,helpers_added,original_treewidth,final_treewidth,width_change,original_nodes,final_nodes,node_ratio,sat_equivalent,witness_valid");
+        println!(
+            "family,vars,clauses,seed,selector,first_candidates,pairs_tested,helpers_added,original_treewidth,final_treewidth,width_change,original_nodes,final_nodes,node_ratio,sat_equivalent,witness_valid"
+        );
     } else if engine == "shake-inverse-width" {
-        println!("family,vars,clauses,seed,selector,leaf_richness,gate_applied,inverse_depth,removed,core_vars,core_clauses,probes,inverse_forced,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,sat,sat_equivalent,reconstruction_valid");
+        println!(
+            "family,vars,clauses,seed,selector,leaf_richness,gate_applied,inverse_depth,removed,core_vars,core_clauses,probes,inverse_forced,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,sat,sat_equivalent,reconstruction_valid"
+        );
     } else if engine == "seed-branch-width" {
-        println!("family,vars,clauses,seed,boundary,interior,local_clauses,summary_clauses,recipe_entries,recipe_bits,compilation_trials,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,sat,sat_equivalent,reconstruction_valid");
+        println!(
+            "family,vars,clauses,seed,boundary,interior,local_clauses,summary_clauses,recipe_entries,recipe_bits,compilation_trials,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,sat,sat_equivalent,reconstruction_valid"
+        );
     } else if engine == "seed-bdd-width" {
-        println!("family,vars,clauses,seed,seed_order,boundary,interior,local_clauses,summary_clauses,seed_live_nodes,seed_allocated_nodes,compile_us,original_solve_us,core_solve_us,end_to_end_time_ratio,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,stored_charged_ratio,allocated_charged_ratio,sat,sat_equivalent,reconstruction_valid");
+        println!(
+            "family,vars,clauses,seed,seed_order,boundary,interior,local_clauses,summary_clauses,seed_live_nodes,seed_allocated_nodes,compile_us,original_solve_us,core_solve_us,end_to_end_time_ratio,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,stored_charged_ratio,allocated_charged_ratio,sat,sat_equivalent,reconstruction_valid"
+        );
     } else if engine == "seed-bdd-reuse" {
-        println!("family,vars,clauses,base_seed,update,interior,cold_allocated,warm_new_allocated,allocation_ratio,cold_us,warm_us,time_ratio,shared_manager_nodes,cache_cap,cache_policy,peak_shared_nodes,compactions,evictions,hot_roots,seed_live_nodes,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,sat_equivalent,reconstruction_valid");
+        println!(
+            "family,vars,clauses,base_seed,update,interior,cold_allocated,warm_new_allocated,allocation_ratio,cold_us,warm_us,time_ratio,shared_manager_nodes,cache_cap,cache_policy,peak_shared_nodes,compactions,evictions,hot_roots,seed_live_nodes,original_treewidth,core_treewidth,width_change,original_nodes,core_nodes,node_ratio,sat_equivalent,reconstruction_valid"
+        );
     } else if engine == "multi-seed-width" {
-        println!("family,vars,clauses,seed,selector,branch_cap,max_seeds,seeds,removed,boundary_sum,seed_live_nodes,seed_allocated_nodes,compile_us,final_vars,final_clauses,original_treewidth,final_treewidth,width_change,original_nodes,final_nodes,node_ratio,stored_charged_ratio,original_solve_us,final_solve_us,end_to_end_time_ratio,sat_equivalent,reconstruction_valid");
+        println!(
+            "family,vars,clauses,seed,selector,branch_cap,max_seeds,seeds,removed,boundary_sum,seed_live_nodes,seed_allocated_nodes,compile_us,final_vars,final_clauses,original_treewidth,final_treewidth,width_change,original_nodes,final_nodes,node_ratio,stored_charged_ratio,original_solve_us,final_solve_us,end_to_end_time_ratio,sat_equivalent,reconstruction_valid"
+        );
     } else if engine == "incremental-payback" {
-        println!("family,vars,clauses,seed,query,cold_us,incremental_setup_us,incremental_query_us,incremental_cumulative_ratio,seed_compile_us,seed_solve_us,seed_cumulative_ratio,seeds,removed,seed_cache_nodes,cold_sat,incremental_agrees,seed_agrees,incremental_witness_valid,seed_witness_valid");
+        println!(
+            "family,vars,clauses,seed,query,cold_us,incremental_setup_us,incremental_query_us,incremental_cumulative_ratio,seed_compile_us,seed_solve_us,seed_cumulative_ratio,seeds,removed,seed_cache_nodes,cold_sat,incremental_agrees,seed_agrees,incremental_witness_valid,seed_witness_valid"
+        );
     } else if engine == "assumption-payback" {
-        println!("family,vars,clauses,seed,query,assumed_original,assumed_value,cold_ns,incremental_setup_ns,incremental_query_ns,incremental_cumulative_ratio,seed_setup_ns,seed_query_ns,seed_cumulative_ratio,seeds,removed,core_vars,seed_live_nodes,cold_sat,incremental_agrees,seed_agrees,incremental_witness_valid,seed_witness_valid");
+        println!(
+            "family,vars,clauses,seed,query,assumed_original,assumed_value,cold_ns,incremental_setup_ns,incremental_query_ns,incremental_cumulative_ratio,seed_setup_ns,seed_query_ns,seed_cumulative_ratio,seeds,removed,core_vars,seed_live_nodes,cold_sat,incremental_agrees,seed_agrees,incremental_witness_valid,seed_witness_valid"
+        );
     } else if engine == "deployment-gate" {
-        println!("family,vars,clauses,seed,selector,predicted_log_ratio,threshold,applied,actual_ratio,policy_ratio,seeds,removed,live_nodes,incremental_ns,seeded_ns,training_rows,oof_applied,oof_policy_ratio,sat_valid");
+        println!(
+            "family,vars,clauses,seed,selector,predicted_log_ratio,threshold,applied,actual_ratio,policy_ratio,seeds,removed,live_nodes,incremental_ns,seeded_ns,training_rows,oof_applied,oof_policy_ratio,sat_valid"
+        );
     } else if engine == "crossover-gate" {
-        println!("family,vars,clauses,seed,selector,predicted_query_ratio,query_margin,predicted_setup_queries,setup_margin,predicted_crossover,query_horizon,applied,actual_query_ratio,actual_crossover,actual_ratio,policy_ratio,seeds,removed,incremental_setup_ns,seeded_setup_ns,incremental_query_ns,seeded_query_ns,training_rows,sat_valid");
+        println!(
+            "family,vars,clauses,seed,selector,predicted_query_ratio,query_margin,predicted_setup_queries,setup_margin,predicted_crossover,query_horizon,applied,actual_query_ratio,actual_crossover,actual_ratio,policy_ratio,seeds,removed,incremental_setup_ns,seeded_setup_ns,incremental_query_ns,seeded_query_ns,training_rows,sat_valid"
+        );
     } else if engine == "speculative-compile" {
-        println!("family,vars,clauses,seed,selector,predicted_query_ratio,query_margin,budget_ns,compile_ns,calibration_ns,aborted,deployed,seeds,removed,incremental_ns,seeded_ns,policy_ns,policy_ratio,actual_query_ratio,training_rows,sat_valid");
+        println!(
+            "family,vars,clauses,seed,selector,predicted_query_ratio,query_margin,budget_ns,compile_ns,calibration_ns,aborted,deployed,seeds,removed,incremental_ns,seeded_ns,policy_ns,policy_ratio,actual_query_ratio,training_rows,sat_valid"
+        );
     } else if engine == "offline-scaling" {
-        println!("family,vars,clauses,seed,horizon,seeds,removed,core_vars,seed_live_nodes,offline_compile_ns,incremental_setup_ns,incremental_query_ns,seeded_query_ns,online_query_ratio,amortized_ratio,incremental_qps,seeded_qps,reconstruction_ns_per_sample,reconstruction_samples,crossover_queries,sat_valid");
+        println!(
+            "family,vars,clauses,seed,horizon,seeds,removed,core_vars,seed_live_nodes,offline_compile_ns,incremental_setup_ns,incremental_query_ns,seeded_query_ns,online_query_ratio,amortized_ratio,incremental_qps,seeded_qps,reconstruction_ns_per_sample,reconstruction_samples,crossover_queries,sat_valid"
+        );
     } else if engine == "batch-branch-discovery" {
-        println!("family,vars,clauses,seed,branch_cap,candidates,removed,removed_fraction,boundary_sum,local_clause_touches,discovery_us,target_met,integrity_valid");
+        println!(
+            "family,vars,clauses,seed,branch_cap,candidates,removed,removed_fraction,boundary_sum,local_clause_touches,discovery_us,target_met,integrity_valid"
+        );
     } else if engine == "batch-seed-compile" {
-        println!("family,vars,clauses,seed,branch_cap,candidates,removed,removed_fraction,discovery_us,compile_us,seed_live_nodes,seed_allocated_nodes,core_vars,core_clauses,original_sat,core_sat,sat_equivalent,reconstruction_valid,target_met");
+        println!(
+            "family,vars,clauses,seed,branch_cap,candidates,removed,removed_fraction,discovery_us,compile_us,seed_live_nodes,seed_allocated_nodes,core_vars,core_clauses,original_sat,core_sat,sat_equivalent,reconstruction_valid,target_met"
+        );
     } else if engine == "batch-offline-service" {
-        println!("family,vars,clauses,seed,horizon,branch_cap,seeds,removed,removed_fraction,core_vars,discovery_ns,compile_ns,incremental_setup_ns,seeded_solver_setup_ns,incremental_query_ns,seeded_query_ns,online_query_ratio,amortized_ratio,crossover_queries,incremental_qps,seeded_qps,seed_live_nodes,reconstruction_ns,reconstruction_samples,sat_valid");
+        println!(
+            "family,vars,clauses,seed,horizon,branch_cap,seeds,removed,removed_fraction,core_vars,discovery_ns,compile_ns,incremental_setup_ns,seeded_solver_setup_ns,incremental_query_ns,seeded_query_ns,online_query_ratio,amortized_ratio,crossover_queries,incremental_qps,seeded_qps,seed_live_nodes,reconstruction_ns,reconstruction_samples,sat_valid"
+        );
     } else if engine == "renaming-control" {
-        println!("family,vars,clauses,seed,renaming,branch_cap,candidates,removed,removed_fraction,discovery_us,compile_us,seed_live_nodes,seed_allocated_nodes,core_vars,sat_equivalent,reconstruction_valid,target_met");
+        println!(
+            "family,vars,clauses,seed,renaming,branch_cap,candidates,removed,removed_fraction,discovery_us,compile_us,seed_live_nodes,seed_allocated_nodes,core_vars,sat_equivalent,reconstruction_valid,target_met"
+        );
     } else if engine == "safe-compiler-control" {
-        println!("family,layout,vars,clauses,seed,branch_cap,node_limit,time_limit_ms,candidates,accepted,node_rejected,time_rejected,removed,removed_fraction,discovery_us,compile_us,attempt_nodes,seed_live_nodes,core_vars,sat_equivalent,reconstruction_valid,target_met");
+        println!(
+            "family,layout,vars,clauses,seed,branch_cap,node_limit,time_limit_ms,candidates,accepted,node_rejected,time_rejected,removed,removed_fraction,discovery_us,compile_us,attempt_nodes,seed_live_nodes,core_vars,sat_equivalent,reconstruction_valid,target_met"
+        );
     } else if engine == "bdd-sift" || engine == "bdd-sift-control" {
-        println!("family,elimination_order,start_order,vars,clauses,seed,passes,swaps_tested,swaps_accepted,start_nodes,final_nodes,node_ratio,start_live,final_live,live_ratio,search_us,final_us,total_vs_start_solves,witness_valid");
+        println!(
+            "family,elimination_order,start_order,vars,clauses,seed,passes,swaps_tested,swaps_accepted,start_nodes,final_nodes,node_ratio,start_live,final_live,live_ratio,search_us,final_us,total_vs_start_solves,witness_valid"
+        );
     } else if engine == "flower-ring-states" {
         println!(
             "family,vars,clauses,seed,direction,ring,processed,residual_states,best_possible_c6_orbits,total_bdd_nodes"
         );
     } else if engine == "joint-predict" {
-        println!("family,vars,clauses,seed,selector,budget,accepted,recursive_accepted,candidates_scored,natural_nodes,aligned_nodes,final_nodes,final_vs_natural,final_vs_aligned,predict_us,final_us,initial_width,final_width,estimated_work_ratio,sat_equivalent,witness_valid");
+        println!(
+            "family,vars,clauses,seed,selector,budget,accepted,recursive_accepted,candidates_scored,natural_nodes,aligned_nodes,final_nodes,final_vs_natural,final_vs_aligned,predict_us,final_us,initial_width,final_width,estimated_work_ratio,sat_equivalent,witness_valid"
+        );
     } else if engine == "learned-joint" {
-        println!("family,vars,clauses,test_seed,selector,budget,accepted,training_samples,training_us,inference_us,final_us,natural_nodes,aligned_nodes,final_nodes,final_vs_natural,final_vs_aligned,sat_equivalent,witness_valid");
+        println!(
+            "family,vars,clauses,test_seed,selector,budget,accepted,training_samples,training_us,inference_us,final_us,natural_nodes,aligned_nodes,final_nodes,final_vs_natural,final_vs_aligned,sat_equivalent,witness_valid"
+        );
     } else {
         assert_eq!(
             engine, "compare",
             "engine must be compare, bdd-only, expand-bdd, greedy-expand-bdd, aligned-greedy-expand, feedback-expand-bdd, shortlist-expand-bdd, bdd-frontier-expand, bdd-order-sweep, music-order-sweep, learned-phrase, learned-scent, scent-universal, scent-gate, scent-helper, scent-helper-gate, helper-graph-memory, learned-message, math-tricks, incremental-pinch, checkpoint-compression, branch-reuse, joint-branch, supervised-branch, branch-portfolio, cheap-branch-portfolio, three-action-portfolio, portfolio-generalization, robust-reuse-portfolio, external-reuse-portfolio, external-ablation, replay-metrics, direct-provenance-portfolio, direct-layout-ablation, kernel-scaling, structure-scaling, helper-width-scaling, exact-width-helper, coordinated-width-helper, shake-inverse-width, seed-branch-width, seed-bdd-width, seed-bdd-reuse, multi-seed-width, incremental-payback, assumption-payback, deployment-gate, crossover-gate, speculative-compile, offline-scaling, batch-branch-discovery, batch-seed-compile, bdd-sift, bdd-sift-control, flower-ring-states, joint-predict, or learned-joint"
         );
-        println!("family,order,vars,clauses,seed,sat,peak_boundary,peak_entries,stored_entries,peak_bdd_nodes,stored_bdd_nodes,bdd_ratio,layered_us,bdd_solver_us,bdd_allocated_nodes,bdd_agrees,brute_us,agrees");
+        println!(
+            "family,order,vars,clauses,seed,sat,peak_boundary,peak_entries,stored_entries,peak_bdd_nodes,stored_bdd_nodes,bdd_ratio,layered_us,bdd_solver_us,bdd_allocated_nodes,bdd_agrees,brute_us,agrees"
+        );
     }
     let mut histogram = HashMap::new();
     if engine == "learned-joint" {
@@ -10707,8 +10873,8 @@ fn main() {
                     .collect();
                 let threshold = learn_vector_threshold(&samples, 11);
                 if best.as_ref().is_none_or(|current| {
-                    threshold.1 < current.2 .1
-                        || (threshold.1 == current.2 .1 && threshold.2 < current.2 .2)
+                    threshold.1 < current.2.1
+                        || (threshold.1 == current.2.1 && threshold.2 < current.2.2)
                 }) {
                     best = Some((params, samples, threshold));
                 }
@@ -10801,7 +10967,7 @@ fn main() {
                                 _ => None,
                             };
                             let (params, prediction, threshold) = if let Some(index) = model_index {
-                                (models[index].1, evaluated[index].0, evaluated[index].1 .0)
+                                (models[index].1, evaluated[index].0, evaluated[index].1.0)
                             } else {
                                 (DEFAULT_MESSAGE_PARAMS, 0.0, 0.0)
                             };
@@ -10827,14 +10993,31 @@ fn main() {
                             });
                             println!(
                                 "{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.6},{:.6},{:.6},{},{},{},{},{},{},{},{},{:.6},{}",
-                                test_family, vars, test_vars, test_ratio, test_seed, selector,
-                                order_gate, params.self_weight, params.clause_weight,
-                                params.variable_weight, params.candidate_weight,
-                                params.memory_retention, prediction, threshold,
-                                threshold_info.1, threshold_info.2, helper_applied, budget,
-                                feature_us, baseline.allocated_nodes, order_result.allocated_nodes,
-                                helper_result.allocated_nodes, final_result.allocated_nodes,
-                                final_result.allocated_nodes as f64 / baseline.allocated_nodes.max(1) as f64,
+                                test_family,
+                                vars,
+                                test_vars,
+                                test_ratio,
+                                test_seed,
+                                selector,
+                                order_gate,
+                                params.self_weight,
+                                params.clause_weight,
+                                params.variable_weight,
+                                params.candidate_weight,
+                                params.memory_retention,
+                                prediction,
+                                threshold,
+                                threshold_info.1,
+                                threshold_info.2,
+                                helper_applied,
+                                budget,
+                                feature_us,
+                                baseline.allocated_nodes,
+                                order_result.allocated_nodes,
+                                helper_result.allocated_nodes,
+                                final_result.allocated_nodes,
+                                final_result.allocated_nodes as f64
+                                    / baseline.allocated_nodes.max(1) as f64,
                                 valid
                             );
                         }
@@ -11015,12 +11198,26 @@ fn main() {
                             });
                             println!(
                                 "{},{},{},{},{},{},{},{:.6},{:.6},{:.6},{},{},{},{},{},{},{},{},{:.6},{}",
-                                test_family, vars, test_vars, test_ratio, test_seed, selector,
-                                order_gate, prediction, threshold, oof_ratio, oof_applied,
-                                helper_applied, budget, feature_us, baseline.allocated_nodes,
-                                order_result.allocated_nodes, helper_result.allocated_nodes,
+                                test_family,
+                                vars,
+                                test_vars,
+                                test_ratio,
+                                test_seed,
+                                selector,
+                                order_gate,
+                                prediction,
+                                threshold,
+                                oof_ratio,
+                                oof_applied,
+                                helper_applied,
+                                budget,
+                                feature_us,
+                                baseline.allocated_nodes,
+                                order_result.allocated_nodes,
+                                helper_result.allocated_nodes,
                                 final_result.allocated_nodes,
-                                final_result.allocated_nodes as f64 / baseline.allocated_nodes.max(1) as f64,
+                                final_result.allocated_nodes as f64
+                                    / baseline.allocated_nodes.max(1) as f64,
                                 valid
                             );
                         }
@@ -12043,8 +12240,7 @@ fn main() {
                     original_result.nodes,
                     final_result.nodes,
                     final_result.nodes as f64 / original_result.nodes.max(1) as f64,
-                    (final_result.nodes + live_nodes) as f64
-                        / original_result.nodes.max(1) as f64,
+                    (final_result.nodes + live_nodes) as f64 / original_result.nodes.max(1) as f64,
                     original_solve_us,
                     final_solve_us,
                     (compile_us + final_solve_us) as f64 / original_solve_us.max(1) as f64,
@@ -12636,16 +12832,34 @@ fn main() {
                 } else {
                     f64::INFINITY
                 };
-                println!("{},{},{},{},{},{},{},{},{:.6},{},{},{},{},{},{},{},{:.6},{:.6},{:.1},{:.1},{:.1},{},{},{},{}",
-                    family, scale_vars, formula.len(), formula_seed, horizon, branch_cap, seeds.len(), all_interior.len(),
-                    all_interior.len() as f64 / scale_vars as f64, core_to_original.len(), discovery_ns, compile_ns,
-                    incremental_setup_ns, seeded_solver_setup_ns, incremental_query_ns, seeded_query_ns,
+                println!(
+                    "{},{},{},{},{},{},{},{},{:.6},{},{},{},{},{},{},{},{:.6},{:.6},{:.1},{:.1},{:.1},{},{},{},{}",
+                    family,
+                    scale_vars,
+                    formula.len(),
+                    formula_seed,
+                    horizon,
+                    branch_cap,
+                    seeds.len(),
+                    all_interior.len(),
+                    all_interior.len() as f64 / scale_vars as f64,
+                    core_to_original.len(),
+                    discovery_ns,
+                    compile_ns,
+                    incremental_setup_ns,
+                    seeded_solver_setup_ns,
+                    incremental_query_ns,
+                    seeded_query_ns,
                     seeded_query_ns as f64 / incremental_query_ns.max(1) as f64,
-                    seeded_total as f64 / incremental_total.max(1) as f64, crossover,
+                    seeded_total as f64 / incremental_total.max(1) as f64,
+                    crossover,
                     horizon as f64 * 1e9 / incremental_query_ns.max(1) as f64,
                     horizon as f64 * 1e9 / seeded_query_ns.max(1) as f64,
-                    seeds.iter().map(|seed| seed.live_nodes).sum::<usize>(), reconstruction_ns,
-                    reconstruction_samples, valid);
+                    seeds.iter().map(|seed| seed.live_nodes).sum::<usize>(),
+                    reconstruction_ns,
+                    reconstruction_samples,
+                    valid
+                );
             }
         }
         return;
@@ -12868,11 +13082,13 @@ fn main() {
                         measured.incremental_setup_ns,
                         measured.incremental_query_ns,
                         measured.seeded_query_ns,
-                        measured.seeded_query_ns as f64 / measured.incremental_query_ns.max(1) as f64,
+                        measured.seeded_query_ns as f64
+                            / measured.incremental_query_ns.max(1) as f64,
                         measured.seeded_ns as f64 / measured.incremental_ns.max(1) as f64,
                         horizon as f64 * 1e9 / measured.incremental_query_ns.max(1) as f64,
                         horizon as f64 * 1e9 / measured.seeded_query_ns.max(1) as f64,
-                        measured.reconstruction_ns as f64 / measured.reconstruction_samples.max(1) as f64,
+                        measured.reconstruction_ns as f64
+                            / measured.reconstruction_samples.max(1) as f64,
                         measured.reconstruction_samples,
                         crossover,
                         measured.valid
@@ -13018,12 +13234,30 @@ fn main() {
                                 _ if selected => measured.seeded_ns,
                                 _ => measured.incremental_ns,
                             };
-                            println!("{},{},{},{},{},{:.6},{:.6},{},{},{},{},{},{},{},{},{},{},{:.6},{:.6},{},{}",
-                                test_family, test_vars, formula.len(), formula_seed, selector,
-                                predicted_query_ratio, query_margin, budget_ns, compile_ns, calibration_ns,
-                                aborted, deployed, seeds, removed, measured.incremental_ns, measured.seeded_ns,
-                                policy_ns, policy_ns as f64 / measured.incremental_ns.max(1) as f64,
-                                actual_query_ratio, query_training.len(), measured.valid);
+                            println!(
+                                "{},{},{},{},{},{:.6},{:.6},{},{},{},{},{},{},{},{},{},{},{:.6},{:.6},{},{}",
+                                test_family,
+                                test_vars,
+                                formula.len(),
+                                formula_seed,
+                                selector,
+                                predicted_query_ratio,
+                                query_margin,
+                                budget_ns,
+                                compile_ns,
+                                calibration_ns,
+                                aborted,
+                                deployed,
+                                seeds,
+                                removed,
+                                measured.incremental_ns,
+                                measured.seeded_ns,
+                                policy_ns,
+                                policy_ns as f64 / measured.incremental_ns.max(1) as f64,
+                                actual_query_ratio,
+                                query_training.len(),
+                                measured.valid
+                            );
                         }
                     }
                 }
@@ -13111,11 +13345,7 @@ fn main() {
                         .zip(&end_ratios)
                         .map(
                             |(&prediction, &actual)| {
-                                if prediction < threshold {
-                                    actual
-                                } else {
-                                    1.0
-                                }
+                                if prediction < threshold { actual } else { 1.0 }
                             },
                         )
                         .sum::<f64>()
@@ -13180,13 +13410,33 @@ fn main() {
                                 "oracle" => actual_ratio < 1.0,
                                 _ => unreachable!(),
                             };
-                            println!("{},{},{},{},{},{:.6},{:.6},{:.3},{:.6},{:.3},{},{},{:.6},{:.3},{:.6},{:.6},{},{},{},{},{},{},{},{}",
-                                test_family, test_vars, formula.len(), formula_seed, selector,
-                                predicted_query_ratio, query_margin, predicted_setup_queries, setup_margin,
-                                predicted_crossover, queries, applied, actual_query_ratio, actual_crossover,
-                                actual_ratio, if applied { actual_ratio } else { 1.0 }, measured.seeds,
-                                measured.removed, measured.incremental_setup_ns, measured.seeded_setup_ns,
-                                measured.incremental_query_ns, measured.seeded_query_ns, query_training.len(), measured.valid);
+                            println!(
+                                "{},{},{},{},{},{:.6},{:.6},{:.3},{:.6},{:.3},{},{},{:.6},{:.3},{:.6},{:.6},{},{},{},{},{},{},{},{}",
+                                test_family,
+                                test_vars,
+                                formula.len(),
+                                formula_seed,
+                                selector,
+                                predicted_query_ratio,
+                                query_margin,
+                                predicted_setup_queries,
+                                setup_margin,
+                                predicted_crossover,
+                                queries,
+                                applied,
+                                actual_query_ratio,
+                                actual_crossover,
+                                actual_ratio,
+                                if applied { actual_ratio } else { 1.0 },
+                                measured.seeds,
+                                measured.removed,
+                                measured.incremental_setup_ns,
+                                measured.seeded_setup_ns,
+                                measured.incremental_query_ns,
+                                measured.seeded_query_ns,
+                                query_training.len(),
+                                measured.valid
+                            );
                         }
                     }
                 }
@@ -15664,10 +15914,12 @@ mod tests {
                     brute.is_some(),
                     "vars={vars}, seed={seed}"
                 );
-                assert!(result
-                    .assignment
-                    .as_ref()
-                    .is_none_or(|a| satisfies(&clauses, a)));
+                assert!(
+                    result
+                        .assignment
+                        .as_ref()
+                        .is_none_or(|a| satisfies(&clauses, a))
+                );
             }
         }
     }
@@ -15688,10 +15940,11 @@ mod tests {
                 let bdd = eliminate_with_bdds(vars, &clauses, &order);
                 let brute = brute_force(vars, &clauses);
                 assert_eq!(bdd.assignment.is_some(), brute.is_some());
-                assert!(bdd
-                    .assignment
-                    .as_ref()
-                    .is_none_or(|a| satisfies(&clauses, a)));
+                assert!(
+                    bdd.assignment
+                        .as_ref()
+                        .is_none_or(|a| satisfies(&clauses, a))
+                );
             }
         }
     }
@@ -15746,14 +15999,16 @@ mod tests {
                 baseline.assignment.is_some(),
                 feedback.result.assignment.is_some()
             );
-            assert!(feedback
-                .result
-                .assignment
-                .as_ref()
-                .is_none_or(|assignment| {
-                    satisfies(&clauses, &assignment[..vars])
-                        && satisfies(&feedback.clauses, assignment)
-                }));
+            assert!(
+                feedback
+                    .result
+                    .assignment
+                    .as_ref()
+                    .is_none_or(|assignment| {
+                        satisfies(&clauses, &assignment[..vars])
+                            && satisfies(&feedback.clauses, assignment)
+                    })
+            );
         }
     }
 
@@ -15769,14 +16024,16 @@ mod tests {
                 baseline.assignment.is_some(),
                 frontier.result.assignment.is_some()
             );
-            assert!(frontier
-                .result
-                .assignment
-                .as_ref()
-                .is_none_or(|assignment| {
-                    satisfies(&clauses, &assignment[..vars])
-                        && satisfies(&frontier.clauses, assignment)
-                }));
+            assert!(
+                frontier
+                    .result
+                    .assignment
+                    .as_ref()
+                    .is_none_or(|assignment| {
+                        satisfies(&clauses, &assignment[..vars])
+                            && satisfies(&frontier.clauses, assignment)
+                    })
+            );
         }
     }
 
@@ -15792,10 +16049,12 @@ mod tests {
                 let result = eliminate_with_bdds_ordered(vars, &clauses, &elimination, &bdd_order);
                 let brute = brute_force(vars, &clauses);
                 assert_eq!(result.assignment.is_some(), brute.is_some());
-                assert!(result
-                    .assignment
-                    .as_ref()
-                    .is_none_or(|assignment| satisfies(&clauses, assignment)));
+                assert!(
+                    result
+                        .assignment
+                        .as_ref()
+                        .is_none_or(|assignment| satisfies(&clauses, assignment))
+                );
             }
         }
     }
@@ -15823,11 +16082,13 @@ mod tests {
                 sifted.result.assignment.is_some(),
                 brute_force(vars, &clauses).is_some()
             );
-            assert!(sifted
-                .result
-                .assignment
-                .as_ref()
-                .is_none_or(|assignment| satisfies(&clauses, assignment)));
+            assert!(
+                sifted
+                    .result
+                    .assignment
+                    .as_ref()
+                    .is_none_or(|assignment| satisfies(&clauses, assignment))
+            );
         }
     }
 
@@ -15845,10 +16106,12 @@ mod tests {
                         result.assignment.is_some(),
                         brute_force(vars, &clauses).is_some()
                     );
-                    assert!(result
-                        .assignment
-                        .as_ref()
-                        .is_none_or(|assignment| satisfies(&clauses, assignment)));
+                    assert!(
+                        result
+                            .assignment
+                            .as_ref()
+                            .is_none_or(|assignment| satisfies(&clauses, assignment))
+                    );
                 }
             }
         }
@@ -15970,9 +16233,11 @@ mod tests {
             let natural: Vec<_> = (0..vars).collect();
             let full = eliminate_with_bdds(vars, &mapped, &natural);
             assert_eq!(incremental.is_some(), full.assignment.is_some());
-            assert!(incremental
-                .as_ref()
-                .is_none_or(|assignment| satisfies(&mapped, assignment)));
+            assert!(
+                incremental
+                    .as_ref()
+                    .is_none_or(|assignment| satisfies(&mapped, assignment))
+            );
         }
     }
 
@@ -16069,9 +16334,11 @@ mod tests {
         ];
         let graph = compact_primal_graph(6, &clauses);
         let candidates = global_small_separator_candidates(&graph, 3);
-        assert!(candidates
-            .iter()
-            .any(|(interior, boundary)| interior == &[3, 4, 5] && boundary == &[2]));
+        assert!(
+            candidates
+                .iter()
+                .any(|(interior, boundary)| interior == &[3, 4, 5] && boundary == &[2])
+        );
         for (interior, boundary) in candidates {
             let interior: BTreeSet<_> = interior.into_iter().collect();
             let actual: BTreeSet<_> = interior
