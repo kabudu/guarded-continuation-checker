@@ -56,6 +56,34 @@ arbitrary bounded model checking. The kernel is derived from the known repeated
 transition invariant; the next test must infer reusable kernels for a broader,
 predeclared transition vocabulary without per-formula calibration.
 
+## CNF-recognized transition vocabulary
+
+The follow-up removes the need to identify the equality kernel manually. Given
+only layered CNF, a recognizer reconstructs each output bit's deterministic local
+truth table and matches it against a fixed vocabulary: copy, negation,
+permutation, pairwise XOR, and `(a AND b) XOR c`. It then verifies that the
+normalized clause template is identical at every time step. There is no
+trial-solving, learned selector, or per-formula timing calibration.
+
+For admitted formulas, the kernel stores the state transition over `2^width`
+states and logarithmic jump tables. Partial observations are checked by jumping
+from each candidate initial state to the observed times. Once a candidate is
+found, the full temporal witness is reconstructed by replaying the recognized
+local rules.
+
+The predeclared phase grid contained 45 cases across widths 4, 6, and 8 and
+horizons 10, 100, and 1,000. All cases agreed with persistent Varisat and all
+returned witnesses were valid. Query speedup ranged from 1.44x to 11,476.84x.
+A separate 30-case holdout used widths 5 and 7, horizons 37, 333, and 2,000, and
+a different query seed; it also had complete agreement and valid witnesses, with
+speedups from 2.31x to 3,795.02x.
+
+The largest gains occur for XOR and circuit encodings, where generic clause-level
+reasoning repeatedly rediscovers a compact deterministic transition. These are
+specialized finite-state systems with width at most eight, not arbitrary SAT or
+arbitrary model checking. The next generalization boundary is exact recognition
+of compositions whose local rules are not individually in the fixed vocabulary.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

@@ -28,6 +28,10 @@ Validated findings:
   quotient and full witness recovery without replaying identical layers. It beat
   persistent Varisat at every admitted phase point; this is a deliberately narrow
   model-checking subclass, not a generic SAT result.
+- A CNF-only recognizer now admits five fixed deterministic transition families:
+  copy, negation, permutation, pairwise XOR, and a three-input Boolean circuit.
+  It verifies that the normalized transition template repeats before constructing
+  a logarithmic jump table; changed or unknown templates are rejected.
 - All 40 bundled conventional SATLIB cases were rejected by the conservative
   gate. The technique therefore targets a narrow structured regime.
 
@@ -74,6 +78,20 @@ witness validity.
 This controlled family holds a `width`-bit state constant across a `horizon` of
 local CNF transitions. The benchmark reports both a dense quotient traversal and
 an exact repeated-transition kernel against persistent Varisat.
+
+## Recognized transition vocabulary
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-temporal-vocabulary \
+  copy,negate,permute,xor,circuit \
+  4,6,8 10,100,1000 100 8 777 results/local-vocabulary.csv
+```
+
+The recognizer receives CNF rather than the generator's transition label. It
+recovers local truth tables, matches only the fixed vocabulary, verifies exact
+template repetition, and reconstructs complete witnesses for every admitted
+query.
 
 ## Repository layout
 

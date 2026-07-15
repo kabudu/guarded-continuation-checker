@@ -88,6 +88,26 @@ structurally rejected rather than trial-solved. The dense quotient and exact
 repeated-transition kernel use identical queries and are independently checked
 against persistent Varisat.
 
+## CNF-recognized transition vocabulary
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-temporal-vocabulary \
+  copy,negate,permute,xor,circuit \
+  4,6,8 10,100,1000 100 8 777 \
+  results/reproduced-temporal-vocabulary-phase.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-temporal-vocabulary \
+  copy,negate,permute,xor,circuit \
+  5,7 37,333,2000 100 8 99991 \
+  results/reproduced-temporal-vocabulary-holdout.csv
+```
+
+The maximum width of eight is fixed before the runs. Recognition time is included
+in the reported break-even calculation. `agreement` and `witnesses_valid` must be
+true for every admitted row.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
