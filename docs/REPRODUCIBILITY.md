@@ -2,7 +2,7 @@
 
 ## Environment
 
-- Rust 1.82 or newer
+- Rust 1.97.0 (pinned by `rust-toolchain.toml`)
 - Cargo
 - Release mode for timings
 

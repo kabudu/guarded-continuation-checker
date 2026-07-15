@@ -2,7 +2,7 @@
 name = "continuation-quotient-sat"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.97"
 description = "Research implementation of exact continuation-quotient compilation for structured SAT"
 license = "Apache-2.0"
 repository = "https://github.com/kabudu/continuation-quotient-sat"
