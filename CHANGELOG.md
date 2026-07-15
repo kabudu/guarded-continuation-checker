@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add a bounded-width temporal model-checking phase benchmark.
+- Add an exact repeated-transition kernel with full witness reconstruction.
+- Preserve dense-quotient negative results alongside kernel measurements.
+
 ## 0.1.0 - 2026-07-15
 
 - Initial research release.

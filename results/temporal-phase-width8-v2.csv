@@ -1,0 +1,4 @@
+width,horizon,variables,clauses,queries,max_bound_bits,frontier_bound_bits,admitted,peak_classes,total_layer_states,compile_ns,quotient_ns_per_query,kernel_ns_per_query,incremental_varisat_ns_per_query,quotient_speedup_vs_incremental,kernel_speedup_vs_incremental,quotient_break_even_queries,sat_queries,unsat_queries,agreement,kernel_agreement,witnesses_valid,kernel_witnesses_valid
+8,10,88,160,100,12,9,true,257,21072,104417,50291.670,293.330,1769.170,0.035178,6.031330,340282366920938463463374607431768211455,23,77,true,true,true,true
+8,100,808,1600,100,12,9,true,257,206112,492542,262582.080,585.830,4782.500,0.018213,8.163631,340282366920938463463374607431768211455,20,80,true,true,true,true
+8,1000,8008,16000,100,12,9,true,257,2056512,3567125,10118550.840,5744.160,412906.660,0.040807,71.882862,340282366920938463463374607431768211455,27,73,true,true,true,true
