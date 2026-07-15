@@ -5,6 +5,10 @@
 - Add a bounded-width temporal model-checking phase benchmark.
 - Add an exact repeated-transition kernel with full witness reconstruction.
 - Preserve dense-quotient negative results alongside kernel measurements.
+- Recognize a fixed deterministic transition vocabulary directly from layered CNF.
+- Replace repeated template scans with one-pass normalization and logarithmic
+  transition jump tables.
+- Update GitHub Actions checkout to its Node 24 release.
 
 ## 0.1.0 - 2026-07-15
 

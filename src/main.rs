@@ -7915,6 +7915,320 @@ fn query_temporal_memory_kernel(
     Some(assignment)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum TemporalRule {
+    Copy(usize),
+    Negate(usize),
+    Xor(usize, usize),
+    Circuit(usize, usize, usize),
+}
+
+impl TemporalRule {
+    fn dependencies(&self) -> Vec<usize> {
+        let mut dependencies = match *self {
+            Self::Copy(a) | Self::Negate(a) => vec![a],
+            Self::Xor(a, b) => vec![a, b],
+            Self::Circuit(a, b, c) => vec![a, b, c],
+        };
+        dependencies.sort_unstable();
+        dependencies.dedup();
+        dependencies
+    }
+
+    fn evaluate(&self, state: usize) -> bool {
+        let bit = |index: usize| (state >> index) & 1 == 1;
+        match *self {
+            Self::Copy(a) => bit(a),
+            Self::Negate(a) => !bit(a),
+            Self::Xor(a, b) => bit(a) ^ bit(b),
+            Self::Circuit(a, b, c) => (bit(a) & bit(b)) ^ bit(c),
+        }
+    }
+}
+
+fn temporal_rules(kind: &str, width: usize) -> Result<Vec<TemporalRule>, String> {
+    if width < 3 && kind == "circuit" {
+        return Err("circuit transition requires width at least 3".to_string());
+    }
+    (0..width)
+        .map(|bit| match kind {
+            "copy" => Ok(TemporalRule::Copy(bit)),
+            "negate" => Ok(TemporalRule::Negate(bit)),
+            "permute" => Ok(TemporalRule::Copy((bit + 1) % width)),
+            "xor" => Ok(TemporalRule::Xor(bit, (bit + 1) % width)),
+            "circuit" => Ok(TemporalRule::Circuit(
+                bit,
+                (bit + 1) % width,
+                (bit + width - 1) % width,
+            )),
+            _ => Err(format!("unknown temporal transition kind: {kind}")),
+        })
+        .collect()
+}
+
+fn temporal_rule_clauses(
+    rule: &TemporalRule,
+    output: usize,
+    current_offset: usize,
+    next_offset: usize,
+) -> Vec<Clause> {
+    let dependencies = rule.dependencies();
+    let mut clauses = Vec::with_capacity(1usize << dependencies.len());
+    for pattern in 0..(1usize << dependencies.len()) {
+        let mut state = 0usize;
+        let mut literals = Vec::with_capacity(dependencies.len() + 1);
+        for (position, &dependency) in dependencies.iter().enumerate() {
+            let value = (pattern >> position) & 1 == 1;
+            if value {
+                state |= 1usize << dependency;
+            }
+            literals.push((current_offset + dependency, !value));
+        }
+        literals.push((next_offset + output, rule.evaluate(state)));
+        literals.sort_unstable();
+        clauses.push(Clause(literals));
+    }
+    clauses
+}
+
+fn temporal_vocabulary_formula(
+    kind: &str,
+    width: usize,
+    horizon: usize,
+) -> Result<(usize, Vec<Clause>), String> {
+    let rules = temporal_rules(kind, width)?;
+    let mut formula = Vec::new();
+    for time in 0..horizon {
+        let current = time * width;
+        let next = (time + 1) * width;
+        for (output, rule) in rules.iter().enumerate() {
+            formula.extend(temporal_rule_clauses(rule, output, current, next));
+        }
+    }
+    Ok((width * (horizon + 1), formula))
+}
+
+fn normalized_temporal_steps(
+    formula: &[Clause],
+    width: usize,
+    horizon: usize,
+) -> Result<Vec<Vec<Vec<Literal>>>, String> {
+    let mut steps = vec![Vec::new(); horizon];
+    for clause in formula {
+        let minimum = clause
+            .0
+            .iter()
+            .map(|&(variable, _)| variable / width)
+            .min()
+            .ok_or_else(|| "empty temporal clause".to_string())?;
+        let maximum = clause
+            .0
+            .iter()
+            .map(|&(variable, _)| variable / width)
+            .max()
+            .unwrap();
+        if maximum != minimum + 1 || minimum >= horizon {
+            return Err("clause is not local to adjacent temporal frames".to_string());
+        }
+        let offset = minimum * width;
+        let mut literals: Vec<_> = clause
+            .0
+            .iter()
+            .map(|&(variable, value)| (variable - offset, value))
+            .collect();
+        literals.sort_unstable();
+        steps[minimum].push(literals);
+    }
+    for step in &mut steps {
+        step.sort_unstable();
+    }
+    Ok(steps)
+}
+
+fn recognize_temporal_rules(
+    formula: &[Clause],
+    width: usize,
+    horizon: usize,
+) -> Result<Vec<TemporalRule>, String> {
+    let steps = normalized_temporal_steps(formula, width, horizon)?;
+    let template = steps
+        .first()
+        .ok_or_else(|| "temporal horizon must be positive".to_string())?;
+    for (time, step) in steps.iter().enumerate().skip(1) {
+        if step != template {
+            return Err(format!("transition template changes at time {time}"));
+        }
+    }
+    let mut rules = Vec::with_capacity(width);
+    for output in 0..width {
+        let output_variable = width + output;
+        let local: Vec<_> = template
+            .iter()
+            .filter(|clause| {
+                clause
+                    .iter()
+                    .any(|&(variable, _)| variable == output_variable)
+            })
+            .collect();
+        if local.is_empty() {
+            return Err(format!("output {output} has no defining clauses"));
+        }
+        let mut dependencies: Vec<_> = local
+            .iter()
+            .flat_map(|clause| clause.iter())
+            .filter_map(|&(variable, _)| (variable < width).then_some(variable))
+            .collect();
+        dependencies.sort_unstable();
+        dependencies.dedup();
+        let mut table = Vec::with_capacity(1usize << dependencies.len());
+        for pattern in 0..(1usize << dependencies.len()) {
+            let mut valid = Vec::new();
+            for output_value in [false, true] {
+                let satisfies_local = local.iter().all(|clause| {
+                    clause.iter().any(|&(variable, positive)| {
+                        let value = if variable == output_variable {
+                            output_value
+                        } else {
+                            let position = dependencies
+                                .iter()
+                                .position(|&dependency| dependency == variable)
+                                .expect("recognized dependency");
+                            (pattern >> position) & 1 == 1
+                        };
+                        value == positive
+                    })
+                });
+                if satisfies_local {
+                    valid.push(output_value);
+                }
+            }
+            if valid.len() != 1 {
+                return Err(format!(
+                    "output {output} is not a deterministic local function"
+                ));
+            }
+            table.push(valid[0]);
+        }
+
+        let mut candidates = Vec::new();
+        for a in 0..width {
+            candidates.push(TemporalRule::Copy(a));
+            candidates.push(TemporalRule::Negate(a));
+            for b in a + 1..width {
+                candidates.push(TemporalRule::Xor(a, b));
+            }
+        }
+        if width >= 3 {
+            for a in 0..width {
+                for b in 0..width {
+                    for c in 0..width {
+                        if a != b && a != c && b != c {
+                            candidates.push(TemporalRule::Circuit(a, b, c));
+                        }
+                    }
+                }
+            }
+        }
+        let rule = candidates
+            .into_iter()
+            .find(|candidate| {
+                candidate.dependencies() == dependencies
+                    && (0..(1usize << dependencies.len())).all(|pattern| {
+                        let mut state = 0usize;
+                        for (position, &dependency) in dependencies.iter().enumerate() {
+                            if (pattern >> position) & 1 == 1 {
+                                state |= 1usize << dependency;
+                            }
+                        }
+                        candidate.evaluate(state) == table[pattern]
+                    })
+            })
+            .ok_or_else(|| format!("output {output} is outside the fixed vocabulary"))?;
+        rules.push(rule);
+    }
+    Ok(rules)
+}
+
+struct RecognizedTemporalKernel {
+    width: usize,
+    horizon: usize,
+    rules: Vec<TemporalRule>,
+    jumps: Vec<Vec<usize>>,
+}
+
+impl RecognizedTemporalKernel {
+    fn recognize(formula: &[Clause], width: usize, horizon: usize) -> Result<Self, String> {
+        let rules = recognize_temporal_rules(formula, width, horizon)?;
+        let states = 1usize << width;
+        let mut base = vec![0usize; states];
+        for (state, target) in base.iter_mut().enumerate() {
+            for (output, rule) in rules.iter().enumerate() {
+                if rule.evaluate(state) {
+                    *target |= 1usize << output;
+                }
+            }
+        }
+        let levels = (usize::BITS - horizon.max(1).leading_zeros()) as usize;
+        let mut jumps = vec![base];
+        for level in 1..levels {
+            let previous = &jumps[level - 1];
+            let next = previous.iter().map(|&state| previous[state]).collect();
+            jumps.push(next);
+        }
+        Ok(Self {
+            width,
+            horizon,
+            rules,
+            jumps,
+        })
+    }
+
+    fn advance(&self, mut state: usize, mut steps: usize) -> usize {
+        let mut level = 0usize;
+        while steps > 0 {
+            if steps & 1 == 1 {
+                state = self.jumps[level][state];
+            }
+            steps >>= 1;
+            level += 1;
+        }
+        state
+    }
+
+    fn query(&self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
+        let states = 1usize << self.width;
+        let observations: Vec<_> = assumptions
+            .iter()
+            .enumerate()
+            .filter_map(|(variable, value)| {
+                value.map(|value| (variable / self.width, variable % self.width, value))
+            })
+            .collect();
+        let initial = (0..states).find(|&initial| {
+            observations
+                .iter()
+                .all(|&(time, bit, value)| ((self.advance(initial, time) >> bit) & 1 == 1) == value)
+        })?;
+        let mut assignment = Vec::with_capacity(self.width * (self.horizon + 1));
+        let mut state = initial;
+        for time in 0..=self.horizon {
+            for bit in 0..self.width {
+                assignment.push((state >> bit) & 1 == 1);
+            }
+            if time < self.horizon {
+                let mut next = 0usize;
+                for (output, rule) in self.rules.iter().enumerate() {
+                    if rule.evaluate(state) {
+                        next |= 1usize << output;
+                    }
+                }
+                state = next;
+            }
+        }
+        Some(assignment)
+    }
+}
+
 fn parse_size_grid(value: &str, name: &str) -> Result<Vec<usize>, String> {
     let values: Result<Vec<_>, _> = value
         .split(',')
@@ -8081,6 +8395,126 @@ fn benchmark_continuation_temporal_phase(
                 "temporal phase width={width} horizon={horizon} vars={vars} admitted=true peak={} quotient_speedup={quotient_speedup:.3} kernel_speedup={kernel_speedup:.3} agreement={agreement} kernel_agreement={kernel_agreement} witnesses_valid={witnesses_valid} kernel_witnesses_valid={kernel_witnesses_valid}",
                 compiled.peak_classes
             );
+        }
+    }
+    Ok(())
+}
+
+fn benchmark_temporal_vocabulary(
+    kinds: &[&str],
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    max_width: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create temporal vocabulary output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,max_width,admitted,recognition_ns,jump_table_states,kernel_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,break_even_queries,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write temporal vocabulary header: {error}"))?;
+    for &kind in kinds {
+        for &width in widths {
+            for &horizon in horizons {
+                let vars = width * (horizon + 1);
+                if width > max_width {
+                    writeln!(file, "{kind},{width},{horizon},{vars},0,{query_count},{max_width},false,0,0,0,0,0,0,0,0,true,true,width_gate")
+                        .map_err(|error| format!("write vocabulary rejection: {error}"))?;
+                    continue;
+                }
+                let (_, formula) = temporal_vocabulary_formula(kind, width, horizon)?;
+                let recognition_start = Instant::now();
+                let kernel = RecognizedTemporalKernel::recognize(&formula, width, horizon)?;
+                let recognition_ns = recognition_start.elapsed().as_nanos();
+                let jump_table_states: usize = kernel.jumps.iter().map(Vec::len).sum();
+                let mut rng =
+                    Rng(seed ^ (width as u64).rotate_left(13) ^ (horizon as u64).rotate_left(31));
+                let mut queries = Vec::with_capacity(query_count);
+                for query_index in 0..query_count {
+                    let mut assumptions = vec![None; vars];
+                    let observations = 2 + query_index % 5;
+                    for _ in 0..observations {
+                        let time = rng.below(horizon + 1);
+                        let bit = rng.below(width);
+                        assumptions[time * width + bit] = Some(rng.next() & 1 == 1);
+                    }
+                    queries.push(assumptions);
+                }
+                let kernel_start = Instant::now();
+                let kernel_answers: Vec<_> = queries
+                    .iter()
+                    .map(|assumptions| kernel.query(assumptions))
+                    .collect();
+                let kernel_ns = kernel_start.elapsed().as_nanos();
+
+                let mut solver = Solver::new();
+                add_to_varisat(&mut solver, &formula);
+                let varisat_start = Instant::now();
+                let varisat_answers: Vec<Option<Vec<bool>>> = queries
+                    .iter()
+                    .map(|assumptions| {
+                        let literals: Vec<_> = assumptions
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(variable, value)| {
+                                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                            })
+                            .collect();
+                        solver.assume(&literals);
+                        if !solver.solve().expect("temporal vocabulary Varisat solve") {
+                            return None;
+                        }
+                        let mut assignment = vec![false; vars];
+                        for literal in solver.model().expect("temporal vocabulary model") {
+                            if literal.var().index() < vars {
+                                assignment[literal.var().index()] = literal.is_positive();
+                            }
+                        }
+                        Some(assignment)
+                    })
+                    .collect();
+                let varisat_ns = varisat_start.elapsed().as_nanos();
+                let agreement = kernel_answers
+                    .iter()
+                    .zip(&varisat_answers)
+                    .all(|(left, right)| left.is_some() == right.is_some());
+                let witnesses_valid =
+                    kernel_answers
+                        .iter()
+                        .zip(&queries)
+                        .all(|(answer, assumptions)| {
+                            answer.as_ref().is_none_or(|assignment| {
+                                satisfies(&formula, assignment)
+                                    && assumptions.iter().enumerate().all(|(variable, required)| {
+                                        required.is_none_or(|value| assignment[variable] == value)
+                                    })
+                            })
+                        });
+                let sat_queries = kernel_answers
+                    .iter()
+                    .filter(|answer| answer.is_some())
+                    .count();
+                let unsat_queries = query_count - sat_queries;
+                let kernel_per_query = kernel_ns as f64 / query_count as f64;
+                let varisat_per_query = varisat_ns as f64 / query_count as f64;
+                let speedup = varisat_per_query / kernel_per_query.max(1.0);
+                let break_even = if varisat_per_query > kernel_per_query {
+                    (recognition_ns as f64 / (varisat_per_query - kernel_per_query)).ceil() as u128
+                } else {
+                    u128::MAX
+                };
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{max_width},true,{recognition_ns},{jump_table_states},{kernel_per_query:.3},{varisat_per_query:.3},{speedup:.6},{break_even},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                    .map_err(|error| format!("write temporal vocabulary row: {error}"))?;
+                file.flush()
+                    .map_err(|error| format!("flush temporal vocabulary output: {error}"))?;
+                println!(
+                    "temporal vocabulary kind={kind} width={width} horizon={horizon} vars={vars} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
+                );
+            }
         }
     }
     Ok(())
@@ -9551,6 +9985,37 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 max_bound_bits,
                 seed,
                 Path::new(&args[6]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-temporal-vocabulary" => {
+            if args.len() != 8 {
+                return Err("usage: continuation-quotient-sat benchmark-temporal-vocabulary KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
+            }
+            let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
+            if kinds.is_empty() {
+                return Err("transition kind grid must not be empty".to_string());
+            }
+            let widths = parse_size_grid(&args[2], "width")?;
+            let horizons = parse_size_grid(&args[3], "horizon")?;
+            let queries = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid vocabulary query count".to_string())?
+                .max(1);
+            let max_width = args[5]
+                .parse::<usize>()
+                .map_err(|_| "invalid vocabulary width gate".to_string())?;
+            let seed = args[6]
+                .parse::<u64>()
+                .map_err(|_| "invalid vocabulary seed".to_string())?;
+            benchmark_temporal_vocabulary(
+                &kinds,
+                &widths,
+                &horizons,
+                queries,
+                max_width,
+                seed,
+                Path::new(&args[7]),
             )?;
             Ok(true)
         }
@@ -16964,5 +17429,45 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn temporal_vocabulary_is_recognized_from_cnf_and_matches_varisat() {
+        let mut rng = Rng(0xdec0_de24);
+        for kind in ["copy", "negate", "permute", "xor", "circuit"] {
+            let width = 4;
+            let horizon = 7;
+            let (vars, formula) = temporal_vocabulary_formula(kind, width, horizon).unwrap();
+            let kernel = RecognizedTemporalKernel::recognize(&formula, width, horizon).unwrap();
+            for _ in 0..100 {
+                let mut assumptions = vec![None; vars];
+                for _ in 0..5 {
+                    assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                }
+                let kernel_answer = kernel.query(&assumptions);
+                let mut constrained = formula.clone();
+                constrained.extend(assumptions.iter().enumerate().filter_map(
+                    |(variable, value)| value.map(|value| Clause(vec![(variable, value)])),
+                ));
+                let varisat_answer = solve_with_varisat(vars, &constrained);
+                assert_eq!(kernel_answer.is_some(), varisat_answer.is_some(), "{kind}");
+                if let Some(assignment) = kernel_answer {
+                    assert!(satisfies(&formula, &assignment), "{kind}");
+                    assert!(assumptions.iter().enumerate().all(|(variable, required)| {
+                        required.is_none_or(|value| assignment[variable] == value)
+                    }));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn temporal_recognizer_rejects_a_changed_transition_template() {
+        let width = 4;
+        let horizon = 3;
+        let (_, mut formula) = temporal_vocabulary_formula("copy", width, horizon).unwrap();
+        let second_step_clause = 2 * width;
+        formula[second_step_clause].0[0].1 = !formula[second_step_clause].0[0].1;
+        assert!(RecognizedTemporalKernel::recognize(&formula, width, horizon).is_err());
     }
 }
