@@ -84,6 +84,33 @@ specialized finite-state systems with width at most eight, not arbitrary SAT or
 arbitrary model checking. The next generalization boundary is exact recognition
 of compositions whose local rules are not individually in the fixed vocabulary.
 
+## Exact recognition beyond named rules
+
+The next experiment recognizes the entire repeated one-step relation directly.
+After one-pass normalization verifies identical CNF at every time step, the
+recognizer enumerates all current and next states. It admits the formula only if
+every current state has exactly one satisfying successor. This accepts exact
+compositions outside the named vocabulary while rejecting incomplete,
+nondeterministic, or changing transition relations.
+
+Four composed families were predeclared: three-input majority, a three-input
+multiplexer, `(a XOR b) AND NOT c`, and `(a XOR b) XOR (c AND d)`. The fixed-rule
+recognizer rejects these families; the exact relation recognizer accepts them.
+
+The 36-case phase grid used widths 4, 6, and 8 and horizons 10, 100, and 1,000.
+All cases agreed with persistent Varisat and returned valid witnesses. Measured
+query speedup ranged from 30.68x to 7,808.06x. A separate 24-case holdout used
+widths 5 and 7, horizons 37, 333, and 2,000, and a different query seed. It also
+had complete agreement and valid witnesses, with speedups from 119.45x to
+4,299.87x.
+
+This broadens the result from a rule vocabulary to arbitrary deterministic
+repeated transitions within a very small state width. Recognition is exhaustive:
+its worst-case work is proportional to `2^(2*width)` times the one-step clause
+count. It therefore does not remove the exponential dependence on width and does
+not imply a general SAT improvement. Its plausible application is repeated-query
+model checking for compact deterministic controllers and protocols.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

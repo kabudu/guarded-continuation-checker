@@ -32,6 +32,10 @@ Validated findings:
   copy, negation, permutation, pairwise XOR, and a three-input Boolean circuit.
   It verifies that the normalized transition template repeats before constructing
   a logarithmic jump table; changed or unknown templates are rejected.
+- A bounded exact-composition recognizer removes the named-rule requirement. It
+  enumerates the repeated one-step CNF relation, admits it only when every current
+  state has exactly one successor, and rejects incomplete, nondeterministic, or
+  changing transitions.
 - All 40 bundled conventional SATLIB cases were rejected by the conservative
   gate. The technique therefore targets a narrow structured regime.
 
@@ -92,6 +96,20 @@ The recognizer receives CNF rather than the generator's transition label. It
 recovers local truth tables, matches only the fixed vocabulary, verifies exact
 template repetition, and reconstructs complete witnesses for every admitted
 query.
+
+## Exact composed transitions
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  4,6,8 10,100,1000 100 8 12345 results/local-compositions.csv
+```
+
+This path recognizes the complete deterministic one-step relation rather than
+matching individual output functions to the fixed vocabulary. Its exhaustive
+recognition cost is exponential in twice the state width, so width eight remains
+an explicit hard gate.
 
 ## Repository layout
 

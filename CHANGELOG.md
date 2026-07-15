@@ -9,6 +9,8 @@
 - Replace repeated template scans with one-pass normalization and logarithmic
   transition jump tables.
 - Update GitHub Actions checkout to its Node 24 release.
+- Recognize arbitrary total deterministic repeated transitions within a fixed
+  width gate, including compositions outside the named rule vocabulary.
 
 ## 0.1.0 - 2026-07-15
 
