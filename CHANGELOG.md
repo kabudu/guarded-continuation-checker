@@ -11,6 +11,8 @@
 - Update GitHub Actions checkout to its Node 24 release.
 - Recognize arbitrary total deterministic repeated transitions within a fixed
   width gate, including compositions outside the named rule vocabulary.
+- Recover separable output functions locally from repeated CNF, eliminating the
+  exhaustive current/next state-pair scan while preserving complete witnesses.
 
 ## 0.1.0 - 2026-07-15
 

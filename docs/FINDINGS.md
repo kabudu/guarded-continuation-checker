@@ -111,6 +111,31 @@ count. It therefore does not remove the exponential dependence on width and does
 not imply a general SAT improvement. Its plausible application is repeated-query
 model checking for compact deterministic controllers and protocols.
 
+## Local output-cone recovery
+
+The follow-up avoids enumerating current/next state pairs when the repeated CNF
+decomposes by output. Each clause must contain exactly one next-frame variable.
+Clauses are grouped by that output, their current-frame dependencies are
+discovered directly, and a total deterministic truth table is checked using only
+those dependencies. Cross-output clauses and non-functions are rejected.
+
+For output dependency bound `k`, semantic recovery takes approximately
+`sum(output 2^k)` truth-table checks instead of `2^(2*width)`. Constructing the
+current explicit jump kernel still takes `O(width * 2^width)` work and
+`O(2^width log horizon)` entries. The experiment therefore removes an avoidable
+exponential factor without claiming polynomial scaling in arbitrary width.
+
+The 36-case phase grid used widths 4, 8, and 12 and horizons 10, 100, and 1,000.
+All rows agreed with persistent Varisat and produced valid witnesses; measured
+query speedups ranged from 19.82x to 7,746.55x. The independently seeded 36-case
+holdout used widths 5, 9, and 13 and horizons 37, 333, and 2,000. Again every row
+agreed and every witness validated, with speedups from 52.26x to 17,387.40x.
+The largest instance contained 26,013 CNF variables.
+
+This is a meaningful model-checking improvement for repeated deterministic
+systems with locally defined outputs. The next boundary is avoiding the explicit
+`2^width` state table, for example through a symbolic transition representation.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

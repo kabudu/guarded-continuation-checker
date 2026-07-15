@@ -8272,6 +8272,97 @@ impl RecognizedTemporalKernel {
         Ok(Self::from_base(width, horizon, base))
     }
 
+    fn recognize_local_composition(
+        formula: &[Clause],
+        width: usize,
+        horizon: usize,
+    ) -> Result<Self, String> {
+        let steps = normalized_temporal_steps(formula, width, horizon)?;
+        let template = steps
+            .first()
+            .ok_or_else(|| "temporal horizon must be positive".to_string())?;
+        if steps.iter().skip(1).any(|step| step != template) {
+            return Err("transition template is not repeated exactly".to_string());
+        }
+
+        let mut output_clauses: Vec<Vec<&Vec<Literal>>> = vec![Vec::new(); width];
+        for clause in template {
+            let mut outputs: Vec<_> = clause
+                .iter()
+                .filter(|&&(variable, _)| variable >= width)
+                .map(|&(variable, _)| variable - width)
+                .collect();
+            outputs.sort_unstable();
+            outputs.dedup();
+            if outputs.len() != 1 {
+                return Err(
+                    "local recovery requires every clause to constrain exactly one output"
+                        .to_string(),
+                );
+            }
+            output_clauses[outputs[0]].push(clause);
+        }
+
+        let mut recovered = Vec::with_capacity(width);
+        for (output, clauses) in output_clauses.iter().enumerate() {
+            if clauses.is_empty() {
+                return Err(format!("output {output} has no defining clauses"));
+            }
+            let output_variable = width + output;
+            let mut dependencies: Vec<_> = clauses
+                .iter()
+                .flat_map(|clause| clause.iter())
+                .filter_map(|&(variable, _)| (variable < width).then_some(variable))
+                .collect();
+            dependencies.sort_unstable();
+            dependencies.dedup();
+            let mut table = Vec::with_capacity(1usize << dependencies.len());
+            for pattern in 0..(1usize << dependencies.len()) {
+                let valid: Vec<_> = [false, true]
+                    .into_iter()
+                    .filter(|&output_value| {
+                        clauses.iter().all(|clause| {
+                            clause.iter().any(|&(variable, positive)| {
+                                let value = if variable == output_variable {
+                                    output_value
+                                } else {
+                                    let position = dependencies
+                                        .iter()
+                                        .position(|&dependency| dependency == variable)
+                                        .expect("local dependency");
+                                    (pattern >> position) & 1 == 1
+                                };
+                                value == positive
+                            })
+                        })
+                    })
+                    .collect();
+                if valid.len() != 1 {
+                    return Err(format!(
+                        "output {output} is not a total deterministic local function"
+                    ));
+                }
+                table.push(valid[0]);
+            }
+            recovered.push((dependencies, table));
+        }
+
+        let states = 1usize << width;
+        let mut base = vec![0usize; states];
+        for (state, target) in base.iter_mut().enumerate() {
+            for (output, (dependencies, table)) in recovered.iter().enumerate() {
+                let mut pattern = 0usize;
+                for (position, &dependency) in dependencies.iter().enumerate() {
+                    pattern |= ((state >> dependency) & 1) << position;
+                }
+                if table[pattern] {
+                    *target |= 1usize << output;
+                }
+            }
+        }
+        Ok(Self::from_base(width, horizon, base))
+    }
+
     fn from_base(width: usize, horizon: usize, base: Vec<usize>) -> Self {
         let levels = (usize::BITS - horizon.max(1).leading_zeros()) as usize;
         let mut jumps = vec![base];
@@ -8618,6 +8709,7 @@ fn benchmark_temporal_vocabulary(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn benchmark_temporal_compositions(
     kinds: &[&str],
     widths: &[usize],
@@ -8626,6 +8718,7 @@ fn benchmark_temporal_compositions(
     max_width: usize,
     seed: u64,
     output: &Path,
+    local_recovery: bool,
 ) -> Result<(), String> {
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
@@ -8646,9 +8739,11 @@ fn benchmark_temporal_compositions(
                 }
                 let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
                 let recognition_start = Instant::now();
-                let kernel = RecognizedTemporalKernel::recognize_exact_composition(
-                    &formula, width, horizon,
-                )?;
+                let kernel = if local_recovery {
+                    RecognizedTemporalKernel::recognize_local_composition(&formula, width, horizon)?
+                } else {
+                    RecognizedTemporalKernel::recognize_exact_composition(&formula, width, horizon)?
+                };
                 let recognition_ns = recognition_start.elapsed().as_nanos();
                 let jump_table_states: usize = kernel.jumps.iter().map(Vec::len).sum();
                 let mut rng =
@@ -8730,7 +8825,8 @@ fn benchmark_temporal_compositions(
                 file.flush()
                     .map_err(|error| format!("flush temporal composition output: {error}"))?;
                 println!(
-                    "temporal composition kind={kind} width={width} horizon={horizon} vars={vars} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
+                    "temporal composition recognizer={} kind={kind} width={width} horizon={horizon} vars={vars} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+                    if local_recovery { "local" } else { "exact" }
                 );
             }
         }
@@ -10237,9 +10333,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
-        "benchmark-temporal-compositions" => {
+        "benchmark-temporal-compositions" | "benchmark-local-temporal-compositions" => {
             if args.len() != 8 {
-                return Err("usage: continuation-quotient-sat benchmark-temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
+                return Err("usage: continuation-quotient-sat benchmark-{local-}temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
             }
             let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
             if kinds.is_empty() {
@@ -10265,6 +10361,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 max_width,
                 seed,
                 Path::new(&args[7]),
+                args[0] == "benchmark-local-temporal-compositions",
             )?;
             Ok(true)
         }
@@ -17764,6 +17861,50 @@ mod tests {
         });
         assert!(
             RecognizedTemporalKernel::recognize_exact_composition(&formula, width, horizon)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn local_composition_recognizer_matches_exact_without_fixed_vocabulary() {
+        let mut rng = Rng(0x10ca_1c0e);
+        for kind in ["majority3", "mux3", "mixed3", "cascade4"] {
+            let width = 7;
+            let horizon = 9;
+            let (vars, formula) = temporal_composition_formula(kind, width, horizon).unwrap();
+            let local =
+                RecognizedTemporalKernel::recognize_local_composition(&formula, width, horizon)
+                    .unwrap();
+            let exact =
+                RecognizedTemporalKernel::recognize_exact_composition(&formula, width, horizon)
+                    .unwrap();
+            assert_eq!(local.jumps[0], exact.jumps[0], "{kind}");
+            for _ in 0..50 {
+                let mut assumptions = vec![None; vars];
+                for _ in 0..6 {
+                    assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                }
+                assert_eq!(
+                    local.query(&assumptions).is_some(),
+                    exact.query(&assumptions).is_some(),
+                    "{kind}"
+                );
+                if let Some(assignment) = local.query(&assumptions) {
+                    assert!(satisfies(&formula, &assignment), "{kind}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn local_composition_recognizer_rejects_cross_output_clauses() {
+        let width = 4;
+        let horizon = 2;
+        let (_, mut formula) = temporal_composition_formula("mixed3", width, horizon).unwrap();
+        formula[0].0.push((width + 1, true));
+        formula[0].0.sort_unstable();
+        assert!(
+            RecognizedTemporalKernel::recognize_local_composition(&formula, width, horizon)
                 .is_err()
         );
     }

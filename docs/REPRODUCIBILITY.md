@@ -129,6 +129,25 @@ template verification, exhaustive determinism checking, and jump-table
 construction. All admitted rows must report `agreement=true`,
 `witnesses_valid=true`, and `status=ok`.
 
+## Local output-cone recovery
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-local-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  4,8,12 10,100,1000 100 12 24680 \
+  results/reproduced-local-temporal-compositions-phase.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-local-temporal-compositions \
+  majority3,mux3,mixed3,cascade4 \
+  5,9,13 37,333,2000 100 13 1357911 \
+  results/reproduced-local-temporal-compositions-holdout.csv
+```
+
+Both grids were fixed before their runs. Every one of the 72 data rows must
+report `agreement=true`, `witnesses_valid=true`, and `status=ok`.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
