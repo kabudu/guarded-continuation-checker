@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this research software, please cite this repository."
+title: "Continuation Quotient SAT"
+type: software
+authors:
+  - family-names: "Kabudu"
+repository-code: "https://github.com/kabudu/continuation-quotient-sat"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-07-15
+abstract: >-
+  A Rust research implementation of exact residual-CNF continuation quotienting
+  for structurally gated repeated SAT assumption queries with witness recovery.

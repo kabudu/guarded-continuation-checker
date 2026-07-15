@@ -1,0 +1,5 @@
+cohort,instances,admitted,rejected,bound_min,bound_max,queries,query_speedup,transition_bytes,repair_residual_bytes,agreement,witnesses_valid
+satlib-uf20,30,0,30,17,19,0,na,na,na,true,true
+satlib-aim50,8,0,8,33,40,0,na,na,na,true,true
+satlib-pigeonhole,2,0,2,31,48,0,na,na,na,true,true
+modular-demo,1,1,0,6,6,10000,3.103310,1106,11632,true,true

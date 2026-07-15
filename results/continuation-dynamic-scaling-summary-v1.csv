@@ -1,0 +1,12 @@
+family,variables,seed,reference_width,peak_classes,peak_class_bits,bit_change,quotient_ns,varisat_ns,time_ratio,sat,witness_valid
+random-planted,31,94031,16,6233,13,-3,572592500,228458,2506.335957,true,true
+random,31,98401,18,7259,13,-5,858266125,185542,4625.724230,false,true
+banded-planted,40,98002,4,12,4,0,2731709,212334,12.865151,true,true
+flower-planted,40,98003,8,6256,13,5,702437709,79291,8858.984109,true,true
+random-planted,40,94040,17,284617,19,2,40458788333,116666,346791.595949,true,true
+stacked-flower-planted,40,98004,11,3774,12,1,714591209,235667,3032.207348,true,true
+banded-planted,60,98102,4,10,4,0,6028042,223459,26.976054,true,true
+flower-planted,60,98103,9,93916,17,8,42748171750,366625,116599.172861,true,true
+stacked-flower-planted,60,98104,12,38651,16,4,13819689958,257833,53599.383935,true,true
+banded-planted,80,98202,4,10,4,0,10011792,578125,17.317694,true,true
+banded-planted,100,98302,4,11,4,0,20914875,129584,161.400134,true,true

@@ -1,0 +1,16 @@
+cohort,family,variables,cases,admitted,bound_min,bound_max,average_peak_classes,valid,average_gate_ns,average_routed_ns
+held-out,random-planted,31,1,0,27,27,0,1,105291,283874
+held-out,random,31,1,0,30,30,0,1,228417,432126
+held-out,banded-planted,40,1,1,5,5,12,1,61500,3448000
+held-out,flower-planted,40,1,0,23,23,0,1,158250,329458
+held-out,random-planted,40,1,0,36,36,0,1,183084,308667
+held-out,stacked-flower-planted,40,1,0,22,22,0,1,199291,413750
+held-out,banded-planted,60,1,1,5,5,10,1,58958,6755041
+held-out,flower-planted,60,1,0,31,31,0,1,381750,542084
+held-out,stacked-flower-planted,60,1,0,34,34,0,1,437625,743375
+held-out,banded-planted,80,1,1,5,5,10,1,110292,12353334
+held-out,banded-planted,100,1,1,5,5,11,1,248000,19389750
+unseen-10,banded-planted,40,10,10,5,5,10.4,10,67112,3806125
+unseen-10,random-planted,40,10,0,33,36,0,10,157892,278075
+unseen-10,flower-planted,40,10,0,23,26,0,10,217479,374721
+unseen-10,stacked-flower-planted,40,10,0,22,26,0,10,209896,360417

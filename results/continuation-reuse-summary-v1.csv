@@ -1,0 +1,7 @@
+cohort,variables,cases,queries_per_case,average_peak_classes,average_compile_ns,average_quotient_ns_per_query,average_fresh_varisat_ns_per_query,average_incremental_varisat_ns_per_query,average_speedup_vs_fresh,average_speedup_vs_incremental,average_break_even_fresh,average_break_even_incremental,agreement,witnesses_valid
+held-out-q10,100,1,10,11,20474625,5158.300,99570.800,7875.000,19.303026,1.526666,217,7537,true,true
+held-out-q100,100,1,100,11,19906208,3353.750,112818.340,4362.500,33.639460,1.300783,182,19734,true,true
+held-out-q1000,100,1,1000,11,15129875,2010.708,98367.542,4092.750,48.921843,2.035477,158,7267,true,true
+held-out-q10000,100,1,10000,11,14455667,1843.287,76600.421,3587.238,41.556415,1.946109,194,8290,true,true
+held-out-q20000,100,1,20000,11,16299958,2086.006,69866.375,3442.967,33.492889,1.650506,241,12013,true,true
+unseen,100,10,5000,10.7,12435000,1610.000,83010.000,3168.000,51.986000,1.968000,153.7,10216.3,true,true

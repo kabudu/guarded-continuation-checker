@@ -1,0 +1,3 @@
+cohort,kind,cases,average_repair_ms,average_full_recompile_ms,aggregate_speedup,repair_faster_cases,agreement,witnesses_valid
+unseen,insert,50,11.963,15.772,1.318,50,true,true
+unseen,delete-root-rebuild,50,12.360,12.380,1.002,20,true,true

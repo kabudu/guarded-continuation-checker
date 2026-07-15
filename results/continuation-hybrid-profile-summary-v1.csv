@@ -1,0 +1,5 @@
+cohort,stable_span,workloads,phases,wins,mean_speedup,aggregate_speedup,min_speedup,max_speedup,compile_decisions,repair_decisions,quotient_decisions,cdcl_decisions,agreement,witnesses_valid
+held-out,4,1,12,0,0.967918,0.967918,0.967918,0.967918,na,na,na,na,true,true
+held-out,6,1,12,1,1.011639,1.011639,1.011639,1.011639,na,na,na,na,true,true
+unseen,4,10,120,1,0.844756,0.858953,0.525285,1.372636,21,7,64,28,true,true
+unseen,6,10,120,2,0.923579,0.922478,0.582336,1.496551,12,7,76,25,true,true
