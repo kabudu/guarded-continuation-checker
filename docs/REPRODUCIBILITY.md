@@ -252,6 +252,14 @@ Then run the frozen dependency rule and natural control:
 For admitted rows, `compiled_frames` must be much smaller than the horizon and
 `cycle_length` must be positive. Rejected rows must identify the node gate.
 
+## Pre-cycle growth guard
+
+Repeat the cycle phase and holdout commands with `dependency-guard` in place of
+`dependency`, seeds unchanged, and outputs
+`results/reproduced-preimage-growth-guard-{phase,holdout}.csv`. Admission,
+agreement, and witness validity must match the unguarded cohorts. The rejected
+holdout rows must identify frame 56 and 192,220 nodes in their status.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

@@ -8479,7 +8479,14 @@ impl SymbolicPreimageTransition {
         order_kind: &str,
     ) -> Result<Self, String> {
         let transition = SymbolicTemporalTransition::recognize(formula, width, horizon)?;
-        let rank_to_variable = preimage_variable_order(&transition.functions, width, order_kind)?;
+        let growth_guard = order_kind == "dependency-guard";
+        let effective_order = if growth_guard {
+            "dependency"
+        } else {
+            order_kind
+        };
+        let rank_to_variable =
+            preimage_variable_order(&transition.functions, width, effective_order)?;
         let mut variable_to_rank = vec![0usize; width];
         for (rank, &variable) in rank_to_variable.iter().enumerate() {
             variable_to_rank[variable] = rank;
@@ -8496,6 +8503,8 @@ impl SymbolicPreimageTransition {
         seen.insert(frames[0].clone(), 0usize);
         let mut cycle_start = None;
         let mut cycle_length = 0usize;
+        let mut previous_nodes = manager.nodes.len();
+        let mut previous_increment = 0usize;
         for time in 0..horizon {
             let previous = &frames[time];
             let next: Vec<_> = transition
@@ -8513,6 +8522,20 @@ impl SymbolicPreimageTransition {
             if manager.budget_exceeded {
                 return Err(format!("BDD node limit exceeded at frame {}", time + 1));
             }
+            let current_nodes = manager.nodes.len();
+            let increment = current_nodes.saturating_sub(previous_nodes);
+            if growth_guard
+                && time >= 2
+                && increment > previous_increment
+                && current_nodes.saturating_add(increment.saturating_mul(4)) > node_limit
+            {
+                return Err(format!(
+                    "BDD growth guard projected node exhaustion at frame {} ({current_nodes} nodes)",
+                    time + 1
+                ));
+            }
+            previous_nodes = current_nodes;
+            previous_increment = increment;
             if let Some(&previous_time) = seen.get(&next) {
                 cycle_start = Some(previous_time);
                 cycle_length = time + 1 - previous_time;
@@ -18765,5 +18788,33 @@ mod tests {
         if let Some(assignment) = answer {
             assert!(satisfies(&formula, &assignment));
         }
+    }
+
+    #[test]
+    fn preimage_growth_guard_rejects_early_without_approximating() {
+        let width = 9;
+        let horizon = 137;
+        let (_, explosive) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let error = SymbolicPreimageTransition::recognize_ordered(
+            &explosive,
+            width,
+            horizon,
+            200_000,
+            "dependency-guard",
+        )
+        .err()
+        .unwrap();
+        assert!(error.contains("growth guard"));
+
+        let (_, compact) = temporal_composition_formula("majority3", width, horizon).unwrap();
+        let guarded = SymbolicPreimageTransition::recognize_ordered(
+            &compact,
+            width,
+            horizon,
+            200_000,
+            "dependency-guard",
+        )
+        .unwrap();
+        assert!(guarded.cycle().is_some());
     }
 }
