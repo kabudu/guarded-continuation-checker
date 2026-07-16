@@ -168,6 +168,9 @@ is retained as a falsified compaction strategy.
 earlier observation cones on demand, applies those observations directly to BDD
 roots, and reconstructs the full prefix witness. This removes most checkpoint
 nodes exactly, but does not yet provide a stable speedup over full CDCL.
+`benchmark-native-bdd-theory` keeps the prefix BDD native, propagates unary and
+pairwise checkpoint consequences into CDCL, and learns query-gated checkpoint
+conflicts. It is exact, but higher-order conflicts dominate the measured cascade.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
