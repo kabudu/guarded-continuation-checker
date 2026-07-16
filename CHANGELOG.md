@@ -15,6 +15,8 @@
   exhaustive current/next state-pair scan while preserving complete witnesses.
 - Replay recovered local transition functions without an explicit `2^width`
   state table for fully specified deterministic initial states.
+- Solve partial-initial-state temporal queries with exact BDD preimages and full
+  witness reconstruction under a hard node-budget admission gate.
 
 ## 0.1.0 - 2026-07-15
 
