@@ -8552,6 +8552,181 @@ impl HybridTemporalPreimage {
     }
 }
 
+#[derive(Clone, Copy)]
+enum EncodedLiteral {
+    Constant(bool),
+    Variable(usize, bool),
+}
+
+fn add_encoded_clause(solver: &mut Solver<'_>, literals: &[EncodedLiteral]) {
+    if literals
+        .iter()
+        .any(|literal| matches!(literal, EncodedLiteral::Constant(true)))
+    {
+        return;
+    }
+    let clause: Vec<_> = literals
+        .iter()
+        .filter_map(|literal| match *literal {
+            EncodedLiteral::Constant(false) => None,
+            EncodedLiteral::Variable(variable, positive) => {
+                Some(Lit::from_var(Var::from_index(variable), positive))
+            }
+            EncodedLiteral::Constant(true) => unreachable!(),
+        })
+        .collect();
+    solver.add_clause(&clause);
+}
+
+fn encoded_bdd_literal(root: usize, positive: bool, original_variables: usize) -> EncodedLiteral {
+    if root < 2 {
+        EncodedLiteral::Constant((root == 1) == positive)
+    } else {
+        EncodedLiteral::Variable(original_variables + root - 2, positive)
+    }
+}
+
+struct CheckpointCdclPreimage {
+    solver: Solver<'static>,
+    variables: usize,
+    checkpoint: usize,
+    bdd_nodes: usize,
+}
+
+impl CheckpointCdclPreimage {
+    fn recognize(
+        formula: &[Clause],
+        width: usize,
+        horizon: usize,
+        checkpoint: usize,
+        node_limit: usize,
+    ) -> Result<Self, String> {
+        if checkpoint == 0 || checkpoint >= horizon {
+            return Err("checkpoint must be inside the temporal horizon".to_string());
+        }
+        let prefix: Vec<_> = formula
+            .iter()
+            .filter(|clause| {
+                clause
+                    .0
+                    .iter()
+                    .map(|&(variable, _)| variable / width)
+                    .min()
+                    .is_some_and(|time| time < checkpoint)
+            })
+            .cloned()
+            .collect();
+        let preimage = SymbolicPreimageTransition::recognize_ordered(
+            &prefix,
+            width,
+            checkpoint,
+            node_limit,
+            "dependency",
+        )?;
+        let variables = width * (horizon + 1);
+        let mut solver = Solver::new();
+
+        for (index, node) in preimage.manager.nodes.iter().copied().enumerate() {
+            let output = variables + index;
+            let input = preimage.rank_to_variable[node.variable];
+            let high = |positive| encoded_bdd_literal(node.high, positive, variables);
+            let low = |positive| encoded_bdd_literal(node.low, positive, variables);
+            add_encoded_clause(
+                &mut solver,
+                &[
+                    EncodedLiteral::Variable(input, false),
+                    high(false),
+                    EncodedLiteral::Variable(output, true),
+                ],
+            );
+            add_encoded_clause(
+                &mut solver,
+                &[
+                    EncodedLiteral::Variable(input, false),
+                    high(true),
+                    EncodedLiteral::Variable(output, false),
+                ],
+            );
+            add_encoded_clause(
+                &mut solver,
+                &[
+                    EncodedLiteral::Variable(input, true),
+                    low(false),
+                    EncodedLiteral::Variable(output, true),
+                ],
+            );
+            add_encoded_clause(
+                &mut solver,
+                &[
+                    EncodedLiteral::Variable(input, true),
+                    low(true),
+                    EncodedLiteral::Variable(output, false),
+                ],
+            );
+        }
+        for time in 1..=checkpoint {
+            for bit in 0..width {
+                let variable = time * width + bit;
+                let root = preimage.frame(time)[bit];
+                add_encoded_clause(
+                    &mut solver,
+                    &[
+                        EncodedLiteral::Variable(variable, false),
+                        encoded_bdd_literal(root, true, variables),
+                    ],
+                );
+                add_encoded_clause(
+                    &mut solver,
+                    &[
+                        EncodedLiteral::Variable(variable, true),
+                        encoded_bdd_literal(root, false, variables),
+                    ],
+                );
+            }
+        }
+        let suffix: Vec<_> = formula
+            .iter()
+            .filter(|clause| {
+                clause
+                    .0
+                    .iter()
+                    .map(|&(variable, _)| variable / width)
+                    .min()
+                    .is_some_and(|time| time >= checkpoint)
+            })
+            .cloned()
+            .collect();
+        add_to_varisat(&mut solver, &suffix);
+        Ok(Self {
+            solver,
+            variables,
+            checkpoint,
+            bdd_nodes: preimage.bdd_nodes(),
+        })
+    }
+
+    fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
+        let literals: Vec<_> = assumptions
+            .iter()
+            .enumerate()
+            .filter_map(|(variable, value)| {
+                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+            })
+            .collect();
+        self.solver.assume(&literals);
+        if !self.solver.solve().expect("checkpoint CDCL solve") {
+            return None;
+        }
+        let mut assignment = vec![false; self.variables];
+        for literal in self.solver.model().expect("checkpoint CDCL model") {
+            if literal.var().index() < self.variables {
+                assignment[literal.var().index()] = literal.is_positive();
+            }
+        }
+        Some(assignment)
+    }
+}
+
 impl SymbolicPreimageTransition {
     fn recognize_ordered(
         formula: &[Clause],
@@ -9589,6 +9764,108 @@ fn benchmark_symbolic_preimages(
                     "symbolic preimage kind={kind} width={width} horizon={horizon} backend={backend} nodes={bdd_nodes} frames={compiled_frames} cycle={cycle_start}/{cycle_length} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_checkpoint_cdcl(
+    kind: &str,
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("create checkpoint output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_prefix_nodes,checkpoint_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write checkpoint header: {error}"))?;
+    for &width in widths {
+        for &horizon in horizons {
+            let vars = width * (horizon + 1);
+            let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
+            let recognition_start = Instant::now();
+            let mut engine = CheckpointCdclPreimage::recognize(
+                &formula,
+                width,
+                horizon,
+                checkpoint.min(horizon.saturating_sub(1)),
+                node_limit,
+            )?;
+            let recognition_ns = recognition_start.elapsed().as_nanos();
+            let mut rng =
+                Rng(seed ^ (width as u64).rotate_left(23) ^ (horizon as u64).rotate_left(43));
+            let mut queries = Vec::with_capacity(query_count);
+            for query_index in 0..query_count {
+                let mut assumptions = vec![None; vars];
+                for _ in 0..(2 + query_index % 7) {
+                    assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                }
+                queries.push(assumptions);
+            }
+            let checkpoint_start = Instant::now();
+            let checkpoint_answers: Vec<_> = queries
+                .iter()
+                .map(|assumptions| engine.query(assumptions))
+                .collect();
+            let checkpoint_ns = checkpoint_start.elapsed().as_nanos();
+            let mut solver = Solver::new();
+            add_to_varisat(&mut solver, &formula);
+            let full_start = Instant::now();
+            let full_answers: Vec<_> = queries
+                .iter()
+                .map(|assumptions| {
+                    let literals: Vec<_> = assumptions
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(variable, value)| {
+                            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                        })
+                        .collect();
+                    solver.assume(&literals);
+                    solver.solve().expect("full checkpoint baseline solve")
+                })
+                .collect();
+            let full_ns = full_start.elapsed().as_nanos();
+            let agreement = checkpoint_answers
+                .iter()
+                .zip(&full_answers)
+                .all(|(answer, &sat)| answer.is_some() == sat);
+            let witnesses_valid =
+                checkpoint_answers
+                    .iter()
+                    .zip(&queries)
+                    .all(|(answer, assumptions)| {
+                        answer.as_ref().is_none_or(|assignment| {
+                            satisfies(&formula, assignment)
+                                && assumptions.iter().enumerate().all(|(variable, required)| {
+                                    required.is_none_or(|value| assignment[variable] == value)
+                                })
+                        })
+                    });
+            let sat_queries = checkpoint_answers
+                .iter()
+                .filter(|answer| answer.is_some())
+                .count();
+            let unsat_queries = query_count - sat_queries;
+            let checkpoint_per_query = checkpoint_ns as f64 / query_count as f64;
+            let full_per_query = full_ns as f64 / query_count as f64;
+            let speedup = full_per_query / checkpoint_per_query.max(1.0);
+            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{},{node_limit},{recognition_ns},{},{checkpoint_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.checkpoint, engine.bdd_nodes)
+                .map_err(|error| format!("write checkpoint row: {error}"))?;
+            file.flush()
+                .map_err(|error| format!("flush checkpoint output: {error}"))?;
+            println!(
+                "checkpoint CDCL kind={kind} width={width} horizon={horizon} checkpoint={} bdd_nodes={} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+                engine.checkpoint, engine.bdd_nodes
+            );
         }
     }
     Ok(())
@@ -11165,6 +11442,37 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 seed,
                 Path::new(&args[8]),
                 &args[6],
+            )?;
+            Ok(true)
+        }
+        "benchmark-checkpoint-cdcl" => {
+            if args.len() != 9 {
+                return Err("usage: continuation-quotient-sat benchmark-checkpoint-cdcl KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+            }
+            let widths = parse_size_grid(&args[2], "width")?;
+            let horizons = parse_size_grid(&args[3], "horizon")?;
+            let queries = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid checkpoint query count".to_string())?
+                .max(1);
+            let checkpoint = args[5]
+                .parse::<usize>()
+                .map_err(|_| "invalid checkpoint frame".to_string())?;
+            let node_limit = args[6]
+                .parse::<usize>()
+                .map_err(|_| "invalid checkpoint node limit".to_string())?;
+            let seed = args[7]
+                .parse::<u64>()
+                .map_err(|_| "invalid checkpoint seed".to_string())?;
+            benchmark_checkpoint_cdcl(
+                &args[1],
+                &widths,
+                &horizons,
+                queries,
+                checkpoint,
+                node_limit,
+                seed,
+                Path::new(&args[8]),
             )?;
             Ok(true)
         }
@@ -18931,6 +19239,41 @@ mod tests {
         );
         if let Some(assignment) = answer {
             assert!(satisfies(&formula, &assignment));
+        }
+    }
+
+    #[test]
+    fn checkpoint_cdcl_reuses_bdd_prefix_exactly() {
+        let width = 9;
+        let horizon = 137;
+        let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let mut checkpoint =
+            CheckpointCdclPreimage::recognize(&formula, width, horizon, 20, 200_000).unwrap();
+        assert_eq!(checkpoint.checkpoint, 20);
+        assert!(checkpoint.bdd_nodes > 0);
+        let mut rng = Rng(0xc1ac_0170);
+        for _ in 0..3 {
+            let mut assumptions = vec![None; vars];
+            for _ in 0..7 {
+                assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+            }
+            let answer = checkpoint.query(&assumptions);
+            let mut constrained = formula.clone();
+            constrained.extend(
+                assumptions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(variable, value)| {
+                        value.map(|value| Clause(vec![(variable, value)]))
+                    }),
+            );
+            assert_eq!(
+                answer.is_some(),
+                solve_with_varisat(vars, &constrained).is_some()
+            );
+            if let Some(assignment) = answer {
+                assert!(satisfies(&formula, &assignment));
+            }
         }
     }
 }

@@ -27,6 +27,8 @@
   pre-cycle budget exhaustion early without approximating an answer.
 - Add an exact hybrid backend that switches growth-guard cases from symbolic BDD
   preimages to persistent CDCL, restoring complete workload admission.
+- Add an exact BDD-prefix-to-CDCL checkpoint experiment and preserve its negative
+  performance result for naïve Tseitin encoding.
 
 ## 0.1.0 - 2026-07-15
 
