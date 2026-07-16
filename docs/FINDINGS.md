@@ -158,6 +158,29 @@ trajectory in `O(width * horizon)` time. It does not yet solve existential searc
 over a partially specified initial state, nor provide logarithmic-horizon jumps.
 The next boundary is symbolic function composition or symbolic preimage search.
 
+## Exact symbolic preimages
+
+The next experiment crosses the partial-initial-state boundary. Every state bit
+at every frame is represented as a BDD over only the initial-frame variables.
+Query observations are intersected symbolically, one satisfying initial state is
+extracted, and the local transition circuit replays it to reconstruct the full
+trajectory. No initial-state enumeration is used.
+
+All 48 phase cases (widths 4, 6, and 8; horizons 2, 4, 8, and 16) were admitted,
+agreed with persistent Varisat, and produced valid witnesses. Query performance
+ranged from 0.50x to 42.47x Varisat. The separately seeded 48-case holdout used
+widths 5, 7, and 9 and horizons 3, 7, 15, and 31. It also achieved complete
+agreement and witness validity, with speedups from 0.78x to 57.22x. The largest
+holdout BDD contained 123,160 nodes.
+
+The result is exact but conditional on BDD compactness. A fixed 200,000-node gate
+rejects growth before answering; it never approximates. Several families reached
+fixed points or cycles, causing BDD size to stabilize, while the four-input
+cascade continued growing. Short-horizon cases can be slower than Varisat, but
+the reusable symbolic preimage becomes advantageous on most longer horizons.
+This is not polynomial scaling for arbitrary transitions: BDDs can still require
+exponential space under an unfavorable function or variable order.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

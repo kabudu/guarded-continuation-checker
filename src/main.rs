@@ -231,6 +231,39 @@ impl BddManager {
         }
         root == 1
     }
+
+    fn negate(&mut self, root: usize, memo: &mut HashMap<usize, usize>) -> usize {
+        if root < 2 {
+            return 1 - root;
+        }
+        if let Some(&result) = memo.get(&root) {
+            return result;
+        }
+        let node = self.node(root);
+        let low = self.negate(node.low, memo);
+        let high = self.negate(node.high, memo);
+        let result = self.make(node.variable, low, high);
+        memo.insert(root, result);
+        result
+    }
+
+    fn satisfying_assignment(&self, mut root: usize, variables: usize) -> Option<Vec<bool>> {
+        if root == 0 {
+            return None;
+        }
+        let mut assignment = vec![false; variables];
+        while root >= 2 {
+            let node = self.node(root);
+            if node.low != 0 {
+                assignment[node.variable] = false;
+                root = node.low;
+            } else {
+                assignment[node.variable] = true;
+                root = node.high;
+            }
+        }
+        (root == 1).then_some(assignment)
+    }
 }
 
 #[derive(Debug)]
@@ -8354,6 +8387,122 @@ impl SymbolicTemporalTransition {
     }
 }
 
+fn compose_local_bdd(
+    manager: &mut BddManager,
+    inputs: &[usize],
+    table: &[bool],
+    level: usize,
+    pattern: usize,
+) -> usize {
+    if level == inputs.len() {
+        return usize::from(table[pattern]);
+    }
+    let low = compose_local_bdd(manager, inputs, table, level + 1, pattern);
+    let high = compose_local_bdd(
+        manager,
+        inputs,
+        table,
+        level + 1,
+        pattern | (1usize << level),
+    );
+    if low == high {
+        return low;
+    }
+    let condition = inputs[level];
+    let mut memo = HashMap::new();
+    let not_condition = manager.negate(condition, &mut memo);
+    let low_branch = manager.and(not_condition, low);
+    let high_branch = manager.and(condition, high);
+    manager.or(low_branch, high_branch)
+}
+
+struct SymbolicPreimageTransition {
+    transition: SymbolicTemporalTransition,
+    manager: BddManager,
+    frames: Vec<Vec<usize>>,
+}
+
+impl SymbolicPreimageTransition {
+    fn recognize(
+        formula: &[Clause],
+        width: usize,
+        horizon: usize,
+        node_limit: usize,
+    ) -> Result<Self, String> {
+        let transition = SymbolicTemporalTransition::recognize(formula, width, horizon)?;
+        let mut manager = BddManager {
+            node_limit: Some(node_limit),
+            ..BddManager::default()
+        };
+        let initial: Vec<_> = (0..width)
+            .map(|variable| manager.literal(variable, true))
+            .collect();
+        let mut frames = vec![initial];
+        for time in 0..horizon {
+            let previous = &frames[time];
+            let next: Vec<_> = transition
+                .functions
+                .iter()
+                .map(|function| {
+                    let inputs: Vec<_> = function
+                        .dependencies
+                        .iter()
+                        .map(|&dependency| previous[dependency])
+                        .collect();
+                    compose_local_bdd(&mut manager, &inputs, &function.table, 0, 0)
+                })
+                .collect();
+            if manager.budget_exceeded {
+                return Err(format!("BDD node limit exceeded at frame {}", time + 1));
+            }
+            frames.push(next);
+        }
+        manager.node_limit = None;
+        Ok(Self {
+            transition,
+            manager,
+            frames,
+        })
+    }
+
+    fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
+        let mut constraint = 1usize;
+        for (variable, required) in assumptions.iter().enumerate() {
+            let Some(required) = required else {
+                continue;
+            };
+            let time = variable / self.transition.width;
+            let bit = variable % self.transition.width;
+            let root = self.frames[time][bit];
+            let literal = if *required {
+                root
+            } else {
+                let mut memo = HashMap::new();
+                self.manager.negate(root, &mut memo)
+            };
+            constraint = self.manager.and(constraint, literal);
+            if constraint == 0 {
+                return None;
+            }
+        }
+        let initial = self
+            .manager
+            .satisfying_assignment(constraint, self.transition.width)?;
+        let mut concrete = vec![None; assumptions.len()];
+        for (bit, &value) in initial.iter().enumerate() {
+            concrete[bit] = Some(value);
+        }
+        for (variable, required) in assumptions.iter().enumerate().skip(self.transition.width) {
+            concrete[variable] = *required;
+        }
+        self.transition.query(&concrete)
+    }
+
+    fn bdd_nodes(&self) -> usize {
+        self.manager.nodes.len()
+    }
+}
+
 struct RecognizedTemporalKernel {
     width: usize,
     horizon: usize,
@@ -9078,6 +9227,113 @@ fn benchmark_symbolic_temporal_compositions(
                     .map_err(|error| format!("flush symbolic temporal output: {error}"))?;
                 println!(
                     "symbolic temporal kind={kind} width={width} horizon={horizon} entries={representation_entries} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_symbolic_preimages(
+    kinds: &[&str],
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    node_limit: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("create preimage output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,admitted,recognition_ns,bdd_nodes,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write preimage header: {error}"))?;
+    for &kind in kinds {
+        for &width in widths {
+            for &horizon in horizons {
+                let vars = width * (horizon + 1);
+                let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
+                let recognition_start = Instant::now();
+                let mut preimage = match SymbolicPreimageTransition::recognize(
+                    &formula, width, horizon, node_limit,
+                ) {
+                    Ok(preimage) => preimage,
+                    Err(error) => {
+                        let recognition_ns = recognition_start.elapsed().as_nanos();
+                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},false,{recognition_ns},{node_limit},0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
+                            .map_err(|write_error| format!("write preimage rejection: {write_error}"))?;
+                        continue;
+                    }
+                };
+                let recognition_ns = recognition_start.elapsed().as_nanos();
+                let bdd_nodes = preimage.bdd_nodes();
+                let mut rng =
+                    Rng(seed ^ (width as u64).rotate_left(19) ^ (horizon as u64).rotate_left(41));
+                let mut queries = Vec::with_capacity(query_count);
+                for query_index in 0..query_count {
+                    let mut assumptions = vec![None; vars];
+                    for _ in 0..(2 + query_index % 7) {
+                        assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                    }
+                    queries.push(assumptions);
+                }
+                let preimage_start = Instant::now();
+                let preimage_answers: Vec<_> = queries
+                    .iter()
+                    .map(|assumptions| preimage.query(assumptions))
+                    .collect();
+                let preimage_ns = preimage_start.elapsed().as_nanos();
+                let mut solver = Solver::new();
+                add_to_varisat(&mut solver, &formula);
+                let varisat_start = Instant::now();
+                let varisat_answers: Vec<_> = queries
+                    .iter()
+                    .map(|assumptions| {
+                        let literals: Vec<_> = assumptions
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(variable, value)| {
+                                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                            })
+                            .collect();
+                        solver.assume(&literals);
+                        solver.solve().expect("preimage Varisat solve")
+                    })
+                    .collect();
+                let varisat_ns = varisat_start.elapsed().as_nanos();
+                let agreement = preimage_answers
+                    .iter()
+                    .zip(&varisat_answers)
+                    .all(|(answer, &sat)| answer.is_some() == sat);
+                let witnesses_valid =
+                    preimage_answers
+                        .iter()
+                        .zip(&queries)
+                        .all(|(answer, assumptions)| {
+                            answer.as_ref().is_none_or(|assignment| {
+                                satisfies(&formula, assignment)
+                                    && assumptions.iter().enumerate().all(|(variable, required)| {
+                                        required.is_none_or(|value| assignment[variable] == value)
+                                    })
+                            })
+                        });
+                let sat_queries = preimage_answers
+                    .iter()
+                    .filter(|answer| answer.is_some())
+                    .count();
+                let unsat_queries = query_count - sat_queries;
+                let preimage_per_query = preimage_ns as f64 / query_count as f64;
+                let varisat_per_query = varisat_ns as f64 / query_count as f64;
+                let speedup = varisat_per_query / preimage_per_query.max(1.0);
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},true,{recognition_ns},{bdd_nodes},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                    .map_err(|error| format!("write preimage row: {error}"))?;
+                file.flush()
+                    .map_err(|error| format!("flush preimage output: {error}"))?;
+                println!(
+                    "symbolic preimage kind={kind} width={width} horizon={horizon} nodes={bdd_nodes} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
                 );
             }
         }
@@ -10586,7 +10842,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-temporal-compositions"
         | "benchmark-local-temporal-compositions"
-        | "benchmark-symbolic-temporal-compositions" => {
+        | "benchmark-symbolic-temporal-compositions"
+        | "benchmark-symbolic-preimages" => {
             if args.len() != 8 {
                 return Err("usage: continuation-quotient-sat benchmark-{local-}temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
             }
@@ -10606,7 +10863,17 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let seed = args[6]
                 .parse::<u64>()
                 .map_err(|_| "invalid composition seed".to_string())?;
-            if args[0] == "benchmark-symbolic-temporal-compositions" {
+            if args[0] == "benchmark-symbolic-preimages" {
+                benchmark_symbolic_preimages(
+                    &kinds,
+                    &widths,
+                    &horizons,
+                    queries,
+                    max_width,
+                    seed,
+                    Path::new(&args[7]),
+                )?;
+            } else if args[0] == "benchmark-symbolic-temporal-compositions" {
                 benchmark_symbolic_temporal_compositions(
                     &kinds,
                     &widths,
@@ -18220,5 +18487,47 @@ mod tests {
                 assert!(satisfies(&formula, &assignment));
             }
         }
+    }
+
+    #[test]
+    fn symbolic_preimage_finds_partial_initial_state_and_witness() {
+        let width = 6;
+        let horizon = 5;
+        let (vars, formula) = temporal_composition_formula("mixed3", width, horizon).unwrap();
+        let mut preimage =
+            SymbolicPreimageTransition::recognize(&formula, width, horizon, 100_000).unwrap();
+        let mut rng = Rng(0xbdd5_ea2c);
+        for _ in 0..40 {
+            let mut assumptions = vec![None; vars];
+            for _ in 0..8 {
+                assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+            }
+            let answer = preimage.query(&assumptions);
+            let mut constrained = formula.clone();
+            constrained.extend(
+                assumptions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(variable, value)| {
+                        value.map(|value| Clause(vec![(variable, value)]))
+                    }),
+            );
+            let varisat = solve_with_varisat(vars, &constrained);
+            assert_eq!(answer.is_some(), varisat.is_some());
+            if let Some(assignment) = answer {
+                assert!(satisfies(&formula, &assignment));
+                assert!(assumptions.iter().enumerate().all(|(variable, required)| {
+                    required.is_none_or(|value| assignment[variable] == value)
+                }));
+            }
+        }
+    }
+
+    #[test]
+    fn symbolic_preimage_node_gate_rejects_growth_exactly() {
+        let width = 10;
+        let horizon = 20;
+        let (_, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        assert!(SymbolicPreimageTransition::recognize(&formula, width, horizon, 10).is_err());
     }
 }

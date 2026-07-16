@@ -140,6 +140,19 @@ This representation stores only the recovered local functions and replays them
 directly. It scales linearly with width for bounded local dependency, but requires
 a fully specified initial state and takes linear time in the horizon.
 
+For partially specified initial states and future observations, the exact
+preimage experiment composes BDDs over the initial frame:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  4,6,8 2,4,8,16 100 200000 707070 results/symbolic-preimages.csv
+```
+
+The numeric gate is a hard BDD-node limit. Exceeding it rejects the instance;
+the implementation never substitutes an approximate answer.
+
 ## Repository layout
 
 - `src/main.rs`: solver, generators, benchmarks, and regression tests.

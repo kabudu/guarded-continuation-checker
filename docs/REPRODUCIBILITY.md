@@ -167,6 +167,26 @@ report `agreement=true`, `witnesses_valid=true`, and `status=ok`.
 Queries fully assign the initial frame and add up to four later observations.
 Every admitted row must report agreement and witness validity.
 
+## Exact symbolic preimages
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  4,6,8 2,4,8,16 100 200000 707070 \
+  results/reproduced-symbolic-preimages-phase.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  5,7,9 3,7,15,31 100 200000 808181 \
+  results/reproduced-symbolic-preimages-holdout.csv
+```
+
+Queries contain two to eight observations at arbitrary frames, so the initial
+state is generally partial or entirely unspecified. Admitted rows must report
+agreement and witness validity; rejected rows must identify the hard node gate.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
