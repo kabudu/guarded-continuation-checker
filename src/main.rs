@@ -8054,6 +8054,42 @@ fn composed_transition_dependencies(
         "majority3" | "mux3" | "mixed3" | "cascade4" => {
             Ok((0..count).map(|offset| (output + offset) % width).collect())
         }
+        "hub3" => {
+            let mut dependencies = vec![output, 0, (output + 1) % width];
+            dependencies.dedup();
+            if dependencies.len() < 3 {
+                for candidate in 0..width {
+                    if !dependencies.contains(&candidate) {
+                        dependencies.push(candidate);
+                    }
+                    if dependencies.len() == 3 {
+                        break;
+                    }
+                }
+            }
+            Ok(dependencies)
+        }
+        "tree3" | "irregular3" => {
+            let preferred = if kind == "tree3" {
+                vec![
+                    output,
+                    output.saturating_sub(1) / 2,
+                    (2 * output + 1) % width,
+                ]
+            } else {
+                vec![output, (output * 3 + 1) % width, (output * 5 + 2) % width]
+            };
+            let mut dependencies = Vec::with_capacity(3);
+            for candidate in preferred.into_iter().chain(0..width) {
+                if !dependencies.contains(&candidate) {
+                    dependencies.push(candidate);
+                }
+                if dependencies.len() == 3 {
+                    break;
+                }
+            }
+            Ok(dependencies)
+        }
         _ => Err(format!("unknown composed transition kind: {kind}")),
     }
 }
@@ -8070,6 +8106,15 @@ fn evaluate_composed_transition(kind: &str, values: &[bool]) -> bool {
         }
         "mixed3" => (values[0] ^ values[1]) & !values[2],
         "cascade4" => (values[0] ^ values[1]) ^ (values[2] & values[3]),
+        "hub3" => {
+            if values[0] {
+                values[1]
+            } else {
+                values[2]
+            }
+        }
+        "tree3" => (values[0] & values[1]) | (values[0] & values[2]) | (values[1] & values[2]),
+        "irregular3" => (values[0] ^ values[1]) & !values[2],
         _ => unreachable!("validated composed transition kind"),
     }
 }
@@ -18615,5 +18660,40 @@ mod tests {
             SymbolicPreimageTransition::recognize_ordered(&formula, width, horizon, 10, "natural")
                 .is_err()
         );
+    }
+
+    #[test]
+    fn asymmetric_preimages_preserve_answers_across_fixed_orders() {
+        let mut rng = Rng(0xa51e_77ac);
+        for kind in ["hub3", "tree3", "irregular3"] {
+            let width = 7;
+            let horizon = 6;
+            let (vars, formula) = temporal_composition_formula(kind, width, horizon).unwrap();
+            for order in ["natural", "reverse", "evenodd", "dependency"] {
+                let mut preimage = SymbolicPreimageTransition::recognize_ordered(
+                    &formula, width, horizon, 200_000, order,
+                )
+                .unwrap();
+                for _ in 0..12 {
+                    let mut assumptions = vec![None; vars];
+                    for _ in 0..6 {
+                        assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                    }
+                    let answer = preimage.query(&assumptions);
+                    let mut constrained = formula.clone();
+                    constrained.extend(assumptions.iter().enumerate().filter_map(
+                        |(variable, value)| value.map(|value| Clause(vec![(variable, value)])),
+                    ));
+                    assert_eq!(
+                        answer.is_some(),
+                        solve_with_varisat(vars, &constrained).is_some(),
+                        "{kind}/{order}"
+                    );
+                    if let Some(assignment) = answer {
+                        assert!(satisfies(&formula, &assignment));
+                    }
+                }
+            }
+        }
     }
 }

@@ -210,6 +210,29 @@ Then reproduce the preselected dependency-order holdout:
   results/reproduced-preimage-order-dependency-holdout.csv
 ```
 
+## Asymmetric ordering holdout
+
+Run the four phase orders by replacing `ORDER` with `natural`, `reverse`,
+`evenodd`, and `dependency`:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  hub3,tree3,irregular3 \
+  7,9 7,15,31 50 200000 ORDER 313131 \
+  results/reproduced-asymmetric-order-ORDER-phase.csv
+```
+
+Then run the frozen dependency rule and natural control:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  hub3,tree3,irregular3 \
+  6,8,10 5,13,29 50 200000 dependency 414141 \
+  results/reproduced-asymmetric-order-dependency-holdout.csv
+```
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
