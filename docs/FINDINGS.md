@@ -197,6 +197,25 @@ frame 23. This confirms the gate and ordering implementation, but not a growth
 breakthrough. A useful next ordering experiment requires asymmetric dependency
 graphs or dynamic reordering with a correctness-preserving resource bound.
 
+## Asymmetric dependency ordering
+
+Three asymmetric transition families were added: hub-coupled, tree-like, and an
+irregular modular dependency graph. Each remains a repeated deterministic local
+composition, so the exact preimage and witness contract is unchanged.
+
+On the 18-case phase cohort, all four orders admitted every case and all 72 rows
+were exact. Dependency ordering used 23,288 aggregate BDD nodes versus 25,286 for
+natural order, a 7.90% reduction. Reverse used 25,041 and even/odd used 28,985.
+Dependency order also reduced the phase maximum from 4,389 to 3,729 nodes.
+
+Dependency order was frozen before the unseen even-width holdout. All 27 selected
+rows were admitted, agreed with Varisat, and returned valid witnesses. Against a
+natural-order control on that same holdout, dependency order used 25,026 aggregate
+nodes versus 25,597, a smaller 2.23% improvement. It was not better on every
+formula, but the aggregate phase advantage survived without per-formula trials.
+This supports dependency ordering as a cheap default for asymmetric graphs, not
+as a universal solution to BDD growth.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

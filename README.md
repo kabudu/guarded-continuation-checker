@@ -154,6 +154,8 @@ The numeric gate is a hard BDD-node limit. Exceeding it rejects the instance;
 the implementation never substitutes an approximate answer.
 Available calibration-free orders are `natural`, `reverse`, `evenodd`, and
 `dependency`; the last is derived once from the local dependency graph.
+The benchmark generator also includes asymmetric `hub3`, `tree3`, and
+`irregular3` transition families for evaluating structural ordering rules.
 
 ## Repository layout
 
