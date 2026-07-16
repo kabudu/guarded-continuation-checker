@@ -9226,32 +9226,36 @@ impl NativeBddTheoryPreimage {
                 return Some(assignment);
             }
 
-            let mut core = (0..self.width).collect::<Vec<_>>();
-            let mut candidate_index = 0;
-            while candidate_index < core.len() {
-                let mut candidate = constraint;
-                for (position, &bit) in core.iter().enumerate() {
-                    if position == candidate_index {
-                        continue;
-                    }
+            let checkpoint_literals = checkpoint_state
+                .iter()
+                .enumerate()
+                .map(|(bit, &value)| {
                     let root = self.preimage.frame(self.checkpoint)[bit];
-                    let literal = if checkpoint_state[bit] {
+                    if value {
                         root
                     } else {
                         let mut memo = HashMap::new();
                         self.preimage.manager.negate(root, &mut memo)
-                    };
-                    candidate = self.preimage.manager.and(candidate, literal);
-                    if candidate == 0 {
-                        break;
                     }
-                }
-                if candidate == 0 {
-                    core.remove(candidate_index);
-                } else {
-                    candidate_index += 1;
+                })
+                .collect::<Vec<_>>();
+            let mut suffix = vec![1usize; self.width + 1];
+            for bit in (0..self.width).rev() {
+                suffix[bit] = self
+                    .preimage
+                    .manager
+                    .and(checkpoint_literals[bit], suffix[bit + 1]);
+            }
+            let mut prefix = constraint;
+            let mut core = Vec::with_capacity(self.width);
+            for bit in 0..self.width {
+                let without_current = self.preimage.manager.and(prefix, suffix[bit + 1]);
+                if without_current != 0 {
+                    core.push(bit);
+                    prefix = self.preimage.manager.and(prefix, checkpoint_literals[bit]);
                 }
             }
+            debug_assert_eq!(prefix, 0);
 
             let mut block = Vec::with_capacity(core.len() + 1);
             block.push(Lit::from_var(activation, false));

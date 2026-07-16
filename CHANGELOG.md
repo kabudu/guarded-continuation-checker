@@ -39,6 +39,8 @@
   learning and bounded pairwise theory propagation.
 - Generalize rejected checkpoint states into exact BDD-proven incompatible
   subcubes and report learned-clause width.
+- Add prefix/suffix conjunction caches for linear-pass exact BDD conflict
+  explanation extraction.
 
 ## 0.1.0 - 2026-07-15
 
