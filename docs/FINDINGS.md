@@ -296,6 +296,24 @@ the original transition CNF. The next checkpoint experiment should compact or
 slice the BDD roots to only queried observations, or translate the prefix to a
 shared AIG with structural hashing before CNF emission.
 
+## Structurally hashed AIG checkpoint
+
+The AIG follow-up converts each BDD decision to shared AND/inverter logic, applies
+constant, identity, complement, and commutative reductions, and emits three CNF
+clauses per surviving AND gate. It preserves arbitrary observations and full
+witness recovery exactly.
+
+It did not compact the cascade prefix. At width 9 and checkpoint 10, 41,299 BDD
+nodes became 83,971 AND gates and 251,913 clauses. Speedups versus full CDCL were
+0.051× and 0.221× at horizons 137 and 1,333. The preselected unseen horizon-7,777
+holdout reached 0.619×, below the direct BDD checkpoint's 0.727×. All answers
+agreed and all witnesses validated.
+
+Generic AIG structural hashing therefore fails on this prefix because canonical
+BDD sharing does not translate into repeated two-input conjunctions. The next
+experiment should lazily encode only the checkpoint cone plus earlier frame roots
+actually mentioned by queries, retaining exactness while avoiding unused history.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

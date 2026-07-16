@@ -281,6 +281,21 @@ preselected holdout with:
 
 Every row must agree with the full-CDCL baseline and return valid witnesses.
 
+## Structurally hashed AIG checkpoint
+
+Run the phase and preselected holdout with:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-checkpoint-aig cascade4 9 137,1333 50 10 200000 717171 \
+  results/reproduced-checkpoint-aig-10-phase.csv
+./target/release/continuation-quotient-sat \
+  benchmark-checkpoint-aig cascade4 9 7777 50 10 200000 818181 \
+  results/reproduced-checkpoint-aig-10-holdout.csv
+```
+
+Every row must report `encoding=aig`, exact agreement, and valid witnesses.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
