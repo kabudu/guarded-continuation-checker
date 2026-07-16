@@ -8470,6 +8470,88 @@ struct SymbolicPreimageTransition {
     cycle_length: usize,
 }
 
+enum HybridTemporalPreimage {
+    Bdd(Box<SymbolicPreimageTransition>),
+    Cdcl {
+        solver: Solver<'static>,
+        variables: usize,
+    },
+}
+
+impl HybridTemporalPreimage {
+    fn recognize(
+        formula: &[Clause],
+        width: usize,
+        horizon: usize,
+        node_limit: usize,
+    ) -> Result<(Self, &'static str, Option<String>), String> {
+        match SymbolicPreimageTransition::recognize_ordered(
+            formula,
+            width,
+            horizon,
+            node_limit,
+            "dependency-guard",
+        ) {
+            Ok(preimage) => Ok((Self::Bdd(Box::new(preimage)), "bdd", None)),
+            Err(error) if error.contains("growth guard") => {
+                let mut solver = Solver::new();
+                add_to_varisat(&mut solver, formula);
+                Ok((
+                    Self::Cdcl {
+                        solver,
+                        variables: width * (horizon + 1),
+                    },
+                    "cdcl-fallback",
+                    Some(error),
+                ))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
+        match self {
+            Self::Bdd(preimage) => preimage.query(assumptions),
+            Self::Cdcl { solver, variables } => {
+                let literals: Vec<_> = assumptions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(variable, value)| {
+                        value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                    })
+                    .collect();
+                solver.assume(&literals);
+                if !solver.solve().expect("hybrid temporal CDCL solve") {
+                    return None;
+                }
+                let mut assignment = vec![false; *variables];
+                for literal in solver.model().expect("hybrid temporal CDCL model") {
+                    if literal.var().index() < *variables {
+                        assignment[literal.var().index()] = literal.is_positive();
+                    }
+                }
+                Some(assignment)
+            }
+        }
+    }
+
+    fn bdd_metrics(&self) -> (usize, usize, usize, usize) {
+        match self {
+            Self::Bdd(preimage) => {
+                let (cycle_start, cycle_length) =
+                    preimage.cycle().map_or((usize::MAX, 0usize), |cycle| cycle);
+                (
+                    preimage.bdd_nodes(),
+                    preimage.compiled_frames(),
+                    cycle_start,
+                    cycle_length,
+                )
+            }
+            Self::Cdcl { .. } => (0, 0, usize::MAX, 0),
+        }
+    }
+}
+
 impl SymbolicPreimageTransition {
     fn recognize_ordered(
         formula: &[Clause],
@@ -9412,7 +9494,7 @@ fn benchmark_symbolic_preimages(
     }
     let mut file = fs::File::create(output)
         .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,order,admitted,recognition_ns,bdd_nodes,compiled_frames,cycle_start,cycle_length,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,order,backend,admitted,recognition_ns,bdd_nodes,compiled_frames,cycle_start,cycle_length,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
         .map_err(|error| format!("write preimage header: {error}"))?;
     for &kind in kinds {
         for &width in widths {
@@ -9420,22 +9502,26 @@ fn benchmark_symbolic_preimages(
                 let vars = width * (horizon + 1);
                 let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
                 let recognition_start = Instant::now();
-                let mut preimage = match SymbolicPreimageTransition::recognize_ordered(
-                    &formula, width, horizon, node_limit, order_kind,
-                ) {
-                    Ok(preimage) => preimage,
+                let engine_result = if order_kind == "hybrid" {
+                    HybridTemporalPreimage::recognize(&formula, width, horizon, node_limit)
+                } else {
+                    SymbolicPreimageTransition::recognize_ordered(
+                        &formula, width, horizon, node_limit, order_kind,
+                    )
+                    .map(|preimage| (HybridTemporalPreimage::Bdd(Box::new(preimage)), "bdd", None))
+                };
+                let (mut preimage, backend, fallback_reason) = match engine_result {
+                    Ok(engine) => engine,
                     Err(error) => {
                         let recognition_ns = recognition_start.elapsed().as_nanos();
-                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},false,{recognition_ns},{node_limit},0,0,0,0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
+                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},rejected,false,{recognition_ns},{node_limit},0,0,0,0,0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
                             .map_err(|write_error| format!("write preimage rejection: {write_error}"))?;
                         continue;
                     }
                 };
                 let recognition_ns = recognition_start.elapsed().as_nanos();
-                let bdd_nodes = preimage.bdd_nodes();
-                let compiled_frames = preimage.compiled_frames();
-                let (cycle_start, cycle_length) =
-                    preimage.cycle().map_or((usize::MAX, 0usize), |cycle| cycle);
+                let (bdd_nodes, compiled_frames, cycle_start, cycle_length) =
+                    preimage.bdd_metrics();
                 let mut rng =
                     Rng(seed ^ (width as u64).rotate_left(19) ^ (horizon as u64).rotate_left(41));
                 let mut queries = Vec::with_capacity(query_count);
@@ -9494,12 +9580,13 @@ fn benchmark_symbolic_preimages(
                 let preimage_per_query = preimage_ns as f64 / query_count as f64;
                 let varisat_per_query = varisat_ns as f64 / query_count as f64;
                 let speedup = varisat_per_query / preimage_per_query.max(1.0);
-                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},true,{recognition_ns},{bdd_nodes},{compiled_frames},{cycle_start},{cycle_length},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                let status = fallback_reason.unwrap_or_else(|| "ok".to_string());
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},{backend},true,{recognition_ns},{bdd_nodes},{compiled_frames},{cycle_start},{cycle_length},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},{}", formula.len(), status.replace(',', ";"))
                     .map_err(|error| format!("write preimage row: {error}"))?;
                 file.flush()
                     .map_err(|error| format!("flush preimage output: {error}"))?;
                 println!(
-                    "symbolic preimage kind={kind} width={width} horizon={horizon} nodes={bdd_nodes} frames={compiled_frames} cycle={cycle_start}/{cycle_length} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
+                    "symbolic preimage kind={kind} width={width} horizon={horizon} backend={backend} nodes={bdd_nodes} frames={compiled_frames} cycle={cycle_start}/{cycle_length} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
                 );
             }
         }
@@ -18816,5 +18903,34 @@ mod tests {
         )
         .unwrap();
         assert!(guarded.cycle().is_some());
+    }
+
+    #[test]
+    fn hybrid_preimage_falls_back_exactly_on_bdd_growth() {
+        let width = 9;
+        let horizon = 137;
+        let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let (mut hybrid, backend, reason) =
+            HybridTemporalPreimage::recognize(&formula, width, horizon, 200_000).unwrap();
+        assert_eq!(backend, "cdcl-fallback");
+        assert!(reason.unwrap().contains("growth guard"));
+        let mut assumptions = vec![None; vars];
+        assumptions[3] = Some(true);
+        assumptions[91 * width + 4] = Some(false);
+        let answer = hybrid.query(&assumptions);
+        let mut constrained = formula.clone();
+        constrained.extend(
+            assumptions
+                .iter()
+                .enumerate()
+                .filter_map(|(variable, value)| value.map(|value| Clause(vec![(variable, value)]))),
+        );
+        assert_eq!(
+            answer.is_some(),
+            solve_with_varisat(vars, &constrained).is_some()
+        );
+        if let Some(assignment) = answer {
+            assert!(satisfies(&formula, &assignment));
+        }
     }
 }

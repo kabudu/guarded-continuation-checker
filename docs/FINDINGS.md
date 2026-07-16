@@ -255,6 +255,27 @@ This is bounded resource protection, not a cure for pre-cycle explosion. A more
 aggressive projection could reject a formula shortly before it stabilizes, so
 the guard remains an explicit optional mode rather than the default exact gate.
 
+## Exact BDD/CDCL representation switch
+
+The `hybrid` mode runs dependency-ordered, growth-guarded BDD compilation first.
+If and only if the fixed growth guard fires, it constructs a persistent CDCL
+representation of the same temporal CNF and serves the query workload there.
+Other recognition errors still reject. This is an exact backend switch after the
+guard, not conversion of the partially built BDD into an AIG.
+
+All 24 phase cases remained on the BDD backend, agreed with Varisat, and returned
+valid witnesses, with speedups from 89.66x to 4,351.02x. On the 36-case unseen
+holdout, 33 remained on BDDs and the three former width-9 cascade rejections used
+CDCL fallback. The hybrid therefore admitted 36/36 cases with complete agreement
+and witness validity. Overall holdout speedups ranged from 0.97x to 5,282.56x;
+the three fallback rows were 0.97x--1.03x baseline, as expected for equivalent
+persistent CDCL work after paying the failed BDD attempt.
+
+This closes the operational completeness gap but does not make explosive cases
+faster. The next representation experiment should reuse the already composed
+prefix—via an exact circuit/AIG checkpoint—instead of restarting from the full
+CNF when the guard fires.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

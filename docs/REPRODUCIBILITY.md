@@ -260,6 +260,13 @@ Repeat the cycle phase and holdout commands with `dependency-guard` in place of
 agreement, and witness validity must match the unguarded cohorts. The rejected
 holdout rows must identify frame 56 and 192,220 nodes in their status.
 
+## Exact BDD/CDCL hybrid
+
+Repeat the cycle phase and holdout commands with `hybrid` as the order and write
+to `results/reproduced-hybrid-preimages-{phase,holdout}.csv`. Phase must report 24
+`bdd` rows. Holdout must report 33 `bdd` and three `cdcl-fallback` rows. Every row
+must be admitted with `agreement=true` and `witnesses_valid=true`.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

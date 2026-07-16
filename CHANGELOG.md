@@ -25,6 +25,8 @@
   long-horizon preimage queries without redundant BDD composition.
 - Add an optional calibration-free BDD growth guard that rejects projected
   pre-cycle budget exhaustion early without approximating an answer.
+- Add an exact hybrid backend that switches growth-guard cases from symbolic BDD
+  preimages to persistent CDCL, restoring complete workload admission.
 
 ## 0.1.0 - 2026-07-15
 

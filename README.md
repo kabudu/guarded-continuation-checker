@@ -156,6 +156,8 @@ Available calibration-free orders are `natural`, `reverse`, `evenodd`, and
 `dependency`; the last is derived once from the local dependency graph.
 `dependency-guard` adds a fixed pre-cycle node-growth projection and rejects
 before the hard limit when exhaustion is imminent.
+`hybrid` uses that guarded BDD path first and switches growth-guard cases to a
+persistent exact CDCL solver, restoring complete admission without approximation.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
