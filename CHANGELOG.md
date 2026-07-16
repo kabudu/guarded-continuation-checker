@@ -31,6 +31,10 @@
   performance result for naïve Tseitin encoding.
 - Add a structurally hashed AIG checkpoint encoding and preserve the finding that
   it expands, rather than compacts, the measured cascade prefix.
+- Add exact lazy observation-cone checkpoint encoding with direct BDD-root
+  assumptions and prefix witness reconstruction.
+- Expand cyclic symbolic frames correctly when checkpoint encodings reference a
+  frame beyond the stored transient/cycle vocabulary.
 
 ## 0.1.0 - 2026-07-15
 

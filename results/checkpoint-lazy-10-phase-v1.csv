@@ -1,0 +1,3 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,encoding,recognition_ns,bdd_prefix_nodes,encoding_nodes,encoding_clauses,checkpoint_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status
+cascade4,9,137,1242,19728,50,10,200000,lazy-bdd,19572000,41299,1252,5008,10036720.000,10002641.660,0.996605,38,12,true,true,ok
+cascade4,9,1333,12006,191952,50,10,200000,lazy-bdd,41731083,41299,855,3420,67068133.340,79760593.340,1.189247,44,6,true,true,ok

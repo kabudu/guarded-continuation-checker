@@ -8657,6 +8657,106 @@ fn encoded_bdd_literal(root: usize, positive: bool, original_variables: usize) -
     }
 }
 
+struct LazyBddEncoding {
+    nodes: Vec<BddNode>,
+    rank_to_variable: Vec<usize>,
+    frames: Vec<Vec<usize>>,
+    encoded_nodes: Vec<bool>,
+    linked_variables: Vec<bool>,
+}
+
+fn encode_bdd_cone(
+    solver: &mut Solver<'_>,
+    lazy: &mut LazyBddEncoding,
+    variables: usize,
+    root: usize,
+) -> usize {
+    if root < 2 || lazy.encoded_nodes[root - 2] {
+        return 0;
+    }
+    let node = lazy.nodes[root - 2];
+    let mut added = encode_bdd_cone(solver, lazy, variables, node.low);
+    added += encode_bdd_cone(solver, lazy, variables, node.high);
+    let output = variables + root - 2;
+    let input = lazy.rank_to_variable[node.variable];
+    let high = |positive| encoded_bdd_literal(node.high, positive, variables);
+    let low = |positive| encoded_bdd_literal(node.low, positive, variables);
+    add_encoded_clause(
+        solver,
+        &[
+            EncodedLiteral::Variable(input, false),
+            high(false),
+            EncodedLiteral::Variable(output, true),
+        ],
+    );
+    add_encoded_clause(
+        solver,
+        &[
+            EncodedLiteral::Variable(input, false),
+            high(true),
+            EncodedLiteral::Variable(output, false),
+        ],
+    );
+    add_encoded_clause(
+        solver,
+        &[
+            EncodedLiteral::Variable(input, true),
+            low(false),
+            EncodedLiteral::Variable(output, true),
+        ],
+    );
+    add_encoded_clause(
+        solver,
+        &[
+            EncodedLiteral::Variable(input, true),
+            low(true),
+            EncodedLiteral::Variable(output, false),
+        ],
+    );
+    lazy.encoded_nodes[root - 2] = true;
+    added + 1
+}
+
+fn link_lazy_frame_variable(
+    solver: &mut Solver<'_>,
+    lazy: &mut LazyBddEncoding,
+    variables: usize,
+    width: usize,
+    variable: usize,
+) -> usize {
+    if lazy.linked_variables[variable] {
+        return 0;
+    }
+    let time = variable / width;
+    let bit = variable % width;
+    let root = lazy.frames[time][bit];
+    let added = encode_bdd_cone(solver, lazy, variables, root);
+    let literal = encoded_bdd_literal(root, true, variables);
+    add_encoded_clause(
+        solver,
+        &[EncodedLiteral::Variable(variable, false), literal],
+    );
+    add_encoded_clause(
+        solver,
+        &[EncodedLiteral::Variable(variable, true), literal.negated()],
+    );
+    lazy.linked_variables[variable] = true;
+    added
+}
+
+fn evaluate_bdd_root(lazy: &LazyBddEncoding, assignment: &[bool], mut root: usize) -> bool {
+    while root >= 2 {
+        let node = lazy.nodes[root - 2];
+        let variable = lazy.rank_to_variable[node.variable];
+        root = if assignment[variable] {
+            node.high
+        } else {
+            node.low
+        };
+    }
+    root == 1
+}
+
 struct CheckpointCdclPreimage {
     solver: Solver<'static>,
     variables: usize,
@@ -8664,6 +8764,8 @@ struct CheckpointCdclPreimage {
     bdd_nodes: usize,
     encoding_nodes: usize,
     encoding_clauses: usize,
+    width: usize,
+    lazy: Option<LazyBddEncoding>,
 }
 
 impl CheckpointCdclPreimage {
@@ -8699,7 +8801,8 @@ impl CheckpointCdclPreimage {
         )?;
         let variables = width * (horizon + 1);
         let mut solver = Solver::new();
-        let (roots, encoding_nodes, encoding_clauses) = match encoding {
+        let mut lazy = None;
+        let (roots, mut encoding_nodes, mut encoding_clauses) = match encoding {
             "bdd" => {
                 for (index, node) in preimage.manager.nodes.iter().copied().enumerate() {
                     let output = variables + index;
@@ -8739,10 +8842,9 @@ impl CheckpointCdclPreimage {
                         ],
                     );
                 }
-                let roots = preimage
-                    .frames
-                    .iter()
-                    .map(|frame| {
+                let roots = (0..=checkpoint)
+                    .map(|time| {
+                        let frame = preimage.frame(time);
                         frame
                             .iter()
                             .map(|&root| encoded_bdd_literal(root, true, variables))
@@ -8762,10 +8864,14 @@ impl CheckpointCdclPreimage {
                         EncodedLiteral::Variable(preimage.rank_to_variable[node.variable], true);
                     literals.push(builder.ite(condition, literals[node.high], literals[node.low]));
                 }
-                let roots = preimage
-                    .frames
-                    .iter()
-                    .map(|frame| frame.iter().map(|&root| literals[root]).collect::<Vec<_>>())
+                let roots = (0..=checkpoint)
+                    .map(|time| {
+                        preimage
+                            .frame(time)
+                            .iter()
+                            .map(|&root| literals[root])
+                            .collect::<Vec<_>>()
+                    })
                     .collect::<Vec<_>>();
                 for &(output, a, b) in &builder.gates {
                     let out = EncodedLiteral::Variable(output, true);
@@ -8775,19 +8881,57 @@ impl CheckpointCdclPreimage {
                 }
                 (roots, builder.gates.len(), builder.gates.len() * 3)
             }
+            "lazy-bdd" => {
+                let expanded_frames = (0..=checkpoint)
+                    .map(|time| preimage.frame(time).to_vec())
+                    .collect::<Vec<_>>();
+                let roots = expanded_frames
+                    .iter()
+                    .map(|frame| {
+                        frame
+                            .iter()
+                            .map(|&root| encoded_bdd_literal(root, true, variables))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                lazy = Some(LazyBddEncoding {
+                    nodes: preimage.manager.nodes.clone(),
+                    rank_to_variable: preimage.rank_to_variable.clone(),
+                    frames: expanded_frames,
+                    encoded_nodes: vec![false; preimage.bdd_nodes()],
+                    linked_variables: vec![false; variables],
+                });
+                (roots, 0, 0)
+            }
             _ => return Err(format!("unknown checkpoint encoding: {encoding}")),
         };
-        for (time, frame) in roots.iter().enumerate().take(checkpoint + 1).skip(1) {
+        let first_linked_frame = if encoding == "lazy-bdd" {
+            checkpoint
+        } else {
+            1
+        };
+        for (time, frame) in roots
+            .iter()
+            .enumerate()
+            .take(checkpoint + 1)
+            .skip(first_linked_frame)
+        {
             for (bit, &root) in frame.iter().enumerate().take(width) {
                 let variable = time * width + bit;
-                add_encoded_clause(
-                    &mut solver,
-                    &[EncodedLiteral::Variable(variable, false), root],
-                );
-                add_encoded_clause(
-                    &mut solver,
-                    &[EncodedLiteral::Variable(variable, true), root.negated()],
-                );
+                if let Some(lazy) = lazy.as_mut() {
+                    encoding_nodes +=
+                        link_lazy_frame_variable(&mut solver, lazy, variables, width, variable);
+                    encoding_clauses = encoding_nodes * 4;
+                } else {
+                    add_encoded_clause(
+                        &mut solver,
+                        &[EncodedLiteral::Variable(variable, false), root],
+                    );
+                    add_encoded_clause(
+                        &mut solver,
+                        &[EncodedLiteral::Variable(variable, true), root.negated()],
+                    );
+                }
             }
         }
         let suffix: Vec<_> = formula
@@ -8810,15 +8954,50 @@ impl CheckpointCdclPreimage {
             bdd_nodes: preimage.bdd_nodes(),
             encoding_nodes,
             encoding_clauses,
+            width,
+            lazy,
         })
     }
 
     fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
-        let literals: Vec<_> = assumptions
+        let mut translated = Vec::new();
+        if let Some(lazy) = self.lazy.as_mut() {
+            for (variable, value) in assumptions.iter().enumerate() {
+                let time = variable / self.width;
+                if let Some(value) = value
+                    && time > 0
+                    && time < self.checkpoint
+                {
+                    let root = lazy.frames[time][variable % self.width];
+                    self.encoding_nodes +=
+                        encode_bdd_cone(&mut self.solver, lazy, self.variables, root);
+                    translated.push(encoded_bdd_literal(root, *value, self.variables));
+                }
+            }
+            self.encoding_clauses = self.encoding_nodes * 4;
+        }
+        for (variable, value) in assumptions.iter().enumerate() {
+            let time = variable / self.width;
+            if let Some(value) = value
+                && (self.lazy.is_none() || time == 0 || time >= self.checkpoint)
+            {
+                translated.push(EncodedLiteral::Variable(variable, *value));
+            }
+        }
+        if translated
             .iter()
-            .enumerate()
-            .filter_map(|(variable, value)| {
-                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+            .any(|literal| matches!(literal, EncodedLiteral::Constant(false)))
+        {
+            return None;
+        }
+        let literals: Vec<_> = translated
+            .iter()
+            .filter_map(|literal| match *literal {
+                EncodedLiteral::Variable(variable, positive) => {
+                    Some(Lit::from_var(Var::from_index(variable), positive))
+                }
+                EncodedLiteral::Constant(true) => None,
+                EncodedLiteral::Constant(false) => unreachable!(),
             })
             .collect();
         self.solver.assume(&literals);
@@ -8829,6 +9008,14 @@ impl CheckpointCdclPreimage {
         for literal in self.solver.model().expect("checkpoint CDCL model") {
             if literal.var().index() < self.variables {
                 assignment[literal.var().index()] = literal.is_positive();
+            }
+        }
+        if let Some(lazy) = &self.lazy {
+            for time in 1..=self.checkpoint {
+                for bit in 0..self.width {
+                    assignment[time * self.width + bit] =
+                        evaluate_bdd_root(lazy, &assignment, lazy.frames[time][bit]);
+                }
             }
         }
         Some(assignment)
@@ -11555,7 +11742,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
-        "benchmark-checkpoint-cdcl" | "benchmark-checkpoint-aig" => {
+        "benchmark-checkpoint-cdcl" | "benchmark-checkpoint-aig" | "benchmark-checkpoint-lazy" => {
             if args.len() != 9 {
                 return Err("usage: continuation-quotient-sat benchmark-checkpoint-cdcl KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
             }
@@ -11583,10 +11770,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 node_limit,
                 seed,
                 Path::new(&args[8]),
-                if args[0] == "benchmark-checkpoint-aig" {
-                    "aig"
-                } else {
-                    "bdd"
+                match args[0].as_str() {
+                    "benchmark-checkpoint-aig" => "aig",
+                    "benchmark-checkpoint-lazy" => "lazy-bdd",
+                    _ => "bdd",
                 },
             )?;
             Ok(true)
@@ -19422,6 +19609,48 @@ mod tests {
         );
         if let Some(assignment) = answer {
             assert!(satisfies(&formula, &assignment));
+        }
+    }
+
+    #[test]
+    fn lazy_checkpoint_adds_observed_prefix_cones_exactly() {
+        let width = 5;
+        let horizon = 31;
+        let checkpoint_frame = 9;
+        let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let mut checkpoint = CheckpointCdclPreimage::recognize_with_encoding(
+            &formula,
+            width,
+            horizon,
+            checkpoint_frame,
+            50_000,
+            "lazy-bdd",
+        )
+        .unwrap();
+        let initial_nodes = checkpoint.encoding_nodes;
+        assert!(initial_nodes < checkpoint.bdd_nodes);
+        let mut assumptions = vec![None; vars];
+        assumptions[width * 3 + 1] = Some(true);
+        assumptions[width * 7 + 4] = Some(false);
+        assumptions[width * 19 + 2] = Some(true);
+        let answer = checkpoint.query(&assumptions);
+        assert!(checkpoint.encoding_nodes >= initial_nodes);
+        let mut constrained = formula.clone();
+        constrained.extend(
+            assumptions
+                .iter()
+                .enumerate()
+                .filter_map(|(variable, value)| value.map(|value| Clause(vec![(variable, value)]))),
+        );
+        assert_eq!(
+            answer.is_some(),
+            solve_with_varisat(vars, &constrained).is_some()
+        );
+        if let Some(assignment) = answer {
+            assert!(satisfies(&formula, &assignment));
+            assert!(assumptions.iter().enumerate().all(|(variable, required)| {
+                required.is_none_or(|value| assignment[variable] == value)
+            }));
         }
     }
 }
