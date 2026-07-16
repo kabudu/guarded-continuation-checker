@@ -8466,6 +8466,8 @@ struct SymbolicPreimageTransition {
     manager: BddManager,
     frames: Vec<Vec<usize>>,
     rank_to_variable: Vec<usize>,
+    cycle_start: Option<usize>,
+    cycle_length: usize,
 }
 
 impl SymbolicPreimageTransition {
@@ -8490,6 +8492,10 @@ impl SymbolicPreimageTransition {
             .map(|variable| manager.literal(variable_to_rank[variable], true))
             .collect();
         let mut frames = vec![initial];
+        let mut seen = HashMap::new();
+        seen.insert(frames[0].clone(), 0usize);
+        let mut cycle_start = None;
+        let mut cycle_length = 0usize;
         for time in 0..horizon {
             let previous = &frames[time];
             let next: Vec<_> = transition
@@ -8507,6 +8513,12 @@ impl SymbolicPreimageTransition {
             if manager.budget_exceeded {
                 return Err(format!("BDD node limit exceeded at frame {}", time + 1));
             }
+            if let Some(&previous_time) = seen.get(&next) {
+                cycle_start = Some(previous_time);
+                cycle_length = time + 1 - previous_time;
+                break;
+            }
+            seen.insert(next.clone(), time + 1);
             frames.push(next);
         }
         manager.node_limit = None;
@@ -8515,7 +8527,19 @@ impl SymbolicPreimageTransition {
             manager,
             frames,
             rank_to_variable,
+            cycle_start,
+            cycle_length,
         })
+    }
+
+    fn frame(&self, time: usize) -> &[usize] {
+        if time < self.frames.len() {
+            return &self.frames[time];
+        }
+        let start = self
+            .cycle_start
+            .expect("time beyond compiled acyclic frames");
+        &self.frames[start + (time - start) % self.cycle_length]
     }
 
     fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
@@ -8526,7 +8550,7 @@ impl SymbolicPreimageTransition {
             };
             let time = variable / self.transition.width;
             let bit = variable % self.transition.width;
-            let root = self.frames[time][bit];
+            let root = self.frame(time)[bit];
             let literal = if *required {
                 root
             } else {
@@ -8557,6 +8581,14 @@ impl SymbolicPreimageTransition {
 
     fn bdd_nodes(&self) -> usize {
         self.manager.nodes.len()
+    }
+
+    fn compiled_frames(&self) -> usize {
+        self.frames.len()
+    }
+
+    fn cycle(&self) -> Option<(usize, usize)> {
+        self.cycle_start.map(|start| (start, self.cycle_length))
     }
 }
 
@@ -9357,7 +9389,7 @@ fn benchmark_symbolic_preimages(
     }
     let mut file = fs::File::create(output)
         .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,order,admitted,recognition_ns,bdd_nodes,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,order,admitted,recognition_ns,bdd_nodes,compiled_frames,cycle_start,cycle_length,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
         .map_err(|error| format!("write preimage header: {error}"))?;
     for &kind in kinds {
         for &width in widths {
@@ -9371,13 +9403,16 @@ fn benchmark_symbolic_preimages(
                     Ok(preimage) => preimage,
                     Err(error) => {
                         let recognition_ns = recognition_start.elapsed().as_nanos();
-                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},false,{recognition_ns},{node_limit},0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
+                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},false,{recognition_ns},{node_limit},0,0,0,0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
                             .map_err(|write_error| format!("write preimage rejection: {write_error}"))?;
                         continue;
                     }
                 };
                 let recognition_ns = recognition_start.elapsed().as_nanos();
                 let bdd_nodes = preimage.bdd_nodes();
+                let compiled_frames = preimage.compiled_frames();
+                let (cycle_start, cycle_length) =
+                    preimage.cycle().map_or((usize::MAX, 0usize), |cycle| cycle);
                 let mut rng =
                     Rng(seed ^ (width as u64).rotate_left(19) ^ (horizon as u64).rotate_left(41));
                 let mut queries = Vec::with_capacity(query_count);
@@ -9436,12 +9471,12 @@ fn benchmark_symbolic_preimages(
                 let preimage_per_query = preimage_ns as f64 / query_count as f64;
                 let varisat_per_query = varisat_ns as f64 / query_count as f64;
                 let speedup = varisat_per_query / preimage_per_query.max(1.0);
-                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},true,{recognition_ns},{bdd_nodes},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},true,{recognition_ns},{bdd_nodes},{compiled_frames},{cycle_start},{cycle_length},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
                     .map_err(|error| format!("write preimage row: {error}"))?;
                 file.flush()
                     .map_err(|error| format!("flush preimage output: {error}"))?;
                 println!(
-                    "symbolic preimage kind={kind} width={width} horizon={horizon} nodes={bdd_nodes} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
+                    "symbolic preimage kind={kind} width={width} horizon={horizon} nodes={bdd_nodes} frames={compiled_frames} cycle={cycle_start}/{cycle_length} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}"
                 );
             }
         }
@@ -18694,6 +18729,41 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn symbolic_preimage_reuses_exact_frame_cycles() {
+        let width = 6;
+        let horizon = 200;
+        let (vars, formula) = temporal_composition_formula("majority3", width, horizon).unwrap();
+        let mut preimage = SymbolicPreimageTransition::recognize_ordered(
+            &formula,
+            width,
+            horizon,
+            200_000,
+            "dependency",
+        )
+        .unwrap();
+        assert!(preimage.cycle().is_some());
+        assert!(preimage.compiled_frames() < horizon / 4);
+        let mut assumptions = vec![None; vars];
+        assumptions[0] = Some(true);
+        assumptions[137 * width + 3] = Some(false);
+        let answer = preimage.query(&assumptions);
+        let mut constrained = formula.clone();
+        constrained.extend(
+            assumptions
+                .iter()
+                .enumerate()
+                .filter_map(|(variable, value)| value.map(|value| Clause(vec![(variable, value)]))),
+        );
+        assert_eq!(
+            answer.is_some(),
+            solve_with_varisat(vars, &constrained).is_some()
+        );
+        if let Some(assignment) = answer {
+            assert!(satisfies(&formula, &assignment));
         }
     }
 }

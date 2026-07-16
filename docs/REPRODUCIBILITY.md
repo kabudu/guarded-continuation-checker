@@ -233,6 +233,25 @@ Then run the frozen dependency rule and natural control:
   results/reproduced-asymmetric-order-dependency-holdout.csv
 ```
 
+## Exact frame-cycle checkpoints
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  6,8 100,1000,10000 50 200000 dependency 515151 \
+  results/reproduced-preimage-cycles-phase.csv
+
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  5,7,9 137,1333,7777 50 200000 dependency 616161 \
+  results/reproduced-preimage-cycles-holdout.csv
+```
+
+For admitted rows, `compiled_frames` must be much smaller than the horizon and
+`cycle_length` must be positive. Rejected rows must identify the node gate.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

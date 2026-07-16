@@ -216,6 +216,27 @@ formula, but the aggregate phase advantage survived without per-formula trials.
 This supports dependency ordering as a cheap default for asymmetric graphs, not
 as a universal solution to BDD growth.
 
+## Exact frame-cycle checkpoints
+
+The preimage compiler now hashes each complete vector of state-bit BDD roots.
+Because the manager is canonical for a fixed variable order, an identical vector
+is an exact repeated symbolic state function. On repetition, compilation stops
+and later frames map into the stored cycle by modular arithmetic. No equivalence
+guess or approximate fingerprint is used.
+
+All 24 phase cases at widths 6 and 8 found cycles for horizons 100, 1,000, and
+10,000. They compiled only 7--21 unique frames, agreed with Varisat, and produced
+valid full trajectories. Query speedups ranged from 90.17x to 3,239.19x.
+
+The odd-width holdout admitted 33 of 36 cases through horizon 7,777. Admitted
+instances compiled at most 57 frames, all answers agreed, and all witnesses
+validated; speedups ranged from 51.60x to 5,015.53x. The three width-9 cascade
+instances exceeded 200,000 BDD nodes at frame 60 before a cycle was found and
+were rejected exactly. Cycle checkpoints therefore remove horizon-dependent BDD
+composition and frame storage after a repeat, but do not prevent pre-cycle BDD
+explosion. CNF normalization and complete witness output also remain linear in
+the supplied horizon.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

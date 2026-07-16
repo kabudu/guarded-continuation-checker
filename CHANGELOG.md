@@ -21,6 +21,8 @@
   orders; preserve the negative symmetric-ring comparison and gated holdout.
 - Add asymmetric hub, tree, and irregular transition graphs; dependency ordering
   reduces aggregate BDD size on phase and unseen holdout cohorts.
+- Detect exact repeated symbolic frames and reuse transient/cycle checkpoints for
+  long-horizon preimage queries without redundant BDD composition.
 
 ## 0.1.0 - 2026-07-15
 

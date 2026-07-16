@@ -156,6 +156,8 @@ Available calibration-free orders are `natural`, `reverse`, `evenodd`, and
 `dependency`; the last is derived once from the local dependency graph.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
+When a complete symbolic frame repeats, the compiler stores the transient and
+cycle once and answers later observations by exact modular cycle lookup.
 
 ## Repository layout
 
