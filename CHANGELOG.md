@@ -37,6 +37,8 @@
   frame beyond the stored transient/cycle vocabulary.
 - Add an exact native BDD-theory/CDCL bridge with activation-gated conflict
   learning and bounded pairwise theory propagation.
+- Generalize rejected checkpoint states into exact BDD-proven incompatible
+  subcubes and report learned-clause width.
 
 ## 0.1.0 - 2026-07-15
 

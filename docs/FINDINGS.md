@@ -358,6 +358,25 @@ cannot convey enough of the native BDD to CDCL. A credible next step is conflict
 generalization—derive a smaller BDD explanation for each rejected full state—so
 one learned clause excludes a whole incompatible subcube rather than one state.
 
+## BDD conflict generalization
+
+For every rejected checkpoint state, the generalizer starts with all checkpoint
+literals and greedily removes a literal whenever the remaining conjunction is
+still inconsistent with the query's prefix BDD. The resulting activation-gated
+clause is exact and blocks an entire incompatible subcube.
+
+Explanation quality improved. On the width-9 phase, average learned width fell to
+5.86 and 6.23 literals (maximum 7), while conflicts fell from 184 to 153 and from
+120 to 104. The horizon-1,333 speedup improved from the pairwise bridge's 0.608×
+to 0.895×. The short phase reached 0.668×.
+
+The unseen horizon-7,777 holdout learned width-6.18 clauses and reduced conflicts
+from 101 to 89, but speed fell from 0.700× to 0.546×. Repeated BDD conjunctions
+during greedy deletion cost more than the stronger clauses save. The explanation
+idea works; its construction does not. The next experiment should extract a
+conflict reason during a single BDD traversal or cache subset cofactors, avoiding
+one fresh conjunction chain per deletion candidate.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
