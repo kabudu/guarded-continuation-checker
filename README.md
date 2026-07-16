@@ -147,11 +147,13 @@ preimage experiment composes BDDs over the initial frame:
 ./target/release/continuation-quotient-sat \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
-  4,6,8 2,4,8,16 100 200000 707070 results/symbolic-preimages.csv
+  4,6,8 2,4,8,16 100 200000 natural 707070 results/symbolic-preimages.csv
 ```
 
 The numeric gate is a hard BDD-node limit. Exceeding it rejects the instance;
 the implementation never substitutes an approximate answer.
+Available calibration-free orders are `natural`, `reverse`, `evenodd`, and
+`dependency`; the last is derived once from the local dependency graph.
 
 ## Repository layout
 
