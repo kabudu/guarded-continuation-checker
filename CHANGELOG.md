@@ -17,6 +17,8 @@
   state table for fully specified deterministic initial states.
 - Solve partial-initial-state temporal queries with exact BDD preimages and full
   witness reconstruction under a hard node-budget admission gate.
+- Add calibration-free natural, reverse, even/odd, and dependency-graph BDD
+  orders; preserve the negative symmetric-ring comparison and gated holdout.
 
 ## 0.1.0 - 2026-07-15
 

@@ -173,19 +173,42 @@ Every admitted row must report agreement and witness validity.
 ./target/release/continuation-quotient-sat \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
-  4,6,8 2,4,8,16 100 200000 707070 \
+  4,6,8 2,4,8,16 100 200000 natural 707070 \
   results/reproduced-symbolic-preimages-phase.csv
 
 ./target/release/continuation-quotient-sat \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
-  5,7,9 3,7,15,31 100 200000 808181 \
+  5,7,9 3,7,15,31 100 200000 natural 808181 \
   results/reproduced-symbolic-preimages-holdout.csv
 ```
 
 Queries contain two to eight observations at arbitrary frames, so the initial
 state is generally partial or entirely unspecified. Admitted rows must report
 agreement and witness validity; rejected rows must identify the hard node gate.
+
+## Calibration-free preimage ordering
+
+Run the phase grid once for each order in `natural`, `reverse`, `evenodd`, and
+`dependency`:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  7,9 7,15,31 50 200000 dependency 919191 \
+  results/reproduced-preimage-order-dependency-phase.csv
+```
+
+Then reproduce the preselected dependency-order holdout:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-symbolic-preimages \
+  majority3,mux3,mixed3,cascade4 \
+  6,8,10 5,13,29 50 200000 dependency 20260716 \
+  results/reproduced-preimage-order-dependency-holdout.csv
+```
 
 ## Curated result files
 

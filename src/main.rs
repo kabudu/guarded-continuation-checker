@@ -8420,22 +8420,29 @@ struct SymbolicPreimageTransition {
     transition: SymbolicTemporalTransition,
     manager: BddManager,
     frames: Vec<Vec<usize>>,
+    rank_to_variable: Vec<usize>,
 }
 
 impl SymbolicPreimageTransition {
-    fn recognize(
+    fn recognize_ordered(
         formula: &[Clause],
         width: usize,
         horizon: usize,
         node_limit: usize,
+        order_kind: &str,
     ) -> Result<Self, String> {
         let transition = SymbolicTemporalTransition::recognize(formula, width, horizon)?;
+        let rank_to_variable = preimage_variable_order(&transition.functions, width, order_kind)?;
+        let mut variable_to_rank = vec![0usize; width];
+        for (rank, &variable) in rank_to_variable.iter().enumerate() {
+            variable_to_rank[variable] = rank;
+        }
         let mut manager = BddManager {
             node_limit: Some(node_limit),
             ..BddManager::default()
         };
         let initial: Vec<_> = (0..width)
-            .map(|variable| manager.literal(variable, true))
+            .map(|variable| manager.literal(variable_to_rank[variable], true))
             .collect();
         let mut frames = vec![initial];
         for time in 0..horizon {
@@ -8462,6 +8469,7 @@ impl SymbolicPreimageTransition {
             transition,
             manager,
             frames,
+            rank_to_variable,
         })
     }
 
@@ -8485,9 +8493,13 @@ impl SymbolicPreimageTransition {
                 return None;
             }
         }
-        let initial = self
+        let ranked = self
             .manager
             .satisfying_assignment(constraint, self.transition.width)?;
+        let mut initial = vec![false; self.transition.width];
+        for (rank, &variable) in self.rank_to_variable.iter().enumerate() {
+            initial[variable] = ranked[rank];
+        }
         let mut concrete = vec![None; assumptions.len()];
         for (bit, &value) in initial.iter().enumerate() {
             concrete[bit] = Some(value);
@@ -8500,6 +8512,56 @@ impl SymbolicPreimageTransition {
 
     fn bdd_nodes(&self) -> usize {
         self.manager.nodes.len()
+    }
+}
+
+fn preimage_variable_order(
+    functions: &[LocalBooleanFunction],
+    width: usize,
+    kind: &str,
+) -> Result<Vec<usize>, String> {
+    match kind {
+        "natural" => Ok((0..width).collect()),
+        "reverse" => Ok((0..width).rev().collect()),
+        "evenodd" => Ok((0..width)
+            .filter(|variable| variable % 2 == 0)
+            .chain((0..width).filter(|variable| variable % 2 == 1))
+            .collect()),
+        "dependency" => {
+            let mut adjacency = vec![BTreeSet::new(); width];
+            for function in functions {
+                for &left in &function.dependencies {
+                    for &right in &function.dependencies {
+                        if left != right {
+                            adjacency[left].insert(right);
+                        }
+                    }
+                }
+            }
+            let start = (0..width)
+                .max_by_key(|&variable| (adjacency[variable].len(), usize::MAX - variable))
+                .unwrap_or(0);
+            let mut order = Vec::with_capacity(width);
+            let mut seen = vec![false; width];
+            let mut frontier = vec![start];
+            while let Some(variable) = frontier.pop() {
+                if seen[variable] {
+                    continue;
+                }
+                seen[variable] = true;
+                order.push(variable);
+                let mut neighbours: Vec<_> = adjacency[variable]
+                    .iter()
+                    .copied()
+                    .filter(|&next| !seen[next])
+                    .collect();
+                neighbours.sort_by_key(|&next| (adjacency[next].len(), next));
+                frontier.extend(neighbours.into_iter().rev());
+            }
+            order.extend((0..width).filter(|&variable| !seen[variable]));
+            Ok(order)
+        }
+        _ => Err(format!("unknown preimage variable order: {kind}")),
     }
 }
 
@@ -9243,13 +9305,14 @@ fn benchmark_symbolic_preimages(
     node_limit: usize,
     seed: u64,
     output: &Path,
+    order_kind: &str,
 ) -> Result<(), String> {
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("create preimage output: {error}"))?;
     }
     let mut file = fs::File::create(output)
         .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,admitted,recognition_ns,bdd_nodes,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,node_limit,order,admitted,recognition_ns,bdd_nodes,preimage_ns_per_query,incremental_varisat_ns_per_query,speedup_vs_incremental,sat_queries,unsat_queries,agreement,witnesses_valid,status")
         .map_err(|error| format!("write preimage header: {error}"))?;
     for &kind in kinds {
         for &width in widths {
@@ -9257,13 +9320,13 @@ fn benchmark_symbolic_preimages(
                 let vars = width * (horizon + 1);
                 let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
                 let recognition_start = Instant::now();
-                let mut preimage = match SymbolicPreimageTransition::recognize(
-                    &formula, width, horizon, node_limit,
+                let mut preimage = match SymbolicPreimageTransition::recognize_ordered(
+                    &formula, width, horizon, node_limit, order_kind,
                 ) {
                     Ok(preimage) => preimage,
                     Err(error) => {
                         let recognition_ns = recognition_start.elapsed().as_nanos();
-                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},false,{recognition_ns},{node_limit},0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
+                        writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},false,{recognition_ns},{node_limit},0,0,0,0,0,true,true,{}", formula.len(), error.replace(',', ";"))
                             .map_err(|write_error| format!("write preimage rejection: {write_error}"))?;
                         continue;
                     }
@@ -9328,7 +9391,7 @@ fn benchmark_symbolic_preimages(
                 let preimage_per_query = preimage_ns as f64 / query_count as f64;
                 let varisat_per_query = varisat_ns as f64 / query_count as f64;
                 let speedup = varisat_per_query / preimage_per_query.max(1.0);
-                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},true,{recognition_ns},{bdd_nodes},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
+                writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{node_limit},{order_kind},true,{recognition_ns},{bdd_nodes},{preimage_per_query:.3},{varisat_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len())
                     .map_err(|error| format!("write preimage row: {error}"))?;
                 file.flush()
                     .map_err(|error| format!("flush preimage output: {error}"))?;
@@ -10842,8 +10905,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-temporal-compositions"
         | "benchmark-local-temporal-compositions"
-        | "benchmark-symbolic-temporal-compositions"
-        | "benchmark-symbolic-preimages" => {
+        | "benchmark-symbolic-temporal-compositions" => {
             if args.len() != 8 {
                 return Err("usage: continuation-quotient-sat benchmark-{local-}temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
             }
@@ -10863,17 +10925,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let seed = args[6]
                 .parse::<u64>()
                 .map_err(|_| "invalid composition seed".to_string())?;
-            if args[0] == "benchmark-symbolic-preimages" {
-                benchmark_symbolic_preimages(
-                    &kinds,
-                    &widths,
-                    &horizons,
-                    queries,
-                    max_width,
-                    seed,
-                    Path::new(&args[7]),
-                )?;
-            } else if args[0] == "benchmark-symbolic-temporal-compositions" {
+            if args[0] == "benchmark-symbolic-temporal-compositions" {
                 benchmark_symbolic_temporal_compositions(
                     &kinds,
                     &widths,
@@ -10895,6 +10947,35 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     args[0] == "benchmark-local-temporal-compositions",
                 )?;
             }
+            Ok(true)
+        }
+        "benchmark-symbolic-preimages" => {
+            if args.len() != 9 {
+                return Err("usage: continuation-quotient-sat benchmark-symbolic-preimages KINDS WIDTHS HORIZONS QUERIES NODE_LIMIT ORDER SEED OUTPUT.csv".to_string());
+            }
+            let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
+            let widths = parse_size_grid(&args[2], "width")?;
+            let horizons = parse_size_grid(&args[3], "horizon")?;
+            let queries = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid preimage query count".to_string())?
+                .max(1);
+            let node_limit = args[5]
+                .parse::<usize>()
+                .map_err(|_| "invalid preimage node limit".to_string())?;
+            let seed = args[7]
+                .parse::<u64>()
+                .map_err(|_| "invalid preimage seed".to_string())?;
+            benchmark_symbolic_preimages(
+                &kinds,
+                &widths,
+                &horizons,
+                queries,
+                node_limit,
+                seed,
+                Path::new(&args[8]),
+                &args[6],
+            )?;
             Ok(true)
         }
         "benchmark-continuation-repairs" => {
@@ -18494,8 +18575,10 @@ mod tests {
         let width = 6;
         let horizon = 5;
         let (vars, formula) = temporal_composition_formula("mixed3", width, horizon).unwrap();
-        let mut preimage =
-            SymbolicPreimageTransition::recognize(&formula, width, horizon, 100_000).unwrap();
+        let mut preimage = SymbolicPreimageTransition::recognize_ordered(
+            &formula, width, horizon, 100_000, "natural",
+        )
+        .unwrap();
         let mut rng = Rng(0xbdd5_ea2c);
         for _ in 0..40 {
             let mut assumptions = vec![None; vars];
@@ -18528,6 +18611,9 @@ mod tests {
         let width = 10;
         let horizon = 20;
         let (_, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
-        assert!(SymbolicPreimageTransition::recognize(&formula, width, horizon, 10).is_err());
+        assert!(
+            SymbolicPreimageTransition::recognize_ordered(&formula, width, horizon, 10, "natural")
+                .is_err()
+        );
     }
 }

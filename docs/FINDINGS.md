@@ -181,6 +181,22 @@ the reusable symbolic preimage becomes advantageous on most longer horizons.
 This is not polynomial scaling for arbitrary transitions: BDDs can still require
 exponential space under an unfavorable function or variable order.
 
+## Calibration-free BDD ordering
+
+Four fixed ordering rules were compared on a 24-case phase cohort: natural,
+reverse, even/odd, and a dependency-graph traversal computed without trial
+solves. All remained exact and admitted every phase case. Dependency ordering
+tied natural at 298,679 aggregate nodes because the rotationally symmetric ring
+families give the graph heuristic no asymmetry to exploit. Reverse used 301,237
+nodes and even/odd used 303,437. There was no phase improvement to claim.
+
+The dependency rule was nevertheless preselected for a 36-case unseen holdout.
+It admitted 35 cases with exact agreement and valid witnesses. The width-10,
+horizon-29 cascade was rejected exactly when it crossed the 200,000-node gate at
+frame 23. This confirms the gate and ordering implementation, but not a growth
+breakthrough. A useful next ordering experiment requires asymmetric dependency
+graphs or dynamic reordering with a correctness-preserving resource bound.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
