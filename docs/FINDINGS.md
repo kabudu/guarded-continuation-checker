@@ -276,6 +276,26 @@ faster. The next representation experiment should reuse the already composed
 prefix—via an exact circuit/AIG checkpoint—instead of restarting from the full
 CNF when the guard fires.
 
+## Exact BDD-prefix CDCL checkpoint
+
+The follow-up composes an exact BDD prefix to a fixed frame, converts every
+canonical BDD node to Tseitin CNF, links the stored symbolic frames to temporal
+variables, and appends only the original suffix clauses. Arbitrary observations
+before and after the checkpoint remain supported, and full models are recovered.
+
+All phase and holdout answers agreed with full persistent CDCL and every witness
+validated. Performance was negative. Fixed checkpoints 10, 20, and 40 on the
+width-9 cascade used 41,299, 85,761, and 149,962 BDD nodes respectively. Frame 10
+was preselected, but achieved only 0.078× and 0.379× speedups on horizons 137 and
+1,333. On the unseen horizon-7,777 holdout it improved to 0.727× but did
+not break even.
+
+This proves exact prefix reuse is possible, but naïvely exposing four Tseitin
+clauses per BDD node gives CDCL a much larger, less native representation than
+the original transition CNF. The next checkpoint experiment should compact or
+slice the BDD roots to only queried observations, or translate the prefix to a
+shared AIG with structural hashing before CNF emission.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

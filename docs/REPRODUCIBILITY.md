@@ -267,6 +267,20 @@ to `results/reproduced-hybrid-preimages-{phase,holdout}.csv`. Phase must report 
 `bdd` rows. Holdout must report 33 `bdd` and three `cdcl-fallback` rows. Every row
 must be admitted with `agreement=true` and `witnesses_valid=true`.
 
+## Exact BDD-prefix CDCL checkpoint
+
+Run `benchmark-checkpoint-cdcl cascade4 9 137,1333 50 CHECKPOINT 200000 717171`
+for checkpoints 10, 20, and 40, writing separate CSV files. Then reproduce the
+preselected holdout with:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-checkpoint-cdcl cascade4 9 7777 50 10 200000 818181 \
+  results/reproduced-checkpoint-cdcl-10-holdout.csv
+```
+
+Every row must agree with the full-CDCL baseline and return valid witnesses.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

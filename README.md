@@ -158,6 +158,9 @@ Available calibration-free orders are `natural`, `reverse`, `evenodd`, and
 before the hard limit when exhaustion is imminent.
 `hybrid` uses that guarded BDD path first and switches growth-guard cases to a
 persistent exact CDCL solver, restoring complete admission without approximation.
+`benchmark-checkpoint-cdcl` tests an exact BDD-prefix-to-Tseitin-CNF checkpoint;
+the current encoding preserves semantics but is experimental and slower than the
+full-CDCL control on measured cascade cases.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
