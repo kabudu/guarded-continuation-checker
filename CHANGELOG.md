@@ -23,6 +23,8 @@
   reduces aggregate BDD size on phase and unseen holdout cohorts.
 - Detect exact repeated symbolic frames and reuse transient/cycle checkpoints for
   long-horizon preimage queries without redundant BDD composition.
+- Add an optional calibration-free BDD growth guard that rejects projected
+  pre-cycle budget exhaustion early without approximating an answer.
 
 ## 0.1.0 - 2026-07-15
 

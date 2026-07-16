@@ -237,6 +237,24 @@ composition and frame storage after a repeat, but do not prevent pre-cycle BDD
 explosion. CNF normalization and complete witness output also remain linear in
 the supplied horizon.
 
+## Calibration-free pre-cycle growth guard
+
+A fixed guard now compares consecutive exact BDD node increments. Once growth is
+accelerating, it projects four more increments; if that projection exceeds the
+hard node budget, compilation rejects immediately. The guard changes only
+admission timing, never SAT semantics or witness reconstruction.
+
+On the 24-case cycle phase cohort, the guard admitted the same 24 cases as the
+unguarded dependency order, with complete agreement and witness validity. On the
+36-case holdout it admitted the same 33 cases and rejected the same three
+width-9 cascades. The guard rejected those at frame 56 with 192,220 nodes rather
+than reaching the 200,000-node limit at frame 60. Aggregate rejection time fell
+from 400.57 ms to 372.07 ms, a 7.12% reduction, with no observed false rejection.
+
+This is bounded resource protection, not a cure for pre-cycle explosion. A more
+aggressive projection could reject a formula shortly before it stabilizes, so
+the guard remains an explicit optional mode rather than the default exact gate.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
