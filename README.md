@@ -127,6 +127,14 @@ constraint is recorded in the safety report. These assumptions describe the
 verified environment; they are not proof that a deployed environment satisfies
 that contract.
 
+RTL synthesis is contained in a dedicated Unix process group. A timeout kills
+the entire group, including descendants, and every run has a 512 MiB output-file
+limit. Linux—the supported production-evaluation host—also enforces a 2 GiB
+address-space limit. macOS remains supported for development and records
+`synthesis_memory_limit_kind=unavailable`; its process-tree, file-size, timeout,
+and model limits still apply, but it must not be used as evidence of hard memory
+containment.
+
 The same example now includes a five-module controller and a repeated-property
 BMC experiment:
 

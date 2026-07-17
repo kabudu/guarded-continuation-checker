@@ -2,13 +2,33 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::env;
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
 const RTL_ARTIFACT_SCHEMA_VERSION: usize = 1;
+const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
+
+fn synthesis_memory_limit_kind() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "unavailable"
+    } else {
+        "address-space"
+    }
+}
+
+fn synthesis_memory_limit_bytes() -> u64 {
+    if cfg!(target_os = "macos") {
+        0
+    } else {
+        YOSYS_MEMORY_LIMIT_BYTES
+    }
+}
 
 #[derive(Clone, Debug)]
 struct Clause(Vec<(usize, bool)>);
@@ -12336,6 +12356,97 @@ fn replace_file(source: &Path, destination: &Path) -> Result<(), String> {
     })
 }
 
+fn configure_contained_process(
+    command: &mut Command,
+    memory_limit_bytes: u64,
+    file_limit_bytes: u64,
+) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        #[cfg(not(target_os = "macos"))]
+        let memory_limit = libc::rlim_t::try_from(memory_limit_bytes).map_err(|_| {
+            "process memory limit is not representable on this platform".to_string()
+        })?;
+        #[cfg(target_os = "macos")]
+        let _ = memory_limit_bytes;
+        let file_limit = libc::rlim_t::try_from(file_limit_bytes)
+            .map_err(|_| "process file limit is not representable on this platform".to_string())?;
+        // SAFETY: pre_exec runs after fork and before exec. The closure only invokes
+        // async-signal-safe libc functions and constructs errors from errno on failure.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let memory = libc::rlimit {
+                        rlim_cur: memory_limit,
+                        rlim_max: memory_limit,
+                    };
+                    if libc::setrlimit(libc::RLIMIT_AS, &memory) == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                let file = libc::rlimit {
+                    rlim_cur: file_limit,
+                    rlim_max: file_limit,
+                };
+                if libc::setrlimit(libc::RLIMIT_FSIZE, &file) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (command, memory_limit_bytes, file_limit_bytes);
+        Err("contained synthesis currently requires Linux or macOS".to_string())
+    }
+}
+
+#[cfg(unix)]
+fn kill_process_group(process_id: u32) -> Result<(), String> {
+    let process_group = i32::try_from(process_id)
+        .map_err(|_| "child process identifier exceeds platform range".to_string())?;
+    // SAFETY: a negative PID asks kill(2) to signal the process group created by setsid.
+    if unsafe { libc::kill(-process_group, libc::SIGKILL) } == -1 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(format!("terminate contained process group: {error}"));
+        }
+    }
+    Ok(())
+}
+
+fn wait_for_contained_process(
+    child: &mut Child,
+    timeout: std::time::Duration,
+    label: &str,
+) -> Result<Option<ExitStatus>, String> {
+    let process_id = child.id();
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("wait for {label}: {error}"))?
+        {
+            return Ok(Some(status));
+        }
+        if Instant::now() >= deadline {
+            #[cfg(unix)]
+            kill_process_group(process_id)?;
+            child
+                .wait()
+                .map_err(|error| format!("reap timed-out {label}: {error}"))?;
+            return Ok(None);
+        }
+        thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 fn is_rtl_source_snapshot(name: &str) -> bool {
     name == "source.sv"
         || name
@@ -12381,6 +12492,17 @@ fn annotate_rtl_safety_report(
         format!("source_revision={revision}"),
         format!("top={top}"),
         format!("yosys={yosys_version}"),
+        format!("containment_platform={}", std::env::consts::OS),
+        "process_group_timeout_kill=true".to_string(),
+        format!(
+            "synthesis_memory_limit_kind={}",
+            synthesis_memory_limit_kind()
+        ),
+        format!(
+            "synthesis_memory_limit_bytes={}",
+            synthesis_memory_limit_bytes()
+        ),
+        format!("synthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}"),
         "generated_model=model.aag".to_string(),
     ];
     annotated.extend(
@@ -12482,54 +12604,36 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
-    let version_output = Command::new("yosys")
-        .arg("-V")
-        .output()
-        .map_err(|error| format!("run yosys -V: {error}"))?;
-    if !version_output.status.success() {
-        return Err("yosys -V failed".to_string());
-    }
-    let yosys_version = String::from_utf8_lossy(&version_output.stdout)
-        .lines()
-        .next()
-        .unwrap_or("unknown")
-        .trim()
-        .to_string();
     let error_file = fs::File::create(&yosys_errors)
         .map_err(|error| format!("create Yosys error log: {error}"))?;
-    let mut child = Command::new("yosys")
-        .arg("-Q")
+    let mut yosys_command = Command::new("yosys");
+    yosys_command
         .arg("-l")
         .arg("yosys.log")
         .arg("-s")
         .arg("synthesis.ys")
         .current_dir(&stage)
         .stdout(Stdio::null())
-        .stderr(Stdio::from(error_file))
+        .stderr(Stdio::from(error_file));
+    configure_contained_process(
+        &mut yosys_command,
+        YOSYS_MEMORY_LIMIT_BYTES,
+        YOSYS_FILE_LIMIT_BYTES,
+    )?;
+    let mut child = yosys_command
         .spawn()
         .map_err(|error| format!("run Yosys synthesis: {error}"))?;
-    let deadline = Instant::now() + std::time::Duration::from_secs(120);
-    let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|error| format!("wait for Yosys synthesis: {error}"))?
-        {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            child
-                .kill()
-                .map_err(|error| format!("terminate timed-out Yosys synthesis: {error}"))?;
-            child
-                .wait()
-                .map_err(|error| format!("reap timed-out Yosys synthesis: {error}"))?;
-            return Err(format!(
-                "Yosys synthesis exceeded 120 seconds; inspect {} and {}",
-                yosys_log.display(),
-                yosys_errors.display()
-            ));
-        }
-        thread::sleep(std::time::Duration::from_millis(50));
+    let Some(status) = wait_for_contained_process(
+        &mut child,
+        std::time::Duration::from_secs(120),
+        "Yosys synthesis",
+    )?
+    else {
+        return Err(format!(
+            "Yosys synthesis exceeded 120 seconds; inspect {} and {}",
+            yosys_log.display(),
+            yosys_errors.display()
+        ));
     };
     if !status.success() {
         let error_tail = fs::read_to_string(&yosys_errors)
@@ -12549,6 +12653,13 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
             yosys_errors.display()
         ));
     }
+    let yosys_version = fs::read_to_string(&yosys_log)
+        .map_err(|error| format!("read Yosys synthesis log: {error}"))?
+        .lines()
+        .find(|line| line.trim_start().starts_with("Yosys "))
+        .map(str::trim)
+        .ok_or_else(|| "Yosys synthesis log contains no version banner".to_string())?
+        .to_string();
     let safe = firmware_safety_gate_with_constraints(&model, horizon, &stage, assumptions)?;
     annotate_rtl_safety_report(
         &stage.join("safety-report.txt"),
@@ -12572,8 +12683,9 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     fs::write(
         stage.join("run-manifest.txt"),
         format!(
-            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\nyosys={yosys_version}\n",
-            report_value(&source_label), sources.len()
+            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\n",
+            report_value(&source_label), sources.len(), std::env::consts::OS,
+            synthesis_memory_limit_kind(), synthesis_memory_limit_bytes()
         ),
     )
     .map_err(|error| format!("write RTL safety manifest: {error}"))?;
@@ -22675,6 +22787,17 @@ mod tests {
         assert!(manifest.contains("source_count=2\n"));
         assert!(manifest.contains("source_0="));
         assert!(manifest.contains("source_1="));
+        assert!(manifest.contains(&format!("containment_platform={}\n", std::env::consts::OS)));
+        assert!(manifest.contains("process_group_timeout_kill=true\n"));
+        assert!(manifest.contains(&format!(
+            "synthesis_memory_limit_kind={}\n",
+            synthesis_memory_limit_kind()
+        )));
+        assert!(manifest.contains(&format!(
+            "synthesis_memory_limit_bytes={}\n",
+            synthesis_memory_limit_bytes()
+        )));
+        assert!(manifest.contains("synthesis_file_limit_bytes=536870912\n"));
         assert!(
             firmware_rtl_safety_gate(
                 &root.parent().unwrap().join("safe-controller.sv"),
@@ -22758,5 +22881,96 @@ mod tests {
         );
         std::fs::remove_file(unknown).unwrap();
         std::fs::remove_dir_all(artifacts).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn contained_process_kills_descendants() {
+        let limited_file = std::env::temp_dir().join(format!(
+            "cq-sat-contained-output-{}.bin",
+            std::process::id()
+        ));
+        let mut file_command = Command::new("sh");
+        file_command
+            .arg("-c")
+            .arg("dd if=/dev/zero of=\"$1\" bs=2048 count=1 2>/dev/null")
+            .arg("cq-sat-containment-test")
+            .arg(&limited_file)
+            .stderr(Stdio::null());
+        configure_contained_process(&mut file_command, YOSYS_MEMORY_LIMIT_BYTES, 1024).unwrap();
+        let mut file_child = file_command.spawn().unwrap();
+        let file_status = wait_for_contained_process(
+            &mut file_child,
+            std::time::Duration::from_secs(5),
+            "file-limit probe",
+        )
+        .unwrap()
+        .expect("file-limit probe timed out");
+        assert!(!file_status.success());
+        assert!(fs::metadata(&limited_file).unwrap().len() <= 1024);
+        std::fs::remove_file(limited_file).unwrap();
+
+        let pid_file = std::env::temp_dir().join(format!(
+            "cq-sat-contained-descendant-{}.pid",
+            std::process::id()
+        ));
+        let mut tree_command = Command::new("sh");
+        tree_command
+            .arg("-c")
+            .arg("sleep 30 & child=$!; printf '%s' \"$child\" > \"$1\"; wait")
+            .arg("cq-sat-containment-test")
+            .arg(&pid_file);
+        configure_contained_process(
+            &mut tree_command,
+            YOSYS_MEMORY_LIMIT_BYTES,
+            YOSYS_FILE_LIMIT_BYTES,
+        )
+        .unwrap();
+        let mut tree_child = tree_command.spawn().unwrap();
+        assert!(
+            wait_for_contained_process(
+                &mut tree_child,
+                std::time::Duration::from_millis(250),
+                "process-tree probe",
+            )
+            .unwrap()
+            .is_none()
+        );
+        let descendant = fs::read_to_string(&pid_file)
+            .unwrap()
+            .parse::<i32>()
+            .unwrap();
+        let mut gone = false;
+        for _ in 0..100 {
+            // SAFETY: signal zero only queries whether the recorded child PID exists.
+            if unsafe { libc::kill(descendant, 0) } == -1
+                && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+            {
+                gone = true;
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(gone, "contained descendant survived process-group timeout");
+        std::fs::remove_file(pid_file).unwrap();
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn contained_process_enforces_address_space_limit() {
+        let mut memory_command = Command::new("python3");
+        memory_command
+            .arg("-c")
+            .arg("payload = bytearray(768 * 1024 * 1024); print(len(payload))");
+        configure_contained_process(&mut memory_command, 512 * 1024 * 1024, 1024 * 1024).unwrap();
+        let mut memory_child = memory_command.spawn().unwrap();
+        let memory_status = wait_for_contained_process(
+            &mut memory_child,
+            std::time::Duration::from_secs(10),
+            "memory-limit probe",
+        )
+        .unwrap()
+        .expect("memory-limit probe timed out");
+        assert!(!memory_status.success());
     }
 }

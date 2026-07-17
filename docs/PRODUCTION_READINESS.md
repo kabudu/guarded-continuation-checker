@@ -15,6 +15,9 @@ tool production-grade.
 - RTL safety reports and manifests declare artifact schema version 1.
 - Named constant input assumptions are applied at every bounded frame, reject
   unresolved names, and are cross-checked by an independent SBY/Z3 model.
+- Linux synthesis runs in a dedicated process group with a 2 GiB address-space
+  limit, 512 MiB file limit, and group-wide timeout termination. Adversarial CI
+  probes verify memory refusal, file truncation, and descendant cleanup.
 
 ## Required before a production claim
 
@@ -23,8 +26,8 @@ tool production-grade.
 - [ ] Include directories, parameter overrides, memories, and declared clock or
   reset policy for representative embedded RTL projects.
 - [ ] Stable, versioned CLI and artifact schemas with compatibility tests.
-- [ ] Memory and process-tree limits in addition to the current wall timeout and
-  model-size limits.
+- [x] Linux memory, file-size, and process-tree limits in addition to wall-clock
+  and model-size limits. macOS is explicitly development-only for this gate.
 - [ ] Parser and CLI fuzzing with a persistent regression corpus.
 - [ ] Differential validation across a substantial public and design-partner RTL
   corpus, including SAT and UNSAT properties and multiple Yosys versions.

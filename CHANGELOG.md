@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Run Yosys in a dedicated Unix process group with a 512 MiB output-file cap,
+  kill the complete group on timeout, and enforce a 2 GiB address-space limit
+  on Linux.
+- Record the effective containment platform and limits in safety reports and
+  manifests, explicitly reporting memory containment as unavailable on macOS.
+
 ## 0.9.0 - 2026-07-17
 
 - Add fail-closed, named RTL input assumptions that constrain every bounded
