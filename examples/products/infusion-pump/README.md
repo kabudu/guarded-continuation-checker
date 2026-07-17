@@ -104,6 +104,13 @@ target/release/continuation-quotient-sat \
   examples/products/infusion-pump/rtl/project/pump-system.sv
 ```
 
+The deliberately regressed door interlock is also the paired environment-contract
+example. It is UNSAFE with unconstrained `door_open`, but SAFE when
+[`door-closed.assumptions`](rtl/door-closed.assumptions) fixes `door_open=0` at
+every bounded frame. The independent
+[`door-interlock-assumed-safe.sby`](rtl/door-interlock-assumed-safe.sby) harness
+expresses the same assumption directly for SymbiYosys/Z3.
+
 ## Deliberate boundary
 
 The workflow accepts either one SystemVerilog source or a project of up to 64
@@ -113,8 +120,10 @@ to the original five-field ASCII AIGER subset already validated by this project.
 The source is capped at 10 MiB and synthesis at 120 seconds; the existing AIGER
 and bounded-unrolling resource limits still apply afterwards.
 Synthesis don't-care bits are explicitly lowered to zero, while unconstrained
-top-level signals remain primary inputs. General AIGER 1.9 bad-state/constraint
-sections, include directories, parameter overrides, and source-level assertion mapping are
+top-level signals remain primary inputs. Named constant assumptions may constrain
+those inputs at every frame. General AIGER 1.9 bad-state/constraint sections,
+non-constant or time-varying environment assumptions, include directories,
+parameter overrides, and source-level assertion mapping are
 not yet accepted. Unsupported synthesis or model shapes fail with exit status 2
 rather than being approximated.
 

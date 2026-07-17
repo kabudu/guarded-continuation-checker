@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add fail-closed, named RTL input assumptions that constrain every bounded
+  frame, preserve their source artifact, and reject duplicates or unknown names.
+- Cross-check constrained SAFE semantics independently with SymbiYosys and Z3
+  while retaining the matching unconstrained UNSAFE regression.
+
 ## 0.8.0 - 2026-07-17
 
 - Add a bounded multi-file RTL project safety gate with deterministic source

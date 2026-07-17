@@ -8582,6 +8582,43 @@ struct AagBmcEncoding {
     queries: Vec<AagBmcQuery>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AagInputConstraint {
+    name: String,
+    value: bool,
+}
+
+fn resolve_aag_input_constraints(
+    model: &AagModel,
+    constraints: &[AagInputConstraint],
+) -> Result<Vec<(usize, bool)>, String> {
+    let mut resolved = Vec::with_capacity(constraints.len());
+    let mut seen = BTreeSet::new();
+    for constraint in constraints {
+        if !seen.insert(constraint.name.as_str()) {
+            return Err(format!(
+                "duplicate environment assumption: {}",
+                constraint.name
+            ));
+        }
+        let matches = model
+            .input_names
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| *name == &constraint.name)
+            .collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(format!(
+                "environment assumption input `{}` matched {} synthesized inputs; expected exactly one",
+                constraint.name,
+                matches.len()
+            ));
+        }
+        resolved.push((matches[0].0, constraint.value));
+    }
+    Ok(resolved)
+}
+
 fn aag_cnf_literal(model: &AagModel, frame: usize, literal: usize) -> AagCnfLiteral {
     if literal < 2 {
         return AagCnfLiteral::Constant(literal == 1);
@@ -8617,7 +8654,11 @@ fn encode_aag_equivalence(clauses: &mut Vec<Clause>, output: AagCnfLiteral, valu
     push_simplified_clause(clauses, &[output, value.negate()]);
 }
 
-fn aag_bmc_encoding(model: &AagModel, horizon: usize) -> Result<AagBmcEncoding, String> {
+fn aag_bmc_encoding_with_constraints(
+    model: &AagModel,
+    horizon: usize,
+    constraints: &[AagInputConstraint],
+) -> Result<AagBmcEncoding, String> {
     let frames = horizon
         .checked_add(1)
         .ok_or_else(|| "AIGER horizon overflow".to_string())?;
@@ -8629,9 +8670,11 @@ fn aag_bmc_encoding(model: &AagModel, horizon: usize) -> Result<AagBmcEncoding, 
             "AIGER BMC requires {variables} variables; safety limit is 2000000"
         ));
     }
+    let resolved_constraints = resolve_aag_input_constraints(model, constraints)?;
     let clause_bound = frames
         .checked_mul(model.ands.len().saturating_mul(3))
         .and_then(|value| value.checked_add(horizon.saturating_mul(model.latches.len() * 2)))
+        .and_then(|value| value.checked_add(frames.saturating_mul(resolved_constraints.len())))
         .ok_or_else(|| "AIGER BMC clause count overflow".to_string())?;
     if clause_bound > 10_000_000 {
         return Err(format!(
@@ -8648,6 +8691,15 @@ fn aag_bmc_encoding(model: &AagModel, horizon: usize) -> Result<AagBmcEncoding, 
         }
     }
     for frame in 0..=horizon {
+        for &(input, value) in &resolved_constraints {
+            push_simplified_clause(
+                &mut clauses,
+                &[AagCnfLiteral::Variable((
+                    frame * model.max_variable + model.inputs[input] / 2 - 1,
+                    value,
+                ))],
+            );
+        }
         for gate in &model.ands {
             let output = aag_cnf_literal(model, frame, gate.output);
             let left = aag_cnf_literal(model, frame, gate.left);
@@ -8684,6 +8736,10 @@ fn aag_bmc_encoding(model: &AagModel, horizon: usize) -> Result<AagBmcEncoding, 
         clauses,
         queries,
     })
+}
+
+fn aag_bmc_encoding(model: &AagModel, horizon: usize) -> Result<AagBmcEncoding, String> {
+    aag_bmc_encoding_with_constraints(model, horizon, &[])
 }
 
 fn normalized_temporal_steps(
@@ -11806,12 +11862,13 @@ fn benchmark_aiger_query_reuse(
 fn earliest_aag_counterexample(
     model: &AagModel,
     unsafe_horizon: usize,
+    constraints: &[AagInputConstraint],
 ) -> Result<(AagBmcEncoding, AagBmcRun), String> {
     let mut low = 0usize;
     let mut high = unsafe_horizon;
     while low < high {
         let middle = low + (high - low) / 2;
-        let encoding = aag_bmc_encoding(model, middle)?;
+        let encoding = aag_bmc_encoding_with_constraints(model, middle, constraints)?;
         if run_aag_bmc(model, middle, &encoding)?
             .first_sat_query
             .is_some()
@@ -11821,7 +11878,7 @@ fn earliest_aag_counterexample(
             low = middle + 1;
         }
     }
-    let encoding = aag_bmc_encoding(model, low)?;
+    let encoding = aag_bmc_encoding_with_constraints(model, low, constraints)?;
     let run = run_aag_bmc(model, low, &encoding)?;
     if run.first_sat_query.is_none() {
         return Err("failed to reproduce AIGER counterexample at minimal horizon".to_string());
@@ -11869,6 +11926,7 @@ fn append_named_aag_trace(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_general_aiger_safety_result(
     path: &Path,
     input: &Path,
@@ -11877,6 +11935,7 @@ fn write_general_aiger_safety_result(
     encoding: &AagBmcEncoding,
     run: &AagBmcRun,
     gate_reason: &str,
+    constraints: &[AagInputConstraint],
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -11894,11 +11953,19 @@ fn write_general_aiger_safety_result(
             format!("horizon={horizon}"),
             "backend=cdcl".to_string(),
             format!("gate_reason={gate_reason}"),
+            format!("assumption_count={}", constraints.len()),
             format!("bad_frame={}", query.frame),
             format!("bad_output={}", query.output),
             format!("bad_output_name={}", model.output_names[query.output]),
-            "frame,latch_bits_low_to_high,input_bits_low_to_high".to_string(),
         ];
+        lines.extend(constraints.iter().enumerate().map(|(index, constraint)| {
+            format!(
+                "assumption_{index}={}={}",
+                constraint.name,
+                usize::from(constraint.value)
+            )
+        }));
+        lines.push("frame,latch_bits_low_to_high,input_bits_low_to_high".to_string());
         for frame in 0..=query.frame {
             let latches = model
                 .latches
@@ -11921,14 +11988,27 @@ fn write_general_aiger_safety_result(
         append_named_aag_trace(&mut lines, model, witness, query.frame);
         lines.join("\n") + "\n"
     } else {
-        format!(
-            "status=SAFE\ninput={}\nhorizon={horizon}\nbackend=cdcl\ngate_reason={gate_reason}\n",
-            input.display()
-        )
+        let mut lines = vec![
+            "status=SAFE".to_string(),
+            format!("input={}", input.display()),
+            format!("horizon={horizon}"),
+            "backend=cdcl".to_string(),
+            format!("gate_reason={gate_reason}"),
+            format!("assumption_count={}", constraints.len()),
+        ];
+        lines.extend(constraints.iter().enumerate().map(|(index, constraint)| {
+            format!(
+                "assumption_{index}={}={}",
+                constraint.name,
+                usize::from(constraint.value)
+            )
+        }));
+        lines.join("\n") + "\n"
     };
     fs::write(path, body).map_err(|error| format!("write {}: {error}", path.display()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn verify_general_aiger(
     input: &Path,
     model: &AagModel,
@@ -11937,6 +12017,7 @@ fn verify_general_aiger(
     node_limit: usize,
     output: &Path,
     safety_result: &Path,
+    constraints: &[AagInputConstraint],
 ) -> Result<(), String> {
     let gate_start = Instant::now();
     let gate_reason = if model.inputs.is_empty() {
@@ -11946,12 +12027,12 @@ fn verify_general_aiger(
     };
     let gate_ns = gate_start.elapsed().as_nanos();
     let encoding_start = Instant::now();
-    let encoding = aag_bmc_encoding(model, horizon)?;
+    let encoding = aag_bmc_encoding_with_constraints(model, horizon, constraints)?;
     let encoding_ns = encoding_start.elapsed().as_nanos();
     let mut run = run_aag_bmc(model, horizon, &encoding)?;
     let trace_search_start = Instant::now();
     let earliest = if run.first_sat_query.is_some() {
-        Some(earliest_aag_counterexample(model, horizon)?)
+        Some(earliest_aag_counterexample(model, horizon, constraints)?)
     } else {
         None
     };
@@ -11985,6 +12066,7 @@ fn verify_general_aiger(
         trace_encoding,
         trace_run,
         gate_reason,
+        constraints,
     )?;
     if let Some(index) = trace_run.first_sat_query {
         println!(
@@ -12002,13 +12084,14 @@ fn verify_general_aiger(
     Ok(())
 }
 
-fn verify_cq_aiger(
+fn verify_cq_aiger_with_constraints(
     input: &Path,
     horizon: usize,
     checkpoint: usize,
     node_limit: usize,
     output: &Path,
     safety_result: &Path,
+    constraints: &[AagInputConstraint],
 ) -> Result<(), String> {
     let model = parse_aag(input)?;
     if !model.inputs.is_empty() || model.latches.len() > 9 {
@@ -12020,6 +12103,12 @@ fn verify_cq_aiger(
             node_limit,
             output,
             safety_result,
+            constraints,
+        );
+    }
+    if !constraints.is_empty() {
+        return Err(
+            "environment assumptions require an AIGER model with primary inputs".to_string(),
         );
     }
     let (_, formula, initial) = aag_temporal_formula(&model, horizon)?;
@@ -12094,12 +12183,36 @@ fn verify_cq_aiger(
     Ok(())
 }
 
-fn firmware_safety_gate(input: &Path, horizon: usize, artifact_dir: &Path) -> Result<bool, String> {
+fn verify_cq_aiger(
+    input: &Path,
+    horizon: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    output: &Path,
+    safety_result: &Path,
+) -> Result<(), String> {
+    verify_cq_aiger_with_constraints(
+        input,
+        horizon,
+        checkpoint,
+        node_limit,
+        output,
+        safety_result,
+        &[],
+    )
+}
+
+fn firmware_safety_gate_with_constraints(
+    input: &Path,
+    horizon: usize,
+    artifact_dir: &Path,
+    constraints: &[AagInputConstraint],
+) -> Result<bool, String> {
     fs::create_dir_all(artifact_dir)
         .map_err(|error| format!("create firmware safety artifact directory: {error}"))?;
     let metrics = artifact_dir.join("solver-metrics.csv");
     let report = artifact_dir.join("safety-report.txt");
-    verify_cq_aiger(input, horizon, 10, 200_000, &metrics, &report)?;
+    verify_cq_aiger_with_constraints(input, horizon, 10, 200_000, &metrics, &report, constraints)?;
     let result = fs::read_to_string(&report)
         .map_err(|error| format!("read firmware safety report: {error}"))?;
     let safe = result.lines().next() == Some("status=SAFE");
@@ -12132,6 +12245,10 @@ fn firmware_safety_gate(input: &Path, horizon: usize, artifact_dir: &Path) -> Re
     Ok(safe)
 }
 
+fn firmware_safety_gate(input: &Path, horizon: usize, artifact_dir: &Path) -> Result<bool, String> {
+    firmware_safety_gate_with_constraints(input, horizon, artifact_dir, &[])
+}
+
 fn valid_verilog_identifier(value: &str) -> bool {
     let mut characters = value.chars();
     characters
@@ -12140,6 +12257,69 @@ fn valid_verilog_identifier(value: &str) -> bool {
         && characters.all(|character| {
             character == '_' || character == '$' || character.is_ascii_alphanumeric()
         })
+}
+
+fn parse_environment_assumptions(
+    path: &Path,
+) -> Result<(Vec<AagInputConstraint>, Vec<u8>), String> {
+    let metadata = fs::metadata(path).map_err(|error| {
+        format!(
+            "inspect environment assumptions {}: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "environment assumptions are not a file: {}",
+            path.display()
+        ));
+    }
+    if metadata.len() > 65_536 {
+        return Err("environment assumptions exceed safety limit 65536 bytes".to_string());
+    }
+    let bytes = fs::read(path)
+        .map_err(|error| format!("read environment assumptions {}: {error}", path.display()))?;
+    if bytes.len() > 65_536 {
+        return Err("environment assumptions exceed safety limit 65536 bytes".to_string());
+    }
+    let body = std::str::from_utf8(&bytes)
+        .map_err(|_| "environment assumptions must be valid UTF-8".to_string())?;
+    let mut constraints = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (index, raw) in body.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (name, value) = line.split_once('=').ok_or_else(|| {
+            format!(
+                "invalid environment assumption at line {}: expected NAME=0 or NAME=1",
+                index + 1
+            )
+        })?;
+        let name = name.trim();
+        let value = value.trim();
+        if !valid_verilog_identifier(name) || !matches!(value, "0" | "1") {
+            return Err(format!(
+                "invalid environment assumption at line {}: expected NAME=0 or NAME=1",
+                index + 1
+            ));
+        }
+        if !seen.insert(name.to_string()) {
+            return Err(format!("duplicate environment assumption `{name}`"));
+        }
+        constraints.push(AagInputConstraint {
+            name: name.to_string(),
+            value: value == "1",
+        });
+        if constraints.len() > 256 {
+            return Err("environment assumptions exceed safety limit 256 entries".to_string());
+        }
+    }
+    if constraints.is_empty() {
+        return Err("environment assumptions file contains no assumptions".to_string());
+    }
+    Ok((constraints, bytes))
 }
 
 fn replace_file(source: &Path, destination: &Path) -> Result<(), String> {
@@ -12212,11 +12392,12 @@ fn annotate_rtl_safety_report(
         .map_err(|error| format!("write annotated RTL safety report: {error}"))
 }
 
-fn firmware_rtl_project_safety_gate(
+fn firmware_rtl_project_safety_gate_with_assumptions(
     inputs: &[PathBuf],
     top: &str,
     horizon: usize,
     artifact_dir: &Path,
+    assumptions_path: Option<&Path>,
 ) -> Result<bool, String> {
     if !valid_verilog_identifier(top) {
         return Err("RTL top must be a simple Verilog identifier".to_string());
@@ -12224,6 +12405,12 @@ fn firmware_rtl_project_safety_gate(
     if inputs.is_empty() || inputs.len() > 64 {
         return Err("RTL project must contain between 1 and 64 source files".to_string());
     }
+    let assumption_document = assumptions_path
+        .map(parse_environment_assumptions)
+        .transpose()?;
+    let assumptions = assumption_document
+        .as_ref()
+        .map_or(&[][..], |(constraints, _)| constraints.as_slice());
     let mut sources = Vec::with_capacity(inputs.len());
     let mut seen_sources = BTreeSet::new();
     let mut source_bytes = 0u64;
@@ -12286,6 +12473,10 @@ fn firmware_rtl_project_safety_gate(
         })
         .collect::<Result<Vec<_>, String>>()?;
     let staged_sources = staged_source_names.join(" ");
+    if let Some((_, bytes)) = &assumption_document {
+        fs::write(stage.join("assumptions.txt"), bytes)
+            .map_err(|error| format!("stage environment assumptions: {error}"))?;
+    }
     let script = format!(
         "read_verilog -formal -sv -D CQ_AIGER_EXPORT {staged_sources}\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
@@ -12358,7 +12549,7 @@ fn firmware_rtl_project_safety_gate(
             yosys_errors.display()
         ));
     }
-    let safe = firmware_safety_gate(&model, horizon, &stage)?;
+    let safe = firmware_safety_gate_with_constraints(&model, horizon, &stage, assumptions)?;
     annotate_rtl_safety_report(
         &stage.join("safety-report.txt"),
         &source_label,
@@ -12373,10 +12564,15 @@ fn firmware_rtl_project_safety_gate(
         .map(|(index, source)| format!("source_{index}={}", report_value(source)))
         .collect::<Vec<_>>()
         .join("\n");
+    let assumption_source_label = assumptions_path.map_or_else(
+        || "none".to_string(),
+        |path| report_value(&path.to_string_lossy()),
+    );
+    let assumption_count = assumptions.len();
     fs::write(
         stage.join("run-manifest.txt"),
         format!(
-            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\nyosys={yosys_version}\n",
+            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\nyosys={yosys_version}\n",
             report_value(&source_label), sources.len()
         ),
     )
@@ -12407,6 +12603,15 @@ fn firmware_rtl_project_safety_gate(
         "safety-report.txt",
     ];
     published_names.extend(staged_source_names.iter().map(String::as_str));
+    if assumptions_path.is_some() {
+        published_names.push("assumptions.txt");
+    } else {
+        let stale = artifact_dir.join("assumptions.txt");
+        if stale.is_file() {
+            fs::remove_file(stale)
+                .map_err(|error| format!("remove stale environment assumptions: {error}"))?;
+        }
+    }
     for name in published_names {
         replace_file(&stage.join(name), &artifact_dir.join(name))?;
     }
@@ -12419,6 +12624,15 @@ fn firmware_rtl_project_safety_gate(
         artifact_dir.join("safety-report.txt").display()
     );
     Ok(safe)
+}
+
+fn firmware_rtl_project_safety_gate(
+    inputs: &[PathBuf],
+    top: &str,
+    horizon: usize,
+    artifact_dir: &Path,
+) -> Result<bool, String> {
+    firmware_rtl_project_safety_gate_with_assumptions(inputs, top, horizon, artifact_dir, None)
 }
 
 fn firmware_rtl_safety_gate(
@@ -12464,6 +12678,24 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
             let sources = args[4..].iter().map(PathBuf::from).collect::<Vec<_>>();
             firmware_rtl_project_safety_gate(&sources, &args[1], horizon, Path::new(&args[3]))
                 .map(Some)
+        }
+        Some("firmware-rtl-constrained-project-safety-gate") => {
+            if args.len() < 6 {
+                return Err("usage: continuation-quotient-sat firmware-rtl-constrained-project-safety-gate TOP HORIZON ARTIFACT_DIR ASSUMPTIONS.txt SOURCE.sv SOURCE2.sv [...]".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid constrained RTL project safety horizon".to_string())?
+                .max(1);
+            let sources = args[5..].iter().map(PathBuf::from).collect::<Vec<_>>();
+            firmware_rtl_project_safety_gate_with_assumptions(
+                &sources,
+                &args[1],
+                horizon,
+                Path::new(&args[3]),
+                Some(Path::new(&args[4])),
+            )
+            .map(Some)
         }
         _ => Ok(None),
     }
@@ -22477,5 +22709,54 @@ mod tests {
             .unwrap_err()
             .contains("between 1 and 64")
         );
+    }
+
+    #[test]
+    fn rtl_environment_assumptions_are_exact_named_all_frame_constraints() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping RTL assumption test because Yosys is unavailable");
+            return;
+        }
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/products/infusion-pump/rtl");
+        let source = root.join("door-interlock-regression.sv");
+        let assumptions = root.join("door-closed.assumptions");
+        let artifacts =
+            std::env::temp_dir().join(format!("cq-sat-rtl-assumptions-{}", std::process::id()));
+        assert!(
+            firmware_rtl_project_safety_gate_with_assumptions(
+                &[source],
+                "infusion_pump_controller",
+                8,
+                &artifacts,
+                Some(&assumptions),
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            fs::read_to_string(artifacts.join("assumptions.txt")).unwrap(),
+            fs::read_to_string(&assumptions).unwrap()
+        );
+        let report = fs::read_to_string(artifacts.join("safety-report.txt")).unwrap();
+        assert!(report.contains("assumption_count=1\n"));
+        assert!(report.contains("assumption_0=door_open=0\n"));
+        let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
+        assert!(manifest.contains("assumption_count=1\n"));
+
+        let unknown = std::env::temp_dir().join(format!(
+            "cq-sat-unknown-assumption-{}.txt",
+            std::process::id()
+        ));
+        fs::write(&unknown, "missing_input=0\n").unwrap();
+        let (constraints, _) = parse_environment_assumptions(&unknown).unwrap();
+        let model = parse_aag(&artifacts.join("model.aag")).unwrap();
+        assert!(
+            aag_bmc_encoding_with_constraints(&model, 8, &constraints)
+                .err()
+                .unwrap()
+                .contains("matched 0 synthesized inputs")
+        );
+        std::fs::remove_file(unknown).unwrap();
+        std::fs::remove_dir_all(artifacts).unwrap();
     }
 }

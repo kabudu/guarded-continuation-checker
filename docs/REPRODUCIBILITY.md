@@ -500,6 +500,24 @@ must remove both numbered snapshots before publishing `source.sv` and the new
 manifest. CI independently requires `project/pump-system.sby` to pass through
 depth 16 with SymbiYosys and Z3.
 
+To verify explicit environment assumptions, run the known-unsafe door-interlock
+model with the door-closed contract:
+
+```sh
+target/release/continuation-quotient-sat \
+  firmware-rtl-constrained-project-safety-gate \
+  infusion_pump_controller 8 results/rtl-door-closed \
+  examples/products/infusion-pump/rtl/door-closed.assumptions \
+  examples/products/infusion-pump/rtl/door-interlock-regression.sv
+```
+
+The constrained command must exit 0 and report `SAFE`, with
+`assumption_0=door_open=0` in `safety-report.txt`. The same RTL through the
+unconstrained gate must exit 1 and report `UNSAFE` at frame 1. CI independently
+requires `door-interlock-assumed-safe.sby` to pass through depth 8 and the
+unconstrained `door-interlock-regression.sby` to fail. This paired check detects
+constraint polarity or scope errors rather than merely confirming one result.
+
 ### Multi-module query-reuse benchmark
 
 Generate the checked-in model from its five-module SystemVerilog source and run

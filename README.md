@@ -110,6 +110,23 @@ The project interface accepts at most 64 regular files, 10 MiB per file and
 25 MiB total. It rejects canonical duplicates and publishes deterministic source
 snapshots plus their ordered labels in the final manifest.
 
+Constant environment contracts use a bounded assumptions file containing one
+`NAME=0` or `NAME=1` entry per synthesized primary input. Each entry is enforced
+at every frame and an unknown or duplicate name fails the run:
+
+```sh
+./target/release/continuation-quotient-sat \
+  firmware-rtl-constrained-project-safety-gate \
+  infusion_pump_controller 8 target/firmware-safety/door-closed \
+  examples/products/infusion-pump/rtl/door-closed.assumptions \
+  examples/products/infusion-pump/rtl/door-interlock-regression.sv
+```
+
+The assumptions file is copied into the evidence bundle and each resolved
+constraint is recorded in the safety report. These assumptions describe the
+verified environment; they are not proof that a deployed environment satisfies
+that contract.
+
 The same example now includes a five-module controller and a repeated-property
 BMC experiment:
 

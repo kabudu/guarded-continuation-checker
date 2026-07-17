@@ -13,11 +13,13 @@ tool production-grade.
 - Single- and multi-file sources are snapshotted with ordered provenance.
 - Unsafe bounded results preserve named inputs and state for replay.
 - RTL safety reports and manifests declare artifact schema version 1.
+- Named constant input assumptions are applied at every bounded frame, reject
+  unresolved names, and are cross-checked by an independent SBY/Z3 model.
 
 ## Required before a production claim
 
-- [ ] Explicit environment assumptions and constraints with independently
-  checked semantics.
+- [x] Explicit constant environment assumptions and constraints with
+  independently checked semantics.
 - [ ] Include directories, parameter overrides, memories, and declared clock or
   reset policy for representative embedded RTL projects.
 - [ ] Stable, versioned CLI and artifact schemas with compatibility tests.
