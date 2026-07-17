@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-07-17
+
 - Add fail-closed, named RTL input assumptions that constrain every bounded
   frame, preserve their source artifact, and reject duplicates or unknown names.
 - Cross-check constrained SAFE semantics independently with SymbiYosys and Z3
