@@ -518,6 +518,23 @@ requires `door-interlock-assumed-safe.sby` to pass through depth 8 and the
 unconstrained `door-interlock-regression.sby` to fail. This paired check detects
 constraint polarity or scope errors rather than merely confirming one result.
 
+On Linux, every RTL gate report and manifest must contain:
+
+```text
+containment_platform=linux
+process_group_timeout_kill=true
+synthesis_memory_limit_kind=address-space
+synthesis_memory_limit_bytes=2147483648
+synthesis_file_limit_bytes=536870912
+```
+
+The test suite runs three adversarial containment probes: a Python allocation
+larger than its reduced address-space limit must fail, a write beyond a reduced
+file limit must fail without exceeding the cap, and a shell descendant must no
+longer exist after group timeout. macOS runs the latter two probes and records a
+zero-byte, `unavailable` memory limit rather than claiming enforcement that the
+platform cannot provide reliably.
+
 ### Multi-module query-reuse benchmark
 
 Generate the checked-in model from its five-module SystemVerilog source and run
