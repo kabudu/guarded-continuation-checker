@@ -158,8 +158,8 @@ address-space limit. macOS remains supported for development and records
 and model limits still apply, but it must not be used as evidence of hard memory
 containment.
 
-Completed evidence bundles use the strict
-[RTL artifact schema v3](docs/ARTIFACT_SCHEMA_V3.md). Validate one before
+Completed evidence bundles use the strict, SHA-256-bound
+[RTL artifact schema v4](docs/ARTIFACT_SCHEMA_V4.md). Validate one before
 retention or downstream processing:
 
 ```sh
@@ -167,8 +167,9 @@ retention or downstream processing:
   firmware-artifact-validate target/firmware-safety/project
 ```
 
-Schema v3 rejects unknown, reordered, duplicated, or malformed manifest fields,
-stale source snapshots, missing evidence, and report/manifest disagreement.
+Schema v4 additionally rejects modified or symlinked indexed evidence. SHA-256
+detects changes relative to a trusted manifest; it is not a signature. See the
+[security policy and threat model](SECURITY.md) before evaluating untrusted RTL.
 Direct ASCII AIGER inputs are capped at 256 MiB. CI also runs 25,000 deterministic
 mutations over persistent AIGER, assumptions, project-config, and CLI corpora.
 

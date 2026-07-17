@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::env;
 use std::fs;
@@ -10,7 +11,7 @@ use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
-const RTL_ARTIFACT_SCHEMA_VERSION: usize = 3;
+const RTL_ARTIFACT_SCHEMA_VERSION: usize = 4;
 const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
 const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
@@ -12865,8 +12866,162 @@ fn report_value(value: &str) -> String {
         .replace('\r', "%0D")
 }
 
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect evidence file {}: {error}", path.display()))?;
+    if !metadata.file_type().is_file() {
+        return Err(format!(
+            "evidence path is not a regular file: {}",
+            path.display()
+        ));
+    }
+    let mut file = fs::File::open(path)
+        .map_err(|error| format!("open evidence file {}: {error}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = std::io::Read::read(&mut file, &mut buffer)
+            .map_err(|error| format!("hash evidence file {}: {error}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn collect_evidence_files(root: &Path, directory: &Path) -> Result<Vec<String>, String> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(directory)
+        .map_err(|error| format!("read evidence directory {}: {error}", directory.display()))?
+    {
+        let entry = entry.map_err(|error| format!("read evidence entry: {error}"))?;
+        let kind = entry
+            .file_type()
+            .map_err(|error| format!("inspect evidence entry: {error}"))?;
+        if kind.is_symlink() {
+            return Err(format!(
+                "evidence bundle contains a symlink: {}",
+                entry.path().display()
+            ));
+        }
+        if kind.is_dir() {
+            files.extend(collect_evidence_files(root, &entry.path())?);
+        } else if kind.is_file() {
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|_| format!("evidence path escaped bundle: {}", path.display()))?;
+            let relative = relative
+                .to_str()
+                .ok_or_else(|| "evidence paths must be valid UTF-8".to_string())?;
+            if relative.contains('\n') || relative.contains('\r') {
+                return Err("evidence paths may not contain line breaks".to_string());
+            }
+            files.push(relative.to_string());
+        } else {
+            return Err(format!(
+                "evidence bundle contains a non-file entry: {}",
+                entry.path().display()
+            ));
+        }
+        if files.len() > 4096 {
+            return Err("evidence bundle exceeds 4096 files".to_string());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn write_evidence_index(root: &Path) -> Result<String, String> {
+    let index = root.join("evidence.sha256");
+    let manifest = root.join("run-manifest.txt");
+    if index.exists() || manifest.exists() {
+        return Err("evidence index must be generated before manifest publication".to_string());
+    }
+    let files = collect_evidence_files(root, root)?;
+    let mut body = String::new();
+    for relative in files {
+        let digest = sha256_file(&root.join(&relative))?;
+        body.push_str(&format!("{digest}  {relative}\n"));
+    }
+    if body.len() > 1_048_576 {
+        return Err("evidence index exceeds 1048576 bytes".to_string());
+    }
+    fs::write(&index, body).map_err(|error| format!("write evidence index: {error}"))?;
+    sha256_file(&index)
+}
+
+fn validate_evidence_index(root: &Path, expected_index_digest: &str) -> Result<(), String> {
+    if expected_index_digest.len() != 64
+        || !expected_index_digest
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err("evidence index SHA-256 is malformed".to_string());
+    }
+    let index = root.join("evidence.sha256");
+    if sha256_file(&index)? != expected_index_digest {
+        return Err("evidence index SHA-256 disagrees with manifest".to_string());
+    }
+    let metadata =
+        fs::symlink_metadata(&index).map_err(|error| format!("inspect evidence index: {error}"))?;
+    if metadata.len() > 1_048_576 {
+        return Err("evidence index exceeds 1048576 bytes".to_string());
+    }
+    let body =
+        fs::read_to_string(&index).map_err(|error| format!("read evidence index: {error}"))?;
+    let mut previous = None::<String>;
+    let mut count = 0usize;
+    for (line_number, line) in body.lines().enumerate() {
+        let (digest, relative) = line
+            .split_once("  ")
+            .ok_or_else(|| format!("invalid evidence index line {}", line_number + 1))?;
+        if digest.len() != 64
+            || !digest
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+        {
+            return Err(format!(
+                "invalid evidence digest at line {}",
+                line_number + 1
+            ));
+        }
+        let relative_path = Path::new(relative);
+        if relative.is_empty()
+            || relative == "evidence.sha256"
+            || relative == "run-manifest.txt"
+            || relative_path.is_absolute()
+            || relative_path
+                .components()
+                .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        {
+            return Err(format!("invalid evidence path at line {}", line_number + 1));
+        }
+        if previous.as_deref().is_some_and(|value| value >= relative) {
+            return Err("evidence index paths must be unique and sorted".to_string());
+        }
+        if sha256_file(&root.join(relative))? != digest {
+            return Err(format!("evidence SHA-256 mismatch for `{relative}`"));
+        }
+        previous = Some(relative.to_string());
+        count += 1;
+        if count > 4096 {
+            return Err("evidence index exceeds 4096 files".to_string());
+        }
+    }
+    if count == 0 {
+        return Err("evidence index contains no files".to_string());
+    }
+    Ok(())
+}
+
 fn read_rtl_manifest(path: &Path) -> Result<Vec<(String, String)>, String> {
-    let metadata = fs::metadata(path)
+    let metadata = fs::symlink_metadata(path)
         .map_err(|error| format!("inspect RTL artifact manifest {}: {error}", path.display()))?;
     if !metadata.is_file() || metadata.len() > 65_536 {
         return Err(
@@ -12908,7 +13063,13 @@ fn rtl_manifest_value<'a>(fields: &'a [(String, String)], key: &str) -> Result<&
 }
 
 fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
-    if !artifact_dir.is_dir() {
+    let root_metadata = fs::symlink_metadata(artifact_dir).map_err(|error| {
+        format!(
+            "inspect RTL artifact bundle {}: {error}",
+            artifact_dir.display()
+        )
+    })?;
+    if !root_metadata.file_type().is_dir() {
         return Err(format!(
             "RTL artifact bundle is not a directory: {}",
             artifact_dir.display()
@@ -13003,7 +13164,7 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
         || rtl_manifest_value(&fields, "synthesis_file_limit_bytes")?
             != YOSYS_FILE_LIMIT_BYTES.to_string()
     {
-        return Err("RTL artifact synthesis limits do not match schema v3".to_string());
+        return Err("RTL artifact synthesis limits do not match schema v4".to_string());
     }
     if !rtl_manifest_value(&fields, "yosys")?.starts_with("Yosys ") {
         return Err("RTL artifact Yosys version is malformed".to_string());
@@ -13040,6 +13201,9 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
             "synthesis_memory_limit_bytes",
             "synthesis_file_limit_bytes",
             "yosys",
+            "evidence_digest_algorithm",
+            "evidence_index",
+            "evidence_index_sha256",
         ]
         .into_iter()
         .map(str::to_string),
@@ -13049,8 +13213,17 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
         .map(|(key, _)| key.clone())
         .collect::<Vec<_>>();
     if actual_keys != expected_keys {
-        return Err("RTL artifact manifest fields or ordering do not match schema v3".to_string());
+        return Err("RTL artifact manifest fields or ordering do not match schema v4".to_string());
     }
+    if rtl_manifest_value(&fields, "evidence_digest_algorithm")? != "sha256"
+        || rtl_manifest_value(&fields, "evidence_index")? != "evidence.sha256"
+    {
+        return Err("RTL artifact evidence digest contract is invalid".to_string());
+    }
+    validate_evidence_index(
+        artifact_dir,
+        rtl_manifest_value(&fields, "evidence_index_sha256")?,
+    )?;
 
     let expected_sources = if source_count == 1 {
         vec!["source.sv".to_string()]
@@ -13412,6 +13585,26 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     let source_label = source_labels.join(";");
     fs::create_dir_all(artifact_dir)
         .map_err(|error| format!("create RTL safety artifact directory: {error}"))?;
+    let artifact_metadata = fs::symlink_metadata(artifact_dir)
+        .map_err(|error| format!("inspect RTL safety artifact directory: {error}"))?;
+    if !artifact_metadata.file_type().is_dir() {
+        return Err("RTL safety artifact path must be a real directory, not a symlink".to_string());
+    }
+    for entry in fs::read_dir(artifact_dir)
+        .map_err(|error| format!("inspect RTL safety artifact directory: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("inspect RTL safety artifact entry: {error}"))?;
+        if entry
+            .file_type()
+            .map_err(|error| format!("inspect RTL safety artifact entry: {error}"))?
+            .is_symlink()
+        {
+            return Err(format!(
+                "RTL safety artifact directory contains a symlink: {}",
+                entry.path().display()
+            ));
+        }
+    }
     let stage = artifact_dir.join(format!(".rtl-stage-{}", std::process::id()));
     fs::create_dir(&stage)
         .map_err(|error| format!("create RTL safety staging directory: {error}"))?;
@@ -13595,10 +13788,11 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         || "unspecified".to_string(),
         |options| rtl_reset_policy_label(&options.reset),
     );
+    let evidence_index_sha256 = write_evidence_index(&stage)?;
     fs::write(
         stage.join("run-manifest.txt"),
         format!(
-            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nfirmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\nproject_config={project_config}\ninclude_dir_count={include_dir_count}\ninclude_file_count={include_file_count}\ninclude_bytes={include_bytes}\nparameter_count={parameter_count}\nparameters={parameters}\nclock_policy={clock_policy}\nreset_policy={reset_policy}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\n",
+            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nfirmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\nproject_config={project_config}\ninclude_dir_count={include_dir_count}\ninclude_file_count={include_file_count}\ninclude_bytes={include_bytes}\nparameter_count={parameter_count}\nparameters={parameters}\nclock_policy={clock_policy}\nreset_policy={reset_policy}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\nevidence_digest_algorithm=sha256\nevidence_index=evidence.sha256\nevidence_index_sha256={evidence_index_sha256}\n",
             report_value(&source_label), sources.len(), std::env::consts::OS,
             synthesis_memory_limit_kind(), synthesis_memory_limit_bytes()
         ),
@@ -13632,6 +13826,7 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         "yosys-errors.log",
         "solver-metrics.csv",
         "safety-report.txt",
+        "evidence.sha256",
     ];
     published_names.extend(staged_source_names.iter().map(String::as_str));
     if assumptions_path.is_some() {
@@ -23699,6 +23894,27 @@ mod tests {
             )
             .is_err()
         );
+        #[cfg(unix)]
+        {
+            let real_artifacts =
+                std::env::temp_dir().join(format!("cq-sat-real-artifacts-{}", std::process::id()));
+            let linked_artifacts = std::env::temp_dir()
+                .join(format!("cq-sat-linked-artifacts-{}", std::process::id()));
+            fs::create_dir(&real_artifacts).unwrap();
+            std::os::unix::fs::symlink(&real_artifacts, &linked_artifacts).unwrap();
+            assert!(
+                firmware_rtl_safety_gate(
+                    &root.join("safe-controller.sv"),
+                    "infusion_pump_controller",
+                    8,
+                    &linked_artifacts,
+                )
+                .unwrap_err()
+                .contains("real directory")
+            );
+            fs::remove_file(linked_artifacts).unwrap();
+            fs::remove_dir(real_artifacts).unwrap();
+        }
         let oversized =
             std::env::temp_dir().join(format!("cq-sat-oversized-rtl-{}.sv", std::process::id()));
         let oversized_file = fs::File::create(&oversized).unwrap();
@@ -23772,8 +23988,10 @@ mod tests {
         assert!(!synthesis.contains(&root.to_string_lossy().to_string()));
         let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
         assert!(manifest.contains("status=SAFE\n"));
-        assert!(manifest.contains("schema_version=3\n"));
+        assert!(manifest.contains("schema_version=4\n"));
         assert!(manifest.contains("firmware_cli_version=2\n"));
+        assert!(manifest.contains("evidence_digest_algorithm=sha256\n"));
+        assert!(manifest.contains("evidence_index=evidence.sha256\n"));
         assert!(manifest.contains("source_count=2\n"));
         assert!(manifest.contains("source_0="));
         assert!(manifest.contains("source_1="));
@@ -23788,6 +24006,34 @@ mod tests {
             synthesis_memory_limit_bytes()
         )));
         assert!(manifest.contains("synthesis_file_limit_bytes=536870912\n"));
+        validate_rtl_artifact_bundle(&artifacts).unwrap();
+        let source_snapshot = artifacts.join("source-0000.sv");
+        let source_bytes = fs::read(&source_snapshot).unwrap();
+        fs::write(&source_snapshot, b"tampered RTL").unwrap();
+        assert!(
+            validate_rtl_artifact_bundle(&artifacts)
+                .unwrap_err()
+                .contains("evidence SHA-256 mismatch")
+        );
+        fs::write(&source_snapshot, &source_bytes).unwrap();
+        #[cfg(unix)]
+        {
+            let external = std::env::temp_dir().join(format!(
+                "cq-sat-evidence-symlink-target-{}",
+                std::process::id()
+            ));
+            fs::write(&external, &source_bytes).unwrap();
+            fs::remove_file(&source_snapshot).unwrap();
+            std::os::unix::fs::symlink(&external, &source_snapshot).unwrap();
+            assert!(
+                validate_rtl_artifact_bundle(&artifacts)
+                    .unwrap_err()
+                    .contains("not a regular file")
+            );
+            fs::remove_file(&source_snapshot).unwrap();
+            fs::write(&source_snapshot, &source_bytes).unwrap();
+            fs::remove_file(external).unwrap();
+        }
         validate_rtl_artifact_bundle(&artifacts).unwrap();
         fs::write(
             artifacts.join("run-manifest.txt"),
@@ -23998,7 +24244,7 @@ mod tests {
         assert!(script.contains("select -assert-count 1 infusion_pump_memory/clk"));
         assert!(script.contains("memory_map"));
         let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
-        assert!(manifest.contains("schema_version=3\n"));
+        assert!(manifest.contains("schema_version=4\n"));
         assert!(manifest.contains("firmware_cli_version=2\n"));
         assert!(manifest.contains("clock_policy=clk:posedge\n"));
         assert!(manifest.contains("reset_policy=rst_n:active-low:1\n"));
@@ -24016,7 +24262,7 @@ mod tests {
         assert!(
             validate_rtl_artifact_bundle(&artifacts)
                 .unwrap_err()
-                .contains("disagrees with manifest")
+                .contains("evidence SHA-256 mismatch")
         );
         fs::remove_dir_all(artifacts).unwrap();
     }

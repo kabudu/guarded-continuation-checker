@@ -13,13 +13,14 @@ tool production-grade.
 - Single- and multi-file sources are snapshotted with ordered provenance.
 - Unsafe bounded results preserve named inputs and state for replay.
 - RTL safety reports and manifests declare compatibility-locked artifact schema
-  version 3 and firmware CLI contract version 2.
+  version 4 and firmware CLI contract version 2.
 - Named constant input assumptions are applied at every bounded frame, reject
   unresolved names, and are cross-checked by an independent SBY/Z3 model.
 - Linux synthesis runs in a dedicated process group with a 2 GiB address-space
   limit, 512 MiB file limit, and group-wide timeout termination. Adversarial CI
   probes verify memory refusal, file truncation, and descendant cleanup.
-- Artifact schema v3 has exact ordering and compatibility tests plus a strict
+- Artifact schema v4 has exact ordering, SHA-256 evidence binding, symlink
+  rejection, compatibility tests, and a strict
   executable bundle validator. Firmware CLI contract v2 fixes product command
   signatures and exit meanings. Direct AIGER input is bounded to 256 MiB.
 - CI executes 25,000 deterministic mutations over persistent AIGER,
@@ -28,6 +29,9 @@ tool production-grade.
   with twelve separately owned properties (six SAFE and six UNSAFE). All twelve
   match expected results on Yosys 0.67+post and digest-pinned Yosys 0.36; the
   modern run also agrees with an independent SymbiYosys/Z3 oracle.
+- CI actions are pinned to immutable commits, Rust dependencies are checksum-
+  locked, RustSec auditing is required on every PR, and Dependabot monitors both
+  Cargo and GitHub Actions dependencies.
 
 ## Required before a production claim
 
@@ -36,7 +40,7 @@ tool production-grade.
 - [x] Include directories, parameter overrides, memories, and declared clock or
   reset policy for representative embedded RTL projects, with an independent
   SymbiYosys/Z3 oracle.
-- [x] Stable artifact schema v3 and firmware CLI contract v2 with executable
+- [x] Stable artifact schema v4 and firmware CLI contract v2 with executable
   version queries, validators, and compatibility tests.
 - [x] Linux memory, file-size, and process-tree limits in addition to wall-clock
   and model-size limits. macOS is explicitly development-only for this gate.
@@ -45,8 +49,9 @@ tool production-grade.
   including SAFE and UNSAFE properties and multiple Yosys versions.
 - [ ] Differential validation across a substantial design-partner RTL corpus,
   including representative toolchains, properties, and failure modes.
-- [ ] Security review of source ingestion, subprocess isolation, artifacts, and
-  dependency supply chain.
+- [ ] Complete the security review tracked in `SECURITY.md`. Artifact integrity
+  and dependency monitoring are implemented; a stronger isolation boundary for
+  hostile RTL and an independent external assessment remain open.
 - [ ] Operational documentation for installation, upgrades, support, incident
   response, and result retention.
 - [ ] Independent technical review and successful design-partner pilots.

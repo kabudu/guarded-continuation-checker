@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-07-17
+
+- Add artifact schema v4 with a bounded SHA-256 inventory covering generated
+  RTL, synthesis, model, solver, and report evidence; reject tampering and
+  symlink substitution in the strict validator.
+- Document the deployment threat model and remaining Yosys isolation limits.
+- Pin GitHub Actions to immutable commits, require RustSec dependency auditing
+  in CI, and enable weekly Cargo and Actions dependency updates.
+
 ## 0.14.0 - 2026-07-17
 
 - Add a revision-pinned public RTL corpus built from five unmodified Yosys test
