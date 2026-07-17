@@ -148,8 +148,10 @@ independent evidence exists. Records must use opaque custodian and environment
 IDs; confidential identities and source material belong in the access-controlled
 review record referenced by the final column, not in the public repository.
 
-The register is UTF-8 RFC 4180 CSV with the exact committed header and one row
-per configuration. Fields have these canonical forms:
+The register is a deliberately restricted, injection-resistant subset of UTF-8
+RFC 4180 CSV: the exact committed header, LF line endings, one unquoted
+single-line row per configuration, no commas inside fields, and at most 10,000
+rows or 8 MiB. Fields have these canonical forms:
 
 - opaque IDs and tags use only ASCII letters, digits, `.`, `_`, and `-`;
 - commits are full lowercase hexadecimal object IDs;
@@ -164,11 +166,56 @@ per configuration. Fields have these canonical forms:
 - `report_reference` is an immutable report identifier or URL, never a formula
   or spreadsheet expression.
 
+`organization_id`, `project_id`, `domain_id`, and `worker_id` are required
+opaque cohort dimensions. `witness_replayed`, `partner_triaged`,
+`repeat_result`, and `repeat_bundle_valid` use `yes`, `no`, or `na`; every
+partner UNSAFE row requires the first two to be `yes`, and every production-gate
+row requires both repeat fields to be `yes`.
+
 No field may be empty except `bundle_digest` and `isolation_report_digest` for
 an expected `FAILURE` that produced no artifact. CSV cells beginning with `=`,
 `+`, `-`, or `@` are prohibited to avoid spreadsheet formula injection. A row
 with `open`, `pending`, or `rejected` status remains in aggregate denominators
 and cannot support a passing cohort conclusion.
+
+Validate syntax without making a production claim:
+
+```sh
+scripts/external-evidence-register-check.sh docs/EXTERNAL_EVIDENCE_REGISTER.csv
+```
+
+The production gate additionally requires an LF-only `KEY=VALUE` attestation
+with exactly these keys: `protocol_version`, `target_tag`, `target_commit`,
+`security_assessment_status`, `security_assessment_report`,
+`technical_review_status`, `technical_review_report`,
+`operator_exercises_status`, `data_handling_status`,
+`independent_reviewer_id`, `independent_aggregate_status`,
+`independent_aggregate_report`, `critical_findings_open`,
+`high_findings_open`, and `assessment_date`. Status values must be `PASS`, open
+critical/high counts must be zero, and the release must match every row.
+
+```sh
+scripts/external-evidence-register-check.sh \
+  --production-gate REGISTER.csv ATTESTATION.conf REVIEWED_SOURCE_REPOSITORY
+```
+
+Exit `0` means the selected mode passed. Exit `1` means a syntactically readable
+production package did not satisfy the production gate. Exit `2` means invalid
+invocation, an unsafe file precondition, or malformed register input. Neither
+non-zero status may be treated as production evidence.
+
+The gate fails closed unless it finds at least seven reproduced security cases,
+three independent technical cases, the full partner cohort and result-class
+coverage, positive resource measurements, exact result/exit agreement,
+repeated validated results, replayed and triaged UNSAFE witnesses, no duplicate
+partner input/requirement pair, no unresolved row, and a complete passing
+attestation. The independent signatory remains responsible for detecting an
+omitted test; no register can prove that its author disclosed every attempted
+configuration.
+
+The source repository must contain the attested release as an annotated tag,
+and the checker requires that tag to peel to the exact attested 40-character
+Git SHA-1 commit. A missing, lightweight, or mismatched tag fails the gate.
 
 The production-readiness checklist may be changed only by a PR that links the
 attributable reports and aggregate register, demonstrates every acceptance

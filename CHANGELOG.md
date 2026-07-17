@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.20.0 - 2026-07-17
+
+- Add a fail-closed external-evidence register validator and production-gate
+  checker for schema, result/exit agreement, cohort diversity and size,
+  independent review coverage, replay, repetition, resources, findings, and
+  attestation requirements.
+- Exercise valid, disagreement, exit mismatch, witness replay, unresolved row,
+  spreadsheet-injection, attestation, cohort-size, symlink, annotated-tag, and
+  tag/commit binding paths in CI without populating the canonical header-only
+  evidence register.
+
 ## 0.19.0 - 2026-07-17
 
 - Define fixed independence, attack reproduction, technical review, partner
