@@ -12,8 +12,8 @@ review invalidates affected conclusions and requires documented impact review.
 
 An independent reviewer must not have authored or approved the implementation
 being assessed and must be free to report adverse findings. Paid work is allowed
-when scope, evidence access, and the right to report findings to the maintainer
-are contractually preserved.
+when scope, private evidence access, and the right to report a non-confidential
+final outcome to the maintainer are contractually preserved.
 
 The security assessor must have demonstrated experience reviewing Linux
 containers, shell boundaries, Rust parsers or native tools, and CI supply chains.
@@ -100,11 +100,12 @@ A configuration counts only when the partner owns and reviews the requirement,
 model boundary, assumptions, bad outputs, and horizon. Synthetic examples may
 supplement but not count toward the 30 partner configurations.
 
-Before transfer, the maintainer and partner must agree confidential-data scope,
-retention and deletion, authorised operators, incident contacts, allowed report
-redaction, and whether execution occurs on a partner-owned worker. Confidential
-RTL, traces, credentials, or identity data must never be attached to a public
-GitHub issue or committed to this repository.
+Before evaluation, the partner and its chosen assessor must establish
+confidential-data scope, retention and deletion, authorised operators, incident
+contacts, allowed report redaction, and worker ownership. The maintainer is not
+an evaluation operator or recipient of partner RTL, property text, traces,
+credentials, identity mappings, or intermediate records. Such material must
+never be attached to a public GitHub issue or committed to this repository.
 
 Each expected SAFE or UNSAFE result must be compared with an independently owned
 oracle or pre-existing reviewed result. Expected failure cases must compare the
@@ -136,8 +137,9 @@ indices and attributable private review records must still exist.
 
 ## Evidence register
 
-The maintainer must keep a versioned register with one row per review or pilot
-configuration containing an opaque ID, partner/reviewer custodian, target tag,
+The partner and independent aggregate reviewer must keep a versioned private
+register with one row per review or pilot configuration containing an opaque ID,
+partner/reviewer custodian, target tag,
 environment ID, input and requirement record digests, expected result source,
 CQ result, oracle result, exit class, validated-bundle digest, isolation-report
 digest, runtime, peak memory, disposition, and review status.
@@ -217,7 +219,9 @@ The source repository must contain the attested release as an annotated tag,
 and the checker requires that tag to peel to the exact attested 40-character
 Git SHA-1 commit. A missing, lightweight, or mismatched tag fails the gate.
 
-The production-readiness checklist may be changed only by a PR that links the
-attributable reports and aggregate register, demonstrates every acceptance
-criterion, and receives independent approval. Until then, external messaging
-remains “research preview” or “design-partner evaluation”.
+The maintainer receives only the completed non-confidential outcome report,
+aggregate counts and limitations, gate result, and agreed public references—not
+the private register. The production-readiness checklist may be changed only by
+a PR whose public references and independently attributable outcome demonstrate
+every acceptance criterion without exposing partner data. Until then, external
+messaging remains “research preview” or “design-partner evaluation”.

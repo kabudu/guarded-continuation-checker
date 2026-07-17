@@ -62,6 +62,9 @@ External engagement can start from the sendable
 [design-partner brief](docs/DESIGN_PARTNER_BRIEF.md), private
 [pilot intake template](docs/PILOT_INTAKE_TEMPLATE.md), and
 [independent-assessment statement of work](docs/INDEPENDENT_ASSESSMENT_SOW.md).
+Partners operate the evaluation independently using repository resources and
+return only the final non-confidential
+[outcome and suitability report](docs/OUTCOME_REPORT_TEMPLATE.md).
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

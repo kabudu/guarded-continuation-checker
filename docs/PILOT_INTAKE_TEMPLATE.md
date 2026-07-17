@@ -3,6 +3,9 @@
 Copy this template into the partner's approved access-controlled system. Do not
 complete it in a public GitHub issue, pull request, discussion, or repository.
 Use opaque IDs in the public evidence register and keep the mapping private.
+The partner and its independent reviewer operate the evaluation without
+maintainer access. Send the maintainer only the final non-confidential outcome
+defined in `OUTCOME_REPORT_TEMPLATE.md`.
 
 ## Authority and contacts
 
@@ -115,6 +118,9 @@ or disagreed. It remains in the private record and aggregate denominator.
 - Independent reviewer conclusion and date:
 - Evidence-register export reference and digest:
 - Aggregate report reference and digest:
+- Final non-confidential outcome report reference:
+- Confirmation that no private source, trace, credential, identity mapping, or
+  intermediate record is being sent to the maintainer:
 
 ## Independent aggregate attestation
 
