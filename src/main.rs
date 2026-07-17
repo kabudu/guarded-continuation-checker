@@ -9022,6 +9022,220 @@ impl CheckpointCdclPreimage {
     }
 }
 
+struct NativeBddTheoryPreimage {
+    solver: Solver<'static>,
+    preimage: SymbolicPreimageTransition,
+    variables: usize,
+    width: usize,
+    checkpoint: usize,
+    activations: Vec<Var>,
+    theory_conflicts: usize,
+    theory_clauses: usize,
+}
+
+impl NativeBddTheoryPreimage {
+    fn recognize(
+        formula: &[Clause],
+        width: usize,
+        horizon: usize,
+        checkpoint: usize,
+        node_limit: usize,
+    ) -> Result<Self, String> {
+        if checkpoint == 0 || checkpoint >= horizon {
+            return Err("checkpoint must be inside the temporal horizon".to_string());
+        }
+        let prefix = formula
+            .iter()
+            .filter(|clause| {
+                clause
+                    .0
+                    .iter()
+                    .map(|&(variable, _)| variable / width)
+                    .min()
+                    .is_some_and(|time| time < checkpoint)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let preimage = SymbolicPreimageTransition::recognize_ordered(
+            &prefix,
+            width,
+            checkpoint,
+            node_limit,
+            "dependency",
+        )?;
+        let suffix = formula
+            .iter()
+            .filter(|clause| {
+                clause
+                    .0
+                    .iter()
+                    .map(|&(variable, _)| variable / width)
+                    .min()
+                    .is_some_and(|time| time >= checkpoint)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut solver = Solver::new();
+        add_to_varisat(&mut solver, &suffix);
+        Ok(Self {
+            solver,
+            preimage,
+            variables: width * (horizon + 1),
+            width,
+            checkpoint,
+            activations: Vec::new(),
+            theory_conflicts: 0,
+            theory_clauses: 0,
+        })
+    }
+
+    fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
+        let mut constraint = 1usize;
+        for (variable, required) in assumptions.iter().enumerate() {
+            let Some(required) = required else { continue };
+            let time = variable / self.width;
+            if time > self.checkpoint {
+                continue;
+            }
+            let root = self.preimage.frame(time)[variable % self.width];
+            let literal = if *required {
+                root
+            } else {
+                let mut memo = HashMap::new();
+                self.preimage.manager.negate(root, &mut memo)
+            };
+            constraint = self.preimage.manager.and(constraint, literal);
+            if constraint == 0 {
+                return None;
+            }
+        }
+
+        let activation = Var::from_index(self.variables + self.activations.len());
+        let mut base_assumptions = self
+            .activations
+            .iter()
+            .map(|&old| Lit::from_var(old, false))
+            .collect::<Vec<_>>();
+        base_assumptions.push(Lit::from_var(activation, true));
+        self.activations.push(activation);
+        for (variable, required) in assumptions.iter().enumerate() {
+            if variable / self.width >= self.checkpoint
+                && let Some(value) = required
+            {
+                base_assumptions.push(Lit::from_var(Var::from_index(variable), *value));
+            }
+        }
+
+        for bit in 0..self.width {
+            let root = self.preimage.frame(self.checkpoint)[bit];
+            let mut memo = HashMap::new();
+            let not_root = self.preimage.manager.negate(root, &mut memo);
+            if self.preimage.manager.and(constraint, not_root) == 0 {
+                base_assumptions.push(Lit::from_var(
+                    Var::from_index(self.checkpoint * self.width + bit),
+                    true,
+                ));
+            } else if self.preimage.manager.and(constraint, root) == 0 {
+                base_assumptions.push(Lit::from_var(
+                    Var::from_index(self.checkpoint * self.width + bit),
+                    false,
+                ));
+            }
+        }
+
+        for first in 0..self.width {
+            for second in (first + 1)..self.width {
+                for first_value in [false, true] {
+                    for second_value in [false, true] {
+                        let mut candidate = constraint;
+                        for (bit, value) in [(first, first_value), (second, second_value)] {
+                            let root = self.preimage.frame(self.checkpoint)[bit];
+                            let literal = if value {
+                                root
+                            } else {
+                                let mut memo = HashMap::new();
+                                self.preimage.manager.negate(root, &mut memo)
+                            };
+                            candidate = self.preimage.manager.and(candidate, literal);
+                        }
+                        if candidate == 0 {
+                            self.solver.add_clause(&[
+                                Lit::from_var(activation, false),
+                                Lit::from_var(
+                                    Var::from_index(self.checkpoint * self.width + first),
+                                    !first_value,
+                                ),
+                                Lit::from_var(
+                                    Var::from_index(self.checkpoint * self.width + second),
+                                    !second_value,
+                                ),
+                            ]);
+                            self.theory_clauses += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        loop {
+            self.solver.assume(&base_assumptions);
+            if !self.solver.solve().expect("native BDD theory solve") {
+                return None;
+            }
+            let model = self.solver.model().expect("native BDD theory model");
+            let mut assignment = vec![false; self.variables];
+            for literal in model {
+                if literal.var().index() < self.variables {
+                    assignment[literal.var().index()] = literal.is_positive();
+                }
+            }
+            let checkpoint_state = (0..self.width)
+                .map(|bit| assignment[self.checkpoint * self.width + bit])
+                .collect::<Vec<_>>();
+            let mut joint = constraint;
+            for (bit, &value) in checkpoint_state.iter().enumerate() {
+                let root = self.preimage.frame(self.checkpoint)[bit];
+                let literal = if value {
+                    root
+                } else {
+                    let mut memo = HashMap::new();
+                    self.preimage.manager.negate(root, &mut memo)
+                };
+                joint = self.preimage.manager.and(joint, literal);
+                if joint == 0 {
+                    break;
+                }
+            }
+            if let Some(ranked) = self
+                .preimage
+                .manager
+                .satisfying_assignment(joint, self.width)
+            {
+                for time in 0..=self.checkpoint {
+                    for bit in 0..self.width {
+                        assignment[time * self.width + bit] = self
+                            .preimage
+                            .manager
+                            .evaluate(self.preimage.frame(time)[bit], &ranked);
+                    }
+                }
+                return Some(assignment);
+            }
+
+            let mut block = Vec::with_capacity(self.width + 1);
+            block.push(Lit::from_var(activation, false));
+            for (bit, &value) in checkpoint_state.iter().enumerate() {
+                block.push(Lit::from_var(
+                    Var::from_index(self.checkpoint * self.width + bit),
+                    !value,
+                ));
+            }
+            self.solver.add_clause(&block);
+            self.theory_conflicts += 1;
+        }
+    }
+}
+
 impl SymbolicPreimageTransition {
     fn recognize_ordered(
         formula: &[Clause],
@@ -10162,6 +10376,110 @@ fn benchmark_checkpoint_cdcl(
             println!(
                 "checkpoint CDCL kind={kind} width={width} horizon={horizon} checkpoint={} encoding={encoding} bdd_nodes={} encoding_nodes={} encoding_clauses={} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
                 engine.checkpoint, engine.bdd_nodes, engine.encoding_nodes, engine.encoding_clauses
+            );
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_native_bdd_theory(
+    kind: &str,
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("create theory output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,theory_clauses,theory_conflicts,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write theory header: {error}"))?;
+    for &width in widths {
+        for &horizon in horizons {
+            let vars = width * (horizon + 1);
+            let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
+            let effective_checkpoint = checkpoint.min(horizon.saturating_sub(1));
+            let recognition_start = Instant::now();
+            let mut engine = NativeBddTheoryPreimage::recognize(
+                &formula,
+                width,
+                horizon,
+                effective_checkpoint,
+                node_limit,
+            )?;
+            let recognition_ns = recognition_start.elapsed().as_nanos();
+            let bdd_nodes = engine.preimage.bdd_nodes();
+            let mut rng =
+                Rng(seed ^ (width as u64).rotate_left(23) ^ (horizon as u64).rotate_left(43));
+            let mut queries = Vec::with_capacity(query_count);
+            for query_index in 0..query_count {
+                let mut assumptions = vec![None; vars];
+                for _ in 0..(2 + query_index % 7) {
+                    assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+                }
+                queries.push(assumptions);
+            }
+            let theory_start = Instant::now();
+            let theory_answers = queries
+                .iter()
+                .map(|assumptions| engine.query(assumptions))
+                .collect::<Vec<_>>();
+            let theory_ns = theory_start.elapsed().as_nanos();
+            let mut solver = Solver::new();
+            add_to_varisat(&mut solver, &formula);
+            let full_start = Instant::now();
+            let full_answers = queries
+                .iter()
+                .map(|assumptions| {
+                    let literals = assumptions
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(variable, value)| {
+                            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                        })
+                        .collect::<Vec<_>>();
+                    solver.assume(&literals);
+                    solver.solve().expect("native theory baseline solve")
+                })
+                .collect::<Vec<_>>();
+            let full_ns = full_start.elapsed().as_nanos();
+            let agreement = theory_answers
+                .iter()
+                .zip(&full_answers)
+                .all(|(answer, &sat)| answer.is_some() == sat);
+            let witnesses_valid =
+                theory_answers
+                    .iter()
+                    .zip(&queries)
+                    .all(|(answer, assumptions)| {
+                        answer.as_ref().is_none_or(|assignment| {
+                            satisfies(&formula, assignment)
+                                && assumptions.iter().enumerate().all(|(variable, required)| {
+                                    required.is_none_or(|value| assignment[variable] == value)
+                                })
+                        })
+                    });
+            let sat_queries = theory_answers
+                .iter()
+                .filter(|answer| answer.is_some())
+                .count();
+            let unsat_queries = query_count - sat_queries;
+            let theory_per_query = theory_ns as f64 / query_count as f64;
+            let full_per_query = full_ns as f64 / query_count as f64;
+            let speedup = full_per_query / theory_per_query.max(1.0);
+            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{effective_checkpoint},{node_limit},{recognition_ns},{bdd_nodes},{},{},{theory_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.theory_clauses, engine.theory_conflicts)
+                .map_err(|error| format!("write theory row: {error}"))?;
+            file.flush()
+                .map_err(|error| format!("flush theory output: {error}"))?;
+            println!(
+                "native BDD theory kind={kind} width={width} horizon={horizon} checkpoint={effective_checkpoint} bdd_nodes={bdd_nodes} theory_clauses={} conflicts={} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+                engine.theory_clauses, engine.theory_conflicts
             );
         }
     }
@@ -11775,6 +12093,31 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     "benchmark-checkpoint-lazy" => "lazy-bdd",
                     _ => "bdd",
                 },
+            )?;
+            Ok(true)
+        }
+        "benchmark-native-bdd-theory" => {
+            if args.len() != 9 {
+                return Err("usage: continuation-quotient-sat benchmark-native-bdd-theory KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+            }
+            benchmark_native_bdd_theory(
+                &args[1],
+                &parse_size_grid(&args[2], "width")?,
+                &parse_size_grid(&args[3], "horizon")?,
+                args[4]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid theory query count".to_string())?
+                    .max(1),
+                args[5]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid theory checkpoint".to_string())?,
+                args[6]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid theory node limit".to_string())?,
+                args[7]
+                    .parse::<u64>()
+                    .map_err(|_| "invalid theory seed".to_string())?,
+                Path::new(&args[8]),
             )?;
             Ok(true)
         }
@@ -19651,6 +19994,42 @@ mod tests {
             assert!(assumptions.iter().enumerate().all(|(variable, required)| {
                 required.is_none_or(|value| assignment[variable] == value)
             }));
+        }
+    }
+
+    #[test]
+    fn native_bdd_theory_reconciles_checkpoint_models_exactly() {
+        let width = 5;
+        let horizon = 31;
+        let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let mut engine =
+            NativeBddTheoryPreimage::recognize(&formula, width, horizon, 9, 50_000).unwrap();
+        let mut rng = Rng(0x07e0_f1e5);
+        for _ in 0..5 {
+            let mut assumptions = vec![None; vars];
+            for _ in 0..6 {
+                assumptions[rng.below(vars)] = Some(rng.next() & 1 == 1);
+            }
+            let answer = engine.query(&assumptions);
+            let mut constrained = formula.clone();
+            constrained.extend(
+                assumptions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(variable, value)| {
+                        value.map(|value| Clause(vec![(variable, value)]))
+                    }),
+            );
+            assert_eq!(
+                answer.is_some(),
+                solve_with_varisat(vars, &constrained).is_some()
+            );
+            if let Some(assignment) = answer {
+                assert!(satisfies(&formula, &assignment));
+                assert!(assumptions.iter().enumerate().all(|(variable, required)| {
+                    required.is_none_or(|value| assignment[variable] == value)
+                }));
+            }
         }
     }
 }

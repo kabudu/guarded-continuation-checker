@@ -312,6 +312,21 @@ Run the final direct-root-assumption phase and holdout with:
 Every row must report `encoding=lazy-bdd`, exact agreement, and valid witnesses.
 Timing is explicitly exploratory; node and clause counts are deterministic.
 
+## Native BDD-theory bridge
+
+Run the pairwise-propagating phase and holdout with:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
+  results/reproduced-native-bdd-theory-pairwise-10-phase.csv
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
+  results/reproduced-native-bdd-theory-pairwise-10-holdout.csv
+```
+
+Every row must agree with full CDCL and validate every returned witness.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

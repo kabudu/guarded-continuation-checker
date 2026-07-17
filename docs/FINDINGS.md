@@ -336,6 +336,28 @@ breakthrough, not yet a solver-speed breakthrough. The remaining target is a
 native circuit propagator or a compact encoding whose propagation quality matches
 the original transition clauses.
 
+## Native BDD-theory bridge
+
+The native bridge avoids checkpoint CNF entirely. For each query it builds the
+prefix observation constraint in the BDD, sends forced checkpoint literals to a
+persistent suffix CDCL solver, checks the proposed checkpoint state against the
+BDD, and learns an activation-gated blocking clause for each incompatible state.
+The activation makes query-specific learning retractable without rebuilding the
+solver. Full witnesses are reconstructed from a satisfying initial BDD path.
+
+The bridge is exact, but reconciliation dominates. Without bounded correlation
+clauses it learned 184 and 120 checkpoint conflicts across the horizon-137 and
+horizon-1,333 phase rows, reaching only 0.703× and 0.615× speedups. Adding all
+query-specific pairwise consequences produced only 16 useful clauses on the
+short row and none on the longer rows; conflict counts were unchanged. Pairwise
+phase speedups were 0.639× and 0.608×, and the unseen horizon-7,777 holdout was
+0.700× with 101 conflicts. Every answer agreed and every witness validated.
+
+The checkpoint relation is therefore higher-order: unary and binary propagation
+cannot convey enough of the native BDD to CDCL. A credible next step is conflict
+generalization—derive a smaller BDD explanation for each rejected full state—so
+one learned clause excludes a whole incompatible subcube rather than one state.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
