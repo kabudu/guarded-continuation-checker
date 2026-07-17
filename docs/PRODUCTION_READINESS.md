@@ -32,6 +32,9 @@ tool production-grade.
 - CI actions are pinned to immutable commits, Rust dependencies are checksum-
   locked, RustSec auditing is required on every PR, and Dependabot monitors both
   Cargo and GitHub Actions dependencies.
+- Hostile-RTL isolation profile v1 runs a non-root, networkless, read-only,
+  capability-free container with seccomp and cgroup-v2 limits, probes those
+  controls before parsing, and validates output in a second read-only container.
 
 ## Required before a production claim
 
@@ -49,9 +52,10 @@ tool production-grade.
   including SAFE and UNSAFE properties and multiple Yosys versions.
 - [ ] Differential validation across a substantial design-partner RTL corpus,
   including representative toolchains, properties, and failure modes.
-- [ ] Complete the security review tracked in `SECURITY.md`. Artifact integrity
-  and dependency monitoring are implemented; a stronger isolation boundary for
-  hostile RTL and an independent external assessment remain open.
+- [x] In-repository security review covering source ingestion, subprocess and
+  hostile-RTL isolation, artifact integrity, and dependency supply chain.
+- [ ] Independent external security assessment of the documented threat model
+  and hostile-RTL isolation boundary.
 - [x] Operational documentation and executable qualification for installation,
   upgrades, rollback, support, incident response, restoration, and result
   retention.

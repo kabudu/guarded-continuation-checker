@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.17.0 - 2026-07-17
+
+- Add hostile-RTL isolation profile v1 with an immutable Yosys image, no
+  network, read-only root/input mounts, non-root execution, zero capabilities,
+  `no_new_privileges`, seccomp, and bounded cgroup-v2 resources.
+- Probe every effective isolation control before parsing RTL, preserve SAFE and
+  UNSAFE exit semantics, validate evidence in a second read-only container, and
+  record a sibling isolation report. Enforce a container-ID-based 300-second
+  outer watchdog plus 30-second probe and validation deadlines.
+
 ## 0.16.0 - 2026-07-17
 
 - Add a production-evaluation operations runbook covering supported hosts,
