@@ -54,6 +54,8 @@ Operators evaluating the tool with a design partner must follow the
 [production-evaluation operations runbook](docs/OPERATIONS.md).
 Untrusted inputs must use the probed, fail-closed
 [hostile-RTL isolation profile v1](docs/ISOLATION_PROFILE_V1.md).
+Any use in a regulated or safety-related programme must follow the bounded
+[standards applicability and assurance claims](docs/STANDARDS_APPLICABILITY.md).
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

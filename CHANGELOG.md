@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.18.0 - 2026-07-17
+
+- Define CQ-SAT/GCC's exact bounded, model-relative assurance claim and its
+  exclusions for physical-product and lifecycle safety.
+- Add an applicability matrix, adopter evidence responsibilities, and permitted
+  wording for ISO 26262, IEC 61508, IEC 62304, FDA infusion-pump guidance, and
+  IEC 81001-5-1 without implying conformity, certification, or qualification.
+
 ## 0.17.0 - 2026-07-17
 
 - Add hostile-RTL isolation profile v1 with an immutable Yosys image, no
