@@ -4,7 +4,7 @@
 
 **Subject:** Design-partner evaluation of bounded RTL configuration safety
 
-> We are inviting a small number of embedded-product teams to evaluate
+> I am inviting embedded-product teams to evaluate
 > CQ-SAT/GCC, an open-source bounded verification tool for configuration and
 > control-safety properties expressed against RTL.
 >
@@ -18,8 +18,8 @@
 >
 > The current research preview has a stable CLI and evidence schema, independent
 > public oracle comparisons, bounded Linux execution, a hostile-input isolation
-> profile, and a machine-enforced external-evidence protocol. We are now seeking
-> teams willing to run controlled evaluations against representative, non-public
+> profile, and a machine-enforced external-evidence protocol. I am seeking teams
+> willing to run self-directed evaluations against representative, non-public
 > RTL requirements and compare results with an independently owned oracle or
 > pre-existing reviewed result.
 >
@@ -35,12 +35,34 @@
 >
 > If this is relevant, please reply with a non-confidential description of your
 > product/control domain, RTL toolchain, preferred worker ownership, whether an
-> independent expected result is available, and the appropriate technical and
-> security contacts. Please do not send source code or other confidential data
-> in the initial response.
+> independent expected result is available, and the appropriate contact for the
+> final outcome. I do not plan to participate in setup or execution, access your
+> RTL, or review private intermediate evidence. The repository contains the
+> operating, security, intake, review, and reporting guidance needed to conduct
+> the evaluation directly. Please do not send source code or other confidential
+> data to me or through public project channels.
 
-Replace “we” and contact details for the sender, but do not weaken or remove the
-bounded-result and non-certification wording.
+Add the sender's contact details, but do not weaken or remove the bounded-result,
+self-service, confidentiality, or non-certification wording.
+
+## Self-service operating model
+
+The design partner owns the evaluation from intake through independent review.
+The individual maintainer:
+
+- supplies the public repository and tagged releases as-is under the licence;
+- does not need access to partner RTL, properties, traces, workers, credentials,
+  private registers, meetings, or intermediate findings;
+- does not operate or supervise the partner's evaluation;
+- does not promise engineering, commercial, legal, safety, or certification
+  support; and
+- is told only the final suitability outcome, non-confidential aggregate counts,
+  material limitations, production-gate result, and public report references.
+
+The partner may open a normal public issue for a reproducible, non-confidential
+repository defect. Suspected vulnerabilities must use GitHub Security Advisories.
+Neither route should contain partner source, property text, traces, credentials,
+identity mappings, or other confidential material.
 
 ## Suitable partners
 
@@ -63,11 +85,12 @@ reviewed configurations, subject to the partner's actual projects and approval.
 
 ## Engagement sequence
 
-1. Exchange only non-confidential scope and identify authorised technical,
-   security, safety, and data-owning contacts.
-2. Agree data location, access, retention, deletion, incident handling,
-   report-redaction rights, commercial terms, and any confidentiality agreement
-   outside this repository. This document is not legal advice or an NDA.
+1. The partner identifies authorised technical, security, safety, data-owning,
+   oracle, and independent-review contacts without involving the maintainer.
+2. The partner establishes data location, access, retention, deletion, incident
+   handling, report-redaction rights, commercial terms, and any confidentiality
+   agreement with its chosen assessor. This document is not legal advice or an
+   NDA, and the maintainer is not a recipient of partner source data.
 3. Select one immutable CQ release and record its annotated tag and commit.
 4. Qualify the partner-owned ephemeral Linux worker from the published runbook.
 5. Map each requirement to reviewed sources, top, parameters, assumptions, bad
@@ -78,17 +101,18 @@ reviewed configurations, subject to the partner's actual projects and approval.
 8. Complete the operator exercises and populate the external evidence register
    using opaque public identifiers.
 9. Reconcile every disagreement without dropping it from the denominator.
-10. Obtain independent review of the private records and aggregate conclusion.
+10. Obtain independent review, then send the maintainer only the completed
+    non-confidential outcome report and any agreed public evidence references.
 
-## What the project provides
+## Repository resources
 
 - source and tagged releases under the repository licence;
 - versioned CLI, schema validator, isolation wrapper, operations runbook, public
   corpus, independent-oracle examples, and production-gate checker;
-- engineering support scoped and agreed separately for setup, failure triage,
-  and reproducibility; and
-- prompt private handling of suspected vulnerabilities through GitHub Security
-  Advisories.
+- the self-service design-partner brief, private intake, assessor scope, outcome
+  template, external-evidence register, and executable production gate; and
+- a private GitHub Security Advisory route for suspected repository
+  vulnerabilities, without any commitment to partner-specific evaluation work.
 
 ## What the partner provides
 
@@ -100,6 +124,8 @@ reviewed configurations, subject to the partner's actual projects and approval.
 - attributable private approval or rejection of each evidence row; and
 - permission for an agreed, redacted aggregate report—or an explicit decision
   that the pilot cannot count toward the public production cohort.
+- delivery to the maintainer of only the final non-confidential outcome and
+  suitability report required by `OUTCOME_REPORT_TEMPLATE.md`.
 
 ## Go/no-go call
 
@@ -108,9 +134,11 @@ Before any confidential transfer, confirm:
 - the use case is bounded RTL verification rather than a request for whole-device
   certification or an unbounded proof;
 - all parties accept CQ-SAT/GCC's research-preview status and claim boundary;
-- data-handling and incident contacts are authorised;
+- the partner's data-handling and incident contacts are authorised;
 - an independent expected result is feasible;
 - unresolved disagreements and failures will be retained; and
 - the partner can complete an attributable private review record.
+- the partner accepts that the maintainer will not operate, supervise, or access
+  the private evaluation.
 
 If any item is false, pause the pilot or treat it as non-qualifying exploration.

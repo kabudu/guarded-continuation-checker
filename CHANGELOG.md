@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.22.0 - 2026-07-17
+
+- Rewrite external communication in the individual maintainer's first person
+  and make design-partner and assessor evaluations explicitly self-service.
+- Remove any maintainer engineering-support or private-evidence expectation and
+  add a strict non-confidential outcome/suitability report as the only intended
+  evaluation artifact returned to the maintainer.
+
 ## 0.21.0 - 2026-07-17
 
 - Add sendable, claim-bounded design-partner outreach and a controlled

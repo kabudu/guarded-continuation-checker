@@ -10,13 +10,13 @@ or declare conformity with a safety standard.
 
 **Subject:** Independent security and formal-verification assessment request
 
-> We are seeking an independent assessment of CQ-SAT/GCC, an open-source bounded
+> I am seeking an independent assessment of CQ-SAT/GCC, an open-source bounded
 > RTL configuration-safety verification tool. The target will be one immutable,
 > annotated release tag. The engagement covers both its documented Linux threat
 > model/isolation boundary and the correctness of its RTL-to-bounded-result and
 > evidence semantics.
 >
-> We require hands-on reproduction and adversarial testing, attributable reports,
+> I require hands-on reproduction and adversarial testing, attributable reports,
 > finding reproduction steps, and independent retesting after remediation. CI,
 > automated scanning, or a testimonial alone will not satisfy the engagement.
 >
@@ -24,7 +24,12 @@ or declare conformity with a safety standard.
 > SAT/BMC, RTL synthesis, or embedded assurance experience; proposed personnel;
 > independence/conflict declaration; methodology; environment needs; schedule;
 > deliverables; handling of confidential findings; retest terms; and commercial
-> proposal. Do not send sensitive customer information in the initial response.
+> proposal. The evaluation is self-directed: I do not plan to participate in its
+> operation or receive private source, traces, credentials, or intermediate
+> records. Please use the repository guidance directly and send me only the final
+> non-confidential outcome, suitability conclusion, material limitations, gate
+> result, and agreed public report references. Do not send sensitive customer
+> information in the initial response or final outcome.
 
 ## Target and independence
 
@@ -93,6 +98,9 @@ Reports may be confidential during coordinated remediation. Suspected
 vulnerabilities must use the repository's private GitHub Security Advisory route,
 not a public issue. The final public disclosure scope and timing require explicit
 agreement and must not expose partner RTL, traces, credentials, or identities.
+The partner and assessor retain private evaluation records under their own
+authorised arrangements; the maintainer receives only the final redacted outcome
+defined by `OUTCOME_REPORT_TEMPLATE.md`.
 
 ## Acceptance
 
