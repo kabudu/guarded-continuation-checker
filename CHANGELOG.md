@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-07-17
+
 - Establish RTL artifact schema v2 as the first compatibility-locked evidence
   contract and add a strict bundle validator for field, status, and snapshot
   consistency.
