@@ -8630,13 +8630,53 @@ struct AagBmcEncoding {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct AagInputConstraint {
     name: String,
-    value: bool,
+    pattern: AagInputConstraintPattern,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum AagInputConstraintPattern {
+    Constant(bool),
+    StartupReset {
+        asserted_frames: usize,
+        asserted_value: bool,
+    },
+}
+
+impl AagInputConstraintPattern {
+    fn value_at(&self, frame: usize) -> bool {
+        match *self {
+            Self::Constant(value) => value,
+            Self::StartupReset {
+                asserted_frames,
+                asserted_value,
+            } => {
+                if frame < asserted_frames {
+                    asserted_value
+                } else {
+                    !asserted_value
+                }
+            }
+        }
+    }
+
+    fn report(&self) -> String {
+        match *self {
+            Self::Constant(value) => usize::from(value).to_string(),
+            Self::StartupReset {
+                asserted_frames,
+                asserted_value,
+            } => format!(
+                "startup(asserted_frames={asserted_frames},asserted_value={})",
+                usize::from(asserted_value)
+            ),
+        }
+    }
 }
 
 fn resolve_aag_input_constraints(
     model: &AagModel,
     constraints: &[AagInputConstraint],
-) -> Result<Vec<(usize, bool)>, String> {
+) -> Result<Vec<(usize, AagInputConstraintPattern)>, String> {
     let mut resolved = Vec::with_capacity(constraints.len());
     let mut seen = BTreeSet::new();
     for constraint in constraints {
@@ -8659,7 +8699,7 @@ fn resolve_aag_input_constraints(
                 matches.len()
             ));
         }
-        resolved.push((matches[0].0, constraint.value));
+        resolved.push((matches[0].0, constraint.pattern.clone()));
     }
     Ok(resolved)
 }
@@ -8736,11 +8776,12 @@ fn aag_bmc_encoding_with_constraints(
         }
     }
     for frame in 0..=horizon {
-        for &(input, value) in &resolved_constraints {
+        for (input, pattern) in &resolved_constraints {
+            let value = pattern.value_at(frame);
             push_simplified_clause(
                 &mut clauses,
                 &[AagCnfLiteral::Variable((
-                    frame * model.max_variable + model.inputs[input] / 2 - 1,
+                    frame * model.max_variable + model.inputs[*input] / 2 - 1,
                     value,
                 ))],
             );
@@ -12007,7 +12048,7 @@ fn write_general_aiger_safety_result(
             format!(
                 "assumption_{index}={}={}",
                 constraint.name,
-                usize::from(constraint.value)
+                constraint.pattern.report()
             )
         }));
         lines.push("frame,latch_bits_low_to_high,input_bits_low_to_high".to_string());
@@ -12045,7 +12086,7 @@ fn write_general_aiger_safety_result(
             format!(
                 "assumption_{index}={}={}",
                 constraint.name,
-                usize::from(constraint.value)
+                constraint.pattern.report()
             )
         }));
         lines.join("\n") + "\n"
@@ -12307,6 +12348,7 @@ fn valid_verilog_identifier(value: &str) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RtlProjectConfig {
     document: Vec<u8>,
+    version: usize,
     top: String,
     horizon: usize,
     sources: Vec<PathBuf>,
@@ -12320,7 +12362,33 @@ struct RtlProjectConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum RtlResetPolicy {
     None,
-    Deasserted { signal: String, level: bool },
+    Deasserted {
+        signal: String,
+        level: bool,
+    },
+    Startup {
+        signal: String,
+        active_low: bool,
+        asserted_frames: usize,
+    },
+}
+
+fn rtl_reset_policy_label(policy: &RtlResetPolicy) -> String {
+    match policy {
+        RtlResetPolicy::None => "none".to_string(),
+        RtlResetPolicy::Deasserted { signal, level } => format!(
+            "{signal}:deasserted-{}",
+            if *level { "high" } else { "low" }
+        ),
+        RtlResetPolicy::Startup {
+            signal,
+            active_low,
+            asserted_frames,
+        } => format!(
+            "{signal}:active-{}:{asserted_frames}",
+            if *active_low { "low" } else { "high" }
+        ),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -12501,8 +12569,13 @@ fn parse_rtl_project_config(path: &Path) -> Result<RtlProjectConfig, String> {
             _ => return Err(format!("unknown RTL project field `{key}`")),
         }
     }
-    if scalar.get("project_version").map(String::as_str) != Some("1") {
-        return Err("RTL project config requires project_version=1".to_string());
+    let version = scalar
+        .get("project_version")
+        .ok_or_else(|| "RTL project config is missing `project_version`".to_string())?
+        .parse::<usize>()
+        .map_err(|_| "RTL project version must be an integer".to_string())?;
+    if !matches!(version, 1 | 2) {
+        return Err("RTL project config supports project_version=1 or 2".to_string());
     }
     let top = scalar
         .remove("top")
@@ -12540,13 +12613,13 @@ fn parse_rtl_project_config(path: &Path) -> Result<RtlProjectConfig, String> {
     {
         "none" => RtlResetPolicy::None,
         value => {
-            let (signal, state) = value.split_once(':').ok_or_else(|| {
-                "reset must be none or SIGNAL:deasserted-low/deasserted-high".to_string()
-            })?;
+            let parts = value.split(':').collect::<Vec<_>>();
+            let signal = parts.first().copied().unwrap_or_default();
             if !valid_verilog_identifier(signal) {
                 return Err("reset signal is invalid".to_string());
             }
-            match state {
+            match parts.as_slice() {
+                [_, state] => match *state {
                 "deasserted-low" => RtlResetPolicy::Deasserted {
                     signal: signal.to_string(),
                     level: false,
@@ -12555,11 +12628,23 @@ fn parse_rtl_project_config(path: &Path) -> Result<RtlProjectConfig, String> {
                     signal: signal.to_string(),
                     level: true,
                 },
-                _ => {
-                    return Err(
-                        "reset must be none or SIGNAL:deasserted-low/deasserted-high".to_string(),
-                    );
+                    _ => return Err("reset must be none, SIGNAL:deasserted-low/deasserted-high, or SIGNAL:active-low/active-high:ASSERTED_FRAMES".to_string()),
+                },
+                [_, active @ ("active-low" | "active-high"), frames] => {
+                    if version < 2 {
+                        return Err("startup reset sequences require project_version=2".to_string());
+                    }
+                    let asserted_frames = frames.parse::<usize>().map_err(|_| "reset asserted frame count must be an integer".to_string())?;
+                    if asserted_frames == 0 || asserted_frames > horizon {
+                        return Err("reset asserted frame count must be between 1 and the horizon".to_string());
+                    }
+                    RtlResetPolicy::Startup {
+                        signal: signal.to_string(),
+                        active_low: *active == "active-low",
+                        asserted_frames,
+                    }
                 }
+                _ => return Err("reset must be none, SIGNAL:deasserted-low/deasserted-high, or SIGNAL:active-low/active-high:ASSERTED_FRAMES".to_string()),
             }
         }
     };
@@ -12569,6 +12654,7 @@ fn parse_rtl_project_config(path: &Path) -> Result<RtlProjectConfig, String> {
         .transpose()?;
     Ok(RtlProjectConfig {
         document: bytes,
+        version,
         top,
         horizon,
         sources,
@@ -12631,7 +12717,7 @@ fn parse_environment_assumptions(
         }
         constraints.push(AagInputConstraint {
             name: name.to_string(),
-            value: value == "1",
+            pattern: AagInputConstraintPattern::Constant(value == "1"),
         });
         if constraints.len() > 256 {
             return Err("environment assumptions exceed safety limit 256 entries".to_string());
@@ -13056,13 +13142,7 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
                 .collect::<Vec<_>>()
                 .join(";")
         };
-        let config_reset = match &config.reset {
-            RtlResetPolicy::None => "none".to_string(),
-            RtlResetPolicy::Deasserted { signal, level } => format!(
-                "{signal}:deasserted-{}",
-                if *level { "high" } else { "low" }
-            ),
-        };
+        let config_reset = rtl_reset_policy_label(&config.reset);
         if config.top != rtl_manifest_value(&fields, "top")?
             || config.horizon.to_string() != rtl_manifest_value(&fields, "horizon")?
             || config.sources.len() != source_count
@@ -13209,15 +13289,7 @@ fn annotate_rtl_safety_report(
             "reset_policy={}",
             build_options.map_or_else(
                 || "unspecified".to_string(),
-                |options| match &options.reset {
-                    RtlResetPolicy::None => "none".to_string(),
-                    RtlResetPolicy::Deasserted { signal, level } => {
-                        format!(
-                            "{signal}:deasserted-{}",
-                            if *level { "high" } else { "low" }
-                        )
-                    }
-                }
+                |options| rtl_reset_policy_label(&options.reset)
             )
         ),
         format!("yosys={yosys_version}"),
@@ -13263,23 +13335,35 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     let mut effective_assumptions = assumption_document
         .as_ref()
         .map_or_else(Vec::new, |(constraints, _)| constraints.clone());
-    if let Some(RtlBuildOptions {
-        reset: RtlResetPolicy::Deasserted { signal, level },
-        ..
-    }) = build_options
-    {
+    let reset_constraint = build_options.and_then(|options| match &options.reset {
+        RtlResetPolicy::None => None,
+        RtlResetPolicy::Deasserted { signal, level } => Some(AagInputConstraint {
+            name: signal.clone(),
+            pattern: AagInputConstraintPattern::Constant(*level),
+        }),
+        RtlResetPolicy::Startup {
+            signal,
+            active_low,
+            asserted_frames,
+        } => Some(AagInputConstraint {
+            name: signal.clone(),
+            pattern: AagInputConstraintPattern::StartupReset {
+                asserted_frames: *asserted_frames,
+                asserted_value: !*active_low,
+            },
+        }),
+    });
+    if let Some(reset_constraint) = reset_constraint {
         if effective_assumptions
             .iter()
-            .any(|constraint| constraint.name == *signal)
+            .any(|constraint| constraint.name == reset_constraint.name.as_str())
         {
             return Err(format!(
-                "reset signal `{signal}` duplicates an environment assumption"
+                "reset signal `{}` duplicates an environment assumption",
+                reset_constraint.name
             ));
         }
-        effective_assumptions.push(AagInputConstraint {
-            name: signal.clone(),
-            value: *level,
-        });
+        effective_assumptions.push(reset_constraint);
     }
     let assumptions = effective_assumptions.as_slice();
     let mut sources = Vec::with_capacity(inputs.len());
@@ -13505,13 +13589,7 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     );
     let reset_policy = build_options.map_or_else(
         || "unspecified".to_string(),
-        |options| match &options.reset {
-            RtlResetPolicy::None => "none".to_string(),
-            RtlResetPolicy::Deasserted { signal, level } => format!(
-                "{signal}:deasserted-{}",
-                if *level { "high" } else { "low" }
-            ),
-        },
+        |options| rtl_reset_policy_label(&options.reset),
     );
     fs::write(
         stage.join("run-manifest.txt"),
@@ -23827,6 +23905,7 @@ mod tests {
         )
         .unwrap();
         let parsed = parse_rtl_project_config(&config_path).unwrap();
+        assert_eq!(parsed.version, 1);
         assert_eq!(parsed.top, "pump_top");
         assert_eq!(parsed.horizon, 32);
         assert_eq!(parsed.sources.len(), 2);
@@ -23843,6 +23922,21 @@ mod tests {
                 level: true
             }
         );
+        fs::write(
+            &config_path,
+            "project_version=2\ntop=pump_top\nhorizon=32\nclock=clk:posedge\nreset=rst_n:active-low:2\nsource=rtl/top.sv\n",
+        )
+        .unwrap();
+        let startup = parse_rtl_project_config(&config_path).unwrap();
+        assert_eq!(startup.version, 2);
+        assert_eq!(
+            startup.reset,
+            RtlResetPolicy::Startup {
+                signal: "rst_n".to_string(),
+                active_low: true,
+                asserted_frames: 2,
+            }
+        );
 
         for (body, expected) in [
             (
@@ -23856,6 +23950,10 @@ mod tests {
             (
                 "project_version=1\ntop=x\nhorizon=1\nclock=c:posedge\nreset=none\nsource=x.sv\nshell=evil\n",
                 "unknown",
+            ),
+            (
+                "project_version=1\ntop=x\nhorizon=2\nclock=c:posedge\nreset=rst_n:active-low:1\nsource=x.sv\n",
+                "require project_version=2",
             ),
         ] {
             fs::write(&config_path, body).unwrap();
@@ -23899,8 +23997,12 @@ mod tests {
         assert!(manifest.contains("schema_version=3\n"));
         assert!(manifest.contains("firmware_cli_version=2\n"));
         assert!(manifest.contains("clock_policy=clk:posedge\n"));
-        assert!(manifest.contains("reset_policy=rst_n:deasserted-high\n"));
+        assert!(manifest.contains("reset_policy=rst_n:active-low:1\n"));
         assert!(manifest.contains("parameters=DEPTH:8\n"));
+        let report = fs::read_to_string(artifacts.join("safety-report.txt")).unwrap();
+        assert!(report.contains(
+            "assumption_0=rst_n=startup(asserted_frames=1,asserted_value=0)\n"
+        ));
         let config_snapshot = fs::read_to_string(artifacts.join("cq-project.conf")).unwrap();
         fs::write(
             artifacts.join("cq-project.conf"),
@@ -23913,6 +24015,45 @@ mod tests {
                 .contains("disagrees with manifest")
         );
         fs::remove_dir_all(artifacts).unwrap();
+    }
+
+    #[test]
+    fn startup_reset_constraints_change_value_at_the_exact_frame_boundary() {
+        let model = AagModel {
+            max_variable: 2,
+            inputs: vec![2],
+            input_names: vec!["rst_n".to_string()],
+            latches: vec![AagLatch {
+                current: 4,
+                next: 4,
+                initial: Some(false),
+            }],
+            latch_names: vec!["state".to_string()],
+            outputs: vec![4],
+            output_names: vec!["bad".to_string()],
+            ands: Vec::new(),
+        };
+        let encoding = aag_bmc_encoding_with_constraints(
+            &model,
+            3,
+            &[AagInputConstraint {
+                name: "rst_n".to_string(),
+                pattern: AagInputConstraintPattern::StartupReset {
+                    asserted_frames: 2,
+                    asserted_value: false,
+                },
+            }],
+        )
+        .unwrap();
+        for (frame, expected) in [(0, false), (1, false), (2, true), (3, true)] {
+            let variable = frame * model.max_variable;
+            assert!(
+                encoding
+                    .clauses
+                    .iter()
+                    .any(|clause| clause.0 == vec![(variable, expected)])
+            );
+        }
     }
 
     fn fuzz_mutation(seed: &[u8], iteration: usize) -> Vec<u8> {

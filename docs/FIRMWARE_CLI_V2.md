@@ -29,10 +29,13 @@ firmware-artifact-validate ARTIFACT_DIR
 is a simple Verilog identifier. Project source order is significant. The
 assumptions grammar and project bounds are documented in the README.
 
-`PROJECT.conf` v1 uses strict `KEY=VALUE` lines and requires `top`, `horizon`,
+`PROJECT.conf` v1/v2 uses strict `KEY=VALUE` lines and requires `top`, `horizon`,
 one or more `source`, `clock`, and `reset`. It accepts bounded `include_dir`,
 `parameter=NAME:VALUE`, and `assumptions` entries. Paths are relative to the
 config, may not traverse, and are snapshotted before synthesis.
+Version 2 adds `reset=SIGNAL:active-low:N` and `active-high:N`; `N` must be from
+1 through the horizon. The reset is asserted for frames `0..N-1` and
+deasserted for all remaining frames. Version 1 remains accepted unchanged.
 
 ## Exit status
 
