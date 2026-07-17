@@ -1,0 +1,2 @@
+# The installation interlock guarantees that the pump door remains closed.
+door_open=0
