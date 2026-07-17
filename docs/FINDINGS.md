@@ -464,10 +464,8 @@ speedups of 2.03×, 1.68×, and 3.06×. The sensor-voting example selected CDCL 
 matched its query path at 1.0×. All portfolio and oracle rows agreed and validated
 complete witnesses.
 
-This is useful today as a research-grade repeated temporal-verification runner,
-not yet as a general DIMACS auto-solver. The next product frontier is accepting an
-external transition-system interchange format and validating independently sourced
-hardware/protocol models without generator labels.
+This is useful today as a research-grade repeated temporal-verification and
+bounded AIGER safety runner, not as a general DIMACS auto-solver.
 
 ## External ASCII AIGER validation
 
@@ -491,7 +489,33 @@ eight bad frames through frame 137, and emits the complete counterexample trace.
 
 This is the first independently sourced model exercised through the portfolio.
 It validates exact bounded-safety reporting and safe selection, not specialized
-acceleration. Input-driven AIGER semantics remain the next product step.
+acceleration.
+
+## Input-driven AIGER bounded model checking
+
+Primary-input and wider AIGER models now follow an exact scalable fallback. Each
+time frame receives explicit input, latch, and AND-gate variables. Three-clause
+Tseitin equivalences encode every AND gate, two-clause equivalences connect latch
+updates, and declared initial values become unit clauses. One aggregate clause
+asks whether any bad output is true in any frame. A SAFE result is therefore one
+UNSAT proof across every input sequence; an UNSAFE result is accompanied by a
+complete input/latch trace. Binary search over the bound produces the shortest
+bad horizon without changing satisfiability semantics.
+
+Two independently sourced models validate both outcomes:
+
+- Peterson's two-thread, one-core mutual-exclusion model has 2 inputs, 9 latches,
+  and 109 AND gates. Its forbidden simultaneous-critical-section output is SAFE
+  through frame 100 for every scheduler and signal sequence. The encoding has
+  12,120 variables and 34,836 clauses.
+- The eight-bit SPI receiver has 3 inputs, 18 latches, and 71 AND gates. It is
+  UNSAFE within the requested 50-frame bound; minimization finds frame 16 and
+  emits the complete `SCLK`, `MOSI`, `NOT_CS`, and latch trace.
+
+Both workloads are rejected from CQ-SAT/GCC statically with
+`aiger-primary-inputs`; no candidate solve or timing calibration occurs. This is
+a real use of the portfolio as a bounded hardware/protocol safety verifier, while
+specialized acceleration remains limited to the deterministic repeated regime.
 
 ## Retraction and correction
 

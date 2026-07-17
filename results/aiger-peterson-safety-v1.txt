@@ -1,0 +1,5 @@
+status=SAFE
+input=examples/aiger/petersons-algorithm-2-threads-1-core.aag
+horizon=100
+backend=cdcl
+gate_reason=aiger-primary-inputs

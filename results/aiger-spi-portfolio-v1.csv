@@ -1,0 +1,2 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,assumptions_per_query,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+spi-bus-receive-e-08-bits.aag,18,50,4692,12631,1,10,200000,cdcl,aiger-primary-inputs,14.034,0,51.000,41,261334,0,0,20075000.000,20075000.000,1.000000,0.987147,1,0,true,true,ok

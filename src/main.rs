@@ -8170,6 +8170,7 @@ struct AagAnd {
 #[derive(Clone, Debug)]
 struct AagModel {
     max_variable: usize,
+    inputs: Vec<usize>,
     latches: Vec<AagLatch>,
     outputs: Vec<usize>,
     ands: Vec<AagAnd>,
@@ -8204,24 +8205,37 @@ fn parse_aag(path: &Path) -> Result<AagModel, String> {
     if header.next().is_some() {
         return Err("extended AIGER headers are not supported yet".to_string());
     }
-    if inputs != 0 {
-        return Err(format!(
-            "CQ-SAT/GCC currently requires a closed deterministic AIGER model; found {inputs} primary inputs"
-        ));
-    }
     if latch_count == 0 {
         return Err("AIGER model must contain at least one latch".to_string());
     }
-    if latch_count > 9 {
+    if max_variable > 1_000_000 {
+        return Err("AIGER maximum variable exceeds safety limit 1000000".to_string());
+    }
+    let defined_variables = inputs
+        .checked_add(latch_count)
+        .and_then(|value| value.checked_add(and_count))
+        .ok_or_else(|| "AIGER definition count overflow".to_string())?;
+    if defined_variables != max_variable {
         return Err(format!(
-            "AIGER model has {latch_count} latches; the external CQ-SAT/GCC safety bound is 9"
+            "AIGER header requires M = I + L + A; found {max_variable} != {defined_variables}"
         ));
     }
+    if output_count > 1_000_000 {
+        return Err("AIGER output count exceeds safety limit 1000000".to_string());
+    }
 
-    for _ in 0..inputs {
-        lines
+    let mut input_literals = Vec::with_capacity(inputs);
+    for index in 0..inputs {
+        let line = lines
             .next()
-            .ok_or_else(|| "truncated AIGER input section".to_string())?;
+            .ok_or_else(|| format!("truncated AIGER input section at input {index}"))?;
+        let mut fields = line.split_whitespace();
+        let literal = parse_aag_usize(fields.next(), "input literal")?;
+        if fields.next().is_some() || literal == 0 || literal & 1 == 1 || literal / 2 > max_variable
+        {
+            return Err(format!("invalid AIGER input {index}"));
+        }
+        input_literals.push(literal);
     }
     let mut latches = Vec::with_capacity(latch_count);
     for index in 0..latch_count {
@@ -8291,9 +8305,10 @@ fn parse_aag(path: &Path) -> Result<AagModel, String> {
         .checked_mul(2)
         .and_then(|value| value.checked_add(1))
         .ok_or_else(|| "AIGER literal range overflow".to_string())?;
-    if latches
+    if input_literals
         .iter()
-        .flat_map(|latch| [latch.current, latch.next])
+        .copied()
+        .chain(latches.iter().flat_map(|latch| [latch.current, latch.next]))
         .chain(outputs.iter().copied())
         .chain(
             ands.iter()
@@ -8304,6 +8319,11 @@ fn parse_aag(path: &Path) -> Result<AagModel, String> {
         return Err("AIGER literal exceeds declared maximum variable".to_string());
     }
     let mut definitions = BTreeSet::new();
+    for &literal in &input_literals {
+        if !definitions.insert(literal / 2) {
+            return Err("duplicate AIGER variable definition".to_string());
+        }
+    }
     for latch in &latches {
         if !definitions.insert(latch.current / 2) {
             return Err("duplicate AIGER variable definition".to_string());
@@ -8325,6 +8345,7 @@ fn parse_aag(path: &Path) -> Result<AagModel, String> {
     }
     Ok(AagModel {
         max_variable,
+        inputs: input_literals,
         latches,
         outputs,
         ands,
@@ -8343,8 +8364,35 @@ fn aag_temporal_formula(model: &AagModel, horizon: usize) -> Result<AagTemporalE
     if horizon == 0 {
         return Err("AIGER horizon must be at least one".to_string());
     }
+    if !model.inputs.is_empty() {
+        return Err("deterministic CQ-SAT/GCC encoding requires zero primary inputs".to_string());
+    }
+    if model.latches.len() > 9 {
+        return Err(format!(
+            "deterministic CQ-SAT/GCC encoding supports at most 9 latches; found {}",
+            model.latches.len()
+        ));
+    }
     let width = model.latches.len();
     let patterns = 1usize << width;
+    let variables = horizon
+        .checked_add(1)
+        .and_then(|frames| frames.checked_mul(width))
+        .ok_or_else(|| "deterministic AIGER variable count overflow".to_string())?;
+    if variables > 2_000_000 {
+        return Err(format!(
+            "deterministic AIGER encoding requires {variables} variables; safety limit is 2000000"
+        ));
+    }
+    let clause_count = horizon
+        .checked_mul(width)
+        .and_then(|value| value.checked_mul(patterns))
+        .ok_or_else(|| "deterministic AIGER clause count overflow".to_string())?;
+    if clause_count > 10_000_000 {
+        return Err(format!(
+            "deterministic AIGER encoding requires {clause_count} clauses; safety limit is 10000000"
+        ));
+    }
     let mut tables = Vec::with_capacity(patterns);
     for pattern in 0..patterns {
         let mut values = vec![false; model.max_variable + 1];
@@ -8363,7 +8411,7 @@ fn aag_temporal_formula(model: &AagModel, horizon: usize) -> Result<AagTemporalE
                 .collect::<Vec<_>>(),
         );
     }
-    let mut formula = Vec::with_capacity(horizon * width * patterns);
+    let mut formula = Vec::with_capacity(clause_count);
     for time in 0..horizon {
         let current = time * width;
         let next = (time + 1) * width;
@@ -8380,7 +8428,7 @@ fn aag_temporal_formula(model: &AagModel, horizon: usize) -> Result<AagTemporalE
         }
     }
     Ok((
-        width * (horizon + 1),
+        variables,
         formula,
         model.latches.iter().map(|latch| latch.initial).collect(),
     ))
@@ -8456,6 +8504,138 @@ fn aag_property_queries(
     Ok((0..query_count)
         .map(|index| space[index % space.len()].2.clone())
         .collect())
+}
+
+#[derive(Clone, Copy)]
+enum AagCnfLiteral {
+    Constant(bool),
+    Variable(Literal),
+}
+
+impl AagCnfLiteral {
+    fn negate(self) -> Self {
+        match self {
+            Self::Constant(value) => Self::Constant(!value),
+            Self::Variable((variable, positive)) => Self::Variable((variable, !positive)),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct AagBmcQuery {
+    frame: usize,
+    output: usize,
+    assumption: AagCnfLiteral,
+}
+
+struct AagBmcEncoding {
+    variables: usize,
+    clauses: Vec<Clause>,
+    queries: Vec<AagBmcQuery>,
+}
+
+fn aag_cnf_literal(model: &AagModel, frame: usize, literal: usize) -> AagCnfLiteral {
+    if literal < 2 {
+        return AagCnfLiteral::Constant(literal == 1);
+    }
+    AagCnfLiteral::Variable((
+        frame * model.max_variable + literal / 2 - 1,
+        literal & 1 == 0,
+    ))
+}
+
+fn push_simplified_clause(clauses: &mut Vec<Clause>, literals: &[AagCnfLiteral]) {
+    let mut clause = Vec::with_capacity(literals.len());
+    for &literal in literals {
+        match literal {
+            AagCnfLiteral::Constant(true) => return,
+            AagCnfLiteral::Constant(false) => {}
+            AagCnfLiteral::Variable(literal) => clause.push(literal),
+        }
+    }
+    clause.sort_unstable();
+    clause.dedup();
+    if clause
+        .windows(2)
+        .any(|pair| pair[0].0 == pair[1].0 && pair[0].1 != pair[1].1)
+    {
+        return;
+    }
+    clauses.push(Clause(clause));
+}
+
+fn encode_aag_equivalence(clauses: &mut Vec<Clause>, output: AagCnfLiteral, value: AagCnfLiteral) {
+    push_simplified_clause(clauses, &[output.negate(), value]);
+    push_simplified_clause(clauses, &[output, value.negate()]);
+}
+
+fn aag_bmc_encoding(model: &AagModel, horizon: usize) -> Result<AagBmcEncoding, String> {
+    let frames = horizon
+        .checked_add(1)
+        .ok_or_else(|| "AIGER horizon overflow".to_string())?;
+    let variables = frames
+        .checked_mul(model.max_variable)
+        .ok_or_else(|| "AIGER BMC variable count overflow".to_string())?;
+    if variables > 2_000_000 {
+        return Err(format!(
+            "AIGER BMC requires {variables} variables; safety limit is 2000000"
+        ));
+    }
+    let clause_bound = frames
+        .checked_mul(model.ands.len().saturating_mul(3))
+        .and_then(|value| value.checked_add(horizon.saturating_mul(model.latches.len() * 2)))
+        .ok_or_else(|| "AIGER BMC clause count overflow".to_string())?;
+    if clause_bound > 10_000_000 {
+        return Err(format!(
+            "AIGER BMC requires up to {clause_bound} clauses; safety limit is 10000000"
+        ));
+    }
+    let mut clauses = Vec::with_capacity(clause_bound + model.latches.len());
+    for latch in &model.latches {
+        if let Some(initial) = latch.initial {
+            push_simplified_clause(
+                &mut clauses,
+                &[AagCnfLiteral::Variable((latch.current / 2 - 1, initial))],
+            );
+        }
+    }
+    for frame in 0..=horizon {
+        for gate in &model.ands {
+            let output = aag_cnf_literal(model, frame, gate.output);
+            let left = aag_cnf_literal(model, frame, gate.left);
+            let right = aag_cnf_literal(model, frame, gate.right);
+            push_simplified_clause(&mut clauses, &[output.negate(), left]);
+            push_simplified_clause(&mut clauses, &[output.negate(), right]);
+            push_simplified_clause(&mut clauses, &[output, left.negate(), right.negate()]);
+        }
+        if frame < horizon {
+            for latch in &model.latches {
+                encode_aag_equivalence(
+                    &mut clauses,
+                    aag_cnf_literal(model, frame + 1, latch.current),
+                    aag_cnf_literal(model, frame, latch.next),
+                );
+            }
+        }
+    }
+    let mut queries = Vec::new();
+    for frame in 0..=horizon {
+        for (output, &literal) in model.outputs.iter().enumerate() {
+            let assumption = aag_cnf_literal(model, frame, literal);
+            if !matches!(assumption, AagCnfLiteral::Constant(false)) {
+                queries.push(AagBmcQuery {
+                    frame,
+                    output,
+                    assumption,
+                });
+            }
+        }
+    }
+    Ok(AagBmcEncoding {
+        variables,
+        clauses,
+        queries,
+    })
 }
 
 fn normalized_temporal_steps(
@@ -11288,6 +11468,298 @@ fn write_aiger_safety_result(
     fs::write(path, body).map_err(|error| format!("write {}: {error}", path.display()))
 }
 
+struct AagBmcRun {
+    first_sat_query: Option<usize>,
+    first_witness: Option<Vec<bool>>,
+    sat_queries: usize,
+    witnesses_valid: bool,
+    query_ns: u128,
+}
+
+fn validate_aag_trace(model: &AagModel, horizon: usize, assignment: &[bool]) -> bool {
+    if assignment.len() < (horizon + 1) * model.max_variable {
+        return false;
+    }
+    for latch in &model.latches {
+        if latch
+            .initial
+            .is_some_and(|initial| assignment[latch.current / 2 - 1] != initial)
+        {
+            return false;
+        }
+    }
+    for frame in 0..=horizon {
+        let offset = frame * model.max_variable;
+        let mut values = vec![false; model.max_variable + 1];
+        for &literal in &model.inputs {
+            values[literal / 2] = assignment[offset + literal / 2 - 1];
+        }
+        for latch in &model.latches {
+            values[latch.current / 2] = assignment[offset + latch.current / 2 - 1];
+        }
+        for gate in &model.ands {
+            let value = evaluate_aag_literal(gate.left, &values)
+                && evaluate_aag_literal(gate.right, &values);
+            if assignment[offset + gate.output / 2 - 1] != value {
+                return false;
+            }
+            values[gate.output / 2] = value;
+        }
+        if frame < horizon {
+            let next_offset = offset + model.max_variable;
+            for latch in &model.latches {
+                if assignment[next_offset + latch.current / 2 - 1]
+                    != evaluate_aag_literal(latch.next, &values)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+fn run_aag_bmc(
+    model: &AagModel,
+    horizon: usize,
+    encoding: &AagBmcEncoding,
+) -> Result<AagBmcRun, String> {
+    if encoding.queries.is_empty() {
+        return Ok(AagBmcRun {
+            first_sat_query: None,
+            first_witness: None,
+            sat_queries: 0,
+            witnesses_valid: true,
+            query_ns: 0,
+        });
+    }
+    let mut solver = Solver::new();
+    add_to_varisat(&mut solver, &encoding.clauses);
+    let aggregate_is_true = encoding
+        .queries
+        .iter()
+        .any(|query| matches!(query.assumption, AagCnfLiteral::Constant(true)));
+    if !aggregate_is_true {
+        let clause = encoding
+            .queries
+            .iter()
+            .filter_map(|query| match query.assumption {
+                AagCnfLiteral::Variable((variable, positive)) => {
+                    Some(Lit::from_var(Var::from_index(variable), positive))
+                }
+                AagCnfLiteral::Constant(_) => None,
+            })
+            .collect::<Vec<_>>();
+        if clause.is_empty() {
+            return Ok(AagBmcRun {
+                first_sat_query: None,
+                first_witness: None,
+                sat_queries: 0,
+                witnesses_valid: true,
+                query_ns: 0,
+            });
+        }
+        solver.add_clause(&clause);
+    }
+    let query_start = Instant::now();
+    let sat = solver
+        .solve()
+        .map_err(|error| format!("solve aggregate AIGER BMC query: {error}"))?;
+    let query_ns = query_start.elapsed().as_nanos();
+    if !sat {
+        return Ok(AagBmcRun {
+            first_sat_query: None,
+            first_witness: None,
+            sat_queries: 0,
+            witnesses_valid: true,
+            query_ns,
+        });
+    }
+    let mut assignment = vec![false; encoding.variables];
+    for literal in solver
+        .model()
+        .ok_or_else(|| "AIGER BMC SAT result has no model".to_string())?
+    {
+        if literal.var().index() < encoding.variables {
+            assignment[literal.var().index()] = literal.is_positive();
+        }
+    }
+    let first_sat_query = encoding
+        .queries
+        .iter()
+        .position(|query| match query.assumption {
+            AagCnfLiteral::Constant(value) => value,
+            AagCnfLiteral::Variable((variable, positive)) => assignment[variable] == positive,
+        })
+        .ok_or_else(|| "aggregate AIGER model does not satisfy a bad output".to_string())?;
+    let witnesses_valid = satisfies(&encoding.clauses, &assignment)
+        && validate_aag_trace(model, horizon, &assignment);
+    Ok(AagBmcRun {
+        first_sat_query: Some(first_sat_query),
+        first_witness: Some(assignment),
+        sat_queries: 1,
+        witnesses_valid,
+        query_ns,
+    })
+}
+
+fn earliest_aag_counterexample(
+    model: &AagModel,
+    unsafe_horizon: usize,
+) -> Result<(AagBmcEncoding, AagBmcRun), String> {
+    let mut low = 0usize;
+    let mut high = unsafe_horizon;
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let encoding = aag_bmc_encoding(model, middle)?;
+        if run_aag_bmc(model, middle, &encoding)?
+            .first_sat_query
+            .is_some()
+        {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    let encoding = aag_bmc_encoding(model, low)?;
+    let run = run_aag_bmc(model, low, &encoding)?;
+    if run.first_sat_query.is_none() {
+        return Err("failed to reproduce AIGER counterexample at minimal horizon".to_string());
+    }
+    Ok((encoding, run))
+}
+
+fn write_general_aiger_safety_result(
+    path: &Path,
+    input: &Path,
+    horizon: usize,
+    model: &AagModel,
+    encoding: &AagBmcEncoding,
+    run: &AagBmcRun,
+    gate_reason: &str,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create AIGER result directory: {error}"))?;
+    }
+    let body = if let Some(index) = run.first_sat_query {
+        let query = &encoding.queries[index];
+        let witness = run
+            .first_witness
+            .as_ref()
+            .ok_or_else(|| "unsafe AIGER result is missing its witness".to_string())?;
+        let mut lines = vec![
+            "status=UNSAFE".to_string(),
+            format!("input={}", input.display()),
+            format!("horizon={horizon}"),
+            "backend=cdcl".to_string(),
+            format!("gate_reason={gate_reason}"),
+            format!("bad_frame={}", query.frame),
+            format!("bad_output={}", query.output),
+            "frame,latch_bits_low_to_high,input_bits_low_to_high".to_string(),
+        ];
+        for frame in 0..=query.frame {
+            let latches = model
+                .latches
+                .iter()
+                .map(|latch| {
+                    let variable = frame * model.max_variable + latch.current / 2 - 1;
+                    if witness[variable] { '1' } else { '0' }
+                })
+                .collect::<String>();
+            let inputs = model
+                .inputs
+                .iter()
+                .map(|literal| {
+                    let variable = frame * model.max_variable + literal / 2 - 1;
+                    if witness[variable] { '1' } else { '0' }
+                })
+                .collect::<String>();
+            lines.push(format!("{frame},{latches},{inputs}"));
+        }
+        lines.join("\n") + "\n"
+    } else {
+        format!(
+            "status=SAFE\ninput={}\nhorizon={horizon}\nbackend=cdcl\ngate_reason={gate_reason}\n",
+            input.display()
+        )
+    };
+    fs::write(path, body).map_err(|error| format!("write {}: {error}", path.display()))
+}
+
+fn verify_general_aiger(
+    input: &Path,
+    model: &AagModel,
+    horizon: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    output: &Path,
+    safety_result: &Path,
+) -> Result<(), String> {
+    let gate_start = Instant::now();
+    let gate_reason = if model.inputs.is_empty() {
+        "aiger-width-limit"
+    } else {
+        "aiger-primary-inputs"
+    };
+    let gate_ns = gate_start.elapsed().as_nanos();
+    let encoding_start = Instant::now();
+    let encoding = aag_bmc_encoding(model, horizon)?;
+    let encoding_ns = encoding_start.elapsed().as_nanos();
+    let mut run = run_aag_bmc(model, horizon, &encoding)?;
+    let trace_search_start = Instant::now();
+    let earliest = if run.first_sat_query.is_some() {
+        Some(earliest_aag_counterexample(model, horizon)?)
+    } else {
+        None
+    };
+    run.query_ns += trace_search_start.elapsed().as_nanos();
+    let query_count = usize::from(!encoding.queries.is_empty());
+    let unsat_queries = query_count.saturating_sub(run.sat_queries);
+    let per_query = run.query_ns as f64 / query_count.max(1) as f64;
+    let amortized = per_query + (gate_ns + encoding_ns) as f64 / query_count.max(1) as f64;
+    let label = input
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("external.aag");
+    let density =
+        encoding.clauses.len() as f64 / horizon.max(1) as f64 / model.latches.len().max(1) as f64;
+    let assumptions_per_query = encoding
+        .queries
+        .iter()
+        .filter(|query| matches!(query.assumption, AagCnfLiteral::Variable(_)))
+        .count() as f64;
+    let mut file = create_cq_portfolio_output(output)?;
+    writeln!(file, "{label},{},{horizon},{},{},{query_count},{},{node_limit},cdcl,{gate_reason},{density:.3},0,{assumptions_per_query:.3},{gate_ns},{encoding_ns},0,0,{per_query:.3},{per_query:.3},1.000000,{:.6},{},{unsat_queries},true,{},ok", model.latches.len(), encoding.variables, encoding.clauses.len(), checkpoint.min(horizon.saturating_sub(1)), per_query / amortized.max(1.0), run.sat_queries, run.witnesses_valid)
+        .map_err(|error| format!("write general AIGER portfolio row: {error}"))?;
+    let (trace_encoding, trace_run) = earliest
+        .as_ref()
+        .map_or((&encoding, &run), |(encoding, run)| (encoding, run));
+    write_general_aiger_safety_result(
+        safety_result,
+        input,
+        horizon,
+        model,
+        trace_encoding,
+        trace_run,
+        gate_reason,
+    )?;
+    if let Some(index) = trace_run.first_sat_query {
+        println!(
+            "AIGER safety status=UNSAFE bad_frame={} bad_output={} backend=cdcl reason={gate_reason} witness={}",
+            trace_encoding.queries[index].frame,
+            trace_encoding.queries[index].output,
+            safety_result.display()
+        );
+    } else {
+        println!(
+            "AIGER safety status=SAFE horizon={horizon} backend=cdcl reason={gate_reason} result={}",
+            safety_result.display()
+        );
+    }
+    Ok(())
+}
+
 fn verify_cq_aiger(
     input: &Path,
     horizon: usize,
@@ -11297,6 +11769,17 @@ fn verify_cq_aiger(
     safety_result: &Path,
 ) -> Result<(), String> {
     let model = parse_aag(input)?;
+    if !model.inputs.is_empty() || model.latches.len() > 9 {
+        return verify_general_aiger(
+            input,
+            &model,
+            horizon,
+            checkpoint,
+            node_limit,
+            output,
+            safety_result,
+        );
+    }
     let (_, formula, initial) = aag_temporal_formula(&model, horizon)?;
     if aag_bad_state_patterns(&model).is_empty() {
         let label = input
@@ -21119,5 +21602,52 @@ mod tests {
         assert!(portfolio.lines().all(|line| line.split(',').count() == 26));
         assert!(result.starts_with("status=SAFE\n"));
         assert!(result.contains("backend=static\n"));
+    }
+
+    #[test]
+    fn primary_input_aiger_uses_exact_cdcl_and_emits_input_trace() {
+        let stem = format!("cq-sat-aiger-input-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aag"));
+        let output = std::env::temp_dir().join(format!("{stem}.csv"));
+        let safety = std::env::temp_dir().join(format!("{stem}.txt"));
+        fs::write(&input, "aag 2 1 1 1 0\n2\n4 2\n4\n").unwrap();
+        verify_cq_aiger(&input, 2, 1, 200_000, &output, &safety).unwrap();
+        let portfolio = fs::read_to_string(&output).unwrap();
+        let result = fs::read_to_string(&safety).unwrap();
+        std::fs::remove_file(input).unwrap();
+        std::fs::remove_file(output).unwrap();
+        std::fs::remove_file(safety).unwrap();
+        assert!(portfolio.contains(",cdcl,aiger-primary-inputs,"));
+        assert!(portfolio.lines().all(|line| line.split(',').count() == 26));
+        assert!(result.starts_with("status=UNSAFE\n"));
+        assert!(result.contains("bad_frame=1\n"));
+        assert!(result.contains("frame,latch_bits_low_to_high,input_bits_low_to_high\n"));
+        assert!(result.contains("0,0,1\n"));
+        assert!(result.contains("1,1,"));
+    }
+
+    #[test]
+    fn independent_input_driven_aiger_models_match_known_safety_results() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/aiger");
+        for (name, horizon, expected) in [
+            ("petersons-algorithm-2-threads-1-core.aag", 20, "SAFE"),
+            ("spi-bus-receive-e-08-bits.aag", 16, "UNSAFE"),
+        ] {
+            let stem = format!("cq-sat-aiger-known-{expected}-{}", std::process::id());
+            let output = std::env::temp_dir().join(format!("{stem}.csv"));
+            let safety = std::env::temp_dir().join(format!("{stem}.txt"));
+            verify_cq_aiger(&root.join(name), horizon, 10, 200_000, &output, &safety).unwrap();
+            let portfolio = fs::read_to_string(&output).unwrap();
+            let result = fs::read_to_string(&safety).unwrap();
+            std::fs::remove_file(output).unwrap();
+            std::fs::remove_file(safety).unwrap();
+            assert!(portfolio.contains(",cdcl,aiger-primary-inputs,"));
+            assert!(portfolio.contains(",true,true,ok\n"));
+            assert!(result.starts_with(&format!("status={expected}\n")));
+            if expected == "UNSAFE" {
+                assert!(result.contains("bad_frame=16\n"));
+                assert!(result.contains("input_bits_low_to_high\n"));
+            }
+        }
     }
 }

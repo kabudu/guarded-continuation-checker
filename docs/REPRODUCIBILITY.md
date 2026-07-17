@@ -430,6 +430,30 @@ The single row must report `width=4`, `backend=cdcl`,
 The model's upstream revision and third-party MIT license are recorded under
 `examples/aiger`.
 
+## Input-driven AIGER protocol and hardware models
+
+```sh
+./target/release/continuation-quotient-sat \
+  verify-cq-aiger \
+  examples/aiger/petersons-algorithm-2-threads-1-core.aag \
+  100 10 200000 results/reproduced-aiger-peterson.csv \
+  results/reproduced-aiger-peterson-safety.txt
+./target/release/continuation-quotient-sat \
+  verify-cq-aiger examples/aiger/spi-bus-receive-e-08-bits.aag \
+  50 10 200000 results/reproduced-aiger-spi.csv \
+  results/reproduced-aiger-spi-safety.txt
+```
+
+The Peterson row must report `variables=12120`, `clauses=34836`, `queries=1`,
+`backend=cdcl`, `gate_reason=aiger-primary-inputs`, `sat_queries=0`,
+`unsat_queries=1`, and valid agreement/witness fields. Its safety result must be
+`SAFE` through horizon 100.
+
+The SPI row must report `variables=4692`, `clauses=12631`, `queries=1`, the same
+CDCL gate reason, `sat_queries=1`, `unsat_queries=0`, and valid
+agreement/witness fields. Its result must be `UNSAFE` with `bad_frame=16` and a
+17-frame latch/input trace. Timing is exploratory.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
