@@ -29,6 +29,8 @@
   preimages to persistent CDCL, restoring complete workload admission.
 - Add an exact BDD-prefix-to-CDCL checkpoint experiment and preserve its negative
   performance result for naïve Tseitin encoding.
+- Add a structurally hashed AIG checkpoint encoding and preserve the finding that
+  it expands, rather than compacts, the measured cascade prefix.
 
 ## 0.1.0 - 2026-07-15
 

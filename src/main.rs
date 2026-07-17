@@ -8552,10 +8552,81 @@ impl HybridTemporalPreimage {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum EncodedLiteral {
     Constant(bool),
     Variable(usize, bool),
+}
+
+impl EncodedLiteral {
+    fn negated(self) -> Self {
+        match self {
+            Self::Constant(value) => Self::Constant(!value),
+            Self::Variable(variable, positive) => Self::Variable(variable, !positive),
+        }
+    }
+}
+
+struct AigBuilder {
+    next_variable: usize,
+    gates: Vec<(usize, EncodedLiteral, EncodedLiteral)>,
+    unique: HashMap<(EncodedLiteral, EncodedLiteral), EncodedLiteral>,
+}
+
+impl AigBuilder {
+    fn new(first_gate_variable: usize) -> Self {
+        Self {
+            next_variable: first_gate_variable,
+            gates: Vec::new(),
+            unique: HashMap::new(),
+        }
+    }
+
+    fn and(&mut self, a: EncodedLiteral, b: EncodedLiteral) -> EncodedLiteral {
+        match (a, b) {
+            (EncodedLiteral::Constant(false), _) | (_, EncodedLiteral::Constant(false)) => {
+                return EncodedLiteral::Constant(false);
+            }
+            (EncodedLiteral::Constant(true), other) | (other, EncodedLiteral::Constant(true)) => {
+                return other;
+            }
+            _ => {}
+        }
+        if a == b {
+            return a;
+        }
+        if a == b.negated() {
+            return EncodedLiteral::Constant(false);
+        }
+        let key = if a <= b { (a, b) } else { (b, a) };
+        if let Some(&literal) = self.unique.get(&key) {
+            return literal;
+        }
+        let output = EncodedLiteral::Variable(self.next_variable, true);
+        self.next_variable += 1;
+        self.gates.push((self.next_variable - 1, key.0, key.1));
+        self.unique.insert(key, output);
+        output
+    }
+
+    fn or(&mut self, a: EncodedLiteral, b: EncodedLiteral) -> EncodedLiteral {
+        let both_false = self.and(a.negated(), b.negated());
+        both_false.negated()
+    }
+
+    fn ite(
+        &mut self,
+        condition: EncodedLiteral,
+        high: EncodedLiteral,
+        low: EncodedLiteral,
+    ) -> EncodedLiteral {
+        if high == low {
+            return high;
+        }
+        let high_branch = self.and(condition, high);
+        let low_branch = self.and(condition.negated(), low);
+        self.or(high_branch, low_branch)
+    }
 }
 
 fn add_encoded_clause(solver: &mut Solver<'_>, literals: &[EncodedLiteral]) {
@@ -8591,15 +8662,18 @@ struct CheckpointCdclPreimage {
     variables: usize,
     checkpoint: usize,
     bdd_nodes: usize,
+    encoding_nodes: usize,
+    encoding_clauses: usize,
 }
 
 impl CheckpointCdclPreimage {
-    fn recognize(
+    fn recognize_with_encoding(
         formula: &[Clause],
         width: usize,
         horizon: usize,
         checkpoint: usize,
         node_limit: usize,
+        encoding: &str,
     ) -> Result<Self, String> {
         if checkpoint == 0 || checkpoint >= horizon {
             return Err("checkpoint must be inside the temporal horizon".to_string());
@@ -8625,62 +8699,94 @@ impl CheckpointCdclPreimage {
         )?;
         let variables = width * (horizon + 1);
         let mut solver = Solver::new();
-
-        for (index, node) in preimage.manager.nodes.iter().copied().enumerate() {
-            let output = variables + index;
-            let input = preimage.rank_to_variable[node.variable];
-            let high = |positive| encoded_bdd_literal(node.high, positive, variables);
-            let low = |positive| encoded_bdd_literal(node.low, positive, variables);
-            add_encoded_clause(
-                &mut solver,
-                &[
-                    EncodedLiteral::Variable(input, false),
-                    high(false),
-                    EncodedLiteral::Variable(output, true),
-                ],
-            );
-            add_encoded_clause(
-                &mut solver,
-                &[
-                    EncodedLiteral::Variable(input, false),
-                    high(true),
-                    EncodedLiteral::Variable(output, false),
-                ],
-            );
-            add_encoded_clause(
-                &mut solver,
-                &[
-                    EncodedLiteral::Variable(input, true),
-                    low(false),
-                    EncodedLiteral::Variable(output, true),
-                ],
-            );
-            add_encoded_clause(
-                &mut solver,
-                &[
-                    EncodedLiteral::Variable(input, true),
-                    low(true),
-                    EncodedLiteral::Variable(output, false),
-                ],
-            );
-        }
-        for time in 1..=checkpoint {
-            for bit in 0..width {
+        let (roots, encoding_nodes, encoding_clauses) = match encoding {
+            "bdd" => {
+                for (index, node) in preimage.manager.nodes.iter().copied().enumerate() {
+                    let output = variables + index;
+                    let input = preimage.rank_to_variable[node.variable];
+                    let high = |positive| encoded_bdd_literal(node.high, positive, variables);
+                    let low = |positive| encoded_bdd_literal(node.low, positive, variables);
+                    add_encoded_clause(
+                        &mut solver,
+                        &[
+                            EncodedLiteral::Variable(input, false),
+                            high(false),
+                            EncodedLiteral::Variable(output, true),
+                        ],
+                    );
+                    add_encoded_clause(
+                        &mut solver,
+                        &[
+                            EncodedLiteral::Variable(input, false),
+                            high(true),
+                            EncodedLiteral::Variable(output, false),
+                        ],
+                    );
+                    add_encoded_clause(
+                        &mut solver,
+                        &[
+                            EncodedLiteral::Variable(input, true),
+                            low(false),
+                            EncodedLiteral::Variable(output, true),
+                        ],
+                    );
+                    add_encoded_clause(
+                        &mut solver,
+                        &[
+                            EncodedLiteral::Variable(input, true),
+                            low(true),
+                            EncodedLiteral::Variable(output, false),
+                        ],
+                    );
+                }
+                let roots = preimage
+                    .frames
+                    .iter()
+                    .map(|frame| {
+                        frame
+                            .iter()
+                            .map(|&root| encoded_bdd_literal(root, true, variables))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                (roots, preimage.bdd_nodes(), preimage.bdd_nodes() * 4)
+            }
+            "aig" => {
+                let mut builder = AigBuilder::new(variables);
+                let mut literals = vec![
+                    EncodedLiteral::Constant(false),
+                    EncodedLiteral::Constant(true),
+                ];
+                for node in preimage.manager.nodes.iter().copied() {
+                    let condition =
+                        EncodedLiteral::Variable(preimage.rank_to_variable[node.variable], true);
+                    literals.push(builder.ite(condition, literals[node.high], literals[node.low]));
+                }
+                let roots = preimage
+                    .frames
+                    .iter()
+                    .map(|frame| frame.iter().map(|&root| literals[root]).collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
+                for &(output, a, b) in &builder.gates {
+                    let out = EncodedLiteral::Variable(output, true);
+                    add_encoded_clause(&mut solver, &[a.negated(), b.negated(), out]);
+                    add_encoded_clause(&mut solver, &[a, out.negated()]);
+                    add_encoded_clause(&mut solver, &[b, out.negated()]);
+                }
+                (roots, builder.gates.len(), builder.gates.len() * 3)
+            }
+            _ => return Err(format!("unknown checkpoint encoding: {encoding}")),
+        };
+        for (time, frame) in roots.iter().enumerate().take(checkpoint + 1).skip(1) {
+            for (bit, &root) in frame.iter().enumerate().take(width) {
                 let variable = time * width + bit;
-                let root = preimage.frame(time)[bit];
                 add_encoded_clause(
                     &mut solver,
-                    &[
-                        EncodedLiteral::Variable(variable, false),
-                        encoded_bdd_literal(root, true, variables),
-                    ],
+                    &[EncodedLiteral::Variable(variable, false), root],
                 );
                 add_encoded_clause(
                     &mut solver,
-                    &[
-                        EncodedLiteral::Variable(variable, true),
-                        encoded_bdd_literal(root, false, variables),
-                    ],
+                    &[EncodedLiteral::Variable(variable, true), root.negated()],
                 );
             }
         }
@@ -8702,6 +8808,8 @@ impl CheckpointCdclPreimage {
             variables,
             checkpoint,
             bdd_nodes: preimage.bdd_nodes(),
+            encoding_nodes,
+            encoding_clauses,
         })
     }
 
@@ -9779,25 +9887,27 @@ fn benchmark_checkpoint_cdcl(
     node_limit: usize,
     seed: u64,
     output: &Path,
+    encoding: &str,
 ) -> Result<(), String> {
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("create checkpoint output: {error}"))?;
     }
     let mut file = fs::File::create(output)
         .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_prefix_nodes,checkpoint_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,encoding,recognition_ns,bdd_prefix_nodes,encoding_nodes,encoding_clauses,checkpoint_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
         .map_err(|error| format!("write checkpoint header: {error}"))?;
     for &width in widths {
         for &horizon in horizons {
             let vars = width * (horizon + 1);
             let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
             let recognition_start = Instant::now();
-            let mut engine = CheckpointCdclPreimage::recognize(
+            let mut engine = CheckpointCdclPreimage::recognize_with_encoding(
                 &formula,
                 width,
                 horizon,
                 checkpoint.min(horizon.saturating_sub(1)),
                 node_limit,
+                encoding,
             )?;
             let recognition_ns = recognition_start.elapsed().as_nanos();
             let mut rng =
@@ -9858,13 +9968,13 @@ fn benchmark_checkpoint_cdcl(
             let checkpoint_per_query = checkpoint_ns as f64 / query_count as f64;
             let full_per_query = full_ns as f64 / query_count as f64;
             let speedup = full_per_query / checkpoint_per_query.max(1.0);
-            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{},{node_limit},{recognition_ns},{},{checkpoint_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.checkpoint, engine.bdd_nodes)
+            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{},{node_limit},{encoding},{recognition_ns},{},{},{},{checkpoint_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.checkpoint, engine.bdd_nodes, engine.encoding_nodes, engine.encoding_clauses)
                 .map_err(|error| format!("write checkpoint row: {error}"))?;
             file.flush()
                 .map_err(|error| format!("flush checkpoint output: {error}"))?;
             println!(
-                "checkpoint CDCL kind={kind} width={width} horizon={horizon} checkpoint={} bdd_nodes={} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
-                engine.checkpoint, engine.bdd_nodes
+                "checkpoint CDCL kind={kind} width={width} horizon={horizon} checkpoint={} encoding={encoding} bdd_nodes={} encoding_nodes={} encoding_clauses={} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+                engine.checkpoint, engine.bdd_nodes, engine.encoding_nodes, engine.encoding_clauses
             );
         }
     }
@@ -11445,7 +11555,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
-        "benchmark-checkpoint-cdcl" => {
+        "benchmark-checkpoint-cdcl" | "benchmark-checkpoint-aig" => {
             if args.len() != 9 {
                 return Err("usage: continuation-quotient-sat benchmark-checkpoint-cdcl KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
             }
@@ -11473,6 +11583,11 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 node_limit,
                 seed,
                 Path::new(&args[8]),
+                if args[0] == "benchmark-checkpoint-aig" {
+                    "aig"
+                } else {
+                    "bdd"
+                },
             )?;
             Ok(true)
         }
@@ -19247,8 +19362,10 @@ mod tests {
         let width = 9;
         let horizon = 137;
         let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
-        let mut checkpoint =
-            CheckpointCdclPreimage::recognize(&formula, width, horizon, 20, 200_000).unwrap();
+        let mut checkpoint = CheckpointCdclPreimage::recognize_with_encoding(
+            &formula, width, horizon, 20, 200_000, "bdd",
+        )
+        .unwrap();
         assert_eq!(checkpoint.checkpoint, 20);
         assert!(checkpoint.bdd_nodes > 0);
         let mut rng = Rng(0xc1ac_0170);
@@ -19274,6 +19391,37 @@ mod tests {
             if let Some(assignment) = answer {
                 assert!(satisfies(&formula, &assignment));
             }
+        }
+    }
+
+    #[test]
+    fn aig_checkpoint_preserves_answers_and_witnesses() {
+        let width = 5;
+        let horizon = 23;
+        let (vars, formula) = temporal_composition_formula("cascade4", width, horizon).unwrap();
+        let mut checkpoint = CheckpointCdclPreimage::recognize_with_encoding(
+            &formula, width, horizon, 7, 50_000, "aig",
+        )
+        .unwrap();
+        assert!(checkpoint.encoding_nodes > 0);
+        assert_eq!(checkpoint.encoding_clauses, checkpoint.encoding_nodes * 3);
+        let mut assumptions = vec![None; vars];
+        assumptions[2] = Some(true);
+        assumptions[width * 11 + 3] = Some(false);
+        let answer = checkpoint.query(&assumptions);
+        let mut constrained = formula.clone();
+        constrained.extend(
+            assumptions
+                .iter()
+                .enumerate()
+                .filter_map(|(variable, value)| value.map(|value| Clause(vec![(variable, value)]))),
+        );
+        assert_eq!(
+            answer.is_some(),
+            solve_with_varisat(vars, &constrained).is_some()
+        );
+        if let Some(assignment) = answer {
+            assert!(satisfies(&formula, &assignment));
         }
     }
 }

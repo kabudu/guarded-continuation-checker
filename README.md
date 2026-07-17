@@ -161,6 +161,9 @@ persistent exact CDCL solver, restoring complete admission without approximation
 `benchmark-checkpoint-cdcl` tests an exact BDD-prefix-to-Tseitin-CNF checkpoint;
 the current encoding preserves semantics but is experimental and slower than the
 full-CDCL control on measured cascade cases.
+`benchmark-checkpoint-aig` replaces each BDD decision with structurally hashed
+AND/inverter logic. It is also exact, but expands the measured cascade prefix and
+is retained as a falsified compaction strategy.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
