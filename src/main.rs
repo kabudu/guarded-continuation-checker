@@ -8153,6 +8153,311 @@ fn temporal_composition_formula(
     Ok((width * (horizon + 1), formula))
 }
 
+#[derive(Clone, Debug)]
+struct AagLatch {
+    current: usize,
+    next: usize,
+    initial: Option<bool>,
+}
+
+#[derive(Clone, Debug)]
+struct AagAnd {
+    output: usize,
+    left: usize,
+    right: usize,
+}
+
+#[derive(Clone, Debug)]
+struct AagModel {
+    max_variable: usize,
+    latches: Vec<AagLatch>,
+    outputs: Vec<usize>,
+    ands: Vec<AagAnd>,
+}
+
+type AagTemporalEncoding = (usize, Vec<Clause>, Vec<Option<bool>>);
+type AagPropertyQuery = (usize, usize, Vec<Option<bool>>);
+
+fn parse_aag_usize(token: Option<&str>, context: &str) -> Result<usize, String> {
+    token
+        .ok_or_else(|| format!("missing {context}"))?
+        .parse::<usize>()
+        .map_err(|_| format!("invalid {context}"))
+}
+
+fn parse_aag(path: &Path) -> Result<AagModel, String> {
+    let source = fs::read_to_string(path)
+        .map_err(|error| format!("read ASCII AIGER {}: {error}", path.display()))?;
+    let mut lines = source.lines();
+    let mut header = lines
+        .next()
+        .ok_or_else(|| "empty ASCII AIGER input".to_string())?
+        .split_whitespace();
+    if header.next() != Some("aag") {
+        return Err("only ASCII AIGER (`aag`) input is supported".to_string());
+    }
+    let max_variable = parse_aag_usize(header.next(), "AIGER maximum variable")?;
+    let inputs = parse_aag_usize(header.next(), "AIGER input count")?;
+    let latch_count = parse_aag_usize(header.next(), "AIGER latch count")?;
+    let output_count = parse_aag_usize(header.next(), "AIGER output count")?;
+    let and_count = parse_aag_usize(header.next(), "AIGER AND count")?;
+    if header.next().is_some() {
+        return Err("extended AIGER headers are not supported yet".to_string());
+    }
+    if inputs != 0 {
+        return Err(format!(
+            "CQ-SAT/GCC currently requires a closed deterministic AIGER model; found {inputs} primary inputs"
+        ));
+    }
+    if latch_count == 0 {
+        return Err("AIGER model must contain at least one latch".to_string());
+    }
+    if latch_count > 9 {
+        return Err(format!(
+            "AIGER model has {latch_count} latches; the external CQ-SAT/GCC safety bound is 9"
+        ));
+    }
+
+    for _ in 0..inputs {
+        lines
+            .next()
+            .ok_or_else(|| "truncated AIGER input section".to_string())?;
+    }
+    let mut latches = Vec::with_capacity(latch_count);
+    for index in 0..latch_count {
+        let line = lines
+            .next()
+            .ok_or_else(|| format!("truncated AIGER latch section at latch {index}"))?;
+        let fields: Vec<_> = line.split_whitespace().collect();
+        if !(2..=3).contains(&fields.len()) {
+            return Err(format!("invalid AIGER latch {index}"));
+        }
+        let current = parse_aag_usize(fields.first().copied(), "latch literal")?;
+        let next = parse_aag_usize(fields.get(1).copied(), "latch next literal")?;
+        if current == 0 || current & 1 == 1 || current / 2 > max_variable {
+            return Err(format!(
+                "invalid current literal {current} for latch {index}"
+            ));
+        }
+        let initial = match fields.get(2).copied() {
+            None | Some("0") => Some(false),
+            Some("1") => Some(true),
+            Some(value) if value.parse::<usize>().ok() == Some(current) => None,
+            Some(_) => return Err(format!("unsupported initial value for latch {index}")),
+        };
+        latches.push(AagLatch {
+            current,
+            next,
+            initial,
+        });
+    }
+    let mut outputs = Vec::with_capacity(output_count);
+    for index in 0..output_count {
+        let line = lines
+            .next()
+            .ok_or_else(|| format!("truncated AIGER output section at output {index}"))?;
+        let mut fields = line.split_whitespace();
+        let literal = parse_aag_usize(fields.next(), "output literal")?;
+        if fields.next().is_some() {
+            return Err(format!("invalid AIGER output {index}"));
+        }
+        outputs.push(literal);
+    }
+    let mut ands = Vec::with_capacity(and_count);
+    for index in 0..and_count {
+        let line = lines
+            .next()
+            .ok_or_else(|| format!("truncated AIGER AND section at gate {index}"))?;
+        let mut fields = line.split_whitespace();
+        let output = parse_aag_usize(fields.next(), "AND output literal")?;
+        let left = parse_aag_usize(fields.next(), "AND left literal")?;
+        let right = parse_aag_usize(fields.next(), "AND right literal")?;
+        if fields.next().is_some()
+            || output == 0
+            || output & 1 == 1
+            || output / 2 > max_variable
+            || left / 2 >= output / 2
+            || right / 2 >= output / 2
+        {
+            return Err(format!("invalid or non-topological AIGER AND gate {index}"));
+        }
+        ands.push(AagAnd {
+            output,
+            left,
+            right,
+        });
+    }
+    let literal_limit = max_variable
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(1))
+        .ok_or_else(|| "AIGER literal range overflow".to_string())?;
+    if latches
+        .iter()
+        .flat_map(|latch| [latch.current, latch.next])
+        .chain(outputs.iter().copied())
+        .chain(
+            ands.iter()
+                .flat_map(|gate| [gate.output, gate.left, gate.right]),
+        )
+        .any(|literal| literal > literal_limit)
+    {
+        return Err("AIGER literal exceeds declared maximum variable".to_string());
+    }
+    let mut definitions = BTreeSet::new();
+    for latch in &latches {
+        if !definitions.insert(latch.current / 2) {
+            return Err("duplicate AIGER variable definition".to_string());
+        }
+    }
+    for gate in &ands {
+        if !definitions.insert(gate.output / 2) {
+            return Err("duplicate AIGER variable definition".to_string());
+        }
+    }
+    if latches
+        .iter()
+        .map(|latch| latch.next)
+        .chain(outputs.iter().copied())
+        .chain(ands.iter().flat_map(|gate| [gate.left, gate.right]))
+        .any(|literal| literal >= 2 && !definitions.contains(&(literal / 2)))
+    {
+        return Err("AIGER literal references an undefined variable".to_string());
+    }
+    Ok(AagModel {
+        max_variable,
+        latches,
+        outputs,
+        ands,
+    })
+}
+
+fn evaluate_aag_literal(literal: usize, values: &[bool]) -> bool {
+    if literal < 2 {
+        return literal == 1;
+    }
+    let base = values[literal / 2];
+    if literal & 1 == 1 { !base } else { base }
+}
+
+fn aag_temporal_formula(model: &AagModel, horizon: usize) -> Result<AagTemporalEncoding, String> {
+    if horizon == 0 {
+        return Err("AIGER horizon must be at least one".to_string());
+    }
+    let width = model.latches.len();
+    let patterns = 1usize << width;
+    let mut tables = Vec::with_capacity(patterns);
+    for pattern in 0..patterns {
+        let mut values = vec![false; model.max_variable + 1];
+        for (bit, latch) in model.latches.iter().enumerate() {
+            values[latch.current / 2] = pattern >> bit & 1 == 1;
+        }
+        for gate in &model.ands {
+            values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                && evaluate_aag_literal(gate.right, &values);
+        }
+        tables.push(
+            model
+                .latches
+                .iter()
+                .map(|latch| evaluate_aag_literal(latch.next, &values))
+                .collect::<Vec<_>>(),
+        );
+    }
+    let mut formula = Vec::with_capacity(horizon * width * patterns);
+    for time in 0..horizon {
+        let current = time * width;
+        let next = (time + 1) * width;
+        for (pattern, values) in tables.iter().enumerate() {
+            for (output, &value) in values.iter().enumerate() {
+                let mut literals = Vec::with_capacity(width + 1);
+                for bit in 0..width {
+                    literals.push((current + bit, pattern >> bit & 1 == 0));
+                }
+                literals.push((next + output, value));
+                literals.sort_unstable();
+                formula.push(Clause(literals));
+            }
+        }
+    }
+    Ok((
+        width * (horizon + 1),
+        formula,
+        model.latches.iter().map(|latch| latch.initial).collect(),
+    ))
+}
+
+fn aag_bad_state_patterns(model: &AagModel) -> Vec<usize> {
+    let width = model.latches.len();
+    (0..(1usize << width))
+        .filter(|&pattern| {
+            let mut values = vec![false; model.max_variable + 1];
+            for (bit, latch) in model.latches.iter().enumerate() {
+                values[latch.current / 2] = pattern >> bit & 1 == 1;
+            }
+            for gate in &model.ands {
+                values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                    && evaluate_aag_literal(gate.right, &values);
+            }
+            model
+                .outputs
+                .iter()
+                .any(|&literal| evaluate_aag_literal(literal, &values))
+        })
+        .collect()
+}
+
+fn aag_property_query_space(
+    model: &AagModel,
+    horizon: usize,
+) -> Result<Vec<AagPropertyQuery>, String> {
+    let width = model.latches.len();
+    let variables = width * (horizon + 1);
+    let bad_patterns = aag_bad_state_patterns(model);
+    if bad_patterns.is_empty() {
+        return Err("AIGER model has no state where a declared output is true".to_string());
+    }
+    let upper_bound = bad_patterns
+        .len()
+        .checked_mul(horizon + 1)
+        .ok_or_else(|| "AIGER property query count overflow".to_string())?;
+    if upper_bound > 1_000_000 {
+        return Err(format!(
+            "AIGER exhaustive property space has up to {upper_bound} queries; safety limit is 1000000"
+        ));
+    }
+    let initial: Vec<_> = model.latches.iter().map(|latch| latch.initial).collect();
+    let mut queries = Vec::new();
+    for frame in 0..=horizon {
+        for &pattern in &bad_patterns {
+            if frame == 0
+                && initial.iter().enumerate().any(|(bit, required)| {
+                    required.is_some_and(|value| value != (pattern >> bit & 1 == 1))
+                })
+            {
+                continue;
+            }
+            let mut assumptions = vec![None; variables];
+            assumptions[..width].copy_from_slice(&initial);
+            for bit in 0..width {
+                assumptions[frame * width + bit] = Some(pattern >> bit & 1 == 1);
+            }
+            queries.push((frame, pattern, assumptions));
+        }
+    }
+    Ok(queries)
+}
+
+fn aag_property_queries(
+    model: &AagModel,
+    horizon: usize,
+    query_count: usize,
+) -> Result<Vec<Vec<Option<bool>>>, String> {
+    let space = aag_property_query_space(model, horizon)?;
+    Ok((0..query_count)
+        .map(|index| space[index % space.len()].2.clone())
+        .collect())
+}
+
 fn normalized_temporal_steps(
     formula: &[Clause],
     width: usize,
@@ -9085,6 +9390,7 @@ struct CqPortfolioDecision {
     reason: &'static str,
     clauses_per_bit_step: f64,
     maximum_fanout: usize,
+    assumptions_per_query: f64,
 }
 
 fn cq_portfolio_decision(
@@ -9092,34 +9398,39 @@ fn cq_portfolio_decision(
     width: usize,
     horizon: usize,
     expected_queries: usize,
+    assumptions_per_query: f64,
 ) -> Result<CqPortfolioDecision, String> {
     let clauses_per_bit_step = formula.len() as f64 / horizon.max(1) as f64 / width as f64;
     let mut maximum_fanout = 0usize;
-    let (specialized, reason) =
-        if width <= 9 && clauses_per_bit_step >= 12.0 && expected_queries >= 8 {
-            (true, "dense-transition")
-        } else if width <= 7 && expected_queries >= 128 {
-            let functions = recover_local_transition(formula, width, horizon)?;
-            let mut fanout = vec![0usize; width];
-            for function in &functions {
-                for &dependency in &function.dependencies {
-                    fanout[dependency] += 1;
-                }
+    let (specialized, reason) = if width <= 9
+        && clauses_per_bit_step >= 12.0
+        && expected_queries >= 8
+        && assumptions_per_query <= width as f64
+    {
+        (true, "dense-transition")
+    } else if width <= 7 && expected_queries >= 128 && assumptions_per_query <= width as f64 {
+        let functions = recover_local_transition(formula, width, horizon)?;
+        let mut fanout = vec![0usize; width];
+        for function in &functions {
+            for &dependency in &function.dependencies {
+                fanout[dependency] += 1;
             }
-            maximum_fanout = fanout.into_iter().max().unwrap_or(0);
-            if maximum_fanout >= width.saturating_sub(1) {
-                (true, "narrow-hub")
-            } else {
-                (false, "cdcl-fallback")
-            }
+        }
+        maximum_fanout = fanout.into_iter().max().unwrap_or(0);
+        if maximum_fanout >= width.saturating_sub(1) {
+            (true, "narrow-hub")
         } else {
             (false, "cdcl-fallback")
-        };
+        }
+    } else {
+        (false, "cdcl-fallback")
+    };
     Ok(CqPortfolioDecision {
         specialized,
         reason,
         clauses_per_bit_step,
         maximum_fanout,
+        assumptions_per_query,
     })
 }
 
@@ -10661,6 +10972,198 @@ fn benchmark_native_bdd_theory(
     Ok(())
 }
 
+struct CqPortfolioRun {
+    backend: &'static str,
+    first_sat_query: Option<usize>,
+    first_witness: Option<Vec<bool>>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_cq_portfolio_case(
+    file: &mut fs::File,
+    kind: &str,
+    width: usize,
+    horizon: usize,
+    formula: &[Clause],
+    initial: &[Option<bool>],
+    provided_queries: Option<Vec<Vec<Option<bool>>>>,
+    query_count: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    seed: u64,
+) -> Result<CqPortfolioRun, String> {
+    if initial.len() != width {
+        return Err("portfolio initial-state width mismatch".to_string());
+    }
+    let variables = width * (horizon + 1);
+    let effective_checkpoint = checkpoint.min(horizon.saturating_sub(1));
+    let queries = if let Some(queries) = provided_queries {
+        if queries.len() != query_count
+            || queries
+                .iter()
+                .any(|assumptions| assumptions.len() != variables)
+        {
+            return Err("provided portfolio query dimensions do not match".to_string());
+        }
+        queries
+    } else {
+        let mut rng = Rng(seed ^ (width as u64).rotate_left(23) ^ (horizon as u64).rotate_left(43));
+        let mut queries = Vec::with_capacity(query_count);
+        for query_index in 0..query_count {
+            let mut assumptions = vec![None; variables];
+            for _ in 0..(2 + query_index % 7) {
+                assumptions[rng.below(variables)] = Some(rng.next() & 1 == 1);
+            }
+            assumptions[..width].copy_from_slice(initial);
+            queries.push(assumptions);
+        }
+        queries
+    };
+    let gate_start = Instant::now();
+    let assumptions_per_query = queries
+        .iter()
+        .map(|assumptions| assumptions.iter().filter(|value| value.is_some()).count())
+        .sum::<usize>() as f64
+        / query_count as f64;
+    let decision =
+        cq_portfolio_decision(formula, width, horizon, query_count, assumptions_per_query)?;
+    let gate_ns = gate_start.elapsed().as_nanos();
+
+    let mut recognition_ns = gate_ns;
+    let mut specialized_recognition_ns = 0u128;
+    let mut bdd_nodes = 0usize;
+    let mut global_clauses = 0usize;
+    let portfolio_start = Instant::now();
+    let portfolio_answers = if decision.specialized {
+        let recognition_start = Instant::now();
+        let mut engine = NativeBddTheoryPreimage::recognize(
+            formula,
+            width,
+            horizon,
+            effective_checkpoint,
+            node_limit,
+        )?;
+        specialized_recognition_ns = recognition_start.elapsed().as_nanos();
+        recognition_ns += specialized_recognition_ns;
+        bdd_nodes = engine.preimage.bdd_nodes();
+        global_clauses = engine.global_clauses;
+        queries
+            .iter()
+            .map(|assumptions| engine.query(assumptions))
+            .collect::<Vec<_>>()
+    } else {
+        let mut solver = Solver::new();
+        add_to_varisat(&mut solver, formula);
+        queries
+            .iter()
+            .map(|assumptions| {
+                let literals = assumptions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(variable, value)| {
+                        value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                    })
+                    .collect::<Vec<_>>();
+                solver.assume(&literals);
+                if !solver.solve().expect("portfolio CDCL solve") {
+                    return None;
+                }
+                let mut assignment = vec![false; variables];
+                for literal in solver.model().expect("portfolio CDCL model") {
+                    if literal.var().index() < variables {
+                        assignment[literal.var().index()] = literal.is_positive();
+                    }
+                }
+                Some(assignment)
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut portfolio_ns = portfolio_start
+        .elapsed()
+        .as_nanos()
+        .saturating_sub(specialized_recognition_ns);
+
+    let mut baseline = Solver::new();
+    add_to_varisat(&mut baseline, formula);
+    let baseline_start = Instant::now();
+    let baseline_answers = queries
+        .iter()
+        .map(|assumptions| {
+            let literals = assumptions
+                .iter()
+                .enumerate()
+                .filter_map(|(variable, value)| {
+                    value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                })
+                .collect::<Vec<_>>();
+            baseline.assume(&literals);
+            baseline.solve().expect("portfolio baseline solve")
+        })
+        .collect::<Vec<_>>();
+    let baseline_ns = baseline_start.elapsed().as_nanos();
+    if !decision.specialized {
+        portfolio_ns = baseline_ns;
+    }
+    let agreement = portfolio_answers
+        .iter()
+        .zip(&baseline_answers)
+        .all(|(answer, &sat)| answer.is_some() == sat);
+    let witnesses_valid = portfolio_answers
+        .iter()
+        .zip(&queries)
+        .all(|(answer, assumptions)| {
+            answer.as_ref().is_none_or(|assignment| {
+                satisfies(formula, assignment)
+                    && assumptions.iter().enumerate().all(|(variable, required)| {
+                        required.is_none_or(|value| assignment[variable] == value)
+                    })
+            })
+        });
+    let sat_queries = portfolio_answers
+        .iter()
+        .filter(|answer| answer.is_some())
+        .count();
+    let first_sat_query = portfolio_answers.iter().position(Option::is_some);
+    let first_witness = first_sat_query
+        .and_then(|index| portfolio_answers[index].as_ref())
+        .cloned();
+    let unsat_queries = query_count - sat_queries;
+    let portfolio_per_query = portfolio_ns as f64 / query_count as f64;
+    let baseline_per_query = baseline_ns as f64 / query_count as f64;
+    let query_speedup = baseline_per_query / portfolio_per_query.max(1.0);
+    let amortized_per_query = portfolio_per_query + recognition_ns as f64 / query_count as f64;
+    let amortized_speedup = baseline_per_query / amortized_per_query.max(1.0);
+    let backend = if decision.specialized {
+        "cq-gcc"
+    } else {
+        "cdcl"
+    };
+    writeln!(file, "{kind},{width},{horizon},{variables},{},{query_count},{effective_checkpoint},{node_limit},{backend},{},{:.3},{},{:.3},{gate_ns},{recognition_ns},{bdd_nodes},{global_clauses},{portfolio_per_query:.3},{baseline_per_query:.3},{query_speedup:.6},{amortized_speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), decision.reason, decision.clauses_per_bit_step, decision.maximum_fanout, decision.assumptions_per_query)
+                .map_err(|error| format!("write portfolio row: {error}"))?;
+    file.flush()
+        .map_err(|error| format!("flush portfolio output: {error}"))?;
+    println!(
+        "CQ portfolio kind={kind} width={width} horizon={horizon} backend={backend} reason={} query_speedup={query_speedup:.3} amortized_speedup={amortized_speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+        decision.reason
+    );
+    Ok(CqPortfolioRun {
+        backend,
+        first_sat_query,
+        first_witness,
+    })
+}
+
+fn create_cq_portfolio_output(output: &Path) -> Result<fs::File, String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("create portfolio output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,assumptions_per_query,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write portfolio header: {error}"))?;
+    Ok(file)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn benchmark_cq_portfolio(
     kind: &str,
@@ -10672,148 +11175,196 @@ fn benchmark_cq_portfolio(
     seed: u64,
     output: &Path,
 ) -> Result<(), String> {
-    if let Some(parent) = output.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("create portfolio output: {error}"))?;
-    }
-    let mut file = fs::File::create(output)
-        .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status")
-        .map_err(|error| format!("write portfolio header: {error}"))?;
+    let mut file = create_cq_portfolio_output(output)?;
     for &width in widths {
         for &horizon in horizons {
-            let variables = width * (horizon + 1);
             let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
-            let gate_start = Instant::now();
-            let decision = cq_portfolio_decision(&formula, width, horizon, query_count)?;
-            let gate_ns = gate_start.elapsed().as_nanos();
-            let effective_checkpoint = checkpoint.min(horizon.saturating_sub(1));
-            let mut rng =
-                Rng(seed ^ (width as u64).rotate_left(23) ^ (horizon as u64).rotate_left(43));
-            let mut queries = Vec::with_capacity(query_count);
-            for query_index in 0..query_count {
-                let mut assumptions = vec![None; variables];
-                for _ in 0..(2 + query_index % 7) {
-                    assumptions[rng.below(variables)] = Some(rng.next() & 1 == 1);
-                }
-                queries.push(assumptions);
-            }
-
-            let mut recognition_ns = gate_ns;
-            let mut specialized_recognition_ns = 0u128;
-            let mut bdd_nodes = 0usize;
-            let mut global_clauses = 0usize;
-            let portfolio_start = Instant::now();
-            let portfolio_answers = if decision.specialized {
-                let recognition_start = Instant::now();
-                let mut engine = NativeBddTheoryPreimage::recognize(
-                    &formula,
-                    width,
-                    horizon,
-                    effective_checkpoint,
-                    node_limit,
-                )?;
-                specialized_recognition_ns = recognition_start.elapsed().as_nanos();
-                recognition_ns += specialized_recognition_ns;
-                bdd_nodes = engine.preimage.bdd_nodes();
-                global_clauses = engine.global_clauses;
-                queries
-                    .iter()
-                    .map(|assumptions| engine.query(assumptions))
-                    .collect::<Vec<_>>()
-            } else {
-                let mut solver = Solver::new();
-                add_to_varisat(&mut solver, &formula);
-                queries
-                    .iter()
-                    .map(|assumptions| {
-                        let literals = assumptions
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(variable, value)| {
-                                value.map(|value| Lit::from_var(Var::from_index(variable), value))
-                            })
-                            .collect::<Vec<_>>();
-                        solver.assume(&literals);
-                        if !solver.solve().expect("portfolio CDCL solve") {
-                            return None;
-                        }
-                        let mut assignment = vec![false; variables];
-                        for literal in solver.model().expect("portfolio CDCL model") {
-                            if literal.var().index() < variables {
-                                assignment[literal.var().index()] = literal.is_positive();
-                            }
-                        }
-                        Some(assignment)
-                    })
-                    .collect::<Vec<_>>()
-            };
-            let mut portfolio_ns = portfolio_start
-                .elapsed()
-                .as_nanos()
-                .saturating_sub(specialized_recognition_ns);
-
-            let mut baseline = Solver::new();
-            add_to_varisat(&mut baseline, &formula);
-            let baseline_start = Instant::now();
-            let baseline_answers = queries
-                .iter()
-                .map(|assumptions| {
-                    let literals = assumptions
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(variable, value)| {
-                            value.map(|value| Lit::from_var(Var::from_index(variable), value))
-                        })
-                        .collect::<Vec<_>>();
-                    baseline.assume(&literals);
-                    baseline.solve().expect("portfolio baseline solve")
-                })
-                .collect::<Vec<_>>();
-            let baseline_ns = baseline_start.elapsed().as_nanos();
-            if !decision.specialized {
-                portfolio_ns = baseline_ns;
-            }
-            let agreement = portfolio_answers
-                .iter()
-                .zip(&baseline_answers)
-                .all(|(answer, &sat)| answer.is_some() == sat);
-            let witnesses_valid =
-                portfolio_answers
-                    .iter()
-                    .zip(&queries)
-                    .all(|(answer, assumptions)| {
-                        answer.as_ref().is_none_or(|assignment| {
-                            satisfies(&formula, assignment)
-                                && assumptions.iter().enumerate().all(|(variable, required)| {
-                                    required.is_none_or(|value| assignment[variable] == value)
-                                })
-                        })
-                    });
-            let sat_queries = portfolio_answers
-                .iter()
-                .filter(|answer| answer.is_some())
-                .count();
-            let unsat_queries = query_count - sat_queries;
-            let portfolio_per_query = portfolio_ns as f64 / query_count as f64;
-            let baseline_per_query = baseline_ns as f64 / query_count as f64;
-            let query_speedup = baseline_per_query / portfolio_per_query.max(1.0);
-            let amortized_per_query =
-                portfolio_per_query + recognition_ns as f64 / query_count as f64;
-            let amortized_speedup = baseline_per_query / amortized_per_query.max(1.0);
-            let backend = if decision.specialized {
-                "cq-gcc"
-            } else {
-                "cdcl"
-            };
-            writeln!(file, "{kind},{width},{horizon},{variables},{},{query_count},{effective_checkpoint},{node_limit},{backend},{},{:.3},{},{gate_ns},{recognition_ns},{bdd_nodes},{global_clauses},{portfolio_per_query:.3},{baseline_per_query:.3},{query_speedup:.6},{amortized_speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), decision.reason, decision.clauses_per_bit_step, decision.maximum_fanout)
-                .map_err(|error| format!("write portfolio row: {error}"))?;
-            file.flush()
-                .map_err(|error| format!("flush portfolio output: {error}"))?;
-            println!(
-                "CQ portfolio kind={kind} width={width} horizon={horizon} backend={backend} reason={} query_speedup={query_speedup:.3} amortized_speedup={amortized_speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
-                decision.reason
-            );
+            write_cq_portfolio_case(
+                &mut file,
+                kind,
+                width,
+                horizon,
+                &formula,
+                &vec![None; width],
+                None,
+                query_count,
+                checkpoint,
+                node_limit,
+                seed,
+            )?;
         }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_cq_aiger(
+    input: &Path,
+    horizon: usize,
+    query_count: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    let model = parse_aag(input)?;
+    let (_, formula, initial) = aag_temporal_formula(&model, horizon)?;
+    let property_queries = aag_property_queries(&model, horizon, query_count)?;
+    let label = input
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("external.aag");
+    let mut file = create_cq_portfolio_output(output)?;
+    write_cq_portfolio_case(
+        &mut file,
+        label,
+        model.latches.len(),
+        horizon,
+        &formula,
+        &initial,
+        Some(property_queries),
+        query_count,
+        checkpoint,
+        node_limit,
+        seed,
+    )?;
+    println!(
+        "AIGER model={} latches={} outputs={} ands={}",
+        input.display(),
+        model.latches.len(),
+        model.outputs.len(),
+        model.ands.len()
+    );
+    Ok(())
+}
+
+fn write_aiger_safety_result(
+    path: &Path,
+    input: &Path,
+    horizon: usize,
+    width: usize,
+    run: &CqPortfolioRun,
+    query_metadata: &[AagPropertyQuery],
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create AIGER result directory: {error}"))?;
+    }
+    let body = if let Some(index) = run.first_sat_query {
+        let (bad_frame, bad_pattern, _) = &query_metadata[index];
+        let witness = run
+            .first_witness
+            .as_ref()
+            .ok_or_else(|| "unsafe AIGER result is missing its witness".to_string())?;
+        let mut lines = vec![
+            "status=UNSAFE".to_string(),
+            format!("input={}", input.display()),
+            format!("horizon={horizon}"),
+            format!("backend={}", run.backend),
+            format!("bad_frame={bad_frame}"),
+            format!("bad_pattern={bad_pattern}"),
+            "frame,state_bits_low_to_high".to_string(),
+        ];
+        for frame in 0..=horizon {
+            let state = (0..width)
+                .map(|bit| {
+                    if witness[frame * width + bit] {
+                        '1'
+                    } else {
+                        '0'
+                    }
+                })
+                .collect::<String>();
+            lines.push(format!("{frame},{state}"));
+        }
+        lines.join("\n") + "\n"
+    } else {
+        format!(
+            "status=SAFE\ninput={}\nhorizon={horizon}\nbackend={}\n",
+            input.display(),
+            run.backend
+        )
+    };
+    fs::write(path, body).map_err(|error| format!("write {}: {error}", path.display()))
+}
+
+fn verify_cq_aiger(
+    input: &Path,
+    horizon: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    output: &Path,
+    safety_result: &Path,
+) -> Result<(), String> {
+    let model = parse_aag(input)?;
+    let (_, formula, initial) = aag_temporal_formula(&model, horizon)?;
+    if aag_bad_state_patterns(&model).is_empty() {
+        let label = input
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("external.aag");
+        let mut file = create_cq_portfolio_output(output)?;
+        let width = model.latches.len();
+        let variables = width * (horizon + 1);
+        let density = formula.len() as f64 / horizon as f64 / width as f64;
+        writeln!(file, "{label},{width},{horizon},{variables},{},0,{},{},static,constant-false-output,{density:.3},0,0.000,0,0,0,0,0.000,0.000,1.000000,1.000000,0,0,true,true,ok", formula.len(), checkpoint.min(horizon.saturating_sub(1)), node_limit)
+            .map_err(|error| format!("write constant-safe AIGER row: {error}"))?;
+        let run = CqPortfolioRun {
+            backend: "static",
+            first_sat_query: None,
+            first_witness: None,
+        };
+        write_aiger_safety_result(safety_result, input, horizon, width, &run, &[])?;
+        println!(
+            "AIGER safety status=SAFE horizon={horizon} backend=static result={}",
+            safety_result.display()
+        );
+        return Ok(());
+    }
+    let query_metadata = aag_property_query_space(&model, horizon)?;
+    let queries = query_metadata
+        .iter()
+        .map(|(_, _, assumptions)| assumptions.clone())
+        .collect::<Vec<_>>();
+    let label = input
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("external.aag");
+    let mut file = create_cq_portfolio_output(output)?;
+    let run = write_cq_portfolio_case(
+        &mut file,
+        label,
+        model.latches.len(),
+        horizon,
+        &formula,
+        &initial,
+        Some(queries),
+        query_metadata.len(),
+        checkpoint,
+        node_limit,
+        0,
+    )?;
+    write_aiger_safety_result(
+        safety_result,
+        input,
+        horizon,
+        model.latches.len(),
+        &run,
+        &query_metadata,
+    )?;
+    if let Some(index) = run.first_sat_query {
+        println!(
+            "AIGER safety status=UNSAFE bad_frame={} backend={} witness={}",
+            query_metadata[index].0,
+            run.backend,
+            safety_result.display()
+        );
+    } else {
+        println!(
+            "AIGER safety status=SAFE horizon={horizon} backend={} result={}",
+            run.backend,
+            safety_result.display()
+        );
     }
     Ok(())
 }
@@ -12475,6 +13026,54 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     .parse::<u64>()
                     .map_err(|_| "invalid portfolio seed".to_string())?,
                 Path::new(&args[8]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-cq-aiger" => {
+            if args.len() != 8 {
+                return Err("usage: continuation-quotient-sat benchmark-cq-aiger INPUT.aag HORIZON QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+            }
+            benchmark_cq_aiger(
+                Path::new(&args[1]),
+                args[2]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER horizon".to_string())?
+                    .max(1),
+                args[3]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER query count".to_string())?
+                    .max(1),
+                args[4]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER checkpoint".to_string())?,
+                args[5]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER node limit".to_string())?,
+                args[6]
+                    .parse::<u64>()
+                    .map_err(|_| "invalid AIGER seed".to_string())?,
+                Path::new(&args[7]),
+            )?;
+            Ok(true)
+        }
+        "verify-cq-aiger" => {
+            if args.len() != 7 {
+                return Err("usage: continuation-quotient-sat verify-cq-aiger INPUT.aag HORIZON CHECKPOINT NODE_LIMIT OUTPUT.csv SAFETY_RESULT.txt".to_string());
+            }
+            verify_cq_aiger(
+                Path::new(&args[1]),
+                args[2]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER horizon".to_string())?
+                    .max(1),
+                args[3]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER checkpoint".to_string())?,
+                args[4]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER node limit".to_string())?,
+                Path::new(&args[5]),
+                Path::new(&args[6]),
             )?;
             Ok(true)
         }
@@ -20393,52 +20992,132 @@ mod tests {
     #[test]
     fn cq_portfolio_gate_is_static_and_explainable() {
         let (_, cascade) = temporal_composition_formula("cascade4", 9, 137).unwrap();
-        let dense = cq_portfolio_decision(&cascade, 9, 137, 50).unwrap();
+        let dense = cq_portfolio_decision(&cascade, 9, 137, 50, 5.0).unwrap();
         assert!(dense.specialized);
         assert_eq!(dense.reason, "dense-transition");
         assert!(
-            !cq_portfolio_decision(&cascade, 9, 137, 7)
+            !cq_portfolio_decision(&cascade, 9, 137, 7, 5.0)
+                .unwrap()
+                .specialized
+        );
+        assert!(
+            !cq_portfolio_decision(&cascade, 9, 137, 50, 10.0)
                 .unwrap()
                 .specialized
         );
         let (_, wide_cascade) = temporal_composition_formula("cascade4", 10, 137).unwrap();
         assert!(
-            !cq_portfolio_decision(&wide_cascade, 10, 137, 50)
+            !cq_portfolio_decision(&wide_cascade, 10, 137, 50, 5.0)
                 .unwrap()
                 .specialized
         );
 
         let (_, hub) = temporal_composition_formula("hub3", 7, 137).unwrap();
-        let narrow_hub = cq_portfolio_decision(&hub, 7, 137, 128).unwrap();
+        let narrow_hub = cq_portfolio_decision(&hub, 7, 137, 128, 5.0).unwrap();
         assert!(narrow_hub.specialized);
         assert_eq!(narrow_hub.reason, "narrow-hub");
         assert!(
-            !cq_portfolio_decision(&hub, 7, 137, 127)
+            !cq_portfolio_decision(&hub, 7, 137, 127, 5.0)
                 .unwrap()
                 .specialized
         );
 
         let (_, tree_short) = temporal_composition_formula("tree3", 9, 137).unwrap();
-        let fallback = cq_portfolio_decision(&tree_short, 9, 137, 50).unwrap();
+        let fallback = cq_portfolio_decision(&tree_short, 9, 137, 50, 5.0).unwrap();
         assert!(!fallback.specialized);
         assert_eq!(fallback.reason, "cdcl-fallback");
 
         let (_, tree_long) = temporal_composition_formula("tree3", 11, 1_333).unwrap();
-        let conservative_fallback = cq_portfolio_decision(&tree_long, 11, 1_333, 50).unwrap();
+        let conservative_fallback = cq_portfolio_decision(&tree_long, 11, 1_333, 50, 5.0).unwrap();
         assert!(!conservative_fallback.specialized);
         assert_eq!(conservative_fallback.reason, "cdcl-fallback");
 
         let (_, watchdog) = temporal_composition_formula("watchdog4", 9, 137).unwrap();
         assert_eq!(
-            cq_portfolio_decision(&watchdog, 9, 137, 50).unwrap().reason,
+            cq_portfolio_decision(&watchdog, 9, 137, 50, 5.0)
+                .unwrap()
+                .reason,
             "dense-transition"
         );
         let (_, sensor_vote) = temporal_composition_formula("sensor-vote3", 8, 257).unwrap();
         assert_eq!(
-            cq_portfolio_decision(&sensor_vote, 8, 257, 50)
+            cq_portfolio_decision(&sensor_vote, 8, 257, 50, 5.0)
                 .unwrap()
                 .reason,
             "cdcl-fallback"
         );
+    }
+
+    #[test]
+    fn ascii_aiger_import_preserves_transition_and_initial_state() {
+        let path =
+            std::env::temp_dir().join(format!("cq-sat-aiger-import-{}.aag", std::process::id()));
+        fs::write(
+            &path,
+            "aag 5 0 4 1 1\n2 4\n4 6\n6 8\n8 10\n8\n10 2 5\nc\nsmall closed sequential model\n",
+        )
+        .unwrap();
+        let model = parse_aag(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(model.latches.len(), 4);
+        assert_eq!(model.outputs, vec![8]);
+        let (variables, formula, initial) = aag_temporal_formula(&model, 3).unwrap();
+        assert_eq!(variables, 16);
+        assert_eq!(initial, vec![Some(false); 4]);
+        assert!(
+            cq_portfolio_decision(&formula, 4, 3, 8, 2.0)
+                .unwrap()
+                .specialized
+        );
+
+        let transition = SymbolicTemporalTransition::recognize(&formula, 4, 3).unwrap();
+        let mut assumptions = vec![None; variables];
+        assumptions[..4].copy_from_slice(&initial);
+        let assignment = transition.query(&assumptions).unwrap();
+        assert!(assignment.iter().all(|value| !value));
+        assert!(satisfies(&formula, &assignment));
+    }
+
+    #[test]
+    fn external_aiger_counter_reports_exact_unsafe_trace() {
+        let input =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/aiger/counter-overflow-4.aag");
+        let output = std::env::temp_dir().join(format!(
+            "cq-sat-aiger-counter-{}-portfolio.csv",
+            std::process::id()
+        ));
+        let safety = std::env::temp_dir().join(format!(
+            "cq-sat-aiger-counter-{}-safety.txt",
+            std::process::id()
+        ));
+        verify_cq_aiger(&input, 20, 10, 200_000, &output, &safety).unwrap();
+        let portfolio = fs::read_to_string(&output).unwrap();
+        let result = fs::read_to_string(&safety).unwrap();
+        std::fs::remove_file(output).unwrap();
+        std::fs::remove_file(safety).unwrap();
+        assert!(portfolio.contains(",cdcl,cdcl-fallback,"));
+        assert!(portfolio.contains(",true,true,ok\n"));
+        assert!(result.starts_with("status=UNSAFE\n"));
+        assert!(result.contains("bad_frame=15\n"));
+        assert!(result.contains("15,1111\n"));
+    }
+
+    #[test]
+    fn constant_false_aiger_property_reports_safe_without_solving() {
+        let stem = format!("cq-sat-aiger-safe-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aag"));
+        let output = std::env::temp_dir().join(format!("{stem}.csv"));
+        let safety = std::env::temp_dir().join(format!("{stem}.txt"));
+        fs::write(&input, "aag 1 0 1 1 0\n2 2\n0\n").unwrap();
+        verify_cq_aiger(&input, 20, 10, 200_000, &output, &safety).unwrap();
+        let portfolio = fs::read_to_string(&output).unwrap();
+        let result = fs::read_to_string(&safety).unwrap();
+        std::fs::remove_file(input).unwrap();
+        std::fs::remove_file(output).unwrap();
+        std::fs::remove_file(safety).unwrap();
+        assert!(portfolio.contains(",static,constant-false-output,"));
+        assert!(portfolio.lines().all(|line| line.split(',').count() == 26));
+        assert!(result.starts_with("status=SAFE\n"));
+        assert!(result.contains("backend=static\n"));
     }
 }

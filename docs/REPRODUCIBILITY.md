@@ -413,6 +413,23 @@ must select CDCL, agree, and validate witnesses. The rejected broad-gate candida
 and its two 200-query mixed-dynamics stability seeds remain in `results` as the
 counterexample that motivated the conservative release rule.
 
+## External AIGER counter-overflow model
+
+```sh
+./target/release/continuation-quotient-sat \
+  verify-cq-aiger examples/aiger/counter-overflow-4.aag \
+  137 10 200000 results/reproduced-aiger-counter.csv \
+  results/reproduced-aiger-counter-safety.txt
+```
+
+The single row must report `width=4`, `backend=cdcl`,
+`gate_reason=cdcl-fallback`, `assumptions_per_query=8`, `queries=137`,
+`sat_queries=8`, `unsat_queries=129`, `agreement=true`, and
+`witnesses_valid=true`. The safety result must report `status=UNSAFE` and
+`bad_frame=15`, followed by the full frame trace. Timing columns are exploratory.
+The model's upstream revision and third-party MIT license are recorded under
+`examples/aiger`.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
