@@ -57,10 +57,11 @@ See [Research findings](docs/FINDINGS.md) and
   results/local-watchdog-portfolio.csv
 ```
 
-The static gate uses only transition density, dependency fan-out, width, and the
-declared query-batch size. It never trial-solves candidate backends. Dense models
-up to width nine with at least eight queries and narrow hub models up to width
-seven with at least 128 queries use CQ-SAT/GCC; everything else uses the exact
+The static gate uses only transition density, dependency fan-out, width, declared
+query-batch size, and assumption density. It never trial-solves candidate
+backends. Dense models up to width nine with at least eight queries and narrow hub
+models up to width seven with at least 128 queries use CQ-SAT/GCC when the batch
+averages no more than one state-width of assumptions; everything else uses the exact
 persistent-CDCL path. The CSV records
 the backend, reason, recognition cost, structural metrics, speedups, agreement,
 and witness validity.
@@ -68,6 +69,30 @@ and witness validity.
 See the executable [watchdog/interlock](examples/watchdog-controller.md) and
 [redundant sensor-voting](examples/redundant-sensor-monitor.md) examples for the
 accelerated and safe-fallback paths.
+
+### Standard AIGER input
+
+CQ-SAT/GCC can ingest closed deterministic ASCII AIGER safety models directly:
+
+```sh
+./target/release/continuation-quotient-sat \
+  verify-cq-aiger examples/aiger/counter-overflow-4.aag \
+  137 10 200000 results/local-aiger-counter.csv \
+  results/local-aiger-counter-safety.txt
+```
+
+The bundled [four-bit counter overflow model](examples/aiger/README.md) is an
+independently authored, MIT-licensed model pinned to its upstream revision. Its
+bad-state output becomes an exhaustive set of exact bounded-reachability queries.
+The command reports `SAFE` or `UNSAFE` and writes a complete counterexample trace
+for an unsafe model. Static query-shape
+analysis rejects the specialized backend for this workload and uses CDCL: this is
+a real external validation of the portfolio's no-regression path, not a claimed
+CQ-SAT/GCC speedup.
+
+The current importer accepts ASCII `aag` models with no primary inputs and one to
+nine latches. Broader nondeterministic/input-driven AIGER support is not yet
+implemented and such models are rejected explicitly.
 
 ## Build and test
 

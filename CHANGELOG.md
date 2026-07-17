@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-07-17
+
+- Add a validated ASCII AIGER import path for closed deterministic safety models,
+  including initial latch values and bad-state reachability queries.
+- Add an independently sourced, revision-pinned four-bit counter-overflow model
+  with its upstream MIT license and an executable portfolio workflow.
+- Extend the static gate with query assumption density after the external model
+  exposed a full-state-query counterexample to density-only admission.
+
 ## 0.2.0 - 2026-07-17
 
 - Add the bounded, calibration-free CQ-SAT/GCC portfolio gate with exact

@@ -469,6 +469,30 @@ not yet as a general DIMACS auto-solver. The next product frontier is accepting 
 external transition-system interchange format and validating independently sourced
 hardware/protocol models without generator labels.
 
+## External ASCII AIGER validation
+
+The first standard interchange path parses and validates closed deterministic
+ASCII AIGER (`aag`) models with at most nine latches. It evaluates the AIG exactly,
+constructs the repeated latch transition CNF, preserves declared initial values,
+and converts bad-state outputs into bounded reachability queries. Models with
+primary inputs are rejected rather than unsoundly treated as deterministic.
+
+An independently authored four-bit counter-overflow model from Tobias Nießen's
+MIT-licensed AIGER safety suite exposed a gate counterexample. Transition density
+alone selected CQ-SAT/GCC, whose query path was approximately 0.22× the CDCL
+baseline on the first 50 property queries. Full-state property enumeration has a
+different cost profile from sparse trace observations. The v0.3.0 gate
+therefore also reads average assumption count—a static property of the declared
+batch—and rejects batches averaging more than one state-width of assumptions.
+With that correction the external model selects exact CDCL, agrees on all 50
+sampled queries, validates all witnesses, and finds three reachable bad-state
+queries. The exhaustive 137-query safety run reports `UNSAFE` at frame 15, finds
+eight bad frames through frame 137, and emits the complete counterexample trace.
+
+This is the first independently sourced model exercised through the portfolio.
+It validates exact bounded-safety reporting and safe selection, not specialized
+acceleration. Input-driven AIGER semantics remain the next product step.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

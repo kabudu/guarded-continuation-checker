@@ -1,0 +1,2 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,assumptions_per_query,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+counter-overflow-4.aag,4,137,552,8768,137,10,200000,cdcl,cdcl-fallback,16.000,0,8.000,10542,10542,0,0,14013.073,14013.073,1.000000,0.994539,8,129,true,true,ok
