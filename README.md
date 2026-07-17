@@ -56,6 +56,8 @@ Untrusted inputs must use the probed, fail-closed
 [hostile-RTL isolation profile v1](docs/ISOLATION_PROFILE_V1.md).
 Any use in a regulated or safety-related programme must follow the bounded
 [standards applicability and assurance claims](docs/STANDARDS_APPLICABILITY.md).
+The remaining independent assessment and design-partner gates have fixed
+[external evidence and pilot acceptance criteria](docs/EXTERNAL_EVIDENCE_PROTOCOL.md).
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

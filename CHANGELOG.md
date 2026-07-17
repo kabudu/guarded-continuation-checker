@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.19.0 - 2026-07-17
+
+- Define fixed independence, attack reproduction, technical review, partner
+  cohort, oracle comparison, evidence-register, and acceptance requirements for
+  closing the remaining production gates without moving the goalposts.
+- Add the canonical header-only external-evidence register schema without
+  inventing partner or review results.
+
 ## 0.18.0 - 2026-07-17
 
 - Define CQ-SAT/GCC's exact bounded, model-relative assurance claim and its

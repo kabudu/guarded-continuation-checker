@@ -51,15 +51,17 @@ tool production-grade.
 - [x] Differential validation across a small revision-pinned public RTL corpus,
   including SAFE and UNSAFE properties and multiple Yosys versions.
 - [ ] Differential validation across a substantial design-partner RTL corpus,
-  including representative toolchains, properties, and failure modes.
+  including the cohort, coverage, oracle, and acceptance requirements in
+  `EXTERNAL_EVIDENCE_PROTOCOL.md`.
 - [x] In-repository security review covering source ingestion, subprocess and
   hostile-RTL isolation, artifact integrity, and dependency supply chain.
 - [ ] Independent external security assessment of the documented threat model
-  and hostile-RTL isolation boundary.
+  and hostile-RTL isolation boundary against `EXTERNAL_EVIDENCE_PROTOCOL.md`.
 - [x] Operational documentation and executable qualification for installation,
   upgrades, rollback, support, incident response, restoration, and result
   retention.
-- [ ] Independent technical review and successful design-partner pilots.
+- [ ] Independent technical review and successful design-partner pilots meeting
+  the independence, reproduction, evidence-register, and acceptance protocol.
 - [x] Standards applicability and permitted assurance wording documented for
   ISO 26262, IEC 61508, IEC 62304, FDA infusion-pump guidance, and IEC
   81001-5-1 without implying conformity, certification, or tool qualification.
