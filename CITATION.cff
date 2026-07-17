@@ -6,11 +6,11 @@ authors:
   - family-names: "Kabudu"
 repository-code: "https://github.com/kabudu/continuation-quotient-sat"
 license: Apache-2.0
-version: 0.9.0
+version: 0.10.0
 date-released: 2026-07-17
 abstract: >-
   A Rust research implementation of calibration-free CQ-SAT/GCC portfolio
   solving for repeated temporal SAT and bounded multi-file RTL safety queries,
   with portable Yosys synthesis to ASCII AIGER, exact CDCL fallback, bounded
-  repeated-property reuse, explicit named environment assumptions, complete
-  witness recovery, and a product-facing firmware CI safety gate.
+  repeated-property reuse, explicit named environment assumptions, contained
+  RTL synthesis, complete witness recovery, and a firmware CI safety gate.

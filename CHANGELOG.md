@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.10.0 - 2026-07-17
+
 - Run Yosys in a dedicated Unix process group with a 512 MiB output-file cap,
   kill the complete group on timeout, and enforce a 2 GiB address-space limit
   on Linux.
