@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 16
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv pump-components.sv pump-system.sv
+prep -top infusion_pump_system
+
+[files]
+project/pump-components.sv
+project/pump-system.sv

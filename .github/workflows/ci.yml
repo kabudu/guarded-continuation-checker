@@ -34,10 +34,12 @@ jobs:
           git -C /tmp/sby checkout --detach FETCH_HEAD
           python3 /tmp/sby/sbysrc/sby.py -f -d /tmp/sby-safe safe-controller.sby
           python3 /tmp/sby/sbysrc/sby.py -f -d /tmp/sby-multimodule multimodule-controller.sby
+          python3 /tmp/sby/sbysrc/sby.py -f -d /tmp/sby-project project/pump-system.sby
           if python3 /tmp/sby/sbysrc/sby.py -f -d /tmp/sby-regression door-interlock-regression.sby; then
             echo "regressed controller unexpectedly passed SymbiYosys"
             exit 1
           fi
           test -f /tmp/sby-safe/PASS
           test -f /tmp/sby-multimodule/PASS
+          test -f /tmp/sby-project/PASS
           test -f /tmp/sby-regression/FAIL

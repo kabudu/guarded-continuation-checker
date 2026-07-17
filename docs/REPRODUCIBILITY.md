@@ -483,6 +483,23 @@ ASCII AIGER model, signal map, metrics, safety report, and final run manifest.
 Repository CI independently requires the matching SymbiYosys/Z3 `.sby` jobs to
 return PASS for the protected controller and FAIL for the regression.
 
+For the split-source form of the multi-module controller:
+
+```sh
+target/release/continuation-quotient-sat \
+  firmware-rtl-project-safety-gate infusion_pump_system 8 \
+  results/rtl-project-safe \
+  examples/products/infusion-pump/rtl/project/pump-components.sv \
+  examples/products/infusion-pump/rtl/project/pump-system.sv
+```
+
+The command must exit 0, report `SAFE`, publish `source-0000.sv` and
+`source-0001.sv`, and record `source_count=2` with ordered `source_0` and
+`source_1` entries under `schema_version=1`. Reusing the directory with the legacy single-file command
+must remove both numbered snapshots before publishing `source.sv` and the new
+manifest. CI independently requires `project/pump-system.sby` to pass through
+depth 16 with SymbiYosys and Z3.
+
 ### Multi-module query-reuse benchmark
 
 Generate the checked-in model from its five-module SystemVerilog source and run

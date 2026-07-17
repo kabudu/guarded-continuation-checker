@@ -93,18 +93,28 @@ portfolio uses reuse only for multi-property encodings with at most 15,000
 clauses. The checked-in result wins through horizon 16 and selects cold BMC at
 horizons 32 and 64, where unrestricted reuse becomes slower.
 
+The same design is split into two files under [`rtl/project`](rtl/project) to
+exercise the project interface:
+
+```sh
+target/release/continuation-quotient-sat \
+  firmware-rtl-project-safety-gate infusion_pump_system 100 \
+  target/firmware-safety/project \
+  examples/products/infusion-pump/rtl/project/pump-components.sv \
+  examples/products/infusion-pump/rtl/project/pump-system.sv
+```
+
 ## Deliberate boundary
 
-The workflow accepts one SystemVerilog source file, a simple top-module
-identifier, and one or more explicit top-level bad outputs. Modules declared in
-that source are flattened before export. Yosys must lower the design
+The workflow accepts either one SystemVerilog source or a project of up to 64
+ordered sources, a simple top-module identifier, and one or more explicit
+top-level bad outputs. Modules are flattened before export. Yosys must lower the design
 to the original five-field ASCII AIGER subset already validated by this project.
 The source is capped at 10 MiB and synthesis at 120 seconds; the existing AIGER
 and bounded-unrolling resource limits still apply afterwards.
 Synthesis don't-care bits are explicitly lowered to zero, while unconstrained
 top-level signals remain primary inputs. General AIGER 1.9 bad-state/constraint
-sections, multiple RTL source files,
-include directories, parameter overrides, and source-level assertion mapping are
+sections, include directories, parameter overrides, and source-level assertion mapping are
 not yet accepted. Unsupported synthesis or model shapes fail with exit status 2
 rather than being approximated.
 
