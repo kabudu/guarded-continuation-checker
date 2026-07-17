@@ -1,0 +1,2 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+hub3,7,1333,9338,74648,200,10,200000,cq-gcc,narrow-hub,8.000,7,4064375,11904625,574,11,541154.375,664260.205,1.227487,1.105852,27,173,true,true,ok

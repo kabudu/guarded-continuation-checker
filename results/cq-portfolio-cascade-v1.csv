@@ -1,0 +1,4 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+cascade4,9,137,1242,19728,50,10,200000,cq-gcc,dense-transition,16.000,4,1190000,40767583,51664,134,4248420.020,9375482.500,2.206816,1.851482,42,8,true,true,ok
+cascade4,9,1333,12006,191952,50,10,200000,cq-gcc,dense-transition,16.000,4,11919292,70104126,51664,134,35692530.820,93228434.160,2.611987,2.513261,39,11,true,true,ok
+cascade4,9,7777,70002,1119888,50,10,200000,cq-gcc,dense-transition,16.000,4,66821500,213881584,51664,134,261772069.980,852684363.320,3.257354,3.204981,39,11,true,true,ok

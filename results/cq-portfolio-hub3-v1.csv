@@ -1,0 +1,7 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+hub3,7,137,966,7672,50,10,200000,cdcl,cdcl-fallback,8.000,7,445458,445458,0,0,273831.660,273831.660,1.000000,0.968490,4,46,true,true,ok
+hub3,7,1333,9338,74648,50,10,200000,cdcl,cdcl-fallback,8.000,7,5398375,5398375,0,0,3268633.340,3268633.340,1.000000,0.968025,7,43,true,true,ok
+hub3,9,137,1242,9864,50,10,200000,cdcl,cdcl-fallback,8.000,9,549333,549333,0,0,390471.660,390471.660,1.000000,0.972633,6,44,true,true,ok
+hub3,9,1333,12006,95976,50,10,200000,cdcl,cdcl-fallback,8.000,9,5298708,5298708,0,0,4163706.660,4163706.660,1.000000,0.975180,8,42,true,true,ok
+hub3,11,137,1518,12056,50,10,200000,cdcl,cdcl-fallback,8.000,11,655833,655833,0,0,354519.180,354519.180,1.000000,0.964322,5,45,true,true,ok
+hub3,11,1333,14674,117304,50,10,200000,cdcl,cdcl-fallback,8.000,11,6464708,6464708,0,0,6540217.500,6540217.500,1.000000,0.980614,9,41,true,true,ok

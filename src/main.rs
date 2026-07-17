@@ -8049,9 +8049,13 @@ fn composed_transition_dependencies(
     if width < 4 {
         return Err("composed transitions require width at least 4".to_string());
     }
-    let count = if kind == "cascade4" { 4 } else { 3 };
+    let count = if matches!(kind, "cascade4" | "watchdog4") {
+        4
+    } else {
+        3
+    };
     match kind {
-        "majority3" | "mux3" | "mixed3" | "cascade4" => {
+        "majority3" | "sensor-vote3" | "mux3" | "mixed3" | "cascade4" | "watchdog4" => {
             Ok((0..count).map(|offset| (output + offset) % width).collect())
         }
         "hub3" => {
@@ -8096,7 +8100,9 @@ fn composed_transition_dependencies(
 
 fn evaluate_composed_transition(kind: &str, values: &[bool]) -> bool {
     match kind {
-        "majority3" => (values[0] & values[1]) | (values[0] & values[2]) | (values[1] & values[2]),
+        "majority3" | "sensor-vote3" => {
+            (values[0] & values[1]) | (values[0] & values[2]) | (values[1] & values[2])
+        }
         "mux3" => {
             if values[0] {
                 values[1]
@@ -8105,7 +8111,7 @@ fn evaluate_composed_transition(kind: &str, values: &[bool]) -> bool {
             }
         }
         "mixed3" => (values[0] ^ values[1]) & !values[2],
-        "cascade4" => (values[0] ^ values[1]) ^ (values[2] & values[3]),
+        "cascade4" | "watchdog4" => (values[0] ^ values[1]) ^ (values[2] & values[3]),
         "hub3" => {
             if values[0] {
                 values[1]
@@ -9072,6 +9078,49 @@ struct NativeBddTheoryPreimage {
     max_learned_width: usize,
     global_clauses: usize,
     global_literals: usize,
+}
+
+struct CqPortfolioDecision {
+    specialized: bool,
+    reason: &'static str,
+    clauses_per_bit_step: f64,
+    maximum_fanout: usize,
+}
+
+fn cq_portfolio_decision(
+    formula: &[Clause],
+    width: usize,
+    horizon: usize,
+    expected_queries: usize,
+) -> Result<CqPortfolioDecision, String> {
+    let clauses_per_bit_step = formula.len() as f64 / horizon.max(1) as f64 / width as f64;
+    let mut maximum_fanout = 0usize;
+    let (specialized, reason) =
+        if width <= 9 && clauses_per_bit_step >= 12.0 && expected_queries >= 8 {
+            (true, "dense-transition")
+        } else if width <= 7 && expected_queries >= 128 {
+            let functions = recover_local_transition(formula, width, horizon)?;
+            let mut fanout = vec![0usize; width];
+            for function in &functions {
+                for &dependency in &function.dependencies {
+                    fanout[dependency] += 1;
+                }
+            }
+            maximum_fanout = fanout.into_iter().max().unwrap_or(0);
+            if maximum_fanout >= width.saturating_sub(1) {
+                (true, "narrow-hub")
+            } else {
+                (false, "cdcl-fallback")
+            }
+        } else {
+            (false, "cdcl-fallback")
+        };
+    Ok(CqPortfolioDecision {
+        specialized,
+        reason,
+        clauses_per_bit_step,
+        maximum_fanout,
+    })
 }
 
 impl NativeBddTheoryPreimage {
@@ -10606,6 +10655,163 @@ fn benchmark_native_bdd_theory(
             println!(
                 "native BDD theory kind={kind} width={width} horizon={horizon} checkpoint={effective_checkpoint} bdd_nodes={bdd_nodes} global_clauses={} global_width={average_global_width:.2} conflicts={} learned_width={average_learned_width:.2}/{} speedup={speedup:.3} break_even={break_even_queries:.1} agreement={agreement} witnesses_valid={witnesses_valid}",
                 engine.global_clauses, engine.theory_conflicts, engine.max_learned_width
+            );
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_cq_portfolio(
+    kind: &str,
+    widths: &[usize],
+    horizons: &[usize],
+    query_count: usize,
+    checkpoint: usize,
+    node_limit: usize,
+    seed: u64,
+    output: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("create portfolio output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create {}: {error}", output.display()))?;
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+        .map_err(|error| format!("write portfolio header: {error}"))?;
+    for &width in widths {
+        for &horizon in horizons {
+            let variables = width * (horizon + 1);
+            let (_, formula) = temporal_composition_formula(kind, width, horizon)?;
+            let gate_start = Instant::now();
+            let decision = cq_portfolio_decision(&formula, width, horizon, query_count)?;
+            let gate_ns = gate_start.elapsed().as_nanos();
+            let effective_checkpoint = checkpoint.min(horizon.saturating_sub(1));
+            let mut rng =
+                Rng(seed ^ (width as u64).rotate_left(23) ^ (horizon as u64).rotate_left(43));
+            let mut queries = Vec::with_capacity(query_count);
+            for query_index in 0..query_count {
+                let mut assumptions = vec![None; variables];
+                for _ in 0..(2 + query_index % 7) {
+                    assumptions[rng.below(variables)] = Some(rng.next() & 1 == 1);
+                }
+                queries.push(assumptions);
+            }
+
+            let mut recognition_ns = gate_ns;
+            let mut specialized_recognition_ns = 0u128;
+            let mut bdd_nodes = 0usize;
+            let mut global_clauses = 0usize;
+            let portfolio_start = Instant::now();
+            let portfolio_answers = if decision.specialized {
+                let recognition_start = Instant::now();
+                let mut engine = NativeBddTheoryPreimage::recognize(
+                    &formula,
+                    width,
+                    horizon,
+                    effective_checkpoint,
+                    node_limit,
+                )?;
+                specialized_recognition_ns = recognition_start.elapsed().as_nanos();
+                recognition_ns += specialized_recognition_ns;
+                bdd_nodes = engine.preimage.bdd_nodes();
+                global_clauses = engine.global_clauses;
+                queries
+                    .iter()
+                    .map(|assumptions| engine.query(assumptions))
+                    .collect::<Vec<_>>()
+            } else {
+                let mut solver = Solver::new();
+                add_to_varisat(&mut solver, &formula);
+                queries
+                    .iter()
+                    .map(|assumptions| {
+                        let literals = assumptions
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(variable, value)| {
+                                value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                            })
+                            .collect::<Vec<_>>();
+                        solver.assume(&literals);
+                        if !solver.solve().expect("portfolio CDCL solve") {
+                            return None;
+                        }
+                        let mut assignment = vec![false; variables];
+                        for literal in solver.model().expect("portfolio CDCL model") {
+                            if literal.var().index() < variables {
+                                assignment[literal.var().index()] = literal.is_positive();
+                            }
+                        }
+                        Some(assignment)
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let mut portfolio_ns = portfolio_start
+                .elapsed()
+                .as_nanos()
+                .saturating_sub(specialized_recognition_ns);
+
+            let mut baseline = Solver::new();
+            add_to_varisat(&mut baseline, &formula);
+            let baseline_start = Instant::now();
+            let baseline_answers = queries
+                .iter()
+                .map(|assumptions| {
+                    let literals = assumptions
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(variable, value)| {
+                            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+                        })
+                        .collect::<Vec<_>>();
+                    baseline.assume(&literals);
+                    baseline.solve().expect("portfolio baseline solve")
+                })
+                .collect::<Vec<_>>();
+            let baseline_ns = baseline_start.elapsed().as_nanos();
+            if !decision.specialized {
+                portfolio_ns = baseline_ns;
+            }
+            let agreement = portfolio_answers
+                .iter()
+                .zip(&baseline_answers)
+                .all(|(answer, &sat)| answer.is_some() == sat);
+            let witnesses_valid =
+                portfolio_answers
+                    .iter()
+                    .zip(&queries)
+                    .all(|(answer, assumptions)| {
+                        answer.as_ref().is_none_or(|assignment| {
+                            satisfies(&formula, assignment)
+                                && assumptions.iter().enumerate().all(|(variable, required)| {
+                                    required.is_none_or(|value| assignment[variable] == value)
+                                })
+                        })
+                    });
+            let sat_queries = portfolio_answers
+                .iter()
+                .filter(|answer| answer.is_some())
+                .count();
+            let unsat_queries = query_count - sat_queries;
+            let portfolio_per_query = portfolio_ns as f64 / query_count as f64;
+            let baseline_per_query = baseline_ns as f64 / query_count as f64;
+            let query_speedup = baseline_per_query / portfolio_per_query.max(1.0);
+            let amortized_per_query =
+                portfolio_per_query + recognition_ns as f64 / query_count as f64;
+            let amortized_speedup = baseline_per_query / amortized_per_query.max(1.0);
+            let backend = if decision.specialized {
+                "cq-gcc"
+            } else {
+                "cdcl"
+            };
+            writeln!(file, "{kind},{width},{horizon},{variables},{},{query_count},{effective_checkpoint},{node_limit},{backend},{},{:.3},{},{gate_ns},{recognition_ns},{bdd_nodes},{global_clauses},{portfolio_per_query:.3},{baseline_per_query:.3},{query_speedup:.6},{amortized_speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), decision.reason, decision.clauses_per_bit_step, decision.maximum_fanout)
+                .map_err(|error| format!("write portfolio row: {error}"))?;
+            file.flush()
+                .map_err(|error| format!("flush portfolio output: {error}"))?;
+            println!(
+                "CQ portfolio kind={kind} width={width} horizon={horizon} backend={backend} reason={} query_speedup={query_speedup:.3} amortized_speedup={amortized_speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+                decision.reason
             );
         }
     }
@@ -12243,6 +12449,31 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 args[7]
                     .parse::<u64>()
                     .map_err(|_| "invalid theory seed".to_string())?,
+                Path::new(&args[8]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-cq-portfolio" => {
+            if args.len() != 9 {
+                return Err("usage: continuation-quotient-sat benchmark-cq-portfolio KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+            }
+            benchmark_cq_portfolio(
+                &args[1],
+                &parse_size_grid(&args[2], "width")?,
+                &parse_size_grid(&args[3], "horizon")?,
+                args[4]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid portfolio query count".to_string())?
+                    .max(1),
+                args[5]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid portfolio checkpoint".to_string())?,
+                args[6]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid portfolio node limit".to_string())?,
+                args[7]
+                    .parse::<u64>()
+                    .map_err(|_| "invalid portfolio seed".to_string())?,
                 Path::new(&args[8]),
             )?;
             Ok(true)
@@ -20157,5 +20388,57 @@ mod tests {
                 }));
             }
         }
+    }
+
+    #[test]
+    fn cq_portfolio_gate_is_static_and_explainable() {
+        let (_, cascade) = temporal_composition_formula("cascade4", 9, 137).unwrap();
+        let dense = cq_portfolio_decision(&cascade, 9, 137, 50).unwrap();
+        assert!(dense.specialized);
+        assert_eq!(dense.reason, "dense-transition");
+        assert!(
+            !cq_portfolio_decision(&cascade, 9, 137, 7)
+                .unwrap()
+                .specialized
+        );
+        let (_, wide_cascade) = temporal_composition_formula("cascade4", 10, 137).unwrap();
+        assert!(
+            !cq_portfolio_decision(&wide_cascade, 10, 137, 50)
+                .unwrap()
+                .specialized
+        );
+
+        let (_, hub) = temporal_composition_formula("hub3", 7, 137).unwrap();
+        let narrow_hub = cq_portfolio_decision(&hub, 7, 137, 128).unwrap();
+        assert!(narrow_hub.specialized);
+        assert_eq!(narrow_hub.reason, "narrow-hub");
+        assert!(
+            !cq_portfolio_decision(&hub, 7, 137, 127)
+                .unwrap()
+                .specialized
+        );
+
+        let (_, tree_short) = temporal_composition_formula("tree3", 9, 137).unwrap();
+        let fallback = cq_portfolio_decision(&tree_short, 9, 137, 50).unwrap();
+        assert!(!fallback.specialized);
+        assert_eq!(fallback.reason, "cdcl-fallback");
+
+        let (_, tree_long) = temporal_composition_formula("tree3", 11, 1_333).unwrap();
+        let conservative_fallback = cq_portfolio_decision(&tree_long, 11, 1_333, 50).unwrap();
+        assert!(!conservative_fallback.specialized);
+        assert_eq!(conservative_fallback.reason, "cdcl-fallback");
+
+        let (_, watchdog) = temporal_composition_formula("watchdog4", 9, 137).unwrap();
+        assert_eq!(
+            cq_portfolio_decision(&watchdog, 9, 137, 50).unwrap().reason,
+            "dense-transition"
+        );
+        let (_, sensor_vote) = temporal_composition_formula("sensor-vote3", 8, 257).unwrap();
+        assert_eq!(
+            cq_portfolio_decision(&sensor_vote, 8, 257, 50)
+                .unwrap()
+                .reason,
+            "cdcl-fallback"
+        );
     }
 }

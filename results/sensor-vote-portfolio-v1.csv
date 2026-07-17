@@ -1,0 +1,5 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+sensor-vote3,8,257,2064,16448,50,10,200000,cdcl,cdcl-fallback,8.000,0,125,125,0,0,3754237.500,3754237.500,1.000000,0.999999,24,26,true,true,ok
+sensor-vote3,8,2049,16400,131136,50,10,200000,cdcl,cdcl-fallback,8.000,0,0,0,0,0,34621205.820,34621205.820,1.000000,1.000000,24,26,true,true,ok
+sensor-vote3,12,257,3096,24672,50,10,200000,cdcl,cdcl-fallback,8.000,0,125,125,0,0,14159566.660,14159566.660,1.000000,1.000000,27,23,true,true,ok
+sensor-vote3,12,2049,24600,196704,50,10,200000,cdcl,cdcl-fallback,8.000,0,42,42,0,0,418535779.160,418535779.160,1.000000,1.000000,32,18,true,true,ok

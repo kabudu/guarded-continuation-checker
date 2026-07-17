@@ -3,6 +3,10 @@
 Research implementation of exact continuation-quotient compilation for Boolean
 satisfiability problems with small residual state spaces.
 
+The current product-facing backend is **CQ-SAT/GCC**: Continuation-Quotient SAT
+with Global Checkpoint Clauses, wrapped in a calibration-free portfolio gate that
+uses persistent CDCL outside its validated structural regime.
+
 The method processes variables in a fixed order, canonicalizes the residual CNF
 after each Boolean choice, and merges prefixes only when their residual formulas
 are exactly identical. A representative path is retained so satisfiable terminal
@@ -44,6 +48,26 @@ Validated findings:
 
 See [Research findings](docs/FINDINGS.md) and
 [Reproducibility](docs/REPRODUCIBILITY.md) before interpreting benchmark results.
+
+## CQ-SAT/GCC portfolio
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-cq-portfolio watchdog4 9 137,1333,7777 50 10 200000 4141414 \
+  results/local-watchdog-portfolio.csv
+```
+
+The static gate uses only transition density, dependency fan-out, width, and the
+declared query-batch size. It never trial-solves candidate backends. Dense models
+up to width nine with at least eight queries and narrow hub models up to width
+seven with at least 128 queries use CQ-SAT/GCC; everything else uses the exact
+persistent-CDCL path. The CSV records
+the backend, reason, recognition cost, structural metrics, speedups, agreement,
+and witness validity.
+
+See the executable [watchdog/interlock](examples/watchdog-controller.md) and
+[redundant sensor-voting](examples/redundant-sensor-monitor.md) examples for the
+accelerated and safe-fallback paths.
 
 ## Build and test
 
@@ -192,7 +216,7 @@ cycle once and answers later observations by exact modular cycle lookup.
 ## Repository layout
 
 - `src/main.rs`: solver, generators, benchmarks, and regression tests.
-- `examples`: small admitted demonstration formula.
+- `examples`: executable DIMACS and temporal-verification demonstrations.
 - `results`: curated CSV summaries supporting the release claims.
 - `docs`: findings, limitations, and exact reproduction commands.
 

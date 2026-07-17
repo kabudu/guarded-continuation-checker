@@ -390,6 +390,29 @@ All 18 rows must agree and validate witnesses. Six measured rows should report a
 speedup above one; timing is exploratory, while logical outcomes and structural
 counts are deterministic.
 
+## Calibration-free CQ-SAT/GCC portfolio
+
+Run the accelerated and safe-fallback examples:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-cq-portfolio watchdog4 9 137,1333,7777 50 10 200000 4141414 \
+  results/reproduced-watchdog-portfolio.csv
+./target/release/continuation-quotient-sat \
+  benchmark-cq-portfolio sensor-vote3 8,12 257,2049 50 10 200000 5151515 \
+  results/reproduced-sensor-vote-portfolio.csv
+```
+
+Watchdog rows must select `cq-gcc` for `dense-transition`; sensor rows must select
+`cdcl` for `cdcl-fallback`. Every row must agree and validate witnesses. Query
+speed for CDCL fallback is normalized to one because it is the baseline path.
+
+The frozen unseen holdouts use `majority3`, `mux3`, and `mixed3` at widths
+6, 8, 10, and 12 and horizons 257 and 2,049. All 24 final conservative-gate rows
+must select CDCL, agree, and validate witnesses. The rejected broad-gate candidate
+and its two 200-query mixed-dynamics stability seeds remain in `results` as the
+counterexample that motivated the conservative release rule.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

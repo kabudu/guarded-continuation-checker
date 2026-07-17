@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-17
+
+- Add the bounded, calibration-free CQ-SAT/GCC portfolio gate with exact
+  persistent-CDCL fallback and declared-query amortization thresholds.
+- Add unseen majority, multiplexer, and mixed-dynamics holdouts plus independent
+  query-seed stability checks.
+- Add executable watchdog/interlock and redundant sensor-voting verification
+  examples showing specialized and fallback decisions.
+
 - Add a bounded-width temporal model-checking phase benchmark.
 - Add an exact repeated-transition kernel with full witness reconstruction.
 - Preserve dense-quotient negative results alongside kernel measurements.
