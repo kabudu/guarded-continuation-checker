@@ -181,6 +181,9 @@ The global-clause compiler enumerates the bounded checkpoint image once,
 generalizes unreachable states into exact clauses, and installs them in the
 suffix solver for every query. On the measured width-9 cascade this is the first
 variant with phase and unseen-holdout speedups after compilation amortization.
+Cross-family validation is mixed: 6 of 18 asymmetric rows beat full CDCL and five
+amortize within 50 queries. Treat the backend as an admitted specialization, not
+a universal replacement.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
