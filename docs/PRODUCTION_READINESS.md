@@ -60,8 +60,9 @@ tool production-grade.
   upgrades, rollback, support, incident response, restoration, and result
   retention.
 - [ ] Independent technical review and successful design-partner pilots.
-- [ ] Standards applicability documented without implying ISO 26262, IEC 61508,
-  IEC 62304, or other certification that has not been obtained.
+- [x] Standards applicability and permitted assurance wording documented for
+  ISO 26262, IEC 61508, IEC 62304, FDA infusion-pump guidance, and IEC
+  81001-5-1 without implying conformity, certification, or tool qualification.
 
 Until these boxes have evidence, external messaging must say “research preview”
 or “design-partner evaluation”, never “production-certified”.

@@ -38,6 +38,9 @@ scripts/isolated-rtl-evaluation.sh \
 
 See [hostile-RTL isolation profile v1](ISOLATION_PROFILE_V1.md) for enforced
 controls, exit semantics, evidence, and the cases that still require a VM.
+For safety-related use, retain the project-owned review record required by
+[standards applicability and assurance claims](STANDARDS_APPLICABILITY.md);
+a validated bundle by itself is not an assurance case or release approval.
 
 ## Install and qualify
 
