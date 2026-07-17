@@ -25,6 +25,8 @@ jobs:
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Test external production evidence gate
+        run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test
         run: |
           cargo build --release --locked
