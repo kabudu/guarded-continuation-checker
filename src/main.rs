@@ -8,6 +8,8 @@ use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
+const RTL_ARTIFACT_SCHEMA_VERSION: usize = 1;
+
 #[derive(Clone, Debug)]
 struct Clause(Vec<(usize, bool)>);
 
@@ -12154,6 +12156,14 @@ fn replace_file(source: &Path, destination: &Path) -> Result<(), String> {
     })
 }
 
+fn is_rtl_source_snapshot(name: &str) -> bool {
+    name == "source.sv"
+        || name
+            .strip_prefix("source-")
+            .and_then(|rest| rest.strip_suffix(".sv"))
+            .is_some_and(|index| index.len() == 4 && index.chars().all(|c| c.is_ascii_digit()))
+}
+
 fn source_revision() -> String {
     env::var("GITHUB_SHA")
         .ok()
@@ -12186,6 +12196,7 @@ fn annotate_rtl_safety_report(
         .ok_or_else(|| "RTL safety report is empty".to_string())?;
     let mut annotated = vec![
         status.to_string(),
+        format!("schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"),
         format!("source={}", report_value(source)),
         format!("source_revision={revision}"),
         format!("top={top}"),
@@ -12201,8 +12212,8 @@ fn annotate_rtl_safety_report(
         .map_err(|error| format!("write annotated RTL safety report: {error}"))
 }
 
-fn firmware_rtl_safety_gate(
-    input: &Path,
+fn firmware_rtl_project_safety_gate(
+    inputs: &[PathBuf],
     top: &str,
     horizon: usize,
     artifact_dir: &Path,
@@ -12210,20 +12221,45 @@ fn firmware_rtl_safety_gate(
     if !valid_verilog_identifier(top) {
         return Err("RTL top must be a simple Verilog identifier".to_string());
     }
-    let source = fs::canonicalize(input)
-        .map_err(|error| format!("resolve RTL source {}: {error}", input.display()))?;
-    if !source.is_file() {
-        return Err(format!("RTL source is not a file: {}", source.display()));
+    if inputs.is_empty() || inputs.len() > 64 {
+        return Err("RTL project must contain between 1 and 64 source files".to_string());
     }
-    let source_bytes = fs::metadata(&source)
-        .map_err(|error| format!("inspect RTL source {}: {error}", source.display()))?
-        .len();
-    if source_bytes > 10 * 1024 * 1024 {
+    let mut sources = Vec::with_capacity(inputs.len());
+    let mut seen_sources = BTreeSet::new();
+    let mut source_bytes = 0u64;
+    for input in inputs {
+        let source = fs::canonicalize(input)
+            .map_err(|error| format!("resolve RTL source {}: {error}", input.display()))?;
+        if !source.is_file() {
+            return Err(format!("RTL source is not a file: {}", source.display()));
+        }
+        if !seen_sources.insert(source.clone()) {
+            return Err(format!("duplicate RTL source: {}", input.display()));
+        }
+        let bytes = fs::metadata(&source)
+            .map_err(|error| format!("inspect RTL source {}: {error}", source.display()))?
+            .len();
+        if bytes > 10 * 1024 * 1024 {
+            return Err(format!(
+                "RTL source {} is {bytes} bytes; per-file safety limit is 10485760",
+                input.display()
+            ));
+        }
+        source_bytes = source_bytes
+            .checked_add(bytes)
+            .ok_or_else(|| "RTL project source byte count overflow".to_string())?;
+        sources.push(source);
+    }
+    if source_bytes > 25 * 1024 * 1024 {
         return Err(format!(
-            "RTL source is {source_bytes} bytes; safety limit is 10485760"
+            "RTL project is {source_bytes} bytes; total safety limit is 26214400"
         ));
     }
-    let source_label = input.to_string_lossy().to_string();
+    let source_labels = inputs
+        .iter()
+        .map(|input| input.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    let source_label = source_labels.join(";");
     fs::create_dir_all(artifact_dir)
         .map_err(|error| format!("create RTL safety artifact directory: {error}"))?;
     let stage = artifact_dir.join(format!(".rtl-stage-{}", std::process::id()));
@@ -12232,14 +12268,26 @@ fn firmware_rtl_safety_gate(
     let stage = fs::canonicalize(&stage)
         .map_err(|error| format!("resolve RTL safety staging directory: {error}"))?;
     let model = stage.join("model.aag");
-    let staged_source = stage.join("source.sv");
     let synthesis = stage.join("synthesis.ys");
     let yosys_log = stage.join("yosys.log");
     let yosys_errors = stage.join("yosys-errors.log");
-    fs::copy(&source, &staged_source)
-        .map_err(|error| format!("stage RTL source for Yosys: {error}"))?;
+    let staged_source_names = sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            let name = if sources.len() == 1 {
+                "source.sv".to_string()
+            } else {
+                format!("source-{index:04}.sv")
+            };
+            fs::copy(source, stage.join(&name))
+                .map_err(|error| format!("stage RTL source {}: {error}", source.display()))?;
+            Ok(name)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let staged_sources = staged_source_names.join(" ");
     let script = format!(
-        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT {staged_sources}\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
@@ -12319,11 +12367,17 @@ fn firmware_rtl_safety_gate(
     )?;
     let status_name = if safe { "SAFE" } else { "UNSAFE" };
     let revision = source_revision();
+    let manifest_sources = source_labels
+        .iter()
+        .enumerate()
+        .map(|(index, source)| format!("source_{index}={}", report_value(source)))
+        .collect::<Vec<_>>()
+        .join("\n");
     fs::write(
         stage.join("run-manifest.txt"),
         format!(
-            "status={status_name}\nsource={}\nsource_revision={revision}\nsource_bytes={source_bytes}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\nyosys={yosys_version}\n",
-            report_value(&source_label)
+            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\nyosys={yosys_version}\n",
+            report_value(&source_label), sources.len()
         ),
     )
     .map_err(|error| format!("write RTL safety manifest: {error}"))?;
@@ -12332,16 +12386,28 @@ fn firmware_rtl_safety_gate(
         fs::remove_file(&published_manifest)
             .map_err(|error| format!("remove stale RTL safety manifest: {error}"))?;
     }
-    for name in [
+    for entry in fs::read_dir(artifact_dir)
+        .map_err(|error| format!("inspect RTL safety artifact directory: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("inspect RTL safety artifact: {error}"))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if is_rtl_source_snapshot(&name) && entry.path().is_file() {
+            fs::remove_file(entry.path())
+                .map_err(|error| format!("remove stale RTL source snapshot: {error}"))?;
+        }
+    }
+    let mut published_names = vec![
         "model.aag",
         "signal.map",
-        "source.sv",
         "synthesis.ys",
         "yosys.log",
         "yosys-errors.log",
         "solver-metrics.csv",
         "safety-report.txt",
-    ] {
+    ];
+    published_names.extend(staged_source_names.iter().map(String::as_str));
+    for name in published_names {
         replace_file(&stage.join(name), &artifact_dir.join(name))?;
     }
     replace_file(&stage.join("run-manifest.txt"), &published_manifest)?;
@@ -12353,6 +12419,15 @@ fn firmware_rtl_safety_gate(
         artifact_dir.join("safety-report.txt").display()
     );
     Ok(safe)
+}
+
+fn firmware_rtl_safety_gate(
+    input: &Path,
+    top: &str,
+    horizon: usize,
+    artifact_dir: &Path,
+) -> Result<bool, String> {
+    firmware_rtl_project_safety_gate(&[input.to_path_buf()], top, horizon, artifact_dir)
 }
 
 fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
@@ -12376,6 +12451,18 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
                 .map_err(|_| "invalid RTL firmware safety horizon".to_string())?
                 .max(1);
             firmware_rtl_safety_gate(Path::new(&args[1]), &args[2], horizon, Path::new(&args[4]))
+                .map(Some)
+        }
+        Some("firmware-rtl-project-safety-gate") => {
+            if args.len() < 5 {
+                return Err("usage: continuation-quotient-sat firmware-rtl-project-safety-gate TOP HORIZON ARTIFACT_DIR SOURCE.sv SOURCE2.sv [...]".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid RTL project safety horizon".to_string())?
+                .max(1);
+            let sources = args[4..].iter().map(PathBuf::from).collect::<Vec<_>>();
+            firmware_rtl_project_safety_gate(&sources, &args[1], horizon, Path::new(&args[3]))
                 .map(Some)
         }
         _ => Ok(None),
@@ -22327,5 +22414,68 @@ mod tests {
         assert!(!aiger_reuse_gate(15_001, 2));
         assert!(!aiger_reuse_gate(1_000, 1));
         std::fs::remove_dir_all(artifacts).unwrap();
+    }
+
+    #[test]
+    fn rtl_project_gate_stages_multiple_sources_and_rejects_ambiguous_inputs() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping RTL project test because Yosys is unavailable");
+            return;
+        }
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/infusion-pump/rtl/project");
+        let sources = vec![root.join("pump-components.sv"), root.join("pump-system.sv")];
+        let artifacts =
+            std::env::temp_dir().join(format!("cq-sat-rtl-project-{}", std::process::id()));
+        assert!(
+            firmware_rtl_project_safety_gate(&sources, "infusion_pump_system", 8, &artifacts,)
+                .unwrap()
+        );
+        assert!(artifacts.join("source-0000.sv").is_file());
+        assert!(artifacts.join("source-0001.sv").is_file());
+        assert!(!artifacts.join("source.sv").exists());
+        let synthesis = fs::read_to_string(artifacts.join("synthesis.ys")).unwrap();
+        assert!(synthesis.contains("source-0000.sv source-0001.sv"));
+        assert!(!synthesis.contains(&root.to_string_lossy().to_string()));
+        let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
+        assert!(manifest.contains("status=SAFE\n"));
+        assert!(manifest.contains("schema_version=1\n"));
+        assert!(manifest.contains("source_count=2\n"));
+        assert!(manifest.contains("source_0="));
+        assert!(manifest.contains("source_1="));
+        assert!(
+            firmware_rtl_safety_gate(
+                &root.parent().unwrap().join("safe-controller.sv"),
+                "infusion_pump_controller",
+                8,
+                &artifacts,
+            )
+            .unwrap()
+        );
+        assert!(artifacts.join("source.sv").is_file());
+        assert!(!artifacts.join("source-0000.sv").exists());
+        assert!(!artifacts.join("source-0001.sv").exists());
+        std::fs::remove_dir_all(artifacts).unwrap();
+
+        assert!(
+            firmware_rtl_project_safety_gate(
+                &[sources[0].clone(), sources[0].clone()],
+                "infusion_pump_system",
+                8,
+                &std::env::temp_dir().join("cq-sat-duplicate-rtl-project"),
+            )
+            .unwrap_err()
+            .contains("duplicate RTL source")
+        );
+        assert!(
+            firmware_rtl_project_safety_gate(
+                &vec![sources[0].clone(); 65],
+                "infusion_pump_system",
+                8,
+                &std::env::temp_dir().join("cq-sat-too-many-rtl-sources"),
+            )
+            .unwrap_err()
+            .contains("between 1 and 64")
+        );
     }
 }

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a bounded multi-file RTL project safety gate with deterministic source
+  staging, duplicate detection, aggregate limits, and manifest provenance.
+- Remove stale source snapshots before atomic manifest publication so reruns
+  cannot mix evidence from different project inputs.
+- Mark RTL safety reports and manifests with artifact schema version 1.
+
 ## 0.7.0 - 2026-07-17
 
 - Flatten hierarchical modules before RTL-to-AIGER export and make synthesis

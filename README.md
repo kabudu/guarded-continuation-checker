@@ -48,6 +48,8 @@ Validated findings:
 
 See [Research findings](docs/FINDINGS.md) and
 [Reproducibility](docs/REPRODUCIBILITY.md) before interpreting benchmark results.
+The enforced gaps that still prevent a production claim are tracked in
+[Production-readiness gates](docs/PRODUCTION_READINESS.md).
 
 ## CQ-SAT/GCC portfolio
 
@@ -92,6 +94,21 @@ provenance manifest, and GitHub Actions annotations. Exit statuses distinguish
 safe builds (0), discovered violations (1), and tool or input failures (2). The
 example includes a copyable workflow and independent SymbiYosys/Z3 oracle files.
 It demonstrates integration mechanics, not medical-device certification.
+
+Projects split across source files use the bounded project interface. Source
+paths are copied to fixed staging names and never interpolated into Yosys code:
+
+```sh
+./target/release/continuation-quotient-sat \
+  firmware-rtl-project-safety-gate infusion_pump_system 100 \
+  target/firmware-safety/project \
+  examples/products/infusion-pump/rtl/project/pump-components.sv \
+  examples/products/infusion-pump/rtl/project/pump-system.sv
+```
+
+The project interface accepts at most 64 regular files, 10 MiB per file and
+25 MiB total. It rejects canonical duplicates and publishes deterministic source
+snapshots plus their ordered labels in the final manifest.
 
 The same example now includes a five-module controller and a repeated-property
 BMC experiment:
