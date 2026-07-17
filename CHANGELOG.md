@@ -41,6 +41,8 @@
   subcubes and report learned-clause width.
 - Add prefix/suffix conjunction caches for linear-pass exact BDD conflict
   explanation extraction.
+- Precompile bounded exact global checkpoint-image clauses for reuse across all
+  native BDD-theory queries and report recognition-inclusive break-even.
 
 ## 0.1.0 - 2026-07-15
 
