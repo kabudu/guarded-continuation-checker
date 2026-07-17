@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,9 @@ use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
-const RTL_ARTIFACT_SCHEMA_VERSION: usize = 1;
+const RTL_ARTIFACT_SCHEMA_VERSION: usize = 2;
+const FIRMWARE_CLI_CONTRACT_VERSION: usize = 1;
+const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
 
@@ -8212,8 +8214,31 @@ fn parse_aag_usize(token: Option<&str>, context: &str) -> Result<usize, String> 
 }
 
 fn parse_aag(path: &Path) -> Result<AagModel, String> {
-    let source = fs::read_to_string(path)
-        .map_err(|error| format!("read ASCII AIGER {}: {error}", path.display()))?;
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("inspect ASCII AIGER {}: {error}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "ASCII AIGER input is not a file: {}",
+            path.display()
+        ));
+    }
+    if metadata.len() > AAG_INPUT_LIMIT_BYTES {
+        return Err(format!(
+            "ASCII AIGER input exceeds safety limit {AAG_INPUT_LIMIT_BYTES} bytes"
+        ));
+    }
+    let bytes =
+        fs::read(path).map_err(|error| format!("read ASCII AIGER {}: {error}", path.display()))?;
+    if bytes.len() as u64 > AAG_INPUT_LIMIT_BYTES {
+        return Err(format!(
+            "ASCII AIGER input exceeds safety limit {AAG_INPUT_LIMIT_BYTES} bytes"
+        ));
+    }
+    if !bytes.is_ascii() {
+        return Err("ASCII AIGER input contains non-ASCII bytes".to_string());
+    }
+    let source = std::str::from_utf8(&bytes)
+        .map_err(|_| "ASCII AIGER input is not valid UTF-8".to_string())?;
     let mut lines = source.lines();
     let mut header = lines
         .next()
@@ -12472,6 +12497,287 @@ fn report_value(value: &str) -> String {
         .replace('\r', "%0D")
 }
 
+fn read_rtl_manifest(path: &Path) -> Result<Vec<(String, String)>, String> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("inspect RTL artifact manifest {}: {error}", path.display()))?;
+    if !metadata.is_file() || metadata.len() > 65_536 {
+        return Err(
+            "RTL artifact manifest must be a regular file no larger than 65536 bytes".to_string(),
+        );
+    }
+    let body = fs::read_to_string(path)
+        .map_err(|error| format!("read RTL artifact manifest {}: {error}", path.display()))?;
+    if body.len() > 65_536 {
+        return Err("RTL artifact manifest exceeds 65536 bytes".to_string());
+    }
+    let mut fields = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (index, line) in body.lines().enumerate() {
+        let (key, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid RTL artifact manifest line {}", index + 1))?;
+        if key.is_empty()
+            || !key
+                .chars()
+                .all(|character| character == '_' || character.is_ascii_alphanumeric())
+            || value.is_empty()
+        {
+            return Err(format!("invalid RTL artifact manifest line {}", index + 1));
+        }
+        if !seen.insert(key.to_string()) {
+            return Err(format!("duplicate RTL artifact manifest field `{key}`"));
+        }
+        fields.push((key.to_string(), value.to_string()));
+    }
+    Ok(fields)
+}
+
+fn rtl_manifest_value<'a>(fields: &'a [(String, String)], key: &str) -> Result<&'a str, String> {
+    fields
+        .iter()
+        .find_map(|(candidate, value)| (candidate == key).then_some(value.as_str()))
+        .ok_or_else(|| format!("missing RTL artifact manifest field `{key}`"))
+}
+
+fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
+    if !artifact_dir.is_dir() {
+        return Err(format!(
+            "RTL artifact bundle is not a directory: {}",
+            artifact_dir.display()
+        ));
+    }
+    let fields = read_rtl_manifest(&artifact_dir.join("run-manifest.txt"))?;
+    if rtl_manifest_value(&fields, "schema_version")? != RTL_ARTIFACT_SCHEMA_VERSION.to_string() {
+        return Err(format!(
+            "unsupported RTL artifact schema; expected {}",
+            RTL_ARTIFACT_SCHEMA_VERSION
+        ));
+    }
+    if rtl_manifest_value(&fields, "firmware_cli_version")?
+        != FIRMWARE_CLI_CONTRACT_VERSION.to_string()
+    {
+        return Err(format!(
+            "unsupported firmware CLI contract; expected {}",
+            FIRMWARE_CLI_CONTRACT_VERSION
+        ));
+    }
+    let status = rtl_manifest_value(&fields, "status")?;
+    if !matches!(status, "SAFE" | "UNSAFE") {
+        return Err("RTL artifact status must be SAFE or UNSAFE".to_string());
+    }
+    let source_count = rtl_manifest_value(&fields, "source_count")?
+        .parse::<usize>()
+        .map_err(|_| "invalid RTL artifact source_count".to_string())?;
+    if !(1..=64).contains(&source_count) {
+        return Err("RTL artifact source_count must be between 1 and 64".to_string());
+    }
+    let ordered_source = (0..source_count)
+        .map(|index| rtl_manifest_value(&fields, &format!("source_{index}")))
+        .collect::<Result<Vec<_>, _>>()?
+        .join(";");
+    if rtl_manifest_value(&fields, "source")? != ordered_source {
+        return Err("RTL artifact source aggregate disagrees with ordered sources".to_string());
+    }
+    let revision = rtl_manifest_value(&fields, "source_revision")?;
+    if revision != "unknown"
+        && (!(7..=64).contains(&revision.len())
+            || !revision
+                .chars()
+                .all(|character| character.is_ascii_hexdigit()))
+    {
+        return Err("RTL artifact source_revision is malformed".to_string());
+    }
+    let assumption_count = rtl_manifest_value(&fields, "assumption_count")?
+        .parse::<usize>()
+        .map_err(|_| "invalid RTL artifact assumption_count".to_string())?;
+    if assumption_count > 256 {
+        return Err("RTL artifact assumption_count exceeds 256".to_string());
+    }
+    let source_bytes = rtl_manifest_value(&fields, "source_bytes")?
+        .parse::<u64>()
+        .map_err(|_| "invalid RTL artifact numeric field `source_bytes`".to_string())?;
+    let horizon = rtl_manifest_value(&fields, "horizon")?
+        .parse::<u64>()
+        .map_err(|_| "invalid RTL artifact numeric field `horizon`".to_string())?;
+    if horizon == 0 {
+        return Err("RTL artifact horizon must be at least one".to_string());
+    }
+    for key in [
+        "synthesis_timeout_seconds",
+        "synthesis_memory_limit_bytes",
+        "synthesis_file_limit_bytes",
+    ] {
+        rtl_manifest_value(&fields, key)?
+            .parse::<u64>()
+            .map_err(|_| format!("invalid RTL artifact numeric field `{key}`"))?;
+    }
+    if rtl_manifest_value(&fields, "process_group_timeout_kill")? != "true" {
+        return Err("RTL artifact process-group containment is not asserted".to_string());
+    }
+    if !valid_verilog_identifier(rtl_manifest_value(&fields, "top")?) {
+        return Err("RTL artifact top is not a simple Verilog identifier".to_string());
+    }
+    let platform = rtl_manifest_value(&fields, "containment_platform")?;
+    let memory_kind = rtl_manifest_value(&fields, "synthesis_memory_limit_kind")?;
+    let memory_bytes = rtl_manifest_value(&fields, "synthesis_memory_limit_bytes")?;
+    match platform {
+        "linux"
+            if memory_kind == "address-space"
+                && memory_bytes == YOSYS_MEMORY_LIMIT_BYTES.to_string() => {}
+        "macos" if memory_kind == "unavailable" && memory_bytes == "0" => {}
+        _ => return Err("RTL artifact containment fields are inconsistent".to_string()),
+    }
+    if rtl_manifest_value(&fields, "synthesis_timeout_seconds")? != "120"
+        || rtl_manifest_value(&fields, "synthesis_file_limit_bytes")?
+            != YOSYS_FILE_LIMIT_BYTES.to_string()
+    {
+        return Err("RTL artifact synthesis limits do not match schema v2".to_string());
+    }
+    if !rtl_manifest_value(&fields, "yosys")?.starts_with("Yosys ") {
+        return Err("RTL artifact Yosys version is malformed".to_string());
+    }
+
+    let mut expected_keys = vec![
+        "status".to_string(),
+        "schema_version".to_string(),
+        "firmware_cli_version".to_string(),
+        "source".to_string(),
+        "source_count".to_string(),
+    ];
+    expected_keys.extend((0..source_count).map(|index| format!("source_{index}")));
+    expected_keys.extend(
+        [
+            "source_revision",
+            "source_bytes",
+            "assumption_source",
+            "assumption_count",
+            "top",
+            "horizon",
+            "synthesis_timeout_seconds",
+            "containment_platform",
+            "process_group_timeout_kill",
+            "synthesis_memory_limit_kind",
+            "synthesis_memory_limit_bytes",
+            "synthesis_file_limit_bytes",
+            "yosys",
+        ]
+        .into_iter()
+        .map(str::to_string),
+    );
+    let actual_keys = fields
+        .iter()
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    if actual_keys != expected_keys {
+        return Err("RTL artifact manifest fields or ordering do not match schema v2".to_string());
+    }
+
+    let expected_sources = if source_count == 1 {
+        vec!["source.sv".to_string()]
+    } else {
+        (0..source_count)
+            .map(|index| format!("source-{index:04}.sv"))
+            .collect::<Vec<_>>()
+    };
+    for name in [
+        "model.aag",
+        "signal.map",
+        "synthesis.ys",
+        "yosys.log",
+        "yosys-errors.log",
+        "solver-metrics.csv",
+        "safety-report.txt",
+    ]
+    .into_iter()
+    .chain(expected_sources.iter().map(String::as_str))
+    {
+        if !artifact_dir.join(name).is_file() {
+            return Err(format!("RTL artifact bundle is missing `{name}`"));
+        }
+    }
+    let snapshot_bytes = expected_sources.iter().try_fold(0u64, |total, name| {
+        let bytes = fs::metadata(artifact_dir.join(name))
+            .map_err(|error| format!("inspect RTL source snapshot `{name}`: {error}"))?
+            .len();
+        total
+            .checked_add(bytes)
+            .ok_or_else(|| "RTL source snapshot byte count overflow".to_string())
+    })?;
+    if snapshot_bytes != source_bytes {
+        return Err("RTL artifact source_bytes disagrees with snapshots".to_string());
+    }
+    let assumptions_exist = artifact_dir.join("assumptions.txt").is_file();
+    if assumptions_exist != (assumption_count > 0) {
+        return Err(
+            "RTL artifact assumptions snapshot does not match assumption_count".to_string(),
+        );
+    }
+    let assumption_source = rtl_manifest_value(&fields, "assumption_source")?;
+    if (assumption_source == "none") != (assumption_count == 0) {
+        return Err("RTL artifact assumption_source disagrees with assumption_count".to_string());
+    }
+    if assumptions_exist {
+        let (constraints, _) =
+            parse_environment_assumptions(&artifact_dir.join("assumptions.txt"))?;
+        if constraints.len() != assumption_count {
+            return Err("RTL artifact assumption_count disagrees with snapshot".to_string());
+        }
+    }
+    let mut actual_sources = Vec::new();
+    for entry in fs::read_dir(artifact_dir)
+        .map_err(|error| format!("inspect RTL artifact bundle: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("inspect RTL artifact entry: {error}"))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_rtl_source_snapshot(&name) {
+            actual_sources.push(name);
+        }
+    }
+    actual_sources.sort();
+    if actual_sources != expected_sources {
+        return Err("RTL artifact source snapshots do not match source_count".to_string());
+    }
+
+    let report = fs::File::open(artifact_dir.join("safety-report.txt"))
+        .map_err(|error| format!("open RTL safety report: {error}"))?;
+    let mut lines = BufReader::new(report).lines();
+    if lines
+        .next()
+        .transpose()
+        .map_err(|error| format!("read RTL safety status: {error}"))?
+        .as_deref()
+        != Some(&format!("status={status}"))
+    {
+        return Err("RTL safety report status disagrees with manifest".to_string());
+    }
+    if lines
+        .next()
+        .transpose()
+        .map_err(|error| format!("read RTL safety schema: {error}"))?
+        .as_deref()
+        != Some(&format!("schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"))
+    {
+        return Err("RTL safety report schema disagrees with manifest".to_string());
+    }
+    if lines
+        .next()
+        .transpose()
+        .map_err(|error| format!("read RTL safety CLI contract: {error}"))?
+        .as_deref()
+        != Some(&format!(
+            "firmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}"
+        ))
+    {
+        return Err("RTL safety report CLI contract disagrees with manifest".to_string());
+    }
+    println!(
+        "firmware-artifact-validate status=VALID schema={} result={status} bundle={}",
+        RTL_ARTIFACT_SCHEMA_VERSION,
+        artifact_dir.display()
+    );
+    Ok(())
+}
+
 fn annotate_rtl_safety_report(
     report: &Path,
     source: &str,
@@ -12488,6 +12794,7 @@ fn annotate_rtl_safety_report(
     let mut annotated = vec![
         status.to_string(),
         format!("schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"),
+        format!("firmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}"),
         format!("source={}", report_value(source)),
         format!("source_revision={revision}"),
         format!("top={top}"),
@@ -12545,19 +12852,27 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         if !seen_sources.insert(source.clone()) {
             return Err(format!("duplicate RTL source: {}", input.display()));
         }
-        let bytes = fs::metadata(&source)
+        let metadata_bytes = fs::metadata(&source)
             .map_err(|error| format!("inspect RTL source {}: {error}", source.display()))?
             .len();
-        if bytes > 10 * 1024 * 1024 {
+        if metadata_bytes > 10 * 1024 * 1024 {
             return Err(format!(
-                "RTL source {} is {bytes} bytes; per-file safety limit is 10485760",
+                "RTL source {} is {metadata_bytes} bytes; per-file safety limit is 10485760",
+                input.display()
+            ));
+        }
+        let bytes = fs::read(&source)
+            .map_err(|error| format!("read RTL source {}: {error}", source.display()))?;
+        if bytes.len() > 10 * 1024 * 1024 {
+            return Err(format!(
+                "RTL source {} exceeds per-file safety limit 10485760",
                 input.display()
             ));
         }
         source_bytes = source_bytes
-            .checked_add(bytes)
+            .checked_add(bytes.len() as u64)
             .ok_or_else(|| "RTL project source byte count overflow".to_string())?;
-        sources.push(source);
+        sources.push((source, bytes));
     }
     if source_bytes > 25 * 1024 * 1024 {
         return Err(format!(
@@ -12583,13 +12898,13 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     let staged_source_names = sources
         .iter()
         .enumerate()
-        .map(|(index, source)| {
+        .map(|(index, (source, bytes))| {
             let name = if sources.len() == 1 {
                 "source.sv".to_string()
             } else {
                 format!("source-{index:04}.sv")
             };
-            fs::copy(source, stage.join(&name))
+            fs::write(stage.join(&name), bytes)
                 .map_err(|error| format!("stage RTL source {}: {error}", source.display()))?;
             Ok(name)
         })
@@ -12683,7 +12998,7 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     fs::write(
         stage.join("run-manifest.txt"),
         format!(
-            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\n",
+            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nfirmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\n",
             report_value(&source_label), sources.len(), std::env::consts::OS,
             synthesis_memory_limit_kind(), synthesis_memory_limit_bytes()
         ),
@@ -12758,6 +13073,25 @@ fn firmware_rtl_safety_gate(
 
 fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
     match args.first().map(String::as_str) {
+        Some("firmware-cli-version") => {
+            if args.len() != 1 {
+                return Err("usage: continuation-quotient-sat firmware-cli-version".to_string());
+            }
+            println!(
+                "firmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION} artifact_schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"
+            );
+            Ok(Some(true))
+        }
+        Some("firmware-artifact-validate") => {
+            if args.len() != 2 {
+                return Err(
+                    "usage: continuation-quotient-sat firmware-artifact-validate ARTIFACT_DIR"
+                        .to_string(),
+                );
+            }
+            validate_rtl_artifact_bundle(Path::new(&args[1]))?;
+            Ok(Some(true))
+        }
         Some("firmware-safety-gate") => {
             if args.len() != 4 {
                 return Err("usage: continuation-quotient-sat firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR".to_string());
@@ -22783,7 +23117,8 @@ mod tests {
         assert!(!synthesis.contains(&root.to_string_lossy().to_string()));
         let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
         assert!(manifest.contains("status=SAFE\n"));
-        assert!(manifest.contains("schema_version=1\n"));
+        assert!(manifest.contains("schema_version=2\n"));
+        assert!(manifest.contains("firmware_cli_version=1\n"));
         assert!(manifest.contains("source_count=2\n"));
         assert!(manifest.contains("source_0="));
         assert!(manifest.contains("source_1="));
@@ -22798,6 +23133,28 @@ mod tests {
             synthesis_memory_limit_bytes()
         )));
         assert!(manifest.contains("synthesis_file_limit_bytes=536870912\n"));
+        validate_rtl_artifact_bundle(&artifacts).unwrap();
+        fs::write(
+            artifacts.join("run-manifest.txt"),
+            manifest.replacen("status=SAFE", "status=UNSAFE", 1),
+        )
+        .unwrap();
+        assert!(
+            validate_rtl_artifact_bundle(&artifacts)
+                .unwrap_err()
+                .contains("status disagrees")
+        );
+        fs::write(
+            artifacts.join("run-manifest.txt"),
+            format!("{manifest}unexpected_field=value\n"),
+        )
+        .unwrap();
+        assert!(
+            validate_rtl_artifact_bundle(&artifacts)
+                .unwrap_err()
+                .contains("fields or ordering")
+        );
+        fs::write(artifacts.join("run-manifest.txt"), &manifest).unwrap();
         assert!(
             firmware_rtl_safety_gate(
                 &root.parent().unwrap().join("safe-controller.sv"),
@@ -22865,6 +23222,7 @@ mod tests {
         assert!(report.contains("assumption_0=door_open=0\n"));
         let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
         assert!(manifest.contains("assumption_count=1\n"));
+        validate_rtl_artifact_bundle(&artifacts).unwrap();
 
         let unknown = std::env::temp_dir().join(format!(
             "cq-sat-unknown-assumption-{}.txt",
@@ -22881,6 +23239,129 @@ mod tests {
         );
         std::fs::remove_file(unknown).unwrap();
         std::fs::remove_dir_all(artifacts).unwrap();
+    }
+
+    fn fuzz_mutation(seed: &[u8], iteration: usize) -> Vec<u8> {
+        let mut bytes = seed.to_vec();
+        if bytes.is_empty() {
+            bytes.push(0);
+        }
+        let mut rng =
+            Rng(0x9e37_79b9_7f4a_7c15 ^ iteration as u64 ^ (seed.len() as u64).rotate_left(23));
+        for _ in 0..=iteration % 8 {
+            match rng.below(4) {
+                0 => {
+                    let index = rng.below(bytes.len());
+                    bytes[index] ^= 1 << rng.below(8);
+                }
+                1 => bytes.truncate(rng.below(bytes.len() + 1)),
+                2 if bytes.len() < 16_384 => {
+                    let index = rng.below(bytes.len() + 1);
+                    bytes.insert(index, rng.below(256) as u8);
+                }
+                _ => {
+                    let index = rng.below(bytes.len());
+                    bytes[index] = rng.below(256) as u8;
+                }
+            }
+            if bytes.is_empty() {
+                bytes.push(rng.below(256) as u8);
+            }
+        }
+        bytes.truncate(16_384);
+        bytes
+    }
+
+    fn corpus_files(path: &Path) -> Vec<Vec<u8>> {
+        let mut paths = fs::read_dir(path)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|entry| entry.is_file())
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths.iter().map(|entry| fs::read(entry).unwrap()).collect()
+    }
+
+    #[test]
+    fn parser_fuzz_regression_corpora_are_panic_free_and_bounded() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let scratch =
+            std::env::temp_dir().join(format!("cq-sat-parser-fuzz-{}", std::process::id()));
+        fs::create_dir(&scratch).unwrap();
+
+        let mut aiger_seeds = corpus_files(&root.join("tests/fuzz-corpus/aiger"));
+        aiger_seeds.push(fs::read(root.join("examples/aiger/counter-overflow-4.aag")).unwrap());
+        let aiger_input = scratch.join("mutated.aag");
+        for iteration in 0..5_000 {
+            let bytes = fuzz_mutation(&aiger_seeds[iteration % aiger_seeds.len()], iteration);
+            fs::write(&aiger_input, bytes).unwrap();
+            let _ = parse_aag(&aiger_input);
+        }
+        let oversized_aiger = scratch.join("oversized.aag");
+        fs::File::create(&oversized_aiger)
+            .unwrap()
+            .set_len(AAG_INPUT_LIMIT_BYTES + 1)
+            .unwrap();
+        assert!(
+            parse_aag(&oversized_aiger)
+                .unwrap_err()
+                .contains("exceeds safety limit")
+        );
+
+        let mut assumption_seeds = corpus_files(&root.join("tests/fuzz-corpus/assumptions"));
+        assumption_seeds.push(
+            fs::read(root.join("examples/products/infusion-pump/rtl/door-closed.assumptions"))
+                .unwrap(),
+        );
+        let assumption_input = scratch.join("mutated.assumptions");
+        for iteration in 0..5_000 {
+            let bytes = fuzz_mutation(
+                &assumption_seeds[iteration % assumption_seeds.len()],
+                iteration ^ 0x5a5a,
+            );
+            fs::write(&assumption_input, bytes).unwrap();
+            let _ = parse_environment_assumptions(&assumption_input);
+        }
+
+        let cli_seeds = corpus_files(&root.join("tests/fuzz-corpus/cli"));
+        let cli_artifacts = scratch.join("cli-artifacts");
+        for iteration in 0..10_000 {
+            let bytes = fuzz_mutation(&cli_seeds[iteration % cli_seeds.len()], iteration ^ 0xa5a5);
+            let text = String::from_utf8_lossy(&bytes);
+            for line in text.lines().take(32) {
+                let mut args = line
+                    .split('\t')
+                    .take(70)
+                    .map(|argument| argument.chars().take(1_024).collect::<String>())
+                    .collect::<Vec<_>>();
+                if args.first().map(String::as_str) == Some("firmware-safety-gate")
+                    && args.len() == 4
+                {
+                    args[1] = scratch.join("missing.aag").to_string_lossy().to_string();
+                    args[3] = cli_artifacts.to_string_lossy().to_string();
+                }
+                if args.first().map(String::as_str) == Some("firmware-cli-version")
+                    && args.len() == 1
+                {
+                    args.push("fuzz-extra-argument".to_string());
+                }
+                let _ = run_firmware_gate_cli(&args);
+            }
+        }
+        std::fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn firmware_cli_contract_version_is_machine_readable_and_strict() {
+        assert_eq!(
+            run_firmware_gate_cli(&["firmware-cli-version".to_string()]).unwrap(),
+            Some(true)
+        );
+        assert!(
+            run_firmware_gate_cli(&["firmware-cli-version".to_string(), "unexpected".to_string(),])
+                .unwrap_err()
+                .contains("usage:")
+        );
     }
 
     #[cfg(unix)]

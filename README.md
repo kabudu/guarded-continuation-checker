@@ -135,6 +135,25 @@ address-space limit. macOS remains supported for development and records
 and model limits still apply, but it must not be used as evidence of hard memory
 containment.
 
+Completed evidence bundles use the strict
+[RTL artifact schema v2](docs/ARTIFACT_SCHEMA_V2.md). Validate one before
+retention or downstream processing:
+
+```sh
+./target/release/continuation-quotient-sat \
+  firmware-artifact-validate target/firmware-safety/project
+```
+
+Schema v2 rejects unknown, reordered, duplicated, or malformed manifest fields,
+stale source snapshots, missing evidence, and report/manifest disagreement.
+Direct ASCII AIGER inputs are capped at 256 MiB. CI also runs 20,000 deterministic
+mutations over persistent AIGER, assumptions, and CLI regression corpora.
+
+The product-facing commands follow
+[firmware CLI contract v1](docs/FIRMWARE_CLI_V1.md). Query both active contract
+versions with `firmware-cli-version`; breaking command, argument, or exit-status
+changes require a new CLI contract version.
+
 The same example now includes a five-module controller and a repeated-property
 BMC experiment:
 

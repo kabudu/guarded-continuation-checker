@@ -1,0 +1,7 @@
+firmware-safety-gate
+firmware-rtl-safety-gate	missing.sv	bad-top!
+firmware-rtl-project-safety-gate	top	not-a-horizon	artifacts
+firmware-rtl-constrained-project-safety-gate	top	8	artifacts
+firmware-artifact-validate
+firmware-cli-version	unexpected
+unknown-command	value

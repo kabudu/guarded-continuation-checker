@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Establish RTL artifact schema v2 as the first compatibility-locked evidence
+  contract and add a strict bundle validator for field, status, and snapshot
+  consistency.
+- Establish firmware CLI contract v1 with a machine-readable version query,
+  fixed command signatures, and stable exit meanings.
+- Bound direct ASCII AIGER ingestion to 256 MiB before and after reading.
+- Add 20,000 stable-Rust parser and CLI mutation cases backed by persistent
+  malformed and valid regression corpora.
+
 ## 0.10.0 - 2026-07-17
 
 - Run Yosys in a dedicated Unix process group with a 512 MiB output-file cap,
