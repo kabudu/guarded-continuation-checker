@@ -16,11 +16,12 @@
 > only that no declared bad output was found through that reviewed bounded
 > horizon; an UNSAFE result includes a replayable named counterexample.
 >
-> The current research preview has a stable CLI and evidence schema, independent
-> public oracle comparisons, bounded Linux execution, a hostile-input isolation
-> profile, and a machine-enforced external-evidence protocol. I am seeking teams
-> willing to run self-directed evaluations against representative, non-public
-> RTL requirements and compare results with an independently owned oracle or
+> CQ-SAT/GCC is an evaluation-ready research prototype with a stable CLI and
+> evidence schema, independent public oracle comparisons, bounded Linux
+> execution, a hostile-input isolation profile, and a machine-enforced
+> external-evidence protocol. I am seeking teams willing to independently choose
+> representative designs and RTL requirements, run the evaluation using the
+> repository guidance, and compare results with an independently owned oracle or
 > pre-existing reviewed result.
 >
 > The preferred model keeps confidential RTL on a partner-owned ephemeral Linux
@@ -33,14 +34,18 @@
 > correct, reproducible, operationally usable, and suitable as one bounded input
 > to an independently reviewed assurance case.
 >
-> If this is relevant, please reply with a non-confidential description of your
-> product/control domain, RTL toolchain, preferred worker ownership, whether an
-> independent expected result is available, and the appropriate contact for the
-> final outcome. I do not plan to participate in setup or execution, access your
-> RTL, or review private intermediate evidence. The repository contains the
-> operating, security, intake, review, and reporting guidance needed to conduct
-> the evaluation directly. Please do not send source code or other confidential
-> data to me or through public project channels.
+> If this is relevant, your team can use the repository resources directly: it
+> chooses the designs, requirements, worker, oracle, and independent assessor,
+> then conducts the evaluation without my involvement. I do not plan to
+> participate in setup or execution, access your RTL, or review private
+> intermediate evidence. Please send me only the completed non-confidential
+> outcome and suitability report, including agreed aggregate results, material
+> limitations, the production-gate result, and any agreed public report
+> references. Please do not send source code, property text, traces, credentials,
+> partner identity mappings, or other confidential data to me or through public
+> project channels. A reproducible, non-confidential repository defect may be
+> reported through a normal public issue, and a suspected vulnerability through
+> a private GitHub Security Advisory.
 
 Add the sender's contact details, but do not weaken or remove the bounded-result,
 self-service, confidentiality, or non-certification wording.
@@ -133,7 +138,8 @@ Before any confidential transfer, confirm:
 
 - the use case is bounded RTL verification rather than a request for whole-device
   certification or an unbounded proof;
-- all parties accept CQ-SAT/GCC's research-preview status and claim boundary;
+- all parties accept CQ-SAT/GCC's evaluation-ready research-prototype status and
+  claim boundary;
 - the partner's data-handling and incident contacts are authorised;
 - an independent expected result is feasible;
 - unresolved disagreements and failures will be retained; and
