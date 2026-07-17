@@ -24000,9 +24000,9 @@ mod tests {
         assert!(manifest.contains("reset_policy=rst_n:active-low:1\n"));
         assert!(manifest.contains("parameters=DEPTH:8\n"));
         let report = fs::read_to_string(artifacts.join("safety-report.txt")).unwrap();
-        assert!(report.contains(
-            "assumption_0=rst_n=startup(asserted_frames=1,asserted_value=0)\n"
-        ));
+        assert!(
+            report.contains("assumption_0=rst_n=startup(asserted_frames=1,asserted_value=0)\n")
+        );
         let config_snapshot = fs::read_to_string(artifacts.join("cq-project.conf")).unwrap();
         fs::write(
             artifacts.join("cq-project.conf"),
