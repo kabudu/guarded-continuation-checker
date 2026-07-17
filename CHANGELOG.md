@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a product-shaped firmware safety gate with CI-specific exit statuses,
+  GitHub Actions annotations, stable report artifacts, and a copyable workflow.
+- Add safe and deliberately regressed infusion-pump controller models that show
+  build acceptance and shortest-trace failure reproduction end to end.
+
 ## 0.4.0 - 2026-07-17
 
 - Add exact primary-input and wider-model AIGER bounded model checking using a

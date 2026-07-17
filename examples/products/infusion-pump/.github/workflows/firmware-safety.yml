@@ -1,0 +1,24 @@
+name: Firmware safety
+
+on:
+  pull_request:
+    paths:
+      - "firmware/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-door-interlock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install CQ-SAT/GCC
+        run: cargo install --git https://github.com/kabudu/continuation-quotient-sat --tag v0.5.0 --locked
+      - name: Prove the motor cannot run with the door open
+        run: continuation-quotient-sat firmware-safety-gate firmware/controller.aag 100 safety-artifacts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firmware-safety-report
+          path: safety-artifacts/

@@ -1,0 +1,13 @@
+aag 6 2 1 1 3
+2
+4
+6 8 0
+12
+8 2 5
+10 6 5
+12 10 4
+c
+Infusion pump controller with a combinational door-open motor interlock.
+inputs: motor_request, door_open
+latch: requested_motor_active
+bad: delivered_motor_enable AND door_open
