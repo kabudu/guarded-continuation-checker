@@ -314,6 +314,28 @@ BDD sharing does not translate into repeated two-input conjunctions. The next
 experiment should lazily encode only the checkpoint cone plus earlier frame roots
 actually mentioned by queries, retaining exactness while avoiding unused history.
 
+## Lazy observation-cone checkpoint
+
+The lazy checkpoint emits only the checkpoint frame's reachable BDD cone at
+recognition. An observation at an earlier frame recursively adds its missing cone
+once and is passed to CDCL directly as an assumption on the corresponding BDD
+root. Unobserved prefix variables never enter the CNF; after solving, every prefix
+frame is evaluated from the recovered initial state to reconstruct a full witness.
+
+This is exact and materially compact. Across the fixed width-9, checkpoint-10
+cohorts, only 793–1,252 of 41,299 BDD nodes were needed: a 97.0–98.1% reduction.
+All answers agreed with full persistent CDCL and every reconstructed witness
+validated.
+
+Runtime did not generalize reliably. Individual phase measurements crossed the
+baseline in both directions; one horizon-1,333 run reached 1.189×, while a repeat
+with direct root assumptions reached 0.672×. The preselected horizon-7,777 holdout
+was 0.878× before and 0.876× after removing permanent observation links; a larger
+200-query batch stabilized at 0.874×. Lazy cones are therefore a representation
+breakthrough, not yet a solver-speed breakthrough. The remaining target is a
+native circuit propagator or a compact encoding whose propagation quality matches
+the original transition clauses.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

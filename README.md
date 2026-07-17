@@ -164,6 +164,10 @@ full-CDCL control on measured cascade cases.
 `benchmark-checkpoint-aig` replaces each BDD decision with structurally hashed
 AND/inverter logic. It is also exact, but expands the measured cascade prefix and
 is retained as a falsified compaction strategy.
+`benchmark-checkpoint-lazy` encodes only the checkpoint cone initially, adds
+earlier observation cones on demand, applies those observations directly to BDD
+roots, and reconstructs the full prefix witness. This removes most checkpoint
+nodes exactly, but does not yet provide a stable speedup over full CDCL.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
