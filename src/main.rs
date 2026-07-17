@@ -8171,8 +8171,11 @@ struct AagAnd {
 struct AagModel {
     max_variable: usize,
     inputs: Vec<usize>,
+    input_names: Vec<String>,
     latches: Vec<AagLatch>,
+    latch_names: Vec<String>,
     outputs: Vec<usize>,
+    output_names: Vec<String>,
     ands: Vec<AagAnd>,
 }
 
@@ -8343,11 +8346,54 @@ fn parse_aag(path: &Path) -> Result<AagModel, String> {
     {
         return Err("AIGER literal references an undefined variable".to_string());
     }
+    let mut input_names = (0..inputs)
+        .map(|index| format!("input_{index}"))
+        .collect::<Vec<_>>();
+    let mut latch_names = (0..latch_count)
+        .map(|index| format!("latch_{index}"))
+        .collect::<Vec<_>>();
+    let mut output_names = (0..output_count)
+        .map(|index| format!("bad_{index}"))
+        .collect::<Vec<_>>();
+    let mut seen_symbols = BTreeSet::new();
+    for line in lines {
+        if line == "c" {
+            break;
+        }
+        let Some((designator, name)) = line.split_once(' ') else {
+            return Err("invalid AIGER symbol line".to_string());
+        };
+        if name.is_empty() || name.len() > 4096 {
+            return Err("invalid AIGER symbol name".to_string());
+        }
+        let mut chars = designator.chars();
+        let kind = chars
+            .next()
+            .ok_or_else(|| "empty AIGER symbol designator".to_string())?;
+        let index = chars
+            .as_str()
+            .parse::<usize>()
+            .map_err(|_| "invalid AIGER symbol index".to_string())?;
+        if !seen_symbols.insert((kind, index)) {
+            return Err("duplicate AIGER symbol definition".to_string());
+        }
+        let target = match kind {
+            'i' => input_names.get_mut(index),
+            'l' => latch_names.get_mut(index),
+            'o' => output_names.get_mut(index),
+            _ => None,
+        }
+        .ok_or_else(|| "unsupported or out-of-range AIGER symbol".to_string())?;
+        *target = name.to_string();
+    }
     Ok(AagModel {
         max_variable,
         inputs: input_literals,
+        input_names,
         latches,
+        latch_names,
         outputs,
+        output_names,
         ands,
     })
 }
@@ -11629,6 +11675,46 @@ fn earliest_aag_counterexample(
     Ok((encoding, run))
 }
 
+fn report_csv_field(value: &str) -> String {
+    if value
+        .chars()
+        .any(|character| matches!(character, ',' | '"' | '\n' | '\r'))
+    {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+fn append_named_aag_trace(
+    lines: &mut Vec<String>,
+    model: &AagModel,
+    witness: &[bool],
+    bad_frame: usize,
+) {
+    let mut header = vec!["named_frame".to_string()];
+    header.extend(model.latch_names.iter().map(|name| report_csv_field(name)));
+    header.extend(model.input_names.iter().map(|name| report_csv_field(name)));
+    lines.push(header.join(","));
+    for frame in 0..=bad_frame {
+        let offset = frame * model.max_variable;
+        let mut row = vec![frame.to_string()];
+        row.extend(
+            model
+                .latches
+                .iter()
+                .map(|latch| usize::from(witness[offset + latch.current / 2 - 1]).to_string()),
+        );
+        row.extend(
+            model
+                .inputs
+                .iter()
+                .map(|literal| usize::from(witness[offset + literal / 2 - 1]).to_string()),
+        );
+        lines.push(row.join(","));
+    }
+}
+
 fn write_general_aiger_safety_result(
     path: &Path,
     input: &Path,
@@ -11656,6 +11742,7 @@ fn write_general_aiger_safety_result(
             format!("gate_reason={gate_reason}"),
             format!("bad_frame={}", query.frame),
             format!("bad_output={}", query.output),
+            format!("bad_output_name={}", model.output_names[query.output]),
             "frame,latch_bits_low_to_high,input_bits_low_to_high".to_string(),
         ];
         for frame in 0..=query.frame {
@@ -11677,6 +11764,7 @@ fn write_general_aiger_safety_result(
                 .collect::<String>();
             lines.push(format!("{frame},{latches},{inputs}"));
         }
+        append_named_aag_trace(&mut lines, model, witness, query.frame);
         lines.join("\n") + "\n"
     } else {
         format!(
@@ -11890,21 +11978,245 @@ fn firmware_safety_gate(input: &Path, horizon: usize, artifact_dir: &Path) -> Re
     Ok(safe)
 }
 
+fn valid_verilog_identifier(value: &str) -> bool {
+    let mut characters = value.chars();
+    characters
+        .next()
+        .is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
+        && characters.all(|character| {
+            character == '_' || character == '$' || character.is_ascii_alphanumeric()
+        })
+}
+
+fn replace_file(source: &Path, destination: &Path) -> Result<(), String> {
+    if destination.exists() {
+        fs::remove_file(destination)
+            .map_err(|error| format!("remove {}: {error}", destination.display()))?;
+    }
+    fs::rename(source, destination).map_err(|error| {
+        format!(
+            "publish {} as {}: {error}",
+            source.display(),
+            destination.display()
+        )
+    })
+}
+
+fn source_revision() -> String {
+    env::var("GITHUB_SHA")
+        .ok()
+        .filter(|value| {
+            (7..=64).contains(&value.len())
+                && value.chars().all(|character| character.is_ascii_hexdigit())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn report_value(value: &str) -> String {
+    value
+        .replace('%', "%25")
+        .replace('\n', "%0A")
+        .replace('\r', "%0D")
+}
+
+fn annotate_rtl_safety_report(
+    report: &Path,
+    source: &str,
+    top: &str,
+    yosys_version: &str,
+) -> Result<(), String> {
+    let body =
+        fs::read_to_string(report).map_err(|error| format!("read RTL safety report: {error}"))?;
+    let revision = source_revision();
+    let mut lines = body.lines();
+    let status = lines
+        .next()
+        .ok_or_else(|| "RTL safety report is empty".to_string())?;
+    let mut annotated = vec![
+        status.to_string(),
+        format!("source={}", report_value(source)),
+        format!("source_revision={revision}"),
+        format!("top={top}"),
+        format!("yosys={yosys_version}"),
+        "generated_model=model.aag".to_string(),
+    ];
+    annotated.extend(
+        lines
+            .filter(|line| !line.starts_with("input="))
+            .map(str::to_string),
+    );
+    fs::write(report, annotated.join("\n") + "\n")
+        .map_err(|error| format!("write annotated RTL safety report: {error}"))
+}
+
+fn firmware_rtl_safety_gate(
+    input: &Path,
+    top: &str,
+    horizon: usize,
+    artifact_dir: &Path,
+) -> Result<bool, String> {
+    if !valid_verilog_identifier(top) {
+        return Err("RTL top must be a simple Verilog identifier".to_string());
+    }
+    let source = fs::canonicalize(input)
+        .map_err(|error| format!("resolve RTL source {}: {error}", input.display()))?;
+    if !source.is_file() {
+        return Err(format!("RTL source is not a file: {}", source.display()));
+    }
+    let source_bytes = fs::metadata(&source)
+        .map_err(|error| format!("inspect RTL source {}: {error}", source.display()))?
+        .len();
+    if source_bytes > 10 * 1024 * 1024 {
+        return Err(format!(
+            "RTL source is {source_bytes} bytes; safety limit is 10485760"
+        ));
+    }
+    let source_label = input.to_string_lossy().to_string();
+    fs::create_dir_all(artifact_dir)
+        .map_err(|error| format!("create RTL safety artifact directory: {error}"))?;
+    let stage = artifact_dir.join(format!(".rtl-stage-{}", std::process::id()));
+    fs::create_dir(&stage)
+        .map_err(|error| format!("create RTL safety staging directory: {error}"))?;
+    let stage = fs::canonicalize(&stage)
+        .map_err(|error| format!("resolve RTL safety staging directory: {error}"))?;
+    let model = stage.join("model.aag");
+    let staged_source = stage.join("source.sv");
+    let synthesis = stage.join("synthesis.ys");
+    let yosys_log = stage.join("yosys.log");
+    let yosys_errors = stage.join("yosys-errors.log");
+    fs::copy(&source, &staged_source)
+        .map_err(|error| format!("stage RTL source for Yosys: {error}"))?;
+    let script = format!(
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nasync2sync\ndffunmap\nopt\nsimplemap\naigmap\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+    );
+    fs::write(&synthesis, script)
+        .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
+    let version_output = Command::new("yosys")
+        .arg("-V")
+        .output()
+        .map_err(|error| format!("run yosys -V: {error}"))?;
+    if !version_output.status.success() {
+        return Err("yosys -V failed".to_string());
+    }
+    let yosys_version = String::from_utf8_lossy(&version_output.stdout)
+        .lines()
+        .next()
+        .unwrap_or("unknown")
+        .trim()
+        .to_string();
+    let error_file = fs::File::create(&yosys_errors)
+        .map_err(|error| format!("create Yosys error log: {error}"))?;
+    let mut child = Command::new("yosys")
+        .arg("-Q")
+        .arg("-l")
+        .arg("yosys.log")
+        .arg("-s")
+        .arg("synthesis.ys")
+        .current_dir(&stage)
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(error_file))
+        .spawn()
+        .map_err(|error| format!("run Yosys synthesis: {error}"))?;
+    let deadline = Instant::now() + std::time::Duration::from_secs(120);
+    let status = loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("wait for Yosys synthesis: {error}"))?
+        {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            child
+                .kill()
+                .map_err(|error| format!("terminate timed-out Yosys synthesis: {error}"))?;
+            child
+                .wait()
+                .map_err(|error| format!("reap timed-out Yosys synthesis: {error}"))?;
+            return Err(format!(
+                "Yosys synthesis exceeded 120 seconds; inspect {} and {}",
+                yosys_log.display(),
+                yosys_errors.display()
+            ));
+        }
+        thread::sleep(std::time::Duration::from_millis(50));
+    };
+    if !status.success() {
+        return Err(format!(
+            "Yosys synthesis failed; inspect {} and {}",
+            yosys_log.display(),
+            yosys_errors.display()
+        ));
+    }
+    let safe = firmware_safety_gate(&model, horizon, &stage)?;
+    annotate_rtl_safety_report(
+        &stage.join("safety-report.txt"),
+        &source_label,
+        top,
+        &yosys_version,
+    )?;
+    let status_name = if safe { "SAFE" } else { "UNSAFE" };
+    let revision = source_revision();
+    fs::write(
+        stage.join("run-manifest.txt"),
+        format!(
+            "status={status_name}\nsource={}\nsource_revision={revision}\nsource_bytes={source_bytes}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\nyosys={yosys_version}\n",
+            report_value(&source_label)
+        ),
+    )
+    .map_err(|error| format!("write RTL safety manifest: {error}"))?;
+    let published_manifest = artifact_dir.join("run-manifest.txt");
+    if published_manifest.exists() {
+        fs::remove_file(&published_manifest)
+            .map_err(|error| format!("remove stale RTL safety manifest: {error}"))?;
+    }
+    for name in [
+        "model.aag",
+        "signal.map",
+        "source.sv",
+        "synthesis.ys",
+        "yosys.log",
+        "yosys-errors.log",
+        "solver-metrics.csv",
+        "safety-report.txt",
+    ] {
+        replace_file(&stage.join(name), &artifact_dir.join(name))?;
+    }
+    replace_file(&stage.join("run-manifest.txt"), &published_manifest)?;
+    fs::remove_dir(&stage)
+        .map_err(|error| format!("remove RTL safety staging directory: {error}"))?;
+    println!(
+        "firmware-rtl-safety-gate status={status_name} source={} top={top} report={}",
+        source_label,
+        artifact_dir.join("safety-report.txt").display()
+    );
+    Ok(safe)
+}
+
 fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
-    if args.first().map(String::as_str) != Some("firmware-safety-gate") {
-        return Ok(None);
+    match args.first().map(String::as_str) {
+        Some("firmware-safety-gate") => {
+            if args.len() != 4 {
+                return Err("usage: continuation-quotient-sat firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid firmware safety horizon".to_string())?
+                .max(1);
+            firmware_safety_gate(Path::new(&args[1]), horizon, Path::new(&args[3])).map(Some)
+        }
+        Some("firmware-rtl-safety-gate") => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat firmware-rtl-safety-gate INPUT.sv TOP HORIZON ARTIFACT_DIR".to_string());
+            }
+            let horizon = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid RTL firmware safety horizon".to_string())?
+                .max(1);
+            firmware_rtl_safety_gate(Path::new(&args[1]), &args[2], horizon, Path::new(&args[4]))
+                .map(Some)
+        }
+        _ => Ok(None),
     }
-    if args.len() != 4 {
-        return Err(
-            "usage: continuation-quotient-sat firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR"
-                .to_string(),
-        );
-    }
-    let horizon = args[2]
-        .parse::<usize>()
-        .map_err(|_| "invalid firmware safety horizon".to_string())?
-        .max(1);
-    firmware_safety_gate(Path::new(&args[1]), horizon, Path::new(&args[3])).map(Some)
 }
 
 fn benchmark_continuation_dimacs(
@@ -21739,5 +22051,70 @@ mod tests {
             }
             std::fs::remove_dir_all(artifacts).unwrap();
         }
+    }
+
+    #[test]
+    fn rtl_safety_gate_synthesizes_and_names_exact_traces_when_yosys_is_available() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping RTL integration test because Yosys is unavailable");
+            return;
+        }
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/products/infusion-pump/rtl");
+        for (name, expected_safe, expected_status) in [
+            ("safe-controller.sv", true, "status=SAFE\n"),
+            ("door-interlock-regression.sv", false, "status=UNSAFE\n"),
+        ] {
+            let artifacts =
+                std::env::temp_dir().join(format!("cq-sat-rtl-gate-{name}-{}", std::process::id()));
+            let safe = firmware_rtl_safety_gate(
+                &root.join(name),
+                "infusion_pump_controller",
+                8,
+                &artifacts,
+            )
+            .unwrap();
+            assert_eq!(safe, expected_safe);
+            let report = fs::read_to_string(artifacts.join("safety-report.txt")).unwrap();
+            assert!(report.starts_with(expected_status));
+            assert!(report.contains("top=infusion_pump_controller\n"));
+            assert!(report.contains("generated_model=model.aag\n"));
+            assert!(artifacts.join("source.sv").is_file());
+            assert!(artifacts.join("signal.map").is_file());
+            assert!(artifacts.join("run-manifest.txt").is_file());
+            if !expected_safe {
+                assert!(report.contains("bad_frame=1\n"));
+                assert!(report.contains("bad_output_name=bad\n"));
+                assert!(
+                    report.contains("named_frame,requested_motor_active,motor_request,door_open\n")
+                );
+                assert!(report.contains("0,0,1,0\n"));
+                assert!(report.contains("1,1,0,1\n"));
+            }
+            std::fs::remove_dir_all(artifacts).unwrap();
+        }
+        assert!(
+            firmware_rtl_safety_gate(
+                &root.join("safe-controller.sv"),
+                "bad; shell",
+                8,
+                &std::env::temp_dir().join("cq-sat-invalid-rtl-top")
+            )
+            .is_err()
+        );
+        let oversized =
+            std::env::temp_dir().join(format!("cq-sat-oversized-rtl-{}.sv", std::process::id()));
+        let oversized_file = fs::File::create(&oversized).unwrap();
+        oversized_file.set_len(10 * 1024 * 1024 + 1).unwrap();
+        assert!(
+            firmware_rtl_safety_gate(
+                &oversized,
+                "infusion_pump_controller",
+                8,
+                &std::env::temp_dir().join("cq-sat-oversized-rtl")
+            )
+            .is_err()
+        );
+        std::fs::remove_file(oversized).unwrap();
     }
 }

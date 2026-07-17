@@ -15,9 +15,27 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.0
         with:
           components: rustfmt, clippy
+      - name: Install formal RTL tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes yosys z3
       - name: Format
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Cross-check RTL examples with SymbiYosys
+        working-directory: examples/products/infusion-pump/rtl
+        run: |
+          git init /tmp/sby
+          git -C /tmp/sby remote add origin https://github.com/YosysHQ/sby.git
+          git -C /tmp/sby fetch --depth 1 origin fea6e467d067b3ea84b6b5ac08cd48beb59f0d42
+          git -C /tmp/sby checkout --detach FETCH_HEAD
+          python3 /tmp/sby/sbysrc/sby.py -f -d /tmp/sby-safe safe-controller.sby
+          if python3 /tmp/sby/sbysrc/sby.py -f -d /tmp/sby-regression door-interlock-regression.sby; then
+            echo "regressed controller unexpectedly passed SymbiYosys"
+            exit 1
+          fi
+          test -f /tmp/sby-safe/PASS
+          test -f /tmp/sby-regression/FAIL

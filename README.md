@@ -73,22 +73,25 @@ accelerated and safe-fallback paths.
 ### Product integration: firmware safety gate
 
 The [infusion-pump firmware example](examples/products/infusion-pump/README.md)
-shows the verifier as a pull-request safety gate. A protected controller passes;
-a realistic door-interlock regression rejects the build and produces the shortest
-input/state trace needed to reproduce the failure.
+shows the verifier as a pull-request safety gate starting from SystemVerilog. It
+runs Yosys in an isolated staging directory, preserves signal names, and feeds
+the generated ASCII AIGER model into the exact portfolio. A protected controller
+passes; a realistic door-interlock regression rejects the build and produces the
+shortest named input/state trace needed to reproduce the failure.
 
 ```sh
 ./target/release/continuation-quotient-sat \
-  firmware-safety-gate \
-  examples/products/infusion-pump/firmware/safe-controller.aag \
-  100 target/firmware-safety
+  firmware-rtl-safety-gate \
+  examples/products/infusion-pump/rtl/safe-controller.sv \
+  infusion_pump_controller 100 target/firmware-safety
 ```
 
-The command writes stable report and metrics artifacts, emits GitHub Actions
-annotations, and uses distinct exit statuses for safe builds (0), discovered
-safety violations (1), and tool or input failures (2). The example includes a
-copyable pull-request workflow. It demonstrates integration mechanics, not
-medical-device certification.
+The command requires Yosys on `PATH`. It writes the source snapshot, synthesis
+script and log, generated model and signal map, stable report and metrics,
+provenance manifest, and GitHub Actions annotations. Exit statuses distinguish
+safe builds (0), discovered violations (1), and tool or input failures (2). The
+example includes a copyable workflow and independent SymbiYosys/Z3 oracle files.
+It demonstrates integration mechanics, not medical-device certification.
 
 ### Standard AIGER safety verification
 

@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 8
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal safe-controller.sv
+prep -top infusion_pump_controller
+
+[files]
+safe-controller.sv

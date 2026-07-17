@@ -9,9 +9,10 @@ CDCL, and validates every returned witness.
 ## Product-shaped firmware CI
 
 The [infusion-pump firmware safety gate](products/infusion-pump/README.md) wraps
-the exact verifier in a developer-facing product workflow. It provides CI exit
-semantics, GitHub annotations, durable artifacts, a copyable pull-request job,
-and both passing and deliberately regressed controller builds.
+Yosys and the exact verifier in a developer-facing product workflow. It starts
+from SystemVerilog, provides named traces, CI exit semantics, GitHub annotations,
+durable provenance artifacts, a copyable pull-request job, independent
+SymbiYosys/Z3 checks, and passing and deliberately regressed controller builds.
 
 ## Watchdog and interlock trace analysis
 

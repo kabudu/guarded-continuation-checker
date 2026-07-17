@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add an RTL-to-safety-gate path that synthesizes bounded SystemVerilog through
+  Yosys into the exact supported ASCII AIGER subset.
+- Preserve Yosys input, latch, and bad-output names in human-readable traces;
+  publish source, synthesis, model, solver, provenance, and manifest artifacts.
+- Replace the hand-authored product workflow with safe and regressed
+  SystemVerilog controllers cross-checked independently by SymbiYosys and Z3.
+
 ## 0.5.0 - 2026-07-17
 
 - Add a product-shaped firmware safety gate with CI-specific exit statuses,
