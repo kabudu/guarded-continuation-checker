@@ -21,9 +21,15 @@ three-sensor majority voters. Here the specialized backend is not reliably
 faster. The same gate selects persistent CDCL, demonstrating the product's exact
 no-regression path rather than forcing the research backend onto every model.
 
-## Independent AIGER safety model
+## Independent AIGER safety models
 
 [`aiger/counter-overflow-4.aag`](aiger/README.md) is a revision-pinned external
 four-bit counter model. The standard-format importer turns its declared bad-state
 output into exact bounded reachability queries and safely selects CDCL after
 recognizing that the full-state query shape is outside CQ-SAT/GCC's advantage.
+
+The same [AIGER workflow](aiger/README.md) verifies a nondeterministically
+scheduled Peterson mutual-exclusion protocol as SAFE through frame 100 and
+reconstructs the shortest input sequence driving an eight-bit SPI receiver's
+output at frame 16. These revision-pinned external models exercise exact
+primary-input semantics rather than the repository's built-in generators.

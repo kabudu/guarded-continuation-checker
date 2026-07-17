@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-07-17
+
+- Add exact primary-input and wider-model AIGER bounded model checking using a
+  scalable Tseitin-unrolled CDCL fallback selected without trial solving.
+- Combine all bad outputs and frames into one safety query, then minimize unsafe
+  traces to the shortest bad horizon while preserving complete input witnesses.
+- Add revision-pinned Peterson mutual-exclusion and SPI receiver models covering
+  real SAFE protocol verification and UNSAFE hardware input-trace reconstruction.
+
 ## 0.3.0 - 2026-07-17
 
 - Add a validated ASCII AIGER import path for closed deterministic safety models,

@@ -70,9 +70,11 @@ See the executable [watchdog/interlock](examples/watchdog-controller.md) and
 [redundant sensor-voting](examples/redundant-sensor-monitor.md) examples for the
 accelerated and safe-fallback paths.
 
-### Standard AIGER input
+### Standard AIGER safety verification
 
-CQ-SAT/GCC can ingest closed deterministic ASCII AIGER safety models directly:
+The portfolio ingests ASCII AIGER safety models directly. Closed models inside
+the bounded deterministic regime remain eligible for CQ-SAT/GCC; primary-input
+or wider models are sent directly to an exact Tseitin-unrolled CDCL backend.
 
 ```sh
 ./target/release/continuation-quotient-sat \
@@ -85,14 +87,22 @@ The bundled [four-bit counter overflow model](examples/aiger/README.md) is an
 independently authored, MIT-licensed model pinned to its upstream revision. Its
 bad-state output becomes an exhaustive set of exact bounded-reachability queries.
 The command reports `SAFE` or `UNSAFE` and writes a complete counterexample trace
-for an unsafe model. Static query-shape
-analysis rejects the specialized backend for this workload and uses CDCL: this is
+for an unsafe model. Static query-shape analysis rejects the specialized backend
+for this workload and uses CDCL: this is
 a real external validation of the portfolio's no-regression path, not a claimed
 CQ-SAT/GCC speedup.
 
-The current importer accepts ASCII `aag` models with no primary inputs and one to
-nine latches. Broader nondeterministic/input-driven AIGER support is not yet
-implemented and such models are rejected explicitly.
+The bundled examples also include an input-driven
+[Peterson mutual-exclusion protocol](examples/aiger/README.md), proved SAFE
+through frame 100 for every scheduler and signal sequence, and an
+[eight-bit SPI receiver](examples/aiger/README.md), reported UNSAFE with the
+shortest 17-frame input/latch trace. These independently sourced models exercise
+the scalable fallback on real protocol and hardware semantics.
+
+The current importer supports the original five-field ASCII `aag` format,
+arbitrary primary inputs, declared latch initial values, multiple bad outputs,
+and a bounded resource envelope. Extended AIGER 1.9 property sections and binary
+`.aig` input are not yet supported.
 
 ## Build and test
 

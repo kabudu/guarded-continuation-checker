@@ -1,0 +1,2 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,assumptions_per_query,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+petersons-algorithm-2-threads-1-core.aag,9,100,12120,34836,1,10,200000,cdcl,aiger-primary-inputs,38.707,0,101.000,42,723916,0,0,2350167167.000,2350167167.000,1.000000,0.999692,0,1,true,true,ok
