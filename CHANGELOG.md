@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-07-17
+
 - Add a bounded multi-file RTL project safety gate with deterministic source
   staging, duplicate detection, aggregate limits, and manifest provenance.
 - Remove stale source snapshots before atomic manifest publication so reruns
