@@ -1,0 +1,13 @@
+case,expected,cq_status,cq_exit,oracle_status,yosys,agreement
+always01-safe,SAFE,SAFE,0,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+always01-unsafe,UNSAFE,UNSAFE,1,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+always02-safe,SAFE,SAFE,0,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+always02-unsafe,UNSAFE,UNSAFE,1,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+arrays-safe,SAFE,SAFE,0,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+arrays-unsafe,UNSAFE,UNSAFE,1,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+dff0-safe,SAFE,SAFE,0,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+dff0-unsafe,UNSAFE,UNSAFE,1,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+dff997-safe,SAFE,SAFE,0,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+dff997-unsafe,UNSAFE,UNSAFE,1,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+retime-safe,SAFE,SAFE,0,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable
+retime-unsafe,UNSAFE,UNSAFE,1,NOT_RUN,Yosys 0.36+42 (git sha1 70d35314d; clang 11.0.1-2 -fPIC -Os),not-applicable

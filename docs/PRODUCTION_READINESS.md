@@ -24,6 +24,10 @@ tool production-grade.
   signatures and exit meanings. Direct AIGER input is bounded to 256 MiB.
 - CI executes 25,000 deterministic mutations over persistent AIGER,
   assumptions, project-config, and CLI parser regression corpora.
+- A revision-pinned public corpus combines five unmodified Yosys RTL sources
+  with twelve separately owned properties (six SAFE and six UNSAFE). All twelve
+  match expected results on Yosys 0.67+post and digest-pinned Yosys 0.36; the
+  modern run also agrees with an independent SymbiYosys/Z3 oracle.
 
 ## Required before a production claim
 
@@ -37,8 +41,10 @@ tool production-grade.
 - [x] Linux memory, file-size, and process-tree limits in addition to wall-clock
   and model-size limits. macOS is explicitly development-only for this gate.
 - [x] Bounded parser and CLI mutation fuzzing with persistent regression corpora.
-- [ ] Differential validation across a substantial public and design-partner RTL
-  corpus, including SAT and UNSAT properties and multiple Yosys versions.
+- [x] Differential validation across a small revision-pinned public RTL corpus,
+  including SAFE and UNSAFE properties and multiple Yosys versions.
+- [ ] Differential validation across a substantial design-partner RTL corpus,
+  including representative toolchains, properties, and failure modes.
 - [ ] Security review of source ingestion, subprocess isolation, artifacts, and
   dependency supply chain.
 - [ ] Operational documentation for installation, upgrades, support, incident

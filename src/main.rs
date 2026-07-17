@@ -13467,7 +13467,7 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     });
     let includes = include_flags.join(" ");
     let script = format!(
-        "read_verilog -formal -sv -D CQ_AIGER_EXPORT {includes} {staged_sources}\n{parameter_commands}prep -top {top}\n{clock_check}flatten\nasync2sync\nopt\nmemory_map\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT {includes} {staged_sources}\n{parameter_commands}prep -top {top}\n{clock_check}flatten\nasync2sync\nopt\nmemory_map\nopt\ntechmap\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
@@ -13574,12 +13574,16 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     let parameters = build_options.map_or_else(
         || "none".to_string(),
         |options| {
-            options
-                .parameters
-                .iter()
-                .map(|(name, value)| format!("{name}:{value}"))
-                .collect::<Vec<_>>()
-                .join(";")
+            if options.parameters.is_empty() {
+                "none".to_string()
+            } else {
+                options
+                    .parameters
+                    .iter()
+                    .map(|(name, value)| format!("{name}:{value}"))
+                    .collect::<Vec<_>>()
+                    .join(";")
+            }
         },
     );
     let parameter_count = build_options.map_or(0, |options| options.parameters.len());
@@ -24053,6 +24057,28 @@ mod tests {
                     .iter()
                     .any(|clause| clause.0 == vec![(variable, expected)])
             );
+        }
+    }
+
+    #[test]
+    fn public_rtl_corpus_accepts_parameterless_safe_and_unsafe_bundles() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping public RTL corpus test because Yosys is unavailable");
+            return;
+        }
+        let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("corpus/rtl/yosys-simple");
+        for (case, expected_safe) in [("always01-safe", true), ("always01-unsafe", false)] {
+            let artifacts = std::env::temp_dir()
+                .join(format!("cq-sat-public-rtl-{case}-{}", std::process::id()));
+            assert_eq!(
+                firmware_rtl_config_safety_gate(&corpus.join(format!("{case}.conf")), &artifacts,)
+                    .unwrap(),
+                expected_safe
+            );
+            validate_rtl_artifact_bundle(&artifacts).unwrap();
+            let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
+            assert!(manifest.contains("parameter_count=0\nparameters=none\n"));
+            fs::remove_dir_all(artifacts).unwrap();
         }
     }
 

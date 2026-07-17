@@ -1,0 +1,13 @@
+case	config	expected
+always01-safe	always01-safe.conf	SAFE
+always01-unsafe	always01-unsafe.conf	UNSAFE
+always02-safe	always02-safe.conf	SAFE
+always02-unsafe	always02-unsafe.conf	UNSAFE
+arrays-safe	arrays-safe.conf	SAFE
+arrays-unsafe	arrays-unsafe.conf	UNSAFE
+dff0-safe	dff0-safe.conf	SAFE
+dff0-unsafe	dff0-unsafe.conf	UNSAFE
+dff997-safe	dff997-safe.conf	SAFE
+dff997-unsafe	dff997-unsafe.conf	UNSAFE
+retime-safe	retime-safe.conf	SAFE
+retime-unsafe	retime-unsafe.conf	UNSAFE

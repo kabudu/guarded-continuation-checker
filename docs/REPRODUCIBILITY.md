@@ -609,5 +609,32 @@ independent `multimodule-controller.sby` SymbiYosys/Z3 job to pass through depth
 
 ## Curated result files
 
+### Public RTL compatibility corpus
+
+Build a release binary, install Yosys, Z3, and the pinned SymbiYosys revision
+documented by CI, then run:
+
+```sh
+scripts/run-rtl-corpus.sh \
+  target/release/continuation-quotient-sat \
+  corpus/rtl/yosys-simple \
+  results/reproduced-rtl-public-corpus \
+  /path/to/sby/sbysrc/sby.py
+```
+
+The runner first verifies every upstream SHA-256 digest. It then requires each
+CQ result and exit status to match the strict manifest, validates every emitted
+evidence bundle, and requires the independent SymbiYosys/Z3 result to agree.
+The output is written atomically to `results.csv`; any missing, malformed, or
+disagreeing case fails the run.
+
+CI repeats the CQ checks inside the digest-pinned historical image
+`hdlc/yosys@sha256:58c0c80e41fd96b4b90da53c730aa3c43051f0cf2a6c6e336bd012281479df22`
+(Yosys 0.36+42). The independent oracle is intentionally run only on the current
+toolchain because the historical pass is a synthesis-compatibility check. The
+committed reference summaries are
+`results/rtl-public-corpus-yosys-067-v1.csv` and
+`results/rtl-public-corpus-yosys-036-v1.csv`.
+
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
 agreement, and witness-validity columns are part of the experimental contract.

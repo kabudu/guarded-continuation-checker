@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-07-17
+
+- Add a revision-pinned public RTL corpus built from five unmodified Yosys test
+  sources and twelve CQ-owned SAFE/UNSAFE properties, with exact provenance and
+  executable checksum verification.
+- Require all twelve cases to match their expected result on both current Yosys
+  and a digest-pinned Yosys 0.36 image; independently cross-check the current
+  run with SymbiYosys/Z3.
+- Normalize parameterless project evidence as `parameters=none` and add generic
+  technology mapping before AIG lowering, fixing corpus-discovered compatibility
+  failures for parameterless designs and dynamic memory indexing.
+
 ## 0.13.0 - 2026-07-17
 
 - Add project config v2 startup-reset sequences with exact asserted-frame and

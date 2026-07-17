@@ -1,0 +1,13 @@
+case,expected,cq_status,cq_exit,oracle_status,yosys,agreement
+always01-safe,SAFE,SAFE,0,SAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+always01-unsafe,UNSAFE,UNSAFE,1,UNSAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+always02-safe,SAFE,SAFE,0,SAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+always02-unsafe,UNSAFE,UNSAFE,1,UNSAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+arrays-safe,SAFE,SAFE,0,SAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+arrays-unsafe,UNSAFE,UNSAFE,1,UNSAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+dff0-safe,SAFE,SAFE,0,SAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+dff0-unsafe,UNSAFE,UNSAFE,1,UNSAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+dff997-safe,SAFE,SAFE,0,SAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+dff997-unsafe,UNSAFE,UNSAFE,1,UNSAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+retime-safe,SAFE,SAFE,0,SAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
+retime-unsafe,UNSAFE,UNSAFE,1,UNSAFE,Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159; Release; AppleClang clang++ 21.0.0.21000099),true
