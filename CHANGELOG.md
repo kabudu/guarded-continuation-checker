@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.16.0 - 2026-07-17
+
+- Add a production-evaluation operations runbook covering supported hosts,
+  installation, qualification, upgrades, rollback, monitoring, incident
+  response, restoration drills, support ownership, and evidence retention.
+- Add a Linux-only fail-closed qualification script that exercises known SAFE
+  and UNSAFE RTL, schema-v4 validation, CLI contracts, and containment fields;
+  require it in CI.
+
 ## 0.15.0 - 2026-07-17
 
 - Add artifact schema v4 with a bounded SHA-256 inventory covering generated

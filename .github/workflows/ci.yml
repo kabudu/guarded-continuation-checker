@@ -25,6 +25,11 @@ jobs:
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Production-evaluation qualification smoke test
+        run: |
+          cargo build --release --locked
+          scripts/production-evaluation-check.sh \
+            target/release/continuation-quotient-sat /tmp/cq-operations-check
       - name: Cross-check RTL examples with SymbiYosys
         working-directory: examples/products/infusion-pump/rtl
         run: |

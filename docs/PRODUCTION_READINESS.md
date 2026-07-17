@@ -52,8 +52,9 @@ tool production-grade.
 - [ ] Complete the security review tracked in `SECURITY.md`. Artifact integrity
   and dependency monitoring are implemented; a stronger isolation boundary for
   hostile RTL and an independent external assessment remain open.
-- [ ] Operational documentation for installation, upgrades, support, incident
-  response, and result retention.
+- [x] Operational documentation and executable qualification for installation,
+  upgrades, rollback, support, incident response, restoration, and result
+  retention.
 - [ ] Independent technical review and successful design-partner pilots.
 - [ ] Standards applicability documented without implying ISO 26262, IEC 61508,
   IEC 62304, or other certification that has not been obtained.

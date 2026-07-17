@@ -50,6 +50,8 @@ See [Research findings](docs/FINDINGS.md) and
 [Reproducibility](docs/REPRODUCIBILITY.md) before interpreting benchmark results.
 The enforced gaps that still prevent a production claim are tracked in
 [Production-readiness gates](docs/PRODUCTION_READINESS.md).
+Operators evaluating the tool with a design partner must follow the
+[production-evaluation operations runbook](docs/OPERATIONS.md).
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
