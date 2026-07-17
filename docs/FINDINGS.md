@@ -396,6 +396,30 @@ experiment should move from post-model conflict explanations to pre-solve
 higher-order propagation, or compile a bounded set of generalized global clauses
 once and reuse them across every query.
 
+## Reusable global checkpoint clauses
+
+The global compiler enumerates the bounded checkpoint state space once, asks the
+BDD whether each state is reachable from any initial state, skips states already
+covered by a learned reason, and generalizes every remaining unreachable state
+into an exact permanent clause. Query-specific prefix observations still use the
+native BDD, but CDCL receives the reusable checkpoint-image relation before it
+proposes a model.
+
+This is the first robust runtime crossover. The width-9, checkpoint-10 cascade
+compiled 134 global clauses averaging 6.28 literals. The BDD grew from 41,299 to
+51,664 nodes during offline compilation. Reconciliation fell to two conflicts on
+horizon 137 and zero on horizons 1,333 and 7,777. Speedups versus full persistent
+CDCL were 2.546×, 1.190×, and 2.601×. Recognition-inclusive break-even occurred
+after approximately 6.8, 4.8, and 0.5 queries. All answers agreed and all full
+witnesses validated on the preselected unseen holdout.
+
+This does not address arbitrary SAT or P versus NP. It demonstrates a practical
+solver architecture for repeated queries over recognized deterministic temporal
+systems with a small checkpoint width: bounded model checking, protocol and
+hardware trace verification, planning, and fault diagnosis. The next requirement
+is external validation on independently sourced transition systems and wider
+checkpoints, with an admission gate for the exponential checkpoint enumeration.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

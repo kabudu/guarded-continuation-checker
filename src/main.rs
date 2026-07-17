@@ -9022,6 +9022,43 @@ impl CheckpointCdclPreimage {
     }
 }
 
+fn generalized_checkpoint_core(
+    preimage: &mut SymbolicPreimageTransition,
+    checkpoint: usize,
+    width: usize,
+    constraint: usize,
+    state: &[bool],
+) -> Vec<usize> {
+    let literals = state
+        .iter()
+        .enumerate()
+        .map(|(bit, &value)| {
+            let root = preimage.frame(checkpoint)[bit];
+            if value {
+                root
+            } else {
+                let mut memo = HashMap::new();
+                preimage.manager.negate(root, &mut memo)
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut suffix = vec![1usize; width + 1];
+    for bit in (0..width).rev() {
+        suffix[bit] = preimage.manager.and(literals[bit], suffix[bit + 1]);
+    }
+    let mut prefix = constraint;
+    let mut core = Vec::with_capacity(width);
+    for bit in 0..width {
+        let without_current = preimage.manager.and(prefix, suffix[bit + 1]);
+        if without_current != 0 {
+            core.push(bit);
+            prefix = preimage.manager.and(prefix, literals[bit]);
+        }
+    }
+    debug_assert_eq!(prefix, 0);
+    core
+}
+
 struct NativeBddTheoryPreimage {
     solver: Solver<'static>,
     preimage: SymbolicPreimageTransition,
@@ -9033,6 +9070,8 @@ struct NativeBddTheoryPreimage {
     theory_clauses: usize,
     learned_literals: usize,
     max_learned_width: usize,
+    global_clauses: usize,
+    global_literals: usize,
 }
 
 impl NativeBddTheoryPreimage {
@@ -9079,7 +9118,7 @@ impl NativeBddTheoryPreimage {
             .collect::<Vec<_>>();
         let mut solver = Solver::new();
         add_to_varisat(&mut solver, &suffix);
-        Ok(Self {
+        let mut result = Self {
             solver,
             preimage,
             variables: width * (horizon + 1),
@@ -9090,7 +9129,70 @@ impl NativeBddTheoryPreimage {
             theory_clauses: 0,
             learned_literals: 0,
             max_learned_width: 0,
-        })
+            global_clauses: 0,
+            global_literals: 0,
+        };
+        result.compile_global_checkpoint_clauses(4_096);
+        Ok(result)
+    }
+
+    fn compile_global_checkpoint_clauses(&mut self, clause_limit: usize) {
+        if self.width >= usize::BITS as usize || self.width > 16 {
+            return;
+        }
+        let mut forbidden_cores: Vec<Vec<(usize, bool)>> = Vec::new();
+        for bits in 0..(1usize << self.width) {
+            if forbidden_cores.len() >= clause_limit {
+                break;
+            }
+            let state = (0..self.width)
+                .map(|bit| bits & (1usize << bit) != 0)
+                .collect::<Vec<_>>();
+            if forbidden_cores
+                .iter()
+                .any(|core| core.iter().all(|&(bit, value)| state[bit] == value))
+            {
+                continue;
+            }
+            let mut joint = 1usize;
+            for (bit, &value) in state.iter().enumerate() {
+                let root = self.preimage.frame(self.checkpoint)[bit];
+                let literal = if value {
+                    root
+                } else {
+                    let mut memo = HashMap::new();
+                    self.preimage.manager.negate(root, &mut memo)
+                };
+                joint = self.preimage.manager.and(joint, literal);
+                if joint == 0 {
+                    break;
+                }
+            }
+            if joint != 0 {
+                continue;
+            }
+            let core_bits = generalized_checkpoint_core(
+                &mut self.preimage,
+                self.checkpoint,
+                self.width,
+                1,
+                &state,
+            );
+            let core = core_bits
+                .iter()
+                .map(|&bit| (bit, state[bit]))
+                .collect::<Vec<_>>();
+            let clause = core
+                .iter()
+                .map(|&(bit, value)| {
+                    Lit::from_var(Var::from_index(self.checkpoint * self.width + bit), !value)
+                })
+                .collect::<Vec<_>>();
+            self.solver.add_clause(&clause);
+            self.global_literals += core.len();
+            self.global_clauses += 1;
+            forbidden_cores.push(core);
+        }
     }
 
     fn query(&mut self, assumptions: &[Option<bool>]) -> Option<Vec<bool>> {
@@ -9226,36 +9328,13 @@ impl NativeBddTheoryPreimage {
                 return Some(assignment);
             }
 
-            let checkpoint_literals = checkpoint_state
-                .iter()
-                .enumerate()
-                .map(|(bit, &value)| {
-                    let root = self.preimage.frame(self.checkpoint)[bit];
-                    if value {
-                        root
-                    } else {
-                        let mut memo = HashMap::new();
-                        self.preimage.manager.negate(root, &mut memo)
-                    }
-                })
-                .collect::<Vec<_>>();
-            let mut suffix = vec![1usize; self.width + 1];
-            for bit in (0..self.width).rev() {
-                suffix[bit] = self
-                    .preimage
-                    .manager
-                    .and(checkpoint_literals[bit], suffix[bit + 1]);
-            }
-            let mut prefix = constraint;
-            let mut core = Vec::with_capacity(self.width);
-            for bit in 0..self.width {
-                let without_current = self.preimage.manager.and(prefix, suffix[bit + 1]);
-                if without_current != 0 {
-                    core.push(bit);
-                    prefix = self.preimage.manager.and(prefix, checkpoint_literals[bit]);
-                }
-            }
-            debug_assert_eq!(prefix, 0);
+            let core = generalized_checkpoint_core(
+                &mut self.preimage,
+                self.checkpoint,
+                self.width,
+                constraint,
+                &checkpoint_state,
+            );
 
             let mut block = Vec::with_capacity(core.len() + 1);
             block.push(Lit::from_var(activation, false));
@@ -10436,7 +10515,7 @@ fn benchmark_native_bdd_theory(
     }
     let mut file = fs::File::create(output)
         .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,theory_clauses,theory_conflicts,average_learned_width,max_learned_width,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,global_clauses,average_global_width,theory_clauses,theory_conflicts,average_learned_width,max_learned_width,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,break_even_queries,sat_queries,unsat_queries,agreement,witnesses_valid,status")
         .map_err(|error| format!("write theory header: {error}"))?;
     for &width in widths {
         for &horizon in horizons {
@@ -10511,15 +10590,22 @@ fn benchmark_native_bdd_theory(
             let theory_per_query = theory_ns as f64 / query_count as f64;
             let full_per_query = full_ns as f64 / query_count as f64;
             let speedup = full_per_query / theory_per_query.max(1.0);
+            let break_even_queries = if full_per_query > theory_per_query {
+                recognition_ns as f64 / (full_per_query - theory_per_query)
+            } else {
+                f64::INFINITY
+            };
             let average_learned_width =
                 engine.learned_literals as f64 / engine.theory_conflicts.max(1) as f64;
-            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{effective_checkpoint},{node_limit},{recognition_ns},{bdd_nodes},{},{},{average_learned_width:.3},{},{theory_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.theory_clauses, engine.theory_conflicts, engine.max_learned_width)
+            let average_global_width =
+                engine.global_literals as f64 / engine.global_clauses.max(1) as f64;
+            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{effective_checkpoint},{node_limit},{recognition_ns},{bdd_nodes},{},{average_global_width:.3},{},{},{average_learned_width:.3},{},{theory_per_query:.3},{full_per_query:.3},{speedup:.6},{break_even_queries:.3},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.global_clauses, engine.theory_clauses, engine.theory_conflicts, engine.max_learned_width)
                 .map_err(|error| format!("write theory row: {error}"))?;
             file.flush()
                 .map_err(|error| format!("flush theory output: {error}"))?;
             println!(
-                "native BDD theory kind={kind} width={width} horizon={horizon} checkpoint={effective_checkpoint} bdd_nodes={bdd_nodes} theory_clauses={} conflicts={} learned_width={average_learned_width:.2}/{} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
-                engine.theory_clauses, engine.theory_conflicts, engine.max_learned_width
+                "native BDD theory kind={kind} width={width} horizon={horizon} checkpoint={effective_checkpoint} bdd_nodes={bdd_nodes} global_clauses={} global_width={average_global_width:.2} conflicts={} learned_width={average_learned_width:.2}/{} speedup={speedup:.3} break_even={break_even_queries:.1} agreement={agreement} witnesses_valid={witnesses_valid}",
+                engine.global_clauses, engine.theory_conflicts, engine.max_learned_width
             );
         }
     }

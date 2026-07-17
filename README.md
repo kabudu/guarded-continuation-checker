@@ -177,6 +177,10 @@ conjunction minimizer costs more than the conflicts it removes.
 The cached extractor uses prefix/suffix BDD conjunctions to test each checkpoint
 literal once. It preserves identical explanations but does not yield a robust
 runtime improvement, showing reconciliation is now the larger bottleneck.
+The global-clause compiler enumerates the bounded checkpoint image once,
+generalizes unreachable states into exact clauses, and installs them in the
+suffix solver for every query. On the measured width-9 cascade this is the first
+variant with phase and unseen-holdout speedups after compilation amortization.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
