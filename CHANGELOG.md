@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.0 - 2026-07-17
+
 - Add project config v2 startup-reset sequences with exact asserted-frame and
   deasserted-frame constraints in every bounded AIGER query.
 - Cross-check the reset boundary independently with SymbiYosys/Z3 and preserve
