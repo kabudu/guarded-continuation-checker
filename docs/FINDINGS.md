@@ -539,6 +539,32 @@ existing generated-model and bounded-unrolling limits are applied.
 General AIGER 1.9 property/constraint sections and full source-level assertion
 mapping remain unsupported and are rejected rather than approximated.
 
+## Multi-module repeated-property scaling
+
+The next product-shaped model contains five cooperating modules: command
+sequencing, dose accounting, watchdog timing, sensor voting, and the top-level
+pump system. Yosys lowers it to 8 inputs, 14 latches, 4 safety outputs, and 237
+AND gates. This exposed and fixed a real v0.6 integration gap: hierarchical cells
+must be flattened before AIGER export. Synthesis don't-care bits are now lowered
+explicitly to zero; unconstrained top-level signals remain primary inputs.
+
+The corrected benchmark asks one reachability question per property, aggregating
+all frames through each horizon. Every timing repetition starts a new batch, so
+learned clauses do not leak between repetitions. Bounded reuse shares a solver
+for two properties; cold BMC rebuilds it for each property. All 160 curated
+queries agree and all four properties are SAFE.
+
+With the compatibility-stable lowering, full end-to-end reuse speedup is 1.46x
+and 1.20x at horizons 8 and 16. It reverses to 0.70x and 0.78x at horizons 32
+and 64: learned solver state costs more than rebuilding. A one-gate,
+semantics-preserving mapping change moved the earlier crossover, proving that a
+25,000-clause envelope was too permissive. The static portfolio therefore
+enables reuse only for at least two properties and at most 15,000 base clauses.
+It selects cold BMC at horizons 32 and 64 and on the independent single-property
+Peterson and SPI fixtures, yielding a measured no-regression selection on this
+corpus. This is a bounded engineering result, not evidence that reuse universally
+dominates BMC.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

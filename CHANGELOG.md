@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Flatten hierarchical modules before RTL-to-AIGER export and make synthesis
+  don't-care lowering explicit, enabling realistic multi-module controllers.
+- Add an exact repeated-property BMC benchmark with bounded two-query reuse,
+  cold-solver agreement, and a static no-regression portfolio gate.
+- Add a five-module infusion-pump system and curated horizon-scaling evidence.
+
 ## 0.6.0 - 2026-07-17
 
 - Add an RTL-to-safety-gate path that synthesizes bounded SystemVerilog through

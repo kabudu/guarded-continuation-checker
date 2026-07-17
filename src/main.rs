@@ -11649,6 +11649,158 @@ fn run_aag_bmc(
     })
 }
 
+fn solve_aag_query(solver: &mut Solver, query: &AagBmcQuery) -> Result<bool, String> {
+    match query.assumption {
+        AagCnfLiteral::Constant(value) => Ok(value),
+        AagCnfLiteral::Variable((variable, positive)) => {
+            solver.assume(&[Lit::from_var(Var::from_index(variable), positive)]);
+            solver
+                .solve()
+                .map_err(|error| format!("solve AIGER property query: {error}"))
+        }
+    }
+}
+
+fn aag_property_batch(
+    model: &AagModel,
+    horizon: usize,
+    encoding: &AagBmcEncoding,
+) -> (Vec<Clause>, Vec<AagBmcQuery>) {
+    let mut selector_clauses = Vec::new();
+    let mut property_queries = Vec::with_capacity(model.outputs.len());
+    for output in 0..model.outputs.len() {
+        let candidates = encoding
+            .queries
+            .iter()
+            .filter(|query| query.output == output)
+            .map(|query| query.assumption)
+            .collect::<Vec<_>>();
+        let assumption = if candidates
+            .iter()
+            .any(|candidate| matches!(candidate, AagCnfLiteral::Constant(true)))
+        {
+            AagCnfLiteral::Constant(true)
+        } else {
+            let selector = encoding.variables + output;
+            let mut clause = vec![(selector, false)];
+            clause.extend(candidates.iter().filter_map(|candidate| match candidate {
+                AagCnfLiteral::Variable(literal) => Some(*literal),
+                AagCnfLiteral::Constant(_) => None,
+            }));
+            if clause.len() == 1 {
+                AagCnfLiteral::Constant(false)
+            } else {
+                selector_clauses.push(Clause(clause));
+                AagCnfLiteral::Variable((selector, true))
+            }
+        };
+        property_queries.push(AagBmcQuery {
+            frame: horizon,
+            output,
+            assumption,
+        });
+    }
+    (selector_clauses, property_queries)
+}
+
+fn aiger_reuse_gate(clause_count: usize, property_count: usize) -> bool {
+    property_count >= 2 && clause_count <= 15_000
+}
+
+fn benchmark_aiger_query_reuse(
+    input: &Path,
+    horizons: &[usize],
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if horizons.is_empty() {
+        return Err("AIGER reuse benchmark requires at least one horizon".to_string());
+    }
+    if repeats == 0 || repeats > 10_000 {
+        return Err("AIGER reuse benchmark repeats must be between 1 and 10000".to_string());
+    }
+    let model = parse_aag(input)?;
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create AIGER reuse benchmark output: {error}"))?;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| format!("create AIGER reuse benchmark output: {error}"))?;
+    writeln!(file, "input,horizon,latches,inputs,outputs,ands,variables,clauses,distinct_queries,reuse_batch,repeats,total_queries,sat_queries,encoding_ns,reusable_build_ns,reusable_query_ns,cold_total_ns,reusable_amortized_ns,cold_amortized_ns,query_speedup,full_speedup,selected_backend,selected_ns,selected_speedup,agreement,status")
+        .map_err(|error| format!("write AIGER reuse benchmark header: {error}"))?;
+    for &horizon in horizons {
+        if horizon == 0 {
+            return Err("AIGER reuse benchmark horizons must be at least one".to_string());
+        }
+        let encoding_start = Instant::now();
+        let encoding = aag_bmc_encoding(&model, horizon)?;
+        let encoding_ns = encoding_start.elapsed().as_nanos();
+        if encoding.queries.is_empty() {
+            return Err(format!(
+                "AIGER model has no property queries at horizon {horizon}"
+            ));
+        }
+        let (selector_clauses, property_queries) = aag_property_batch(&model, horizon, &encoding);
+        let total_queries = property_queries
+            .len()
+            .checked_mul(repeats)
+            .ok_or_else(|| "AIGER reuse query count overflow".to_string())?;
+        let mut reusable_build_ns = 0u128;
+        let mut reusable_query_ns = 0u128;
+        let mut reusable_answers = Vec::with_capacity(total_queries);
+        for _ in 0..repeats {
+            for batch in property_queries.chunks(2) {
+                let build_start = Instant::now();
+                let mut reusable = Solver::new();
+                add_to_varisat(&mut reusable, &encoding.clauses);
+                add_to_varisat(&mut reusable, &selector_clauses);
+                reusable_build_ns += build_start.elapsed().as_nanos();
+                let query_start = Instant::now();
+                for query in batch {
+                    reusable_answers.push(solve_aag_query(&mut reusable, query)?);
+                }
+                reusable_query_ns += query_start.elapsed().as_nanos();
+            }
+        }
+        let cold_start = Instant::now();
+        let mut cold_answers = Vec::with_capacity(total_queries);
+        for _ in 0..repeats {
+            for query in &property_queries {
+                let mut cold = Solver::new();
+                add_to_varisat(&mut cold, &encoding.clauses);
+                add_to_varisat(&mut cold, &selector_clauses);
+                cold_answers.push(solve_aag_query(&mut cold, query)?);
+            }
+        }
+        let cold_total_ns = cold_start.elapsed().as_nanos();
+        let agreement = reusable_answers == cold_answers;
+        if !agreement {
+            return Err(format!(
+                "reusable and cold BMC disagree at horizon {horizon}"
+            ));
+        }
+        let sat_queries = reusable_answers.iter().filter(|&&answer| answer).count();
+        let reusable_amortized_ns = encoding_ns + reusable_build_ns + reusable_query_ns;
+        let cold_amortized_ns = encoding_ns + cold_total_ns;
+        let query_speedup = cold_total_ns as f64 / reusable_query_ns.max(1) as f64;
+        let full_speedup = cold_amortized_ns as f64 / reusable_amortized_ns.max(1) as f64;
+        let selected_reuse = aiger_reuse_gate(encoding.clauses.len(), property_queries.len());
+        let (selected_backend, selected_ns) = if selected_reuse {
+            ("bounded-reuse", reusable_amortized_ns)
+        } else {
+            ("cold-bmc", cold_amortized_ns)
+        };
+        let selected_speedup = cold_amortized_ns as f64 / selected_ns.max(1) as f64;
+        writeln!(file, "{},{horizon},{},{},{},{},{},{},{},2,{repeats},{total_queries},{sat_queries},{encoding_ns},{reusable_build_ns},{reusable_query_ns},{cold_total_ns},{reusable_amortized_ns},{cold_amortized_ns},{query_speedup:.6},{full_speedup:.6},{selected_backend},{selected_ns},{selected_speedup:.6},{agreement},ok", report_csv_field(&input.to_string_lossy()), model.latches.len(), model.inputs.len(), model.outputs.len(), model.ands.len(), encoding.variables + property_queries.len(), encoding.clauses.len() + selector_clauses.len(), property_queries.len())
+            .map_err(|error| format!("write AIGER reuse benchmark row: {error}"))?;
+        println!(
+            "AIGER reuse horizon={horizon} queries={total_queries} query_speedup={query_speedup:.3} full_speedup={full_speedup:.3} agreement={agreement}"
+        );
+    }
+    file.flush()
+        .map_err(|error| format!("flush AIGER reuse benchmark output: {error}"))
+}
+
 fn earliest_aag_counterexample(
     model: &AagModel,
     unsafe_horizon: usize,
@@ -12087,7 +12239,7 @@ fn firmware_rtl_safety_gate(
     fs::copy(&source, &staged_source)
         .map_err(|error| format!("stage RTL source for Yosys: {error}"))?;
     let script = format!(
-        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nasync2sync\ndffunmap\nopt\nsimplemap\naigmap\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
@@ -12141,8 +12293,19 @@ fn firmware_rtl_safety_gate(
         thread::sleep(std::time::Duration::from_millis(50));
     };
     if !status.success() {
+        let error_tail = fs::read_to_string(&yosys_errors)
+            .ok()
+            .and_then(|body| body.lines().last().map(str::to_string))
+            .filter(|line| !line.is_empty())
+            .or_else(|| {
+                fs::read_to_string(&yosys_log)
+                    .ok()
+                    .and_then(|body| body.lines().last().map(str::to_string))
+                    .filter(|line| !line.is_empty())
+            })
+            .unwrap_or_else(|| "no Yosys diagnostic was captured".to_string());
         return Err(format!(
-            "Yosys synthesis failed; inspect {} and {}",
+            "Yosys synthesis failed: {error_tail}; inspect {} and {}",
             yosys_log.display(),
             yosys_errors.display()
         ));
@@ -13903,6 +14066,20 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     .parse::<u64>()
                     .map_err(|_| "invalid AIGER seed".to_string())?,
                 Path::new(&args[7]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-aiger-query-reuse" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-query-reuse INPUT.aag HORIZONS REPEATS OUTPUT.csv".to_string());
+            }
+            benchmark_aiger_query_reuse(
+                Path::new(&args[1]),
+                &parse_size_grid(&args[2], "horizon")?,
+                args[3]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid AIGER reuse repeat count".to_string())?,
+                Path::new(&args[4]),
             )?;
             Ok(true)
         }
@@ -22116,5 +22293,39 @@ mod tests {
             .is_err()
         );
         std::fs::remove_file(oversized).unwrap();
+    }
+
+    #[test]
+    fn hierarchical_rtl_and_bounded_query_reuse_agree_with_cold_bmc() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping hierarchical RTL test because Yosys is unavailable");
+            return;
+        }
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/products/infusion-pump/rtl");
+        let artifacts =
+            std::env::temp_dir().join(format!("cq-sat-hierarchical-rtl-{}", std::process::id()));
+        assert!(
+            firmware_rtl_safety_gate(
+                &root.join("multimodule-controller.sv"),
+                "infusion_pump_system",
+                8,
+                &artifacts,
+            )
+            .unwrap()
+        );
+        let script = fs::read_to_string(artifacts.join("synthesis.ys")).unwrap();
+        assert!(script.contains("flatten\n"));
+        assert!(script.contains("setundef -zero\n"));
+        let benchmark = artifacts.join("query-reuse.csv");
+        benchmark_aiger_query_reuse(&artifacts.join("model.aag"), &[4, 8], 2, &benchmark).unwrap();
+        let results = fs::read_to_string(benchmark).unwrap();
+        assert_eq!(results.lines().count(), 3);
+        assert!(results.lines().skip(1).all(|row| row.ends_with(",true,ok")));
+        assert!(results.lines().skip(1).all(|row| row.contains(",2,2,8,0,")));
+        assert!(aiger_reuse_gate(15_000, 2));
+        assert!(!aiger_reuse_gate(15_001, 2));
+        assert!(!aiger_reuse_gate(1_000, 1));
+        std::fs::remove_dir_all(artifacts).unwrap();
     }
 }
