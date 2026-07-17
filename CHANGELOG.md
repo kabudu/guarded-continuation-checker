@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add project config v2 startup-reset sequences with exact asserted-frame and
+  deasserted-frame constraints in every bounded AIGER query.
+- Cross-check the reset boundary independently with SymbiYosys/Z3 and preserve
+  the full reset pattern in safety-report and manifest evidence.
+
 ## 0.12.0 - 2026-07-17
 
 - Add strict RTL project config v1 with immutable include snapshots, bounded

@@ -122,8 +122,10 @@ parameters, clock/reset policy, and inferred memories:
 
 All paths are relative to the config and may not traverse its directory.
 Sources, headers, and the config itself are bounded and snapshotted before
-Yosys starts. The declared reset deassertion is enforced at every bounded frame;
-each frame represents one declared active clock edge.
+Yosys starts. Project config v1 supports a permanently deasserted reset. Config
+v2 additionally supports `reset=SIGNAL:active-low:N` or `active-high:N`: reset
+is asserted for exactly frames `0..N-1` and deasserted thereafter. Each frame
+represents one declared active clock edge.
 
 Constant environment contracts use a bounded assumptions file containing one
 `NAME=0` or `NAME=1` entry per synthesized primary input. Each entry is enforced

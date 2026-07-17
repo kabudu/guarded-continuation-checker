@@ -13,7 +13,7 @@ tool production-grade.
 - Single- and multi-file sources are snapshotted with ordered provenance.
 - Unsafe bounded results preserve named inputs and state for replay.
 - RTL safety reports and manifests declare compatibility-locked artifact schema
-  version 2 and firmware CLI contract version 1.
+  version 3 and firmware CLI contract version 2.
 - Named constant input assumptions are applied at every bounded frame, reject
   unresolved names, and are cross-checked by an independent SBY/Z3 model.
 - Linux synthesis runs in a dedicated process group with a 2 GiB address-space

@@ -515,7 +515,8 @@ target/release/continuation-quotient-sat \
 Both commands must exit 0. The synthesis evidence must contain
 `-Iinclude-0000`, `chparam -set DEPTH 8`, the declared clock selection, and
 `memory_map`. The manifest must record schema 3, CLI 2, `clk:posedge`, the
-deasserted-high `rst_n` policy, and `DEPTH:8`. CI and the release procedure also
+config-v2 `rst_n:active-low:1` startup policy, and `DEPTH:8`. Frame 0 must hold
+`rst_n=0`; every later frame must hold `rst_n=1`. CI and the release procedure also
 require `config-project/memory-controller.sby` to pass through depth 8 using the
 pinned SymbiYosys revision and Z3.
 

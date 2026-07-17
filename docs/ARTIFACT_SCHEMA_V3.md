@@ -51,6 +51,8 @@ order:
 
 Percent signs, line feeds, and carriage returns in source labels are encoded as
 `%25`, `%0A`, and `%0D`. Consumers must not interpret other percent sequences.
+`reset_policy` is `unspecified`, `none`, `SIGNAL:deasserted-low/high`, or the
+config-v2 startup form `SIGNAL:active-low/high:N`.
 
 One source is stored as `source.sv`; multiple sources are stored as
 `source-0000.sv` through `source-NNNN.sv`. An `assumptions.txt` snapshot exists

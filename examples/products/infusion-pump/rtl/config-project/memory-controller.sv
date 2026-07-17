@@ -45,8 +45,15 @@ module infusion_pump_memory #(
                  (check_pending && memory[expected_address] != expected_data);
 
 `ifdef SBY
+    reg reset_seen = 0;
+    always @(posedge clk)
+        reset_seen <= 1;
+
     always @* begin
-        assume(rst_n);
+        if (!reset_seen)
+            assume(!rst_n);
+        else
+            assume(rst_n);
         assert(!bad);
     end
 `endif
