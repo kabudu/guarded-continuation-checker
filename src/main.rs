@@ -16,6 +16,7 @@ const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
 const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
+const EVIDENCE_TOTAL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 fn synthesis_memory_limit_kind() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -12965,18 +12966,22 @@ fn validate_evidence_index(root: &Path, expected_index_digest: &str) -> Result<(
         return Err("evidence index SHA-256 is malformed".to_string());
     }
     let index = root.join("evidence.sha256");
-    if sha256_file(&index)? != expected_index_digest {
-        return Err("evidence index SHA-256 disagrees with manifest".to_string());
-    }
     let metadata =
         fs::symlink_metadata(&index).map_err(|error| format!("inspect evidence index: {error}"))?;
+    if !metadata.file_type().is_file() {
+        return Err("evidence index is not a regular file".to_string());
+    }
     if metadata.len() > 1_048_576 {
         return Err("evidence index exceeds 1048576 bytes".to_string());
+    }
+    if sha256_file(&index)? != expected_index_digest {
+        return Err("evidence index SHA-256 disagrees with manifest".to_string());
     }
     let body =
         fs::read_to_string(&index).map_err(|error| format!("read evidence index: {error}"))?;
     let mut previous = None::<String>;
     let mut count = 0usize;
+    let mut total_bytes = 0u64;
     for (line_number, line) in body.lines().enumerate() {
         let (digest, relative) = line
             .split_once("  ")
@@ -13005,7 +13010,26 @@ fn validate_evidence_index(root: &Path, expected_index_digest: &str) -> Result<(
         if previous.as_deref().is_some_and(|value| value >= relative) {
             return Err("evidence index paths must be unique and sorted".to_string());
         }
-        if sha256_file(&root.join(relative))? != digest {
+        let evidence_path = root.join(relative);
+        let evidence_metadata = fs::symlink_metadata(&evidence_path)
+            .map_err(|error| format!("inspect evidence `{relative}`: {error}"))?;
+        if !evidence_metadata.file_type().is_file() {
+            return Err(format!("evidence path is not a regular file: {relative}"));
+        }
+        if evidence_metadata.len() > YOSYS_FILE_LIMIT_BYTES {
+            return Err(format!(
+                "evidence file exceeds {YOSYS_FILE_LIMIT_BYTES} bytes: {relative}"
+            ));
+        }
+        total_bytes = total_bytes
+            .checked_add(evidence_metadata.len())
+            .ok_or_else(|| "evidence byte count overflow".to_string())?;
+        if total_bytes > EVIDENCE_TOTAL_LIMIT_BYTES {
+            return Err(format!(
+                "evidence bundle exceeds {EVIDENCE_TOTAL_LIMIT_BYTES} indexed bytes"
+            ));
+        }
+        if sha256_file(&evidence_path)? != digest {
             return Err(format!("evidence SHA-256 mismatch for `{relative}`"));
         }
         previous = Some(relative.to_string());
@@ -23843,6 +23867,30 @@ mod tests {
             }
             std::fs::remove_dir_all(artifacts).unwrap();
         }
+    }
+
+    #[test]
+    fn evidence_index_rejects_oversized_file_before_hashing() {
+        let root =
+            std::env::temp_dir().join(format!("cq-sat-oversized-evidence-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let oversized = root.join("oversized.bin");
+        fs::File::create(&oversized)
+            .unwrap()
+            .set_len(YOSYS_FILE_LIMIT_BYTES + 1)
+            .unwrap();
+        fs::write(
+            root.join("evidence.sha256"),
+            format!("{}  oversized.bin\n", "0".repeat(64)),
+        )
+        .unwrap();
+        let index_digest = sha256_file(&root.join("evidence.sha256")).unwrap();
+        assert!(
+            validate_evidence_index(&root, &index_digest)
+                .unwrap_err()
+                .contains("evidence file exceeds")
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

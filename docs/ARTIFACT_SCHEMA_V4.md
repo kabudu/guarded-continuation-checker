@@ -34,7 +34,9 @@ SHA256_HEX  bundle/relative/path
 The index excludes itself and `run-manifest.txt`; it covers every other file
 created in the isolated staging directory. Paths must be UTF-8, relative,
 normal-component paths without traversal or line breaks. The validator rejects
-symlinks and non-regular indexed files before hashing them.
+symlinks and non-regular indexed files before hashing them. It also rejects an
+indexed file above 512 MiB or an aggregate indexed size above 2 GiB, preventing
+an attacker-controlled bundle from turning validation into unbounded hashing.
 
 The manifest and index must be retained together. SHA-256 detects corruption or
 substitution relative to a separately trusted manifest digest; it is not a
