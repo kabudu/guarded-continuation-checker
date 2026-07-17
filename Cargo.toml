@@ -1,6 +1,6 @@
 [package]
 name = "continuation-quotient-sat"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Research implementation of exact continuation-quotient compilation for structured SAT"
@@ -14,4 +14,5 @@ debug = true
 
 [dependencies]
 libc = "0.2.186"
+sha2 = "0.11.0"
 varisat = "0.2.2"

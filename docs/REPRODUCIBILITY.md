@@ -495,7 +495,7 @@ target/release/continuation-quotient-sat \
 
 The command must exit 0, report `SAFE`, publish `source-0000.sv` and
 `source-0001.sv`, and record `source_count=2` with ordered `source_0` and
-`source_1` entries under `schema_version=3`. Reusing the directory with the legacy single-file command
+`source_1` entries under `schema_version=4`. Reusing the directory with the legacy single-file command
 must remove both numbered snapshots before publishing `source.sv` and the new
 manifest. CI independently requires `project/pump-system.sby` to pass through
 depth 16 with SymbiYosys and Z3.
@@ -514,7 +514,7 @@ target/release/continuation-quotient-sat \
 
 Both commands must exit 0. The synthesis evidence must contain
 `-Iinclude-0000`, `chparam -set DEPTH 8`, the declared clock selection, and
-`memory_map`. The manifest must record schema 3, CLI 2, `clk:posedge`, the
+`memory_map`. The manifest must record schema 4, CLI 2, `clk:posedge`, the
 config-v2 `rst_n:active-low:1` startup policy, and `DEPTH:8`. Frame 0 must hold
 `rst_n=0`; every later frame must hold `rst_n=1`. CI and the release procedure also
 require `config-project/memory-controller.sby` to pass through depth 8 using the
@@ -565,7 +565,7 @@ target/release/continuation-quotient-sat \
 The command must report `VALID` and exit 0. The compatibility test then changes
 SAFE to UNSAFE without changing the report and appends an unknown manifest field;
 both mutations must be rejected. See
-[RTL artifact schema v3](ARTIFACT_SCHEMA_V3.md) for the exact contract.
+[RTL artifact schema v4](ARTIFACT_SCHEMA_V4.md) for the exact contract.
 
 `cargo test --locked` also runs 5,000 AIGER mutations, 5,000 assumptions-file
 mutations, 5,000 project-config mutations, and 10,000 CLI mutations. Seeds live
@@ -579,7 +579,7 @@ Confirm the machine-readable compatibility versions with:
 target/release/continuation-quotient-sat firmware-cli-version
 ```
 
-The exact output is `firmware_cli_version=2 artifact_schema_version=3`. See
+The exact output is `firmware_cli_version=2 artifact_schema_version=4`. See
 [Firmware CLI contract v2](FIRMWARE_CLI_V2.md) for fixed command signatures and
 exit meanings.
 

@@ -10,7 +10,7 @@ continuation-quotient-sat firmware-cli-version
 The single output line is:
 
 ```text
-firmware_cli_version=2 artifact_schema_version=3
+firmware_cli_version=2 artifact_schema_version=4
 ```
 
 ## Commands
@@ -56,4 +56,4 @@ query's single key/value line is intended for direct machine parsing.
 - A breaking change requires a new CLI contract version and compatibility tests.
 - Additive commands may be introduced without changing v2, but existing v2
   commands cannot silently change semantics.
-- Every schema-v3 report and manifest records `firmware_cli_version=2`.
+- Every schema-v4 report and manifest records `firmware_cli_version=2`.

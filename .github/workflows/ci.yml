@@ -11,8 +11,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.97.0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
         with:
           components: rustfmt, clippy
       - name: Install formal RTL tools
@@ -51,8 +51,8 @@ jobs:
   public-rtl-corpus:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.97.0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
         with:
           targets: x86_64-unknown-linux-musl
       - name: Install corpus tools
@@ -80,3 +80,13 @@ jobs:
               target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
               corpus/rtl/yosys-simple /work/target/corpus-yosys-036 -
           cat target/corpus-yosys-036/results.csv
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Install pinned RustSec auditor
+        run: cargo install cargo-audit --version 0.22.1 --locked
+      - name: Audit locked dependencies
+        run: cargo audit

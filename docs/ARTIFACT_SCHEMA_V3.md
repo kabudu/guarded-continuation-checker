@@ -1,8 +1,10 @@
-# RTL artifact schema v3
+# RTL artifact schema v3 (historical)
 
 Schema v3 extends the compatibility-locked v2 contract with immutable project
 configuration, include snapshots, parameter overrides, and clock/reset policy.
-The active strict validator deliberately accepts only v3.
+Schema v3 was emitted by v0.12.0 through v0.14.0. The active strict validator
+accepts only schema v4; this document is retained to interpret historical
+evidence and does not describe the current producer.
 
 Validate a completed bundle with:
 
@@ -76,7 +78,7 @@ after the validated prefix.
 
 ## Compatibility policy
 
-- The active validator accepts only schema v3 and rejects unknown fields.
+- The historical v3 validator accepted only schema v3 and rejected unknown fields.
 - Reordering, removing, renaming, or adding a field requires a new schema
   version and parallel compatibility tests.
 - A future producer may retain the v3 validator, but must not emit changed data
