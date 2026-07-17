@@ -1,0 +1,4 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+watchdog4,9,137,1242,19728,50,10,200000,cq-gcc,dense-transition,16.000,0,41,41671416,51664,134,4118056.660,10042088.340,2.438550,2.028096,41,9,true,true,ok
+watchdog4,9,1333,12006,191952,50,10,200000,cq-gcc,dense-transition,16.000,0,42,59962125,51664,134,54281559.180,93048378.340,1.714180,1.677128,37,13,true,true,ok
+watchdog4,9,7777,70002,1119888,50,10,200000,cq-gcc,dense-transition,16.000,0,42,164504083,51664,134,201414739.180,626269452.500,3.109353,3.059378,40,10,true,true,ok

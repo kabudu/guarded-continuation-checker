@@ -6,8 +6,9 @@ authors:
   - family-names: "Kabudu"
 repository-code: "https://github.com/kabudu/continuation-quotient-sat"
 license: Apache-2.0
-version: 0.1.0
-date-released: 2026-07-15
+version: 0.2.0
+date-released: 2026-07-17
 abstract: >-
-  A Rust research implementation of exact residual-CNF continuation quotienting
-  for structurally gated repeated SAT assumption queries with witness recovery.
+  A Rust research implementation of calibration-free CQ-SAT/GCC portfolio
+  solving for structurally gated repeated temporal SAT queries with exact CDCL
+  fallback and complete witness recovery.

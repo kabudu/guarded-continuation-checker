@@ -441,6 +441,34 @@ regimes before deployment. Candidate static features are checkpoint width, suffi
 horizon, BDD nodes per state bit, global-clause count and width, and original
 prefix-clause volume; evaluation must preselect the rule and test unseen families.
 
+## Calibration-free CQ-SAT/GCC portfolio
+
+The released gate is deliberately conservative and explainable. It selects the
+global-checkpoint backend only for dense transitions up to width nine with at
+least eight declared queries, or hub-like dependency graphs up to width seven
+with at least 128 declared queries. All other recognized models use the identical
+persistent-CDCL implementation.
+The gate reads no solve times, candidate answers, or formula-specific calibration.
+
+The broad `long-wide` candidate was rejected before release. On identical mixed
+width-12/horizon-2,049 formulas, independent 200-query seeds produced approximately
+1.03× and 0.85× native-backend speedups. Formula structure alone could not safely
+distinguish them. Removing that rule turns the three unseen majority, multiplexer,
+and mixed-dynamics cohorts into exact CDCL fallbacks rather than selected losses.
+
+Dense-transition stability runs reached 1.91× and 1.99× across independent
+200-query seeds. Narrow-hub runs reached 1.19× and 1.14×, with conservative
+break-even near 96–108 queries, motivating the 128-query threshold. In the
+executable watchdog example, the portfolio achieved recognition-inclusive
+speedups of 2.03×, 1.68×, and 3.06×. The sensor-voting example selected CDCL and
+matched its query path at 1.0×. All portfolio and oracle rows agreed and validated
+complete witnesses.
+
+This is useful today as a research-grade repeated temporal-verification runner,
+not yet as a general DIMACS auto-solver. The next product frontier is accepting an
+external transition-system interchange format and validating independently sourced
+hardware/protocol models without generator labels.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

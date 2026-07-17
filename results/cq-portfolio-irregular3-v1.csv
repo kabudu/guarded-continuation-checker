@@ -1,0 +1,7 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,backend,gate_reason,clauses_per_bit_step,maximum_fanout,gate_ns,recognition_ns,bdd_nodes,global_clauses,portfolio_ns_per_query,full_cdcl_ns_per_query,query_speedup,amortized_speedup,sat_queries,unsat_queries,agreement,witnesses_valid,status
+irregular3,7,137,966,7672,50,10,200000,cdcl,cdcl-fallback,8.000,4,468042,468042,0,0,619645.820,619645.820,1.000000,0.985118,22,28,true,true,ok
+irregular3,7,1333,9338,74648,50,10,200000,cdcl,cdcl-fallback,8.000,4,4447709,4447709,0,0,4284799.180,4284799.180,1.000000,0.979662,25,25,true,true,ok
+irregular3,9,137,1242,9864,50,10,200000,cdcl,cdcl-fallback,8.000,6,538167,538167,0,0,1131105.000,1131105.000,1.000000,0.990574,25,25,true,true,ok
+irregular3,9,1333,12006,95976,50,10,200000,cdcl,cdcl-fallback,8.000,6,5641792,5641792,0,0,29542423.320,29542423.320,1.000000,0.996195,18,32,true,true,ok
+irregular3,11,137,1518,12056,50,10,200000,cdcl,cdcl-fallback,8.000,4,697333,697333,0,0,504640.840,504640.840,1.000000,0.973106,30,20,true,true,ok
+irregular3,11,1333,14674,117304,50,10,200000,cdcl,cdcl-fallback,8.000,4,6623791,6623791,0,0,3844729.180,3844729.180,1.000000,0.966691,26,24,true,true,ok

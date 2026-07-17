@@ -1,0 +1,22 @@
+# Executable verification examples
+
+These examples connect the research engine to repeated bounded-model-checking
+workloads. They are deliberately small, stylized transition models—not certified
+industrial controllers. Each command constructs exact layered CNF, issues a fixed
+batch of partial observations, compares the selected backend with persistent
+CDCL, and validates every returned witness.
+
+## Watchdog and interlock trace analysis
+
+[`watchdog-controller.md`](watchdog-controller.md) models a dense network of nine
+latched watchdog/interlock signals. Repeated diagnostic questions ask whether
+partial observations at different frames can belong to one valid execution. The
+calibration-free gate selects CQ-SAT/GCC because the transition encoding is dense
+and the declared batch contains enough queries to amortize compilation.
+
+## Redundant sensor voting
+
+[`redundant-sensor-monitor.md`](redundant-sensor-monitor.md) models overlapping
+three-sensor majority voters. Here the specialized backend is not reliably
+faster. The same gate selects persistent CDCL, demonstrating the product's exact
+no-regression path rather than forcing the research backend onto every model.

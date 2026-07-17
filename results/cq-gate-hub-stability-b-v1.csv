@@ -1,0 +1,2 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,global_clauses,average_global_width,theory_clauses,theory_conflicts,average_learned_width,max_learned_width,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,break_even_queries,sat_queries,unsat_queries,agreement,witnesses_valid,status
+hub3,7,1333,9338,74648,200,10,200000,7793834,574,11,2.000,6360,0,0.000,0,576333.960,657697.710,1.141175,95.790,28,172,true,true,ok
