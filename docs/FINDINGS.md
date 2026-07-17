@@ -420,6 +420,27 @@ hardware trace verification, planning, and fault diagnosis. The next requirement
 is external validation on independently sourced transition systems and wider
 checkpoints, with an admission gate for the exponential checkpoint enumeration.
 
+## Asymmetric cross-family validation
+
+The first structural generalization matrix holds checkpoint 10 and 50 queries
+fixed while testing `hub3`, `tree3`, and `irregular3` at widths 7, 9, and 11 and
+horizons 137 and 1,333. All 18 rows agreed with full CDCL and validated every
+returned witness. Global clauses eliminated reconciliation conflicts on 17 rows;
+the remaining irregular width-7 short row needed two query-local explanations.
+
+Runtime generalization is mixed. Six of 18 rows beat full CDCL, and five amortized
+recognition within the 50-query batch. Hub width 7 reached 1.305× and 1.716×;
+long width-11 rows reached 1.342× for hub, 1.092× for tree, and 1.117× for
+irregular. Most other rows ranged from 0.503× to 0.997×. The strong cascade result
+therefore identifies a real regime, not a broadly dominant solver.
+
+The practical conclusion is conditional: reusable checkpoint-image clauses can
+accelerate repeated temporal verification when the eliminated prefix work exceeds
+the BDD/theory overhead. A calibration-free admission gate must reject the other
+regimes before deployment. Candidate static features are checkpoint width, suffix
+horizon, BDD nodes per state bit, global-clause count and width, and original
+prefix-clause volume; evaluation must preselect the rule and test unseen families.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

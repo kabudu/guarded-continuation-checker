@@ -375,6 +375,21 @@ Run the global-clause phase and preselected holdout with:
 Every row must report 134 global clauses with average width 6.28, exact agreement,
 valid witnesses, and a finite recognition-inclusive break-even query count.
 
+## Asymmetric cross-family validation
+
+For each `KIND`/`SEED` pair `hub3/919191`, `tree3/929292`, and
+`irregular3/939393`, run:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory KIND 7,9,11 137,1333 50 10 200000 SEED \
+  results/reproduced-global-clauses-KIND-generalization.csv
+```
+
+All 18 rows must agree and validate witnesses. Six measured rows should report a
+speedup above one; timing is exploratory, while logical outcomes and structural
+counts are deterministic.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

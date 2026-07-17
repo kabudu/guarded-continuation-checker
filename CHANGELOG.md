@@ -43,6 +43,8 @@
   explanation extraction.
 - Precompile bounded exact global checkpoint-image clauses for reuse across all
   native BDD-theory queries and report recognition-inclusive break-even.
+- Validate reusable global clauses across asymmetric hub, tree, and irregular
+  transition families at widths 7, 9, and 11.
 
 ## 0.1.0 - 2026-07-15
 

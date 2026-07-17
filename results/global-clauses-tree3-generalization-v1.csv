@@ -1,0 +1,7 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,global_clauses,average_global_width,theory_clauses,theory_conflicts,average_learned_width,max_learned_width,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,break_even_queries,sat_queries,unsat_queries,agreement,witnesses_valid,status
+tree3,7,137,966,7672,50,10,200000,1339958,467,15,2.867,495,0,0.000,0,397188.340,361727.500,0.910720,inf,23,27,true,true,ok
+tree3,7,1333,9338,74648,50,10,200000,8891083,467,15,2.867,237,0,0.000,0,4043616.660,3600055.840,0.890306,inf,20,30,true,true,ok
+tree3,9,137,1242,9864,50,10,200000,2127667,1468,27,3.111,446,0,0.000,0,980490.000,923002.500,0.941369,inf,17,33,true,true,ok
+tree3,9,1333,12006,95976,50,10,200000,10869291,1468,27,3.111,124,0,0.000,0,18371085.820,14780222.500,0.804537,inf,24,26,true,true,ok
+tree3,11,137,1518,12056,50,10,200000,4204083,3612,32,3.250,614,0,0.000,0,1585140.000,1237545.000,0.780717,inf,25,25,true,true,ok
+tree3,11,1333,14674,117304,50,10,200000,15855000,3612,32,3.250,148,0,0.000,0,39831097.500,43502158.340,1.092166,4.319,27,23,true,true,ok
