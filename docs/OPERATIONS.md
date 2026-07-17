@@ -7,6 +7,7 @@ remains governed by `PRODUCTION_READINESS.md`.
 ## Supported environment
 
 - Ephemeral, least-privilege Linux worker; do not use a developer workstation.
+- Linux cgroup v2 and a Docker daemon reporting its built-in seccomp profile.
 - Rust 1.97 and edition 2024 for source builds.
 - The release tag and checksum-locked `Cargo.lock` from this repository.
 - Yosys on `PATH`. Record its full `yosys -V` output for every deployment.
@@ -16,6 +17,27 @@ remains governed by `PRODUCTION_READINESS.md`.
 
 macOS is development-only because it cannot enforce the Linux 2 GiB Yosys
 address-space limit. Windows is unsupported.
+
+For untrusted partner RTL, build a static Linux binary and provision the pinned
+isolation image during a trusted network-enabled setup phase:
+
+```sh
+rustup target add x86_64-unknown-linux-musl --toolchain 1.97
+cargo +1.97 build --release --locked --target x86_64-unknown-linux-musl
+docker pull \
+  hdlc/yosys@sha256:58c0c80e41fd96b4b90da53c730aa3c43051f0cf2a6c6e336bd012281479df22
+```
+
+Run the evaluation with no runtime image pull or network access:
+
+```sh
+scripts/isolated-rtl-evaluation.sh \
+  target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+  cq-project.conf evidence/run-001
+```
+
+See [hostile-RTL isolation profile v1](ISOLATION_PROFILE_V1.md) for enforced
+controls, exit semantics, evidence, and the cases that still require a VM.
 
 ## Install and qualify
 

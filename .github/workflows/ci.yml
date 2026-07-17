@@ -85,6 +85,33 @@ jobs:
               target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
               corpus/rtl/yosys-simple /work/target/corpus-yosys-036 -
           cat target/corpus-yosys-036/results.csv
+      - name: Exercise hostile-RTL isolation profile
+        run: |
+          set +e
+          watchdog_output=$(CQ_ISOLATION_WATCHDOG_SELF_TEST=1 \
+            scripts/isolated-rtl-evaluation.sh \
+              target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+              corpus/rtl/yosys-simple/always01-safe.conf target/isolated-watchdog-test)
+          watchdog_exit=$?
+          set -e
+          test "$watchdog_exit" -eq 2
+          grep -qx 'isolation-watchdog-self-test=PASS' <<< "$watchdog_output"
+          test ! -e target/isolated-watchdog-test
+          test ! -e target/isolated-watchdog-test.isolation-report.txt
+          scripts/isolated-rtl-evaluation.sh \
+            target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+            corpus/rtl/yosys-simple/always01-safe.conf target/isolated-safe
+          set +e
+          scripts/isolated-rtl-evaluation.sh \
+            target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+            corpus/rtl/yosys-simple/always01-unsafe.conf target/isolated-unsafe
+          unsafe_exit=$?
+          set -e
+          test "$unsafe_exit" -eq 1
+          grep -qx 'runtime_probe=PASS' target/isolated-safe.isolation-report.txt
+          grep -qx 'result=SAFE' target/isolated-safe.isolation-report.txt
+          grep -qx 'runtime_probe=PASS' target/isolated-unsafe.isolation-report.txt
+          grep -qx 'result=UNSAFE' target/isolated-unsafe.isolation-report.txt
 
   dependency-audit:
     runs-on: ubuntu-latest

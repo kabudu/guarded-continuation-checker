@@ -14,10 +14,9 @@ does not provide the Linux address-space containment guarantee.
 
 - RTL, include files, project configuration, assumptions, AIGER, and retained
   artifacts may be malformed or confidential.
-- Yosys is an external parser and synthesizer running as a child process. Linux
-  runs receive process-group, address-space, output-file, model-size, and
-  wall-clock bounds. These limits reduce denial-of-service impact but are not a
-  syscall, filesystem, or network sandbox.
+- Yosys is an external parser and synthesizer. Local Linux runs receive process-
+  group and resource bounds. The hostile-RTL profile additionally applies a
+  probed, networkless, read-only, capability-free Docker boundary.
 - The CQ-SAT/GCC process, selected Yosys binary, operating-system account, CI
   runner, and artifact destination are trusted in the current model.
 - Artifact schema v4 detects evidence changes relative to its manifest. It does
@@ -39,8 +38,10 @@ does not provide the Linux address-space containment guarantee.
 
 ## Known security limitations
 
-- Local Yosys execution is not a complete sandbox. Untrusted third-party RTL
-  must be evaluated inside an additional container or VM boundary.
+- Local Yosys execution remains inappropriate for untrusted third-party RTL.
+  Isolation profile v1 supplies a container boundary; actively hostile or
+  multi-tenant evaluations still require a disposable VM because containers
+  share the host kernel.
 - Releases are not yet accompanied by signed binaries, an SBOM, SLSA provenance,
   or reproducible-build attestations.
 - The project has not completed an independent external security assessment.
