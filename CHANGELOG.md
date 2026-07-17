@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-07-17
+
 - Add an RTL-to-safety-gate path that synthesizes bounded SystemVerilog through
   Yosys into the exact supported ASCII AIGER subset.
 - Preserve Yosys input, latch, and bad-output names in human-readable traces;
