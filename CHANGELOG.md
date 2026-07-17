@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-07-17
+
 - Add a product-shaped firmware safety gate with CI-specific exit statuses,
   GitHub Actions annotations, stable report artifacts, and a copyable workflow.
 - Add safe and deliberately regressed infusion-pump controller models that show
