@@ -171,6 +171,9 @@ nodes exactly, but does not yet provide a stable speedup over full CDCL.
 `benchmark-native-bdd-theory` keeps the prefix BDD native, propagates unary and
 pairwise checkpoint consequences into CDCL, and learns query-gated checkpoint
 conflicts. It is exact, but higher-order conflicts dominate the measured cascade.
+Rejected checkpoint states are greedily generalized to smaller BDD-proven
+incompatible subcubes. This strengthens learning, but the current repeated-
+conjunction minimizer costs more than the conflicts it removes.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and

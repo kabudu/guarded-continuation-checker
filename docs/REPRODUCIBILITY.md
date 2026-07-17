@@ -327,6 +327,22 @@ Run the pairwise-propagating phase and holdout with:
 
 Every row must agree with full CDCL and validate every returned witness.
 
+## BDD conflict generalization
+
+Run the generalized-conflict phase and holdout with:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
+  results/reproduced-bdd-conflict-generalization-10-phase.csv
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
+  results/reproduced-bdd-conflict-generalization-10-holdout.csv
+```
+
+Every row must agree, validate witnesses, and report learned-clause widths no
+greater than the checkpoint width.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

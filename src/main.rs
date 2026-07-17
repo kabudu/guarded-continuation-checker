@@ -9031,6 +9031,8 @@ struct NativeBddTheoryPreimage {
     activations: Vec<Var>,
     theory_conflicts: usize,
     theory_clauses: usize,
+    learned_literals: usize,
+    max_learned_width: usize,
 }
 
 impl NativeBddTheoryPreimage {
@@ -9086,6 +9088,8 @@ impl NativeBddTheoryPreimage {
             activations: Vec::new(),
             theory_conflicts: 0,
             theory_clauses: 0,
+            learned_literals: 0,
+            max_learned_width: 0,
         })
     }
 
@@ -9222,16 +9226,46 @@ impl NativeBddTheoryPreimage {
                 return Some(assignment);
             }
 
-            let mut block = Vec::with_capacity(self.width + 1);
+            let mut core = (0..self.width).collect::<Vec<_>>();
+            let mut candidate_index = 0;
+            while candidate_index < core.len() {
+                let mut candidate = constraint;
+                for (position, &bit) in core.iter().enumerate() {
+                    if position == candidate_index {
+                        continue;
+                    }
+                    let root = self.preimage.frame(self.checkpoint)[bit];
+                    let literal = if checkpoint_state[bit] {
+                        root
+                    } else {
+                        let mut memo = HashMap::new();
+                        self.preimage.manager.negate(root, &mut memo)
+                    };
+                    candidate = self.preimage.manager.and(candidate, literal);
+                    if candidate == 0 {
+                        break;
+                    }
+                }
+                if candidate == 0 {
+                    core.remove(candidate_index);
+                } else {
+                    candidate_index += 1;
+                }
+            }
+
+            let mut block = Vec::with_capacity(core.len() + 1);
             block.push(Lit::from_var(activation, false));
-            for (bit, &value) in checkpoint_state.iter().enumerate() {
+            for &bit in &core {
                 block.push(Lit::from_var(
                     Var::from_index(self.checkpoint * self.width + bit),
-                    !value,
+                    !checkpoint_state[bit],
                 ));
             }
             self.solver.add_clause(&block);
             self.theory_conflicts += 1;
+            self.theory_clauses += 1;
+            self.learned_literals += core.len();
+            self.max_learned_width = self.max_learned_width.max(core.len());
         }
     }
 }
@@ -10398,7 +10432,7 @@ fn benchmark_native_bdd_theory(
     }
     let mut file = fs::File::create(output)
         .map_err(|error| format!("create {}: {error}", output.display()))?;
-    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,theory_clauses,theory_conflicts,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
+    writeln!(file, "kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,theory_clauses,theory_conflicts,average_learned_width,max_learned_width,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status")
         .map_err(|error| format!("write theory header: {error}"))?;
     for &width in widths {
         for &horizon in horizons {
@@ -10473,13 +10507,15 @@ fn benchmark_native_bdd_theory(
             let theory_per_query = theory_ns as f64 / query_count as f64;
             let full_per_query = full_ns as f64 / query_count as f64;
             let speedup = full_per_query / theory_per_query.max(1.0);
-            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{effective_checkpoint},{node_limit},{recognition_ns},{bdd_nodes},{},{},{theory_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.theory_clauses, engine.theory_conflicts)
+            let average_learned_width =
+                engine.learned_literals as f64 / engine.theory_conflicts.max(1) as f64;
+            writeln!(file, "{kind},{width},{horizon},{vars},{},{query_count},{effective_checkpoint},{node_limit},{recognition_ns},{bdd_nodes},{},{},{average_learned_width:.3},{},{theory_per_query:.3},{full_per_query:.3},{speedup:.6},{sat_queries},{unsat_queries},{agreement},{witnesses_valid},ok", formula.len(), engine.theory_clauses, engine.theory_conflicts, engine.max_learned_width)
                 .map_err(|error| format!("write theory row: {error}"))?;
             file.flush()
                 .map_err(|error| format!("flush theory output: {error}"))?;
             println!(
-                "native BDD theory kind={kind} width={width} horizon={horizon} checkpoint={effective_checkpoint} bdd_nodes={bdd_nodes} theory_clauses={} conflicts={} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
-                engine.theory_clauses, engine.theory_conflicts
+                "native BDD theory kind={kind} width={width} horizon={horizon} checkpoint={effective_checkpoint} bdd_nodes={bdd_nodes} theory_clauses={} conflicts={} learned_width={average_learned_width:.2}/{} speedup={speedup:.3} agreement={agreement} witnesses_valid={witnesses_valid}",
+                engine.theory_clauses, engine.theory_conflicts, engine.max_learned_width
             );
         }
     }
