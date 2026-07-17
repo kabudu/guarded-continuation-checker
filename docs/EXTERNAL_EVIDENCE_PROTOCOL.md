@@ -148,6 +148,28 @@ independent evidence exists. Records must use opaque custodian and environment
 IDs; confidential identities and source material belong in the access-controlled
 review record referenced by the final column, not in the public repository.
 
+The register is UTF-8 RFC 4180 CSV with the exact committed header and one row
+per configuration. Fields have these canonical forms:
+
+- opaque IDs and tags use only ASCII letters, digits, `.`, `_`, and `-`;
+- commits are full lowercase hexadecimal object IDs;
+- all digests are `sha256:` followed by 64 lowercase hexadecimal characters;
+- `record_type` is `security-review`, `technical-review`, or `partner-pilot`;
+- expected, CQ, and oracle results are `SAFE`, `UNSAFE`, or `FAILURE`;
+- `exit_class` is `0`, `1`, or `2`, with the firmware CLI contract meaning;
+- runtime and peak memory are non-negative base-10 integers in milliseconds and
+  bytes;
+- `disposition` is `accepted`, `reconciled`, or `open`;
+- `review_status` is `pending`, `reviewed`, or `rejected`; and
+- `report_reference` is an immutable report identifier or URL, never a formula
+  or spreadsheet expression.
+
+No field may be empty except `bundle_digest` and `isolation_report_digest` for
+an expected `FAILURE` that produced no artifact. CSV cells beginning with `=`,
+`+`, `-`, or `@` are prohibited to avoid spreadsheet formula injection. A row
+with `open`, `pending`, or `rejected` status remains in aggregate denominators
+and cannot support a passing cohort conclusion.
+
 The production-readiness checklist may be changed only by a PR that links the
 attributable reports and aggregate register, demonstrates every acceptance
 criterion, and receives independent approval. Until then, external messaging
