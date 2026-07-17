@@ -1,0 +1,10 @@
+read_verilog -formal -sv -D CQ_AIGER_EXPORT multimodule-controller.sv
+prep -top infusion_pump_system
+flatten
+async2sync
+opt
+dffunmap
+simplemap
+aigmap
+setundef -zero
+write_aiger -ascii -symbols multimodule-controller.aag

@@ -483,6 +483,30 @@ ASCII AIGER model, signal map, metrics, safety report, and final run manifest.
 Repository CI independently requires the matching SymbiYosys/Z3 `.sby` jobs to
 return PASS for the protected controller and FAIL for the regression.
 
+### Multi-module query-reuse benchmark
+
+Generate the checked-in model from its five-module SystemVerilog source and run
+the fixed release-mode grid:
+
+```sh
+cd examples/products/infusion-pump/rtl
+yosys -Q -q -s synthesize-multimodule.ys
+cd ../../../..
+cargo build --release
+target/release/continuation-quotient-sat \
+  benchmark-aiger-query-reuse \
+  examples/products/infusion-pump/rtl/multimodule-controller.aag \
+  8,16,32,64 10 results/reproduced-rtl-query-reuse.csv
+```
+
+Each row must contain four distinct properties, two-property reuse batches,
+exact reusable/cold agreement, and `status=ok`. The static selector must choose
+`bounded-reuse` through horizon 32 and `cold-bmc` at horizon 64. Timing ratios
+are exploratory and machine-dependent; the committed reference run is
+`results/rtl-multimodule-query-reuse-v1.csv`. Repository CI also requires the
+independent `multimodule-controller.sby` SymbiYosys/Z3 job to pass through depth
+16.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

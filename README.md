@@ -93,6 +93,24 @@ safe builds (0), discovered violations (1), and tool or input failures (2). The
 example includes a copyable workflow and independent SymbiYosys/Z3 oracle files.
 It demonstrates integration mechanics, not medical-device certification.
 
+The same example now includes a five-module controller and a repeated-property
+BMC experiment:
+
+```sh
+cd examples/products/infusion-pump/rtl
+yosys -Q -q -s synthesize-multimodule.ys
+cd ../../../..
+./target/release/continuation-quotient-sat \
+  benchmark-aiger-query-reuse \
+  examples/products/infusion-pump/rtl/multimodule-controller.aag \
+  8,16,32,64 10 results/local-rtl-query-reuse.csv
+```
+
+The benchmark compares bounded two-property solver reuse with a fresh exact BMC
+solver per property. A static gate permits reuse only for multi-property
+encodings of at most 25,000 clauses; larger and single-property jobs use cold
+BMC. It reports both strategies even when reuse loses.
+
 ### Standard AIGER safety verification
 
 The portfolio ingests ASCII AIGER safety models directly. Closed models inside

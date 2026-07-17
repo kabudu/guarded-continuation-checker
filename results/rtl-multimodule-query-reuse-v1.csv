@@ -1,0 +1,5 @@
+input,horizon,latches,inputs,outputs,ands,variables,clauses,distinct_queries,reuse_batch,repeats,total_queries,sat_queries,encoding_ns,reusable_build_ns,reusable_query_ns,cold_total_ns,reusable_amortized_ns,cold_amortized_ns,query_speedup,full_speedup,selected_backend,selected_ns,selected_speedup,agreement,status
+examples/products/infusion-pump/rtl/multimodule-controller.aag,8,14,8,4,238,2344,5975,4,2,10,40,0,170667,8002543,17233163,32147209,25406373,32317876,1.865427,1.272038,bounded-reuse,25406373,1.272038,true,ok
+examples/products/infusion-pump/rtl/multimodule-controller.aag,16,14,8,4,238,4424,11295,4,2,10,40,0,229542,14668627,82687459,117306375,97585628,117535917,1.418672,1.204439,bounded-reuse,97585628,1.204439,true,ok
+examples/products/infusion-pump/rtl/multimodule-controller.aag,32,14,8,4,238,8584,21935,4,2,10,40,0,454375,28627210,383881371,437464166,412962956,437918541,1.139582,1.060431,bounded-reuse,412962956,1.060431,true,ok
+examples/products/infusion-pump/rtl/multimodule-controller.aag,64,14,8,4,238,16904,43215,4,2,10,40,0,876875,56612624,1955561500,1292358542,2013050999,1293235417,0.660863,0.642426,cold-bmc,1293235417,1.000000,true,ok

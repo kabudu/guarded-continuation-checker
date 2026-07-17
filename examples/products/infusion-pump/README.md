@@ -71,14 +71,39 @@ SystemVerilog assertion. They are checked through SymbiYosys and Z3 in repositor
 CI: the protected controller must pass and the regression must fail at step 1.
 This oracle uses a separate SMT encoding and solver path from CQ-SAT/GCC.
 
+## Scale to a multi-module controller
+
+[`rtl/multimodule-controller.sv`](rtl/multimodule-controller.sv) composes command
+sequencing, saturating dose accounting, watchdog timing, sensor voting, and a
+top-level pump system with four independent safety outputs. Generate its AIGER
+model and benchmark repeated property checks:
+
+```sh
+cd examples/products/infusion-pump/rtl
+yosys -Q -q -s synthesize-multimodule.ys
+cd ../../../..
+target/release/continuation-quotient-sat benchmark-aiger-query-reuse \
+  examples/products/infusion-pump/rtl/multimodule-controller.aag \
+  8,16,32,64 10 results/local-rtl-query-reuse.csv
+```
+
+The experiment shares one exact solver for bounded batches of two properties and
+compares it with a fresh exact BMC solver for every property. The static
+portfolio uses reuse only for multi-property encodings with at most 25,000
+clauses. The checked-in result wins modestly through horizon 32 and selects cold
+BMC at horizon 64, where unrestricted reuse becomes slower.
+
 ## Deliberate boundary
 
-The v0.6 workflow accepts one SystemVerilog source file, a simple top-module
-identifier, and an explicit top-level `bad` output. Yosys must lower the design
+The workflow accepts one SystemVerilog source file, a simple top-module
+identifier, and one or more explicit top-level bad outputs. Modules declared in
+that source are flattened before export. Yosys must lower the design
 to the original five-field ASCII AIGER subset already validated by this project.
 The source is capped at 10 MiB and synthesis at 120 seconds; the existing AIGER
 and bounded-unrolling resource limits still apply afterwards.
-General AIGER 1.9 bad-state/constraint sections, multiple RTL source files,
+Synthesis don't-care bits are explicitly lowered to zero, while unconstrained
+top-level signals remain primary inputs. General AIGER 1.9 bad-state/constraint
+sections, multiple RTL source files,
 include directories, parameter overrides, and source-level assertion mapping are
 not yet accepted. Unsupported synthesis or model shapes fail with exit status 2
 rather than being approximated.

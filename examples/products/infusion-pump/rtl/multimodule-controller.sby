@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 16
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv multimodule-controller.sv
+prep -top infusion_pump_system
+
+[files]
+multimodule-controller.sv
