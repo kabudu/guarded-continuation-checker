@@ -12,12 +12,18 @@ tool production-grade.
   fixed scripts, portable hierarchy lowering, and atomic manifest publication.
 - Single- and multi-file sources are snapshotted with ordered provenance.
 - Unsafe bounded results preserve named inputs and state for replay.
-- RTL safety reports and manifests declare artifact schema version 1.
+- RTL safety reports and manifests declare compatibility-locked artifact schema
+  version 2 and firmware CLI contract version 1.
 - Named constant input assumptions are applied at every bounded frame, reject
   unresolved names, and are cross-checked by an independent SBY/Z3 model.
 - Linux synthesis runs in a dedicated process group with a 2 GiB address-space
   limit, 512 MiB file limit, and group-wide timeout termination. Adversarial CI
   probes verify memory refusal, file truncation, and descendant cleanup.
+- Artifact schema v2 has exact ordering and compatibility tests plus a strict
+  executable bundle validator. Firmware CLI contract v1 fixes product command
+  signatures and exit meanings. Direct AIGER input is bounded to 256 MiB.
+- CI executes 20,000 deterministic mutations over persistent AIGER,
+  assumptions, and CLI parser regression corpora.
 
 ## Required before a production claim
 
@@ -25,10 +31,11 @@ tool production-grade.
   independently checked semantics.
 - [ ] Include directories, parameter overrides, memories, and declared clock or
   reset policy for representative embedded RTL projects.
-- [ ] Stable, versioned CLI and artifact schemas with compatibility tests.
+- [x] Stable artifact schema v2 and firmware CLI contract v1 with executable
+  version queries, validators, and compatibility tests.
 - [x] Linux memory, file-size, and process-tree limits in addition to wall-clock
   and model-size limits. macOS is explicitly development-only for this gate.
-- [ ] Parser and CLI fuzzing with a persistent regression corpus.
+- [x] Bounded parser and CLI mutation fuzzing with persistent regression corpora.
 - [ ] Differential validation across a substantial public and design-partner RTL
   corpus, including SAT and UNSAT properties and multiple Yosys versions.
 - [ ] Security review of source ingestion, subprocess isolation, artifacts, and

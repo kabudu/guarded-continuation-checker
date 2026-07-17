@@ -495,7 +495,7 @@ target/release/continuation-quotient-sat \
 
 The command must exit 0, report `SAFE`, publish `source-0000.sv` and
 `source-0001.sv`, and record `source_count=2` with ordered `source_0` and
-`source_1` entries under `schema_version=1`. Reusing the directory with the legacy single-file command
+`source_1` entries under `schema_version=2`. Reusing the directory with the legacy single-file command
 must remove both numbered snapshots before publishing `source.sv` and the new
 manifest. CI independently requires `project/pump-system.sby` to pass through
 depth 16 with SymbiYosys and Z3.
@@ -534,6 +534,33 @@ file limit must fail without exceeding the cap, and a shell descendant must no
 longer exist after group timeout. macOS runs the latter two probes and records a
 zero-byte, `unavailable` memory limit rather than claiming enforcement that the
 platform cannot provide reliably.
+
+Validate either completed bundle with:
+
+```sh
+target/release/continuation-quotient-sat \
+  firmware-artifact-validate results/rtl-project-safe
+```
+
+The command must report `VALID` and exit 0. The compatibility test then changes
+SAFE to UNSAFE without changing the report and appends an unknown manifest field;
+both mutations must be rejected. See
+[RTL artifact schema v2](ARTIFACT_SCHEMA_V2.md) for the exact contract.
+
+`cargo test --locked` also runs 5,000 AIGER mutations, 5,000 assumptions-file
+mutations, and 10,000 CLI mutations. Seeds live under `tests/fuzz-corpus`; a
+crash or hang-inducing discovery must be minimized and committed there before
+the fix is merged.
+
+Confirm the machine-readable compatibility versions with:
+
+```sh
+target/release/continuation-quotient-sat firmware-cli-version
+```
+
+The exact output is `firmware_cli_version=1 artifact_schema_version=2`. See
+[Firmware CLI contract v1](FIRMWARE_CLI_V1.md) for fixed command signatures and
+exit meanings.
 
 ### Multi-module query-reuse benchmark
 
