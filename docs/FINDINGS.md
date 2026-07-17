@@ -377,6 +377,25 @@ idea works; its construction does not. The next experiment should extract a
 conflict reason during a single BDD traversal or cache subset cofactors, avoiding
 one fresh conjunction chain per deletion candidate.
 
+## Cached BDD conflict explanations
+
+The cached extractor precomputes suffix conjunctions of the proposed checkpoint
+literals, carries a retained prefix constraint, and tests every literal exactly
+once. It remains exact and produces the same generalized subcubes as the repeated
+deletion implementation on all measured rows.
+
+Clause quality and reconciliation counts were unchanged: average learned widths
+were 5.86, 6.23, and 6.18, with 153, 104, and 89 conflicts. Runtime did not improve
+robustly. Phase speedups were 0.603× and 0.757× versus the earlier 0.668× and
+0.895×. The unseen horizon-7,777 holdout improved from 0.546× to 0.596×, still far
+below full CDCL.
+
+BDD apply caching had already absorbed much of the apparent quadratic rebuilding
+cost. The dominant cost is now repeated CDCL-to-BDD reconciliation. The next
+experiment should move from post-model conflict explanations to pre-solve
+higher-order propagation, or compile a bounded set of generalized global clauses
+once and reuse them across every query.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

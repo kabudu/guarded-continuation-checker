@@ -343,6 +343,22 @@ Run the generalized-conflict phase and holdout with:
 Every row must agree, validate witnesses, and report learned-clause widths no
 greater than the checkpoint width.
 
+## Cached BDD conflict explanations
+
+Run the cached-explanation phase and holdout with:
+
+```sh
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
+  results/reproduced-cached-bdd-conflict-explanations-10-phase.csv
+./target/release/continuation-quotient-sat \
+  benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
+  results/reproduced-cached-bdd-conflict-explanations-10-holdout.csv
+```
+
+Every row must agree, validate witnesses, and preserve the generalized clause
+width and conflict counts recorded by the greedy predecessor.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,

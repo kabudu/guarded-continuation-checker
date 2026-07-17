@@ -1,0 +1,2 @@
+kind,width,horizon,variables,clauses,queries,checkpoint,node_limit,recognition_ns,bdd_nodes,theory_clauses,theory_conflicts,average_learned_width,max_learned_width,theory_ns_per_query,full_cdcl_ns_per_query,speedup_vs_full,sat_queries,unsat_queries,agreement,witnesses_valid,status
+cascade4,9,7777,70002,1119888,50,10,200000,135698292,41299,89,89,6.180,7,989771530.840,590398637.500,0.596500,39,11,true,true,ok

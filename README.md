@@ -174,6 +174,9 @@ conflicts. It is exact, but higher-order conflicts dominate the measured cascade
 Rejected checkpoint states are greedily generalized to smaller BDD-proven
 incompatible subcubes. This strengthens learning, but the current repeated-
 conjunction minimizer costs more than the conflicts it removes.
+The cached extractor uses prefix/suffix BDD conjunctions to test each checkpoint
+literal once. It preserves identical explanations but does not yield a robust
+runtime improvement, showing reconciliation is now the larger bottleneck.
 The benchmark generator also includes asymmetric `hub3`, `tree3`, and
 `irregular3` transition families for evaluating structural ordering rules.
 When a complete symbolic frame repeats, the compiler stores the transient and
