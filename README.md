@@ -58,6 +58,10 @@ Any use in a regulated or safety-related programme must follow the bounded
 [standards applicability and assurance claims](docs/STANDARDS_APPLICABILITY.md).
 The remaining independent assessment and design-partner gates have fixed
 [external evidence and pilot acceptance criteria](docs/EXTERNAL_EVIDENCE_PROTOCOL.md).
+External engagement can start from the sendable
+[design-partner brief](docs/DESIGN_PARTNER_BRIEF.md), private
+[pilot intake template](docs/PILOT_INTAKE_TEMPLATE.md), and
+[independent-assessment statement of work](docs/INDEPENDENT_ASSESSMENT_SOW.md).
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

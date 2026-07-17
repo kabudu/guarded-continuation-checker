@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.21.0 - 2026-07-17
+
+- Add sendable, claim-bounded design-partner outreach and a controlled
+  engagement sequence for confidential representative RTL pilots.
+- Add a private pilot intake/closeout template and an independent security and
+  technical assessment statement of work tied to the executable evidence gate.
+
 ## 0.20.0 - 2026-07-17
 
 - Add a fail-closed external-evidence register validator and production-gate
