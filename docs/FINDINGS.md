@@ -517,6 +517,28 @@ Both workloads are rejected from CQ-SAT/GCC statically with
 a real use of the portfolio as a bounded hardware/protocol safety verifier, while
 specialized acceleration remains limited to the deterministic repeated regime.
 
+## RTL-to-safety product boundary
+
+The v0.6 product path removes the hand-authored AIGER step from the infusion-pump
+workflow. It stages one SystemVerilog source file, invokes Yosys through a fixed
+script without interpolating source-controlled command text, and lowers an
+explicit `bad` output to the original five-field ASCII AIGER subset. CQ-SAT/GCC
+then verifies that generated model through its existing exact portfolio.
+
+Yosys symbols now survive into the report. The regressed controller's shortest
+counterexample is named directly as `requested_motor_active`, `motor_request`,
+and `door_open`, with the failure at frame 1. The protected controller is SAFE
+through the chosen bound. SymbiYosys with Z3 independently returns PASS and FAIL
+for those same sources and locates the regression at step 1.
+
+This is a product-integration result, not a specialized-backend speed result:
+primary inputs route both models to exact CDCL. The accepted boundary is one
+source, one simple top identifier, and an explicit top-level `bad` output.
+Source size is capped at 10 MiB and Yosys synthesis at 120 seconds before the
+existing generated-model and bounded-unrolling limits are applied.
+General AIGER 1.9 property/constraint sections and full source-level assertion
+mapping remain unsupported and are rejected rather than approximated.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

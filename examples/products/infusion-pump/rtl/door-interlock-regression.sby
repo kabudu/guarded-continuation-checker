@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 8
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal door-interlock-regression.sv
+prep -top infusion_pump_controller
+
+[files]
+door-interlock-regression.sv

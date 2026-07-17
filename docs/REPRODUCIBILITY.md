@@ -454,6 +454,35 @@ CDCL gate reason, `sat_queries=1`, `unsat_queries=0`, and valid
 agreement/witness fields. Its result must be `UNSAFE` with `bad_frame=16` and a
 17-frame latch/input trace. Timing is exploratory.
 
+## SystemVerilog firmware safety gate
+
+Install Yosys and build the release binary, then run both product paths:
+
+```sh
+./target/release/continuation-quotient-sat \
+  firmware-rtl-safety-gate \
+  examples/products/infusion-pump/rtl/safe-controller.sv \
+  infusion_pump_controller 8 results/rtl-safe
+./target/release/continuation-quotient-sat \
+  firmware-rtl-safety-gate \
+  examples/products/infusion-pump/rtl/door-interlock-regression.sv \
+  infusion_pump_controller 8 results/rtl-regression
+```
+
+The first command must exit 0 and report `SAFE`. The second must exit 1, report
+`UNSAFE` at `bad_frame=1`, name the `bad` output, and contain this trace:
+
+```text
+named_frame,requested_motor_active,motor_request,door_open
+0,0,1,0
+1,1,0,1
+```
+
+Both directories must contain the staged source, synthesis script and logs,
+ASCII AIGER model, signal map, metrics, safety report, and final run manifest.
+Repository CI independently requires the matching SymbiYosys/Z3 `.sby` jobs to
+return PASS for the protected controller and FAIL for the regression.
+
 ## Curated result files
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
