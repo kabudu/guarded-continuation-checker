@@ -47,3 +47,36 @@ jobs:
           test -f /tmp/sby-config-project/PASS
           test -f /tmp/sby-assumed/PASS
           test -f /tmp/sby-regression/FAIL
+
+  public-rtl-corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.97.0
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install corpus tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools yosys z3
+          git init /tmp/sby
+          git -C /tmp/sby remote add origin https://github.com/YosysHQ/sby.git
+          git -C /tmp/sby fetch --depth 1 origin fea6e467d067b3ea84b6b5ac08cd48beb59f0d42
+          git -C /tmp/sby checkout --detach FETCH_HEAD
+      - name: Build static corpus binary
+        run: cargo build --release --locked --target x86_64-unknown-linux-musl
+      - name: Run current distribution Yosys with independent oracle
+        run: |
+          scripts/run-rtl-corpus.sh \
+            target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+            corpus/rtl/yosys-simple /tmp/corpus-current /tmp/sby/sbysrc/sby.py
+          cat /tmp/corpus-current/results.csv
+      - name: Run pinned historical Yosys 0.36
+        run: |
+          docker run --rm \
+            --volume "$PWD:/work" --workdir /work \
+            hdlc/yosys@sha256:58c0c80e41fd96b4b90da53c730aa3c43051f0cf2a6c6e336bd012281479df22 \
+            scripts/run-rtl-corpus.sh \
+              target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+              corpus/rtl/yosys-simple /work/target/corpus-yosys-036 -
+          cat target/corpus-yosys-036/results.csv
