@@ -11704,7 +11704,7 @@ fn aag_property_batch(
 }
 
 fn aiger_reuse_gate(clause_count: usize, property_count: usize) -> bool {
-    property_count >= 2 && clause_count <= 25_000
+    property_count >= 2 && clause_count <= 15_000
 }
 
 fn benchmark_aiger_query_reuse(
@@ -12239,7 +12239,7 @@ fn firmware_rtl_safety_gate(
     fs::copy(&source, &staged_source)
         .map_err(|error| format!("stage RTL source for Yosys: {error}"))?;
     let script = format!(
-        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
@@ -22323,8 +22323,8 @@ mod tests {
         assert_eq!(results.lines().count(), 3);
         assert!(results.lines().skip(1).all(|row| row.ends_with(",true,ok")));
         assert!(results.lines().skip(1).all(|row| row.contains(",2,2,8,0,")));
-        assert!(aiger_reuse_gate(25_000, 2));
-        assert!(!aiger_reuse_gate(25_001, 2));
+        assert!(aiger_reuse_gate(15_000, 2));
+        assert!(!aiger_reuse_gate(15_001, 2));
         assert!(!aiger_reuse_gate(1_000, 1));
         std::fs::remove_dir_all(artifacts).unwrap();
     }

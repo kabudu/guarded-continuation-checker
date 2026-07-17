@@ -108,7 +108,7 @@ cd ../../../..
 
 The benchmark compares bounded two-property solver reuse with a fresh exact BMC
 solver per property. A static gate permits reuse only for multi-property
-encodings of at most 25,000 clauses; larger and single-property jobs use cold
+encodings of at most 15,000 clauses; larger and single-property jobs use cold
 BMC. It reports both strategies even when reuse loses.
 
 ### Standard AIGER safety verification

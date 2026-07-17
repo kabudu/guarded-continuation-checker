@@ -501,7 +501,7 @@ target/release/continuation-quotient-sat \
 
 Each row must contain four distinct properties, two-property reuse batches,
 exact reusable/cold agreement, and `status=ok`. The static selector must choose
-`bounded-reuse` through horizon 32 and `cold-bmc` at horizon 64. Timing ratios
+`bounded-reuse` through horizon 16 and `cold-bmc` at horizons 32 and 64. Timing ratios
 are exploratory and machine-dependent; the committed reference run is
 `results/rtl-multimodule-query-reuse-v1.csv`. Repository CI also requires the
 independent `multimodule-controller.sby` SymbiYosys/Z3 job to pass through depth

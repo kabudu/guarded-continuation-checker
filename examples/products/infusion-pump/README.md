@@ -89,9 +89,9 @@ target/release/continuation-quotient-sat benchmark-aiger-query-reuse \
 
 The experiment shares one exact solver for bounded batches of two properties and
 compares it with a fresh exact BMC solver for every property. The static
-portfolio uses reuse only for multi-property encodings with at most 25,000
-clauses. The checked-in result wins modestly through horizon 32 and selects cold
-BMC at horizon 64, where unrestricted reuse becomes slower.
+portfolio uses reuse only for multi-property encodings with at most 15,000
+clauses. The checked-in result wins through horizon 16 and selects cold BMC at
+horizons 32 and 64, where unrestricted reuse becomes slower.
 
 ## Deliberate boundary
 
