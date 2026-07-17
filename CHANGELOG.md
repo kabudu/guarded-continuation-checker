@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-07-17
+
 - Flatten hierarchical modules before RTL-to-AIGER export and make synthesis
   don't-care lowering explicit, enabling realistic multi-module controllers.
 - Add an exact repeated-property BMC benchmark with bounded two-query reuse,
