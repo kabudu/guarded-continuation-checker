@@ -70,6 +70,26 @@ See the executable [watchdog/interlock](examples/watchdog-controller.md) and
 [redundant sensor-voting](examples/redundant-sensor-monitor.md) examples for the
 accelerated and safe-fallback paths.
 
+### Product integration: firmware safety gate
+
+The [infusion-pump firmware example](examples/products/infusion-pump/README.md)
+shows the verifier as a pull-request safety gate. A protected controller passes;
+a realistic door-interlock regression rejects the build and produces the shortest
+input/state trace needed to reproduce the failure.
+
+```sh
+./target/release/continuation-quotient-sat \
+  firmware-safety-gate \
+  examples/products/infusion-pump/firmware/safe-controller.aag \
+  100 target/firmware-safety
+```
+
+The command writes stable report and metrics artifacts, emits GitHub Actions
+annotations, and uses distinct exit statuses for safe builds (0), discovered
+safety violations (1), and tool or input failures (2). The example includes a
+copyable pull-request workflow. It demonstrates integration mechanics, not
+medical-device certification.
+
 ### Standard AIGER safety verification
 
 The portfolio ingests ASCII AIGER safety models directly. Closed models inside

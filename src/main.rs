@@ -11852,6 +11852,61 @@ fn verify_cq_aiger(
     Ok(())
 }
 
+fn firmware_safety_gate(input: &Path, horizon: usize, artifact_dir: &Path) -> Result<bool, String> {
+    fs::create_dir_all(artifact_dir)
+        .map_err(|error| format!("create firmware safety artifact directory: {error}"))?;
+    let metrics = artifact_dir.join("solver-metrics.csv");
+    let report = artifact_dir.join("safety-report.txt");
+    verify_cq_aiger(input, horizon, 10, 200_000, &metrics, &report)?;
+    let result = fs::read_to_string(&report)
+        .map_err(|error| format!("read firmware safety report: {error}"))?;
+    let safe = result.lines().next() == Some("status=SAFE");
+    if safe {
+        println!(
+            "::notice title=Firmware safety gate passed::No declared bad state is reachable through frame {horizon}"
+        );
+        println!(
+            "firmware-safety-gate status=SAFE report={}",
+            report.display()
+        );
+    } else if result.lines().next() == Some("status=UNSAFE") {
+        let bad_frame = result
+            .lines()
+            .find_map(|line| line.strip_prefix("bad_frame="))
+            .unwrap_or("unknown");
+        println!(
+            "::error title=Firmware safety gate failed::A declared bad state is reachable at frame {bad_frame}; download the firmware-safety-report artifact to replay it"
+        );
+        println!(
+            "firmware-safety-gate status=UNSAFE bad_frame={bad_frame} report={}",
+            report.display()
+        );
+    } else {
+        return Err(format!(
+            "firmware safety report has no recognized status: {}",
+            report.display()
+        ));
+    }
+    Ok(safe)
+}
+
+fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
+    if args.first().map(String::as_str) != Some("firmware-safety-gate") {
+        return Ok(None);
+    }
+    if args.len() != 4 {
+        return Err(
+            "usage: continuation-quotient-sat firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR"
+                .to_string(),
+        );
+    }
+    let horizon = args[2]
+        .parse::<usize>()
+        .map_err(|_| "invalid firmware safety horizon".to_string())?
+        .max(1);
+    firmware_safety_gate(Path::new(&args[1]), horizon, Path::new(&args[3])).map(Some)
+}
+
 fn benchmark_continuation_dimacs(
     input: &Path,
     query_count: usize,
@@ -14367,6 +14422,15 @@ fn load_or_build_helper_cache(
 
 fn main() {
     let args: Vec<_> = env::args().collect();
+    match run_firmware_gate_cli(&args[1..]) {
+        Ok(Some(true)) => return,
+        Ok(Some(false)) => std::process::exit(1),
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(2);
+        }
+    }
     match run_artifact_cli(&args[1..]) {
         Ok(true) => return,
         Ok(false) => {}
@@ -21648,6 +21712,32 @@ mod tests {
                 assert!(result.contains("bad_frame=16\n"));
                 assert!(result.contains("input_bits_low_to_high\n"));
             }
+        }
+    }
+
+    #[test]
+    fn firmware_safety_gate_distinguishes_safe_and_rejected_builds() {
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/products/infusion-pump/firmware");
+        for (name, expected_safe, expected_status) in [
+            ("safe-controller.aag", true, "status=SAFE\n"),
+            ("door-interlock-regression.aag", false, "status=UNSAFE\n"),
+        ] {
+            let artifacts = std::env::temp_dir().join(format!(
+                "cq-sat-firmware-gate-{name}-{}",
+                std::process::id()
+            ));
+            let safe = firmware_safety_gate(&root.join(name), 8, &artifacts).unwrap();
+            assert_eq!(safe, expected_safe);
+            let report = fs::read_to_string(artifacts.join("safety-report.txt")).unwrap();
+            assert!(report.starts_with(expected_status));
+            assert!(artifacts.join("solver-metrics.csv").is_file());
+            if !expected_safe {
+                assert!(report.contains("bad_frame=1\n"));
+                assert!(report.contains("0,0,10\n"));
+                assert!(report.contains("1,1,01\n"));
+            }
+            std::fs::remove_dir_all(artifacts).unwrap();
         }
     }
 }

@@ -6,6 +6,13 @@ industrial controllers. Each command constructs exact layered CNF, issues a fixe
 batch of partial observations, compares the selected backend with persistent
 CDCL, and validates every returned witness.
 
+## Product-shaped firmware CI
+
+The [infusion-pump firmware safety gate](products/infusion-pump/README.md) wraps
+the exact verifier in a developer-facing product workflow. It provides CI exit
+semantics, GitHub annotations, durable artifacts, a copyable pull-request job,
+and both passing and deliberately regressed controller builds.
+
 ## Watchdog and interlock trace analysis
 
 [`watchdog-controller.md`](watchdog-controller.md) models a dense network of nine
