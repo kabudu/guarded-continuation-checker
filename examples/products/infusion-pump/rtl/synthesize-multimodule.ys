@@ -5,6 +5,7 @@ async2sync
 opt
 dffunmap
 simplemap
+dffunmap
 aigmap
 setundef -zero
 write_aiger -ascii -symbols multimodule-controller.aag

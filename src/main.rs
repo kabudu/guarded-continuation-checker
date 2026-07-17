@@ -12239,7 +12239,7 @@ fn firmware_rtl_safety_gate(
     fs::copy(&source, &staged_source)
         .map_err(|error| format!("stage RTL source for Yosys: {error}"))?;
     let script = format!(
-        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\nsimplemap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT source.sv\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
@@ -12293,8 +12293,19 @@ fn firmware_rtl_safety_gate(
         thread::sleep(std::time::Duration::from_millis(50));
     };
     if !status.success() {
+        let error_tail = fs::read_to_string(&yosys_errors)
+            .ok()
+            .and_then(|body| body.lines().last().map(str::to_string))
+            .filter(|line| !line.is_empty())
+            .or_else(|| {
+                fs::read_to_string(&yosys_log)
+                    .ok()
+                    .and_then(|body| body.lines().last().map(str::to_string))
+                    .filter(|line| !line.is_empty())
+            })
+            .unwrap_or_else(|| "no Yosys diagnostic was captured".to_string());
         return Err(format!(
-            "Yosys synthesis failed; inspect {} and {}",
+            "Yosys synthesis failed: {error_tail}; inspect {} and {}",
             yosys_log.display(),
             yosys_errors.display()
         ));
