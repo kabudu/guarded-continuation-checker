@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add strict RTL project config v1 with immutable include snapshots, bounded
+  top-parameter overrides, declared clock/reset policy, and memory lowering.
+- Add artifact schema v3 and firmware CLI v2 evidence for project semantics,
+  plus a parameterised infusion-pump memory model cross-checked by SBY/Z3.
+- Extend deterministic parser mutation coverage to strict project configs.
+
 ## 0.11.0 - 2026-07-17
 
 - Establish RTL artifact schema v2 as the first compatibility-locked evidence

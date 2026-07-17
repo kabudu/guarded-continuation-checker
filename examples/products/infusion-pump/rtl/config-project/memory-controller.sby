@@ -1,0 +1,15 @@
+[options]
+mode bmc
+depth 8
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv -D SBY -I . memory-controller.sv
+chparam -set DEPTH 8 infusion_pump_memory
+prep -top infusion_pump_memory
+
+[files]
+config-project/include/pump-widths.svh
+config-project/memory-controller.sv

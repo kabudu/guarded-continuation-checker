@@ -19,19 +19,20 @@ tool production-grade.
 - Linux synthesis runs in a dedicated process group with a 2 GiB address-space
   limit, 512 MiB file limit, and group-wide timeout termination. Adversarial CI
   probes verify memory refusal, file truncation, and descendant cleanup.
-- Artifact schema v2 has exact ordering and compatibility tests plus a strict
-  executable bundle validator. Firmware CLI contract v1 fixes product command
+- Artifact schema v3 has exact ordering and compatibility tests plus a strict
+  executable bundle validator. Firmware CLI contract v2 fixes product command
   signatures and exit meanings. Direct AIGER input is bounded to 256 MiB.
-- CI executes 20,000 deterministic mutations over persistent AIGER,
-  assumptions, and CLI parser regression corpora.
+- CI executes 25,000 deterministic mutations over persistent AIGER,
+  assumptions, project-config, and CLI parser regression corpora.
 
 ## Required before a production claim
 
 - [x] Explicit constant environment assumptions and constraints with
   independently checked semantics.
-- [ ] Include directories, parameter overrides, memories, and declared clock or
-  reset policy for representative embedded RTL projects.
-- [x] Stable artifact schema v2 and firmware CLI contract v1 with executable
+- [x] Include directories, parameter overrides, memories, and declared clock or
+  reset policy for representative embedded RTL projects, with an independent
+  SymbiYosys/Z3 oracle.
+- [x] Stable artifact schema v3 and firmware CLI contract v2 with executable
   version queries, validators, and compatibility tests.
 - [x] Linux memory, file-size, and process-tree limits in addition to wall-clock
   and model-size limits. macOS is explicitly development-only for this gate.
