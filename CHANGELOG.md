@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.12.0 - 2026-07-17
+
 - Add strict RTL project config v1 with immutable include snapshots, bounded
   top-parameter overrides, declared clock/reset policy, and memory lowering.
 - Add artifact schema v3 and firmware CLI v2 evidence for project semantics,
