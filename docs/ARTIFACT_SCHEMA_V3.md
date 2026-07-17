@@ -1,8 +1,8 @@
-# RTL artifact schema v2
+# RTL artifact schema v3
 
-Schema v2 is the first compatibility-locked CQ-SAT/GCC RTL evidence contract.
-Schemas emitted before v2 were research-preview formats and are deliberately not
-accepted by the strict validator.
+Schema v3 extends the compatibility-locked v2 contract with immutable project
+configuration, include snapshots, parameter overrides, and clock/reset policy.
+The active strict validator deliberately accepts only v3.
 
 Validate a completed bundle with:
 
@@ -22,8 +22,8 @@ published last and therefore acts as the bundle-completion marker. Every line is
 order:
 
 1. `status` (`SAFE` or `UNSAFE`)
-2. `schema_version` (`2`)
-3. `firmware_cli_version` (`1`)
+2. `schema_version` (`3`)
+3. `firmware_cli_version` (`2`)
 4. `source`
 5. `source_count` (1–64)
 6. `source_0` through `source_N`, in source order
@@ -31,15 +31,23 @@ order:
 8. `source_bytes`
 9. `assumption_source`
 10. `assumption_count` (0–256)
-11. `top`
-12. `horizon`
-13. `synthesis_timeout_seconds`
-14. `containment_platform`
-15. `process_group_timeout_kill`
-16. `synthesis_memory_limit_kind`
-17. `synthesis_memory_limit_bytes`
-18. `synthesis_file_limit_bytes`
-19. `yosys`
+11. `project_config` (`none` or `cq-project.conf`)
+12. `include_dir_count`
+13. `include_file_count`
+14. `include_bytes`
+15. `parameter_count`
+16. `parameters`
+17. `clock_policy`
+18. `reset_policy`
+19. `top`
+20. `horizon`
+21. `synthesis_timeout_seconds`
+22. `containment_platform`
+23. `process_group_timeout_kill`
+24. `synthesis_memory_limit_kind`
+25. `synthesis_memory_limit_bytes`
+26. `synthesis_file_limit_bytes`
+27. `yosys`
 
 Percent signs, line feeds, and carriage returns in source labels are encoded as
 `%25`, `%0A`, and `%0D`. Consumers must not interpret other percent sequences.
@@ -56,8 +64,8 @@ The first three lines of `safety-report.txt` are exactly:
 
 ```text
 status=SAFE|UNSAFE
-schema_version=2
-firmware_cli_version=1
+schema_version=3
+firmware_cli_version=2
 ```
 
 The status and versions must agree with the manifest. Remaining metadata and an
@@ -66,10 +74,10 @@ after the validated prefix.
 
 ## Compatibility policy
 
-- The v2 validator accepts only schema v2 and rejects unknown fields.
+- The active validator accepts only schema v3 and rejects unknown fields.
 - Reordering, removing, renaming, or adding a field requires a new schema
   version and parallel compatibility tests.
-- A future producer may retain the v2 validator, but must not emit changed data
-  while claiming `schema_version=2`.
+- A future producer may retain the v3 validator, but must not emit changed data
+  while claiming `schema_version=3`.
 - Regression tests generate SAFE and constrained bundles, validate the exact
-  v2 field order, and reject status disagreement and unknown-field drift.
+  v3 field order, and reject status disagreement and unknown-field drift.

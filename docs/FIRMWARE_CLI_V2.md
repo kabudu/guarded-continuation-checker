@@ -1,7 +1,7 @@
-# Firmware CLI contract v1
+# Firmware CLI contract v2
 
-Contract v1 is the first stability commitment for CQ-SAT/GCC's product-facing
-firmware commands. Query the active contract without touching project files:
+Contract v2 adds the versioned RTL project-config gate while retaining the v1
+commands and exit meanings. Query the active contract without touching files:
 
 ```sh
 continuation-quotient-sat firmware-cli-version
@@ -10,13 +10,14 @@ continuation-quotient-sat firmware-cli-version
 The single output line is:
 
 ```text
-firmware_cli_version=1 artifact_schema_version=2
+firmware_cli_version=2 artifact_schema_version=3
 ```
 
 ## Commands
 
 ```text
 firmware-cli-version
+firmware-rtl-config-safety-gate PROJECT.conf ARTIFACT_DIR
 firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR
 firmware-rtl-safety-gate INPUT.sv TOP HORIZON ARTIFACT_DIR
 firmware-rtl-project-safety-gate TOP HORIZON ARTIFACT_DIR SOURCE.sv [SOURCE.sv ...]
@@ -27,6 +28,11 @@ firmware-artifact-validate ARTIFACT_DIR
 `HORIZON` is an unsigned decimal integer and is clamped to at least one. `TOP`
 is a simple Verilog identifier. Project source order is significant. The
 assumptions grammar and project bounds are documented in the README.
+
+`PROJECT.conf` v1 uses strict `KEY=VALUE` lines and requires `top`, `horizon`,
+one or more `source`, `clock`, and `reset`. It accepts bounded `include_dir`,
+`parameter=NAME:VALUE`, and `assumptions` entries. Paths are relative to the
+config, may not traverse, and are snapshotted before synthesis.
 
 ## Exit status
 
@@ -43,8 +49,8 @@ query's single key/value line is intended for direct machine parsing.
 ## Compatibility policy
 
 - Argument order, command names, exit meanings, and the version-query format are
-  stable for contract v1.
+  stable for contract v2.
 - A breaking change requires a new CLI contract version and compatibility tests.
-- Additive commands may be introduced without changing v1, but existing v1
+- Additive commands may be introduced without changing v2, but existing v2
   commands cannot silently change semantics.
-- Every schema-v2 report and manifest records `firmware_cli_version=1`.
+- Every schema-v3 report and manifest records `firmware_cli_version=2`.

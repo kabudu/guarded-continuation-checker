@@ -110,6 +110,21 @@ The project interface accepts at most 64 regular files, 10 MiB per file and
 25 MiB total. It rejects canonical duplicates and publishes deterministic source
 snapshots plus their ordered labels in the final manifest.
 
+Representative projects use the strict config interface for includes,
+parameters, clock/reset policy, and inferred memories:
+
+```sh
+./target/release/continuation-quotient-sat \
+  firmware-rtl-config-safety-gate \
+  examples/products/infusion-pump/rtl/config-project/cq-project.conf \
+  target/firmware-safety/config-project
+```
+
+All paths are relative to the config and may not traverse its directory.
+Sources, headers, and the config itself are bounded and snapshotted before
+Yosys starts. The declared reset deassertion is enforced at every bounded frame;
+each frame represents one declared active clock edge.
+
 Constant environment contracts use a bounded assumptions file containing one
 `NAME=0` or `NAME=1` entry per synthesized primary input. Each entry is enforced
 at every frame and an unknown or duplicate name fails the run:
@@ -136,7 +151,7 @@ and model limits still apply, but it must not be used as evidence of hard memory
 containment.
 
 Completed evidence bundles use the strict
-[RTL artifact schema v2](docs/ARTIFACT_SCHEMA_V2.md). Validate one before
+[RTL artifact schema v3](docs/ARTIFACT_SCHEMA_V3.md). Validate one before
 retention or downstream processing:
 
 ```sh
@@ -144,13 +159,13 @@ retention or downstream processing:
   firmware-artifact-validate target/firmware-safety/project
 ```
 
-Schema v2 rejects unknown, reordered, duplicated, or malformed manifest fields,
+Schema v3 rejects unknown, reordered, duplicated, or malformed manifest fields,
 stale source snapshots, missing evidence, and report/manifest disagreement.
-Direct ASCII AIGER inputs are capped at 256 MiB. CI also runs 20,000 deterministic
-mutations over persistent AIGER, assumptions, and CLI regression corpora.
+Direct ASCII AIGER inputs are capped at 256 MiB. CI also runs 25,000 deterministic
+mutations over persistent AIGER, assumptions, project-config, and CLI corpora.
 
 The product-facing commands follow
-[firmware CLI contract v1](docs/FIRMWARE_CLI_V1.md). Query both active contract
+[firmware CLI contract v2](docs/FIRMWARE_CLI_V2.md). Query both active contract
 versions with `firmware-cli-version`; breaking command, argument, or exit-status
 changes require a new CLI contract version.
 

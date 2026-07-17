@@ -1,0 +1,2 @@
+`define PUMP_WORD_BITS 8
+`define PUMP_ADDRESS_BITS 3

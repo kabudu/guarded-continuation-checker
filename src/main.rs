@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -10,8 +10,8 @@ use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
-const RTL_ARTIFACT_SCHEMA_VERSION: usize = 2;
-const FIRMWARE_CLI_CONTRACT_VERSION: usize = 1;
+const RTL_ARTIFACT_SCHEMA_VERSION: usize = 3;
+const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
 const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
@@ -12304,6 +12304,282 @@ fn valid_verilog_identifier(value: &str) -> bool {
         })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RtlProjectConfig {
+    document: Vec<u8>,
+    top: String,
+    horizon: usize,
+    sources: Vec<PathBuf>,
+    include_dirs: Vec<PathBuf>,
+    parameters: Vec<(String, String)>,
+    clock: (String, String),
+    reset: RtlResetPolicy,
+    assumptions: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RtlResetPolicy {
+    None,
+    Deasserted { signal: String, level: bool },
+}
+
+#[derive(Debug, Clone)]
+struct RtlIncludeSnapshot {
+    label: String,
+    files: Vec<(PathBuf, Vec<u8>)>,
+}
+
+#[derive(Debug, Clone)]
+struct RtlBuildOptions {
+    parameters: Vec<(String, String)>,
+    clock: (String, String),
+    reset: RtlResetPolicy,
+    includes: Vec<RtlIncludeSnapshot>,
+    project_config: Vec<u8>,
+}
+
+fn path_within(base: &Path, relative: &Path, label: &str) -> Result<PathBuf, String> {
+    let resolved = fs::canonicalize(base.join(relative))
+        .map_err(|error| format!("resolve {label} {}: {error}", relative.display()))?;
+    if !resolved.starts_with(base) {
+        return Err(format!(
+            "{label} escapes the project directory: {}",
+            relative.display()
+        ));
+    }
+    Ok(resolved)
+}
+
+fn load_rtl_build_options(
+    config_path: &Path,
+    config: &RtlProjectConfig,
+) -> Result<(Vec<PathBuf>, Option<PathBuf>, RtlBuildOptions), String> {
+    let config_path = fs::canonicalize(config_path).map_err(|error| {
+        format!(
+            "resolve RTL project config {}: {error}",
+            config_path.display()
+        )
+    })?;
+    let base = config_path
+        .parent()
+        .ok_or_else(|| "RTL project config has no parent directory".to_string())?;
+    let sources = config
+        .sources
+        .iter()
+        .map(|path| path_within(base, path, "RTL source"))
+        .collect::<Result<Vec<_>, _>>()?;
+    let assumptions = config
+        .assumptions
+        .as_ref()
+        .map(|path| path_within(base, path, "assumptions file"))
+        .transpose()?;
+    let mut total_files = 0usize;
+    let mut total_bytes = 0u64;
+    let mut includes = Vec::new();
+    for (index, relative) in config.include_dirs.iter().enumerate() {
+        let directory = path_within(base, relative, "include directory")?;
+        if !directory.is_dir() {
+            return Err(format!(
+                "include path is not a directory: {}",
+                relative.display()
+            ));
+        }
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|error| format!("read include directory {}: {error}", relative.display()))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("read include entry: {error}"))?;
+        entries.sort_by_key(|entry| entry.file_name());
+        let mut files = Vec::new();
+        for entry in entries {
+            let kind = entry
+                .file_type()
+                .map_err(|error| format!("inspect include entry: {error}"))?;
+            if !kind.is_file() {
+                return Err(format!(
+                    "include directories may contain only regular files: {}",
+                    entry.path().display()
+                ));
+            }
+            let bytes = fs::read(entry.path()).map_err(|error| {
+                format!("read include file {}: {error}", entry.path().display())
+            })?;
+            if bytes.len() > 1024 * 1024 {
+                return Err(format!(
+                    "include file exceeds 1 MiB safety limit: {}",
+                    entry.path().display()
+                ));
+            }
+            total_files += 1;
+            total_bytes = total_bytes
+                .checked_add(bytes.len() as u64)
+                .ok_or_else(|| "include byte count overflow".to_string())?;
+            if total_files > 256 || total_bytes > 10 * 1024 * 1024 {
+                return Err("include snapshot exceeds 256 files or 10 MiB safety limit".to_string());
+            }
+            files.push((PathBuf::from(entry.file_name()), bytes));
+        }
+        includes.push(RtlIncludeSnapshot {
+            label: format!("include-{index:04}"),
+            files,
+        });
+    }
+    Ok((
+        sources,
+        assumptions,
+        RtlBuildOptions {
+            parameters: config.parameters.clone(),
+            clock: config.clock.clone(),
+            reset: config.reset.clone(),
+            includes,
+            project_config: config.document.clone(),
+        },
+    ))
+}
+
+fn safe_project_relative_path(value: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    if value.is_empty()
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(format!(
+            "project path must be a non-empty relative path without traversal: `{value}`"
+        ));
+    }
+    Ok(path)
+}
+
+fn parse_rtl_project_config(path: &Path) -> Result<RtlProjectConfig, String> {
+    let bytes = fs::read(path)
+        .map_err(|error| format!("read RTL project config {}: {error}", path.display()))?;
+    if bytes.len() > 65_536 {
+        return Err("RTL project config exceeds safety limit 65536 bytes".to_string());
+    }
+    let body = std::str::from_utf8(&bytes)
+        .map_err(|_| "RTL project config must be valid UTF-8".to_string())?;
+    let mut scalar = BTreeMap::new();
+    let mut sources = Vec::new();
+    let mut include_dirs = Vec::new();
+    let mut parameters = Vec::new();
+    for (index, raw) in body.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (key, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid RTL project config line {}", index + 1))?;
+        let key = key.trim();
+        let value = value.trim();
+        match key {
+            "source" => sources.push(safe_project_relative_path(value)?),
+            "include_dir" => include_dirs.push(safe_project_relative_path(value)?),
+            "parameter" => {
+                let (name, setting) = value.split_once(':').ok_or_else(|| {
+                    format!(
+                        "invalid parameter at line {}: expected NAME:VALUE",
+                        index + 1
+                    )
+                })?;
+                if !valid_verilog_identifier(name)
+                    || setting.is_empty()
+                    || !setting
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '\''))
+                {
+                    return Err(format!("invalid parameter at line {}", index + 1));
+                }
+                parameters.push((name.to_string(), setting.to_string()));
+            }
+            "project_version" | "top" | "horizon" | "clock" | "reset" | "assumptions" => {
+                if value.is_empty() || scalar.insert(key.to_string(), value.to_string()).is_some() {
+                    return Err(format!("duplicate or empty RTL project field `{key}`"));
+                }
+            }
+            _ => return Err(format!("unknown RTL project field `{key}`")),
+        }
+    }
+    if scalar.get("project_version").map(String::as_str) != Some("1") {
+        return Err("RTL project config requires project_version=1".to_string());
+    }
+    let top = scalar
+        .remove("top")
+        .ok_or_else(|| "RTL project config is missing `top`".to_string())?;
+    if !valid_verilog_identifier(&top) {
+        return Err("RTL project top must be a simple Verilog identifier".to_string());
+    }
+    let horizon = scalar
+        .remove("horizon")
+        .ok_or_else(|| "RTL project config is missing `horizon`".to_string())?
+        .parse::<usize>()
+        .map_err(|_| "RTL project horizon must be an integer".to_string())?;
+    if horizon == 0 || horizon > 1_000_000 {
+        return Err("RTL project horizon must be between 1 and 1000000".to_string());
+    }
+    if sources.is_empty() || sources.len() > 64 {
+        return Err("RTL project must contain between 1 and 64 source files".to_string());
+    }
+    if include_dirs.len() > 16 || parameters.len() > 64 {
+        return Err("RTL project include or parameter count exceeds safety limit".to_string());
+    }
+    let clock = scalar
+        .remove("clock")
+        .ok_or_else(|| "RTL project config is missing `clock`".to_string())?;
+    let (clock_signal, clock_edge) = clock
+        .split_once(':')
+        .ok_or_else(|| "clock must be SIGNAL:posedge or SIGNAL:negedge".to_string())?;
+    if !valid_verilog_identifier(clock_signal) || !matches!(clock_edge, "posedge" | "negedge") {
+        return Err("clock must be SIGNAL:posedge or SIGNAL:negedge".to_string());
+    }
+    let reset = match scalar
+        .remove("reset")
+        .ok_or_else(|| "RTL project config is missing `reset`".to_string())?
+        .as_str()
+    {
+        "none" => RtlResetPolicy::None,
+        value => {
+            let (signal, state) = value.split_once(':').ok_or_else(|| {
+                "reset must be none or SIGNAL:deasserted-low/deasserted-high".to_string()
+            })?;
+            if !valid_verilog_identifier(signal) {
+                return Err("reset signal is invalid".to_string());
+            }
+            match state {
+                "deasserted-low" => RtlResetPolicy::Deasserted {
+                    signal: signal.to_string(),
+                    level: false,
+                },
+                "deasserted-high" => RtlResetPolicy::Deasserted {
+                    signal: signal.to_string(),
+                    level: true,
+                },
+                _ => {
+                    return Err(
+                        "reset must be none or SIGNAL:deasserted-low/deasserted-high".to_string(),
+                    );
+                }
+            }
+        }
+    };
+    let assumptions = scalar
+        .remove("assumptions")
+        .map(|value| safe_project_relative_path(&value))
+        .transpose()?;
+    Ok(RtlProjectConfig {
+        document: bytes,
+        top,
+        horizon,
+        sources,
+        include_dirs,
+        parameters,
+        clock: (clock_signal.to_string(), clock_edge.to_string()),
+        reset,
+        assumptions,
+    })
+}
+
 fn parse_environment_assumptions(
     path: &Path,
 ) -> Result<(Vec<AagInputConstraint>, Vec<u8>), String> {
@@ -12480,6 +12756,12 @@ fn is_rtl_source_snapshot(name: &str) -> bool {
             .is_some_and(|index| index.len() == 4 && index.chars().all(|c| c.is_ascii_digit()))
 }
 
+fn is_rtl_include_snapshot(name: &str) -> bool {
+    name.strip_prefix("include-").is_some_and(|index| {
+        index.len() == 4 && index.chars().all(|character| character.is_ascii_digit())
+    })
+}
+
 fn source_revision() -> String {
     env::var("GITHUB_SHA")
         .ok()
@@ -12603,6 +12885,10 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
         return Err("RTL artifact horizon must be at least one".to_string());
     }
     for key in [
+        "include_dir_count",
+        "include_file_count",
+        "include_bytes",
+        "parameter_count",
         "synthesis_timeout_seconds",
         "synthesis_memory_limit_bytes",
         "synthesis_file_limit_bytes",
@@ -12631,7 +12917,7 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
         || rtl_manifest_value(&fields, "synthesis_file_limit_bytes")?
             != YOSYS_FILE_LIMIT_BYTES.to_string()
     {
-        return Err("RTL artifact synthesis limits do not match schema v2".to_string());
+        return Err("RTL artifact synthesis limits do not match schema v3".to_string());
     }
     if !rtl_manifest_value(&fields, "yosys")?.starts_with("Yosys ") {
         return Err("RTL artifact Yosys version is malformed".to_string());
@@ -12651,6 +12937,14 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
             "source_bytes",
             "assumption_source",
             "assumption_count",
+            "project_config",
+            "include_dir_count",
+            "include_file_count",
+            "include_bytes",
+            "parameter_count",
+            "parameters",
+            "clock_policy",
+            "reset_policy",
             "top",
             "horizon",
             "synthesis_timeout_seconds",
@@ -12669,7 +12963,7 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
         .map(|(key, _)| key.clone())
         .collect::<Vec<_>>();
     if actual_keys != expected_keys {
-        return Err("RTL artifact manifest fields or ordering do not match schema v2".to_string());
+        return Err("RTL artifact manifest fields or ordering do not match schema v3".to_string());
     }
 
     let expected_sources = if source_count == 1 {
@@ -12722,6 +13016,111 @@ fn validate_rtl_artifact_bundle(artifact_dir: &Path) -> Result<(), String> {
         if constraints.len() != assumption_count {
             return Err("RTL artifact assumption_count disagrees with snapshot".to_string());
         }
+    }
+    let project_config = rtl_manifest_value(&fields, "project_config")?;
+    let include_dir_count = rtl_manifest_value(&fields, "include_dir_count")?
+        .parse::<usize>()
+        .unwrap();
+    let include_file_count = rtl_manifest_value(&fields, "include_file_count")?
+        .parse::<usize>()
+        .unwrap();
+    let include_bytes = rtl_manifest_value(&fields, "include_bytes")?
+        .parse::<u64>()
+        .unwrap();
+    let parameter_count = rtl_manifest_value(&fields, "parameter_count")?
+        .parse::<usize>()
+        .unwrap();
+    if (project_config == "none")
+        != (include_dir_count == 0
+            && parameter_count == 0
+            && rtl_manifest_value(&fields, "clock_policy")? == "unspecified"
+            && rtl_manifest_value(&fields, "reset_policy")? == "unspecified")
+    {
+        return Err("RTL project configuration fields are inconsistent".to_string());
+    }
+    if project_config != "none" && project_config != "cq-project.conf" {
+        return Err("RTL artifact project_config is invalid".to_string());
+    }
+    if (project_config == "cq-project.conf") != artifact_dir.join("cq-project.conf").is_file() {
+        return Err("RTL project config snapshot is missing or unexpected".to_string());
+    }
+    if project_config == "cq-project.conf" {
+        let config = parse_rtl_project_config(&artifact_dir.join("cq-project.conf"))?;
+        let config_parameters = if config.parameters.is_empty() {
+            "none".to_string()
+        } else {
+            config
+                .parameters
+                .iter()
+                .map(|(name, value)| format!("{name}:{value}"))
+                .collect::<Vec<_>>()
+                .join(";")
+        };
+        let config_reset = match &config.reset {
+            RtlResetPolicy::None => "none".to_string(),
+            RtlResetPolicy::Deasserted { signal, level } => format!(
+                "{signal}:deasserted-{}",
+                if *level { "high" } else { "low" }
+            ),
+        };
+        if config.top != rtl_manifest_value(&fields, "top")?
+            || config.horizon.to_string() != rtl_manifest_value(&fields, "horizon")?
+            || config.sources.len() != source_count
+            || config.include_dirs.len() != include_dir_count
+            || config.parameters.len() != parameter_count
+            || config_parameters != rtl_manifest_value(&fields, "parameters")?
+            || format!("{}:{}", config.clock.0, config.clock.1)
+                != rtl_manifest_value(&fields, "clock_policy")?
+            || config_reset != rtl_manifest_value(&fields, "reset_policy")?
+            || config.assumptions.is_some() != (assumption_count > 0)
+        {
+            return Err("RTL project config snapshot disagrees with manifest".to_string());
+        }
+    }
+    let mut actual_include_files = 0usize;
+    let mut actual_include_bytes = 0u64;
+    for index in 0..include_dir_count {
+        let directory = artifact_dir.join(format!("include-{index:04}"));
+        if !directory.is_dir() {
+            return Err("RTL include snapshot directory is missing".to_string());
+        }
+        for entry in
+            fs::read_dir(directory).map_err(|error| format!("read include snapshot: {error}"))?
+        {
+            let entry = entry.map_err(|error| format!("read include snapshot entry: {error}"))?;
+            if !entry
+                .file_type()
+                .map_err(|error| format!("inspect include snapshot: {error}"))?
+                .is_file()
+            {
+                return Err("RTL include snapshot contains a non-file".to_string());
+            }
+            actual_include_files += 1;
+            actual_include_bytes += entry
+                .metadata()
+                .map_err(|error| format!("inspect include snapshot: {error}"))?
+                .len();
+        }
+    }
+    if actual_include_files != include_file_count || actual_include_bytes != include_bytes {
+        return Err("RTL include snapshot counts disagree with manifest".to_string());
+    }
+    let actual_include_dirs = fs::read_dir(artifact_dir)
+        .map_err(|error| format!("inspect RTL artifact includes: {error}"))?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_dir())
+                && is_rtl_include_snapshot(&entry.file_name().to_string_lossy())
+        })
+        .count();
+    if actual_include_dirs != include_dir_count {
+        return Err("RTL include snapshot directories disagree with manifest".to_string());
+    }
+    let parameters = rtl_manifest_value(&fields, "parameters")?;
+    if (parameters == "none") != (parameter_count == 0)
+        || (parameter_count > 0 && parameters.split(';').count() != parameter_count)
+    {
+        return Err("RTL parameter count disagrees with manifest".to_string());
     }
     let mut actual_sources = Vec::new();
     for entry in fs::read_dir(artifact_dir)
@@ -12783,6 +13182,7 @@ fn annotate_rtl_safety_report(
     source: &str,
     top: &str,
     yosys_version: &str,
+    build_options: Option<&RtlBuildOptions>,
 ) -> Result<(), String> {
     let body =
         fs::read_to_string(report).map_err(|error| format!("read RTL safety report: {error}"))?;
@@ -12798,6 +13198,28 @@ fn annotate_rtl_safety_report(
         format!("source={}", report_value(source)),
         format!("source_revision={revision}"),
         format!("top={top}"),
+        format!(
+            "clock_policy={}",
+            build_options.map_or_else(
+                || "unspecified".to_string(),
+                |options| format!("{}:{}", options.clock.0, options.clock.1)
+            )
+        ),
+        format!(
+            "reset_policy={}",
+            build_options.map_or_else(
+                || "unspecified".to_string(),
+                |options| match &options.reset {
+                    RtlResetPolicy::None => "none".to_string(),
+                    RtlResetPolicy::Deasserted { signal, level } => {
+                        format!(
+                            "{signal}:deasserted-{}",
+                            if *level { "high" } else { "low" }
+                        )
+                    }
+                }
+            )
+        ),
         format!("yosys={yosys_version}"),
         format!("containment_platform={}", std::env::consts::OS),
         "process_group_timeout_kill=true".to_string(),
@@ -12827,6 +13249,7 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     horizon: usize,
     artifact_dir: &Path,
     assumptions_path: Option<&Path>,
+    build_options: Option<&RtlBuildOptions>,
 ) -> Result<bool, String> {
     if !valid_verilog_identifier(top) {
         return Err("RTL top must be a simple Verilog identifier".to_string());
@@ -12837,9 +13260,28 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     let assumption_document = assumptions_path
         .map(parse_environment_assumptions)
         .transpose()?;
-    let assumptions = assumption_document
+    let mut effective_assumptions = assumption_document
         .as_ref()
-        .map_or(&[][..], |(constraints, _)| constraints.as_slice());
+        .map_or_else(Vec::new, |(constraints, _)| constraints.clone());
+    if let Some(RtlBuildOptions {
+        reset: RtlResetPolicy::Deasserted { signal, level },
+        ..
+    }) = build_options
+    {
+        if effective_assumptions
+            .iter()
+            .any(|constraint| constraint.name == *signal)
+        {
+            return Err(format!(
+                "reset signal `{signal}` duplicates an environment assumption"
+            ));
+        }
+        effective_assumptions.push(AagInputConstraint {
+            name: signal.clone(),
+            value: *level,
+        });
+    }
+    let assumptions = effective_assumptions.as_slice();
     let mut sources = Vec::with_capacity(inputs.len());
     let mut seen_sources = BTreeSet::new();
     let mut source_bytes = 0u64;
@@ -12910,12 +13352,38 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         })
         .collect::<Result<Vec<_>, String>>()?;
     let staged_sources = staged_source_names.join(" ");
+    let mut include_flags = Vec::new();
+    if let Some(options) = build_options {
+        fs::write(stage.join("cq-project.conf"), &options.project_config)
+            .map_err(|error| format!("stage RTL project config: {error}"))?;
+        for include in &options.includes {
+            let directory = stage.join(&include.label);
+            fs::create_dir(&directory)
+                .map_err(|error| format!("stage include directory: {error}"))?;
+            for (name, bytes) in &include.files {
+                fs::write(directory.join(name), bytes)
+                    .map_err(|error| format!("stage include file {}: {error}", name.display()))?;
+            }
+            include_flags.push(format!("-I{}", include.label));
+        }
+    }
     if let Some((_, bytes)) = &assumption_document {
         fs::write(stage.join("assumptions.txt"), bytes)
             .map_err(|error| format!("stage environment assumptions: {error}"))?;
     }
+    let parameter_commands = build_options.map_or_else(String::new, |options| {
+        options
+            .parameters
+            .iter()
+            .map(|(name, value)| format!("chparam -set {name} {value} {top}\n"))
+            .collect()
+    });
+    let clock_check = build_options.map_or_else(String::new, |options| {
+        format!("select -assert-count 1 {top}/{}\n", options.clock.0)
+    });
+    let includes = include_flags.join(" ");
     let script = format!(
-        "read_verilog -formal -sv -D CQ_AIGER_EXPORT {staged_sources}\nprep -top {top}\nflatten\nasync2sync\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
+        "read_verilog -formal -sv -D CQ_AIGER_EXPORT {includes} {staged_sources}\n{parameter_commands}prep -top {top}\n{clock_check}flatten\nasync2sync\nopt\nmemory_map\nopt\ndffunmap\npmuxtree\nsimplemap\ndffunmap\naigmap\nsetundef -zero\nwrite_aiger -ascii -symbols -map signal.map model.aag\n"
     );
     fs::write(&synthesis, script)
         .map_err(|error| format!("write Yosys synthesis script: {error}"))?;
@@ -12981,6 +13449,7 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         &source_label,
         top,
         &yosys_version,
+        build_options,
     )?;
     let status_name = if safe { "SAFE" } else { "UNSAFE" };
     let revision = source_revision();
@@ -12994,11 +13463,60 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         || "none".to_string(),
         |path| report_value(&path.to_string_lossy()),
     );
-    let assumption_count = assumptions.len();
+    let assumption_count = assumption_document
+        .as_ref()
+        .map_or(0, |(constraints, _)| constraints.len());
+    let project_config = if build_options.is_some() {
+        "cq-project.conf"
+    } else {
+        "none"
+    };
+    let include_dir_count = build_options.map_or(0, |options| options.includes.len());
+    let include_file_count = build_options.map_or(0, |options| {
+        options
+            .includes
+            .iter()
+            .map(|include| include.files.len())
+            .sum()
+    });
+    let include_bytes: usize = build_options.map_or(0, |options| {
+        options
+            .includes
+            .iter()
+            .flat_map(|include| &include.files)
+            .map(|(_, bytes)| bytes.len())
+            .sum()
+    });
+    let parameters = build_options.map_or_else(
+        || "none".to_string(),
+        |options| {
+            options
+                .parameters
+                .iter()
+                .map(|(name, value)| format!("{name}:{value}"))
+                .collect::<Vec<_>>()
+                .join(";")
+        },
+    );
+    let parameter_count = build_options.map_or(0, |options| options.parameters.len());
+    let clock_policy = build_options.map_or_else(
+        || "unspecified".to_string(),
+        |options| format!("{}:{}", options.clock.0, options.clock.1),
+    );
+    let reset_policy = build_options.map_or_else(
+        || "unspecified".to_string(),
+        |options| match &options.reset {
+            RtlResetPolicy::None => "none".to_string(),
+            RtlResetPolicy::Deasserted { signal, level } => format!(
+                "{signal}:deasserted-{}",
+                if *level { "high" } else { "low" }
+            ),
+        },
+    );
     fs::write(
         stage.join("run-manifest.txt"),
         format!(
-            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nfirmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\n",
+            "status={status_name}\nschema_version={RTL_ARTIFACT_SCHEMA_VERSION}\nfirmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION}\nsource={}\nsource_count={}\n{manifest_sources}\nsource_revision={revision}\nsource_bytes={source_bytes}\nassumption_source={assumption_source_label}\nassumption_count={assumption_count}\nproject_config={project_config}\ninclude_dir_count={include_dir_count}\ninclude_file_count={include_file_count}\ninclude_bytes={include_bytes}\nparameter_count={parameter_count}\nparameters={parameters}\nclock_policy={clock_policy}\nreset_policy={reset_policy}\ntop={top}\nhorizon={horizon}\nsynthesis_timeout_seconds=120\ncontainment_platform={}\nprocess_group_timeout_kill=true\nsynthesis_memory_limit_kind={}\nsynthesis_memory_limit_bytes={}\nsynthesis_file_limit_bytes={YOSYS_FILE_LIMIT_BYTES}\nyosys={yosys_version}\n",
             report_value(&source_label), sources.len(), std::env::consts::OS,
             synthesis_memory_limit_kind(), synthesis_memory_limit_bytes()
         ),
@@ -13018,6 +13536,10 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
         if is_rtl_source_snapshot(&name) && entry.path().is_file() {
             fs::remove_file(entry.path())
                 .map_err(|error| format!("remove stale RTL source snapshot: {error}"))?;
+        }
+        if is_rtl_include_snapshot(&name) && entry.path().is_dir() {
+            fs::remove_dir_all(entry.path())
+                .map_err(|error| format!("remove stale RTL include snapshot: {error}"))?;
         }
     }
     let mut published_names = vec![
@@ -13042,6 +13564,27 @@ fn firmware_rtl_project_safety_gate_with_assumptions(
     for name in published_names {
         replace_file(&stage.join(name), &artifact_dir.join(name))?;
     }
+    if let Some(options) = build_options {
+        replace_file(
+            &stage.join("cq-project.conf"),
+            &artifact_dir.join("cq-project.conf"),
+        )?;
+        for include in &options.includes {
+            let destination = artifact_dir.join(&include.label);
+            if destination.exists() {
+                fs::remove_dir_all(&destination)
+                    .map_err(|error| format!("remove stale include snapshot: {error}"))?;
+            }
+            fs::rename(stage.join(&include.label), &destination)
+                .map_err(|error| format!("publish include snapshot: {error}"))?;
+        }
+    } else {
+        let stale = artifact_dir.join("cq-project.conf");
+        if stale.is_file() {
+            fs::remove_file(stale)
+                .map_err(|error| format!("remove stale project config: {error}"))?;
+        }
+    }
     replace_file(&stage.join("run-manifest.txt"), &published_manifest)?;
     fs::remove_dir(&stage)
         .map_err(|error| format!("remove RTL safety staging directory: {error}"))?;
@@ -13059,7 +13602,14 @@ fn firmware_rtl_project_safety_gate(
     horizon: usize,
     artifact_dir: &Path,
 ) -> Result<bool, String> {
-    firmware_rtl_project_safety_gate_with_assumptions(inputs, top, horizon, artifact_dir, None)
+    firmware_rtl_project_safety_gate_with_assumptions(
+        inputs,
+        top,
+        horizon,
+        artifact_dir,
+        None,
+        None,
+    )
 }
 
 fn firmware_rtl_safety_gate(
@@ -13069,6 +13619,22 @@ fn firmware_rtl_safety_gate(
     artifact_dir: &Path,
 ) -> Result<bool, String> {
     firmware_rtl_project_safety_gate(&[input.to_path_buf()], top, horizon, artifact_dir)
+}
+
+fn firmware_rtl_config_safety_gate(
+    config_path: &Path,
+    artifact_dir: &Path,
+) -> Result<bool, String> {
+    let config = parse_rtl_project_config(config_path)?;
+    let (sources, assumptions, options) = load_rtl_build_options(config_path, &config)?;
+    firmware_rtl_project_safety_gate_with_assumptions(
+        &sources,
+        &config.top,
+        config.horizon,
+        artifact_dir,
+        assumptions.as_deref(),
+        Some(&options),
+    )
 }
 
 fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
@@ -13091,6 +13657,12 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
             }
             validate_rtl_artifact_bundle(Path::new(&args[1]))?;
             Ok(Some(true))
+        }
+        Some("firmware-rtl-config-safety-gate") => {
+            if args.len() != 3 {
+                return Err("usage: continuation-quotient-sat firmware-rtl-config-safety-gate PROJECT.conf ARTIFACT_DIR".to_string());
+            }
+            firmware_rtl_config_safety_gate(Path::new(&args[1]), Path::new(&args[2])).map(Some)
         }
         Some("firmware-safety-gate") => {
             if args.len() != 4 {
@@ -13140,6 +13712,7 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
                 horizon,
                 Path::new(&args[3]),
                 Some(Path::new(&args[4])),
+                None,
             )
             .map(Some)
         }
@@ -23117,8 +23690,8 @@ mod tests {
         assert!(!synthesis.contains(&root.to_string_lossy().to_string()));
         let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
         assert!(manifest.contains("status=SAFE\n"));
-        assert!(manifest.contains("schema_version=2\n"));
-        assert!(manifest.contains("firmware_cli_version=1\n"));
+        assert!(manifest.contains("schema_version=3\n"));
+        assert!(manifest.contains("firmware_cli_version=2\n"));
         assert!(manifest.contains("source_count=2\n"));
         assert!(manifest.contains("source_0="));
         assert!(manifest.contains("source_1="));
@@ -23210,6 +23783,7 @@ mod tests {
                 8,
                 &artifacts,
                 Some(&assumptions),
+                None,
             )
             .unwrap()
         );
@@ -23239,6 +23813,106 @@ mod tests {
         );
         std::fs::remove_file(unknown).unwrap();
         std::fs::remove_dir_all(artifacts).unwrap();
+    }
+
+    #[test]
+    fn rtl_project_config_v1_is_strict_and_path_safe() {
+        let scratch =
+            std::env::temp_dir().join(format!("cq-sat-project-config-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let config_path = scratch.join("cq-project.conf");
+        fs::write(
+            &config_path,
+            "project_version=1\ntop=pump_top\nhorizon=32\nclock=clk:posedge\nreset=rst_n:deasserted-high\nsource=rtl/top.sv\nsource=rtl/memory.sv\ninclude_dir=rtl/include\nparameter=DEPTH:16\nassumptions=env.assumptions\n",
+        )
+        .unwrap();
+        let parsed = parse_rtl_project_config(&config_path).unwrap();
+        assert_eq!(parsed.top, "pump_top");
+        assert_eq!(parsed.horizon, 32);
+        assert_eq!(parsed.sources.len(), 2);
+        assert_eq!(parsed.include_dirs, vec![PathBuf::from("rtl/include")]);
+        assert_eq!(
+            parsed.parameters,
+            vec![("DEPTH".to_string(), "16".to_string())]
+        );
+        assert_eq!(parsed.clock, ("clk".to_string(), "posedge".to_string()));
+        assert_eq!(
+            parsed.reset,
+            RtlResetPolicy::Deasserted {
+                signal: "rst_n".to_string(),
+                level: true
+            }
+        );
+
+        for (body, expected) in [
+            (
+                "project_version=1\ntop=x\nhorizon=1\nclock=c:posedge\nreset=none\nsource=../escape.sv\n",
+                "without traversal",
+            ),
+            (
+                "project_version=1\ntop=x\ntop=y\nhorizon=1\nclock=c:posedge\nreset=none\nsource=x.sv\n",
+                "duplicate",
+            ),
+            (
+                "project_version=1\ntop=x\nhorizon=1\nclock=c:posedge\nreset=none\nsource=x.sv\nshell=evil\n",
+                "unknown",
+            ),
+        ] {
+            fs::write(&config_path, body).unwrap();
+            assert!(
+                parse_rtl_project_config(&config_path)
+                    .unwrap_err()
+                    .contains(expected)
+            );
+        }
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn rtl_config_gate_snapshots_includes_applies_parameters_and_maps_memory() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping RTL config test because Yosys is unavailable");
+            return;
+        }
+        let project = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/infusion-pump/rtl/config-project");
+        let artifacts =
+            std::env::temp_dir().join(format!("cq-sat-config-project-{}", std::process::id()));
+        assert!(
+            firmware_rtl_config_safety_gate(&project.join("cq-project.conf"), &artifacts).unwrap()
+        );
+        validate_rtl_artifact_bundle(&artifacts).unwrap();
+        assert_eq!(
+            fs::read(artifacts.join("cq-project.conf")).unwrap(),
+            fs::read(project.join("cq-project.conf")).unwrap()
+        );
+        assert_eq!(
+            fs::read(artifacts.join("include-0000/pump-widths.svh")).unwrap(),
+            fs::read(project.join("include/pump-widths.svh")).unwrap()
+        );
+        let script = fs::read_to_string(artifacts.join("synthesis.ys")).unwrap();
+        assert!(script.contains("-Iinclude-0000"));
+        assert!(script.contains("chparam -set DEPTH 8 infusion_pump_memory"));
+        assert!(script.contains("select -assert-count 1 infusion_pump_memory/clk"));
+        assert!(script.contains("memory_map"));
+        let manifest = fs::read_to_string(artifacts.join("run-manifest.txt")).unwrap();
+        assert!(manifest.contains("schema_version=3\n"));
+        assert!(manifest.contains("firmware_cli_version=2\n"));
+        assert!(manifest.contains("clock_policy=clk:posedge\n"));
+        assert!(manifest.contains("reset_policy=rst_n:deasserted-high\n"));
+        assert!(manifest.contains("parameters=DEPTH:8\n"));
+        let config_snapshot = fs::read_to_string(artifacts.join("cq-project.conf")).unwrap();
+        fs::write(
+            artifacts.join("cq-project.conf"),
+            config_snapshot.replace("parameter=DEPTH:8", "parameter=DEPTH:7"),
+        )
+        .unwrap();
+        assert!(
+            validate_rtl_artifact_bundle(&artifacts)
+                .unwrap_err()
+                .contains("disagrees with manifest")
+        );
+        fs::remove_dir_all(artifacts).unwrap();
     }
 
     fn fuzz_mutation(seed: &[u8], iteration: usize) -> Vec<u8> {
@@ -23321,6 +23995,17 @@ mod tests {
             );
             fs::write(&assumption_input, bytes).unwrap();
             let _ = parse_environment_assumptions(&assumption_input);
+        }
+
+        let config_seeds = corpus_files(&root.join("tests/fuzz-corpus/project-config"));
+        let config_input = scratch.join("mutated.conf");
+        for iteration in 0..5_000 {
+            let bytes = fuzz_mutation(
+                &config_seeds[iteration % config_seeds.len()],
+                iteration ^ 0x3c3c,
+            );
+            fs::write(&config_input, bytes).unwrap();
+            let _ = parse_rtl_project_config(&config_input);
         }
 
         let cli_seeds = corpus_files(&root.join("tests/fuzz-corpus/cli"));
