@@ -12,7 +12,7 @@ sufficient.
 | Resource governance | Static input, latch, horizon, node and cache bounds | Wall-clock, memory, output-size and child-process limits with stable machine-readable failure classes | Open |
 | Hostile inputs | Strict certificate/transcript sizes, canonical syntax, unknown/duplicate/truncation rejection and symlink refusal | Add parser fuzz corpus, denial-of-service tests and a documented certificate threat model | In progress |
 | Stable interface | Research CLI commands and CSV schemas | Versioned API/CLI contract, compatibility tests, migration policy and deprecation window | Open |
-| Observability | Benchmark timings and status fields | Structured logs/metrics for admission, fallback, cache use, resource rejection, certificate generation and verification | Open |
+| Observability | Portfolio reports expose admission, backend, reason and gate/backend/verifier timings; certificate-cost schema v1 preserves every producer/checker/CDCL trial and artifact size | Add stable structured runtime logs/metrics for cache use, resource rejection and fleet aggregation | In progress |
 | Cross-platform distribution | Rust package and Linux/macOS CI paths | Reproducible signed artifacts and smoke tests for supported Linux targets and macOS, with an SBOM and provenance | Open |
 | Real product validity | Public synthetic/product-shaped fixtures | Multiple unmodified public firmware/robotics designs plus independent self-service evaluation outcomes | Open |
 | Operational guidance | Evaluation and isolation documentation | Installation, sizing, failure handling, upgrade/rollback and incident-response runbooks | Open |

@@ -30,6 +30,11 @@
   explicit resource errors, add deterministic resource-exhaustion coverage,
   canonical-report rejection tests, and exercise the admitted certificate
   contract across all three product-shaped controllers.
+- Add an answer-balanced certificate-cost benchmark with source/transcript
+  bindings and ten preserved release trials per case. Record the negative
+  evidence that proof publication costs 10–13 ms and exhaustive checking reaches
+  136 ms at 16 inputs despite sub-1-KiB certificates, establishing a concrete
+  non-enumerative-checker target without claiming an external-tool comparison.
 
 ## 0.28.0 - 2026-07-18
 

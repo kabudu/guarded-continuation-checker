@@ -87,6 +87,12 @@ certificate backend only inside the measured regime and otherwise preserves the
 query through persistent-CDCL fallback. It is a bounded research contract, not
 a production interface.
 
+The answer-balanced [predicate certificate cost experiment](docs/PREDICATE_CERTIFICATE_COST.md)
+shows that raw predicate queries are competitive on the admitted cohort, while
+certificate publication and exhaustive checking are currently much more
+expensive than CDCL. All raw trials and sub-1-KiB artifact sizes are retained;
+this is a checker-optimisation target, not a hidden positive benchmark.
+
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,
 persistent CDCL, and admitted CQ. It records the negative result that CQ does

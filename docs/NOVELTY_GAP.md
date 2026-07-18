@@ -43,9 +43,10 @@ Primary starting points:
 
 1. **Closed for candidate v1:** freeze a precise certificate language and
    trusted-checker semantics.
-2. Implement the checker independently from the producer's BDD and cache code.
-3. Demonstrate rejection of structural, semantic, ordering, truncation and
-   source-binding tampering.
+2. **Closed for candidate v1:** implement the checker independently from the
+   producer's BDD and cache code.
+3. **Closed for candidate v1:** demonstrate rejection of structural, semantic,
+   ordering, truncation and source-binding tampering.
 4. Compare certificate generation/checking cost and trust base with the closest
    maintained certifying tools.
 5. Search papers, tools, patents and current implementations for the complete
@@ -59,3 +60,9 @@ Gate 1 is represented by the frozen
 [`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md), with working
 producer and independent exhaustive verifier implementations for both answer
 classes. This closes only the specification gate, not the novelty claim.
+
+The internal [certificate cost experiment](PREDICATE_CERTIFICATE_COST.md)
+preserves ten trials for both answer classes and records a strong negative
+result for proof overhead, especially at 16 inputs. It informs gate 4 but does
+not close it because an obligation-equivalent maintained external certifying
+tool comparison has not yet been run.
