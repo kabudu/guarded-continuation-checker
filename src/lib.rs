@@ -5,11 +5,60 @@
 //! predicate CLI contract before exposing typed certificate operations.
 
 use std::fmt;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, ExitStatus, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// Predicate CLI contract understood by this crate release.
 pub const PREDICATE_API_VERSION: u32 = 1;
+pub const DEFAULT_EXECUTION_TIMEOUT: Duration = Duration::from_secs(300);
+pub const DEFAULT_OUTPUT_LIMIT_BYTES: usize = 1024 * 1024;
+const MAX_OUTPUT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+
+/// Runtime bounds applied independently to every executable invocation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExecutionPolicy {
+    timeout: Duration,
+    output_limit_bytes: usize,
+}
+
+impl ExecutionPolicy {
+    pub fn new(timeout: Duration, output_limit_bytes: usize) -> Result<Self, PredicateApiError> {
+        if timeout.is_zero() {
+            return Err(PredicateApiError::InvalidPolicy(
+                "timeout must be greater than zero".to_string(),
+            ));
+        }
+        if !(1..=MAX_OUTPUT_LIMIT_BYTES).contains(&output_limit_bytes) {
+            return Err(PredicateApiError::InvalidPolicy(format!(
+                "output limit must be in 1..={MAX_OUTPUT_LIMIT_BYTES} bytes"
+            )));
+        }
+        Ok(Self {
+            timeout,
+            output_limit_bytes,
+        })
+    }
+
+    pub fn timeout(self) -> Duration {
+        self.timeout
+    }
+
+    pub fn output_limit_bytes(self) -> usize {
+        self.output_limit_bytes
+    }
+}
+
+impl Default for ExecutionPolicy {
+    fn default() -> Self {
+        Self {
+            timeout: DEFAULT_EXECUTION_TIMEOUT,
+            output_limit_bytes: DEFAULT_OUTPUT_LIMIT_BYTES,
+        }
+    }
+}
 
 /// A supported predicate certificate encoding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,6 +110,14 @@ pub struct PredicateCapabilities {
 #[derive(Debug)]
 pub enum PredicateApiError {
     Io(std::io::Error),
+    InvalidPolicy(String),
+    TimedOut {
+        timeout: Duration,
+    },
+    OutputLimitExceeded {
+        stream: &'static str,
+        limit_bytes: usize,
+    },
     CommandFailed {
         exit_code: Option<i32>,
         stderr: String,
@@ -73,6 +130,19 @@ impl fmt::Display for PredicateApiError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(error) => write!(formatter, "predicate tool I/O failed: {error}"),
+            Self::InvalidPolicy(message) => {
+                write!(formatter, "invalid execution policy: {message}")
+            }
+            Self::TimedOut { timeout } => {
+                write!(formatter, "predicate tool exceeded {timeout:?} deadline")
+            }
+            Self::OutputLimitExceeded {
+                stream,
+                limit_bytes,
+            } => write!(
+                formatter,
+                "predicate tool {stream} exceeded {limit_bytes}-byte limit"
+            ),
             Self::CommandFailed { exit_code, stderr } => write!(
                 formatter,
                 "predicate tool exited with {}: {}",
@@ -104,20 +174,30 @@ impl From<std::io::Error> for PredicateApiError {
 pub struct PredicateTool {
     executable: PathBuf,
     capabilities: PredicateCapabilities,
+    policy: ExecutionPolicy,
 }
 
 impl PredicateTool {
     /// Discover and validate the executable's predicate CLI contract.
     pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    /// Discover with explicit runtime bounds for discovery and later jobs.
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
         let executable = executable.into();
-        let output = Command::new(&executable)
-            .arg("predicate-cli-version")
-            .output()?;
+        let mut command = Command::new(&executable);
+        command.arg("predicate-cli-version");
+        let output = run_bounded(command, policy)?;
         let stdout = successful_stdout(output)?;
         let capabilities = parse_capabilities(&stdout)?;
         Ok(Self {
             executable,
             capabilities,
+            policy,
         })
     }
 
@@ -127,6 +207,16 @@ impl PredicateTool {
 
     pub fn capabilities(&self) -> &PredicateCapabilities {
         &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    /// Return a handle with different validated bounds and unchanged capabilities.
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
     }
 
     /// Produce a deterministic certificate without overwriting `certificate`.
@@ -139,13 +229,14 @@ impl PredicateTool {
         certificate: &Path,
     ) -> Result<PredicateResult, PredicateApiError> {
         self.require_version(version)?;
-        let output = Command::new(&self.executable)
+        let mut command = Command::new(&self.executable);
+        command
             .arg(version.producer_command())
             .arg(model)
             .arg(bad_output.to_string())
             .arg(transcript)
-            .arg(certificate)
-            .output()?;
+            .arg(certificate);
+        let output = run_bounded(command, self.policy)?;
         parse_result(&successful_stdout(output)?)
     }
 
@@ -157,11 +248,12 @@ impl PredicateTool {
         certificate: &Path,
     ) -> Result<PredicateResult, PredicateApiError> {
         self.require_version(version)?;
-        let output = Command::new(&self.executable)
+        let mut command = Command::new(&self.executable);
+        command
             .arg(version.verifier_command())
             .arg(model)
-            .arg(certificate)
-            .output()?;
+            .arg(certificate);
+        let output = run_bounded(command, self.policy)?;
         parse_result(&successful_stdout(output)?)
     }
 
@@ -175,7 +267,86 @@ impl PredicateTool {
     }
 }
 
-fn successful_stdout(output: Output) -> Result<String, PredicateApiError> {
+struct ManagedOutput {
+    status: ExitStatus,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+fn read_limited(
+    reader: impl Read + Send + 'static,
+    limit: usize,
+) -> thread::JoinHandle<Result<Vec<u8>, std::io::Error>> {
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        reader.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+        Ok(bytes)
+    })
+}
+
+fn join_output(
+    handle: thread::JoinHandle<Result<Vec<u8>, std::io::Error>>,
+) -> Result<Vec<u8>, PredicateApiError> {
+    handle
+        .join()
+        .map_err(|_| PredicateApiError::InvalidResponse("output reader stopped".to_string()))?
+        .map_err(PredicateApiError::Io)
+}
+
+fn run_bounded(
+    mut command: Command,
+    policy: ExecutionPolicy,
+) -> Result<ManagedOutput, PredicateApiError> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| PredicateApiError::InvalidResponse("stdout pipe is missing".to_string()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| PredicateApiError::InvalidResponse("stderr pipe is missing".to_string()))?;
+    let stdout_reader = read_limited(stdout, policy.output_limit_bytes);
+    let stderr_reader = read_limited(stderr, policy.output_limit_bytes);
+    let deadline = Instant::now() + policy.timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = join_output(stdout_reader);
+            let _ = join_output(stderr_reader);
+            return Err(PredicateApiError::TimedOut {
+                timeout: policy.timeout,
+            });
+        }
+        thread::sleep(Duration::from_millis(5));
+    };
+    let stdout = join_output(stdout_reader)?;
+    let stderr = join_output(stderr_reader)?;
+    if stdout.len() > policy.output_limit_bytes {
+        return Err(PredicateApiError::OutputLimitExceeded {
+            stream: "stdout",
+            limit_bytes: policy.output_limit_bytes,
+        });
+    }
+    if stderr.len() > policy.output_limit_bytes {
+        return Err(PredicateApiError::OutputLimitExceeded {
+            stream: "stderr",
+            limit_bytes: policy.output_limit_bytes,
+        });
+    }
+    Ok(ManagedOutput {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn successful_stdout(output: ManagedOutput) -> Result<String, PredicateApiError> {
     if !output.status.success() {
         return Err(PredicateApiError::CommandFailed {
             exit_code: output.status.code(),
@@ -288,5 +459,45 @@ mod tests {
             Err(PredicateApiError::IncompatibleContract(_))
         ));
         assert!(parse_capabilities(&canonical.replace(" max_latches=4", "")).is_err());
+    }
+
+    #[test]
+    fn execution_policy_rejects_zero_and_excessive_bounds() {
+        assert!(ExecutionPolicy::new(Duration::ZERO, 1).is_err());
+        assert!(ExecutionPolicy::new(Duration::from_secs(1), 0).is_err());
+        assert!(ExecutionPolicy::new(Duration::from_secs(1), MAX_OUTPUT_LIMIT_BYTES + 1).is_err());
+        assert_eq!(
+            ExecutionPolicy::new(Duration::from_secs(2), 4096)
+                .unwrap()
+                .output_limit_bytes(),
+            4096
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_runner_reports_deadline_and_output_classes() {
+        let mut delayed = Command::new("sleep");
+        delayed.arg("1");
+        assert!(matches!(
+            run_bounded(
+                delayed,
+                ExecutionPolicy::new(Duration::from_millis(10), 1024).unwrap()
+            ),
+            Err(PredicateApiError::TimedOut { .. })
+        ));
+
+        let mut verbose = Command::new("printf");
+        verbose.arg("0123456789");
+        assert!(matches!(
+            run_bounded(
+                verbose,
+                ExecutionPolicy::new(Duration::from_secs(1), 4).unwrap()
+            ),
+            Err(PredicateApiError::OutputLimitExceeded {
+                stream: "stdout",
+                limit_bytes: 4,
+            })
+        ));
     }
 }

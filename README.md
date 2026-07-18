@@ -125,7 +125,10 @@ Rust integrations can use the typed
 and validates a compatible executable, invokes it without a shell, and exposes
 typed v1/v2 production and verification with logical results separated from
 operational errors. The current API intentionally preserves an out-of-process
-boundary for future resource governance; it is not yet an in-process verifier.
+boundary for resource governance; it is not yet an in-process verifier. Every
+call now has a configurable deadline and bounded stdout/stderr with typed timeout
+and output-limit errors; operating-system memory and process-tree enforcement
+remain open deployment controls.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,

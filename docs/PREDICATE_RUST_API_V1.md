@@ -6,11 +6,13 @@ certificates without constructing shell commands.
 
 ```rust,no_run
 use continuation_quotient_sat::{
-    CertificateVersion, PredicateResult, PredicateTool,
+    CertificateVersion, ExecutionPolicy, PredicateResult, PredicateTool,
 };
 use std::path::Path;
+use std::time::Duration;
 
-let tool = PredicateTool::discover("continuation-quotient-sat")?;
+let policy = ExecutionPolicy::new(Duration::from_secs(30), 64 * 1024)?;
+let tool = PredicateTool::discover_with_policy("continuation-quotient-sat", policy)?;
 let result = tool.verify(
     CertificateVersion::V2,
     Path::new("controller.aig"),
@@ -34,6 +36,7 @@ tool handle is returned.
 The public v1 types are:
 
 - `PredicateTool`: a handle bound to one discovered executable;
+- `ExecutionPolicy`: per-invocation deadline and stdout/stderr bounds;
 - `PredicateCapabilities`: the executable's typed formats and limits;
 - `CertificateVersion::{V1,V2}`;
 - `PredicateResult::{Avoidable,Unavoidable}`; and
@@ -48,6 +51,18 @@ into logical answers.
 The executable retains atomic/no-overwrite publication and the independent
 verification semantics defined by each certificate version. The client checks
 that the requested format was advertised before launching a job.
+
+Every discovery, production and verification invocation uses the tool handle's
+`ExecutionPolicy`. The default is a five-minute deadline and a 1-MiB limit for
+each output stream. `ExecutionPolicy::new` accepts nonzero deadlines and output
+limits from 1 byte through 64 MiB. A handle can be cloned or adjusted with
+`with_execution_policy` for different pipeline stages.
+
+Deadline and output-bound failures have stable typed variants:
+`PredicateApiError::TimedOut` and
+`PredicateApiError::OutputLimitExceeded`. The latter identifies `stdout` or
+`stderr` and records the configured byte limit. Command exit failures,
+compatibility drift and response errors remain separately distinguishable.
 
 ## Deployment boundary
 
@@ -71,3 +86,7 @@ typed client rejects a future incompatible CLI contract rather than guessing.
 discovers the actual Cargo-built executable, produces canonical v1 and v2
 artifacts from the interrupt-controller product fixture, independently verifies
 both and checks their typed logical results.
+
+Library unit tests separately prove invalid-policy rejection, deadline handling
+and output-limit classification. These are API-level bounds; operating-system
+memory accounting and process-tree containment remain deployment controls.

@@ -71,6 +71,11 @@
   operational failures, and produces or checks certificate v1/v2 artifacts.
   Exercise it as a separate downstream-style integration-test crate against the
   real built executable and product fixture.
+- Add configurable per-invocation governance to predicate Rust API v1: a
+  five-minute/1-MiB default, validated custom deadlines and 1-B–64-MiB stream
+  caps, concurrent bounded output collection, and stable typed timeout and
+  output-limit failures. Preserve operating-system memory/process-tree controls
+  as an explicit remaining deployment gate.
 
 ## 0.28.0 - 2026-07-18
 
