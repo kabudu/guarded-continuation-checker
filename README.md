@@ -111,7 +111,7 @@ remains the portfolio default while process-isolation, checker-diversity and
 broader performance gates are still open. Its documented
 [reliability boundary](docs/PREDICATE_CERTIFICATE_V2_RELIABILITY.md) covers
 corrupted artifacts, structural proof preflight and fail-closed dependency
-errors; process-level resource limits and checker diversity remain open.
+errors; cross-checker diversity remains open.
 
 Firmware automation can discover the frozen
 [predicate CLI contract v1](docs/PREDICATE_CLI_V1.md) with
@@ -127,10 +127,15 @@ typed v1/v2 production and verification with logical results separated from
 operational errors. The current API intentionally preserves an out-of-process
 boundary for resource governance; it is not yet an in-process verifier. Every
 call now has a configurable deadline and bounded stdout/stderr with typed timeout
-and output-limit errors; operating-system memory and process-tree enforcement
-remain open deployment controls. Observed API calls return metrics schema v1
+and output-limit errors. Observed API calls return metrics schema v1
 with operation, duration, stream sizes, limits, exit status and a stable failure
 class, plus canonical CSV output for build and fleet aggregation.
+
+Unix API jobs now run in their own process groups and apply a configurable
+file-size ceiling; a deadline ends and reaps the full group. Linux and other
+supported non-macOS Unix targets also apply a configurable address-space ceiling
+(2 GiB by default). macOS reports memory containment as unavailable while
+retaining process-group, deadline, stream and file controls.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,

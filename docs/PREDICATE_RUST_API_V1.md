@@ -58,6 +58,16 @@ each output stream. `ExecutionPolicy::new` accepts nonzero deadlines and output
 limits from 1 byte through 64 MiB. A handle can be cloned or adjusted with
 `with_execution_policy` for different pipeline stages.
 
+On Unix, each invocation creates a separate process session. A deadline stops
+the complete process group before it is reaped, so helper processes cannot keep
+the pipeline waiting. Unix also applies a 32-MiB default file-size ceiling,
+configurable from 1 byte through 1 GiB. Supported non-macOS Unix builds apply a
+2-GiB default address-space ceiling, configurable from 64 MiB through 1 TiB.
+macOS does not offer the same dependable address-space control, so
+`memory_limit_bytes` is `None` there; deadlines, process groups, stream bounds
+and file limits still apply. Non-Unix builds retain child deadlines and stream
+bounds but report process-group and address-space containment as unavailable.
+
 Deadline and output-bound failures have stable typed variants:
 `PredicateApiError::TimedOut` and
 `PredicateApiError::OutputLimitExceeded`. The latter identifies `stdout` or
@@ -74,6 +84,8 @@ both paths contain `InvocationMetrics` with:
 - elapsed duration;
 - stdout and stderr byte counts;
 - configured deadline and output limit;
+- configured memory/file ceilings and whether process-group containment was
+  enabled (typed fields, intentionally not added to CSV schema v1);
 - process exit code when available; and
 - success or a stable `FailureClass` (`policy`, `io`, `timeout`,
   `output_limit`, `exit_status`, `compatibility`, or `response`).
@@ -112,8 +124,18 @@ discovers the actual Cargo-built executable, produces canonical v1 and v2
 artifacts from the interrupt-controller product fixture, independently verifies
 both and checks their typed logical results.
 
-Library unit tests separately prove invalid-policy rejection, deadline handling
-output-limit classification and the exact metrics CSV schema. The downstream
-test checks successful v1/v2 verification metrics from the real executable.
-These are API-level bounds; operating-system memory accounting and process-tree
-containment remain deployment controls.
+Library unit tests separately prove invalid-policy rejection, process-group
+deadline handling, output-limit classification and the exact metrics CSV
+schema. The downstream test checks successful v1/v2 verification metrics from
+the real executable.
+The platform matrix exercises the non-macOS Unix address-space limit separately.
+The Linux-specific regression reads the effective address-space ceiling from a
+contained child and requires it not to exceed the configured 128 MiB. It passed
+under the repository's Rust 1.97 toolchain in the `rust:1.97` Linux container on
+18 July 2026. The ordinary `cargo test --locked` Linux CI job runs the same test
+on every pull request. Reproduce the container check with:
+
+```sh
+docker run --rm -v "$PWD:/work" -w /work \
+  -e CARGO_TARGET_DIR=/tmp/cq-target rust:1.97 cargo test --lib
+```

@@ -80,6 +80,12 @@
   certification and verification return duration, stream sizes, configured
   limits, exit status and a stable failure class on both success and error
   paths, with canonical privacy-preserving CSV rows for build/fleet aggregation.
+- Extend predicate API governance to the operating-system boundary. Unix jobs
+  run in isolated process groups with complete-group deadline termination and
+  configurable file ceilings; supported non-macOS Unix targets add a 2-GiB
+  default configurable address-space ceiling. Metrics report which controls
+  were enforced, while macOS remains explicitly unavailable for hard memory
+  evidence.
 
 ## 0.28.0 - 2026-07-18
 

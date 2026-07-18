@@ -60,5 +60,6 @@ rebuilt proof obligation, not byte identity.
 - Deterministic mutation regression is not exhaustive parser verification.
   Continuing automated robustness coverage remains desirable.
 
-Evaluation environments should apply the repository's existing contained
-process limits until the resource-governance gate closes.
+Rust API evaluation environments apply the documented per-call process limits.
+Direct CLI deployments should provide equivalent supervision until the
+resource-governance platform-evidence gate closes.

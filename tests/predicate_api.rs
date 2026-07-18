@@ -36,6 +36,15 @@ fn downstream_api_discovers_certifies_and_verifies_both_formats() {
         );
         assert_eq!(observed.metrics.status, InvocationStatus::Success);
         assert!(observed.metrics.stdout_bytes > 0);
+        assert_eq!(observed.metrics.process_group_containment, cfg!(unix));
+        assert_eq!(observed.metrics.file_limit_bytes, 32 * 1024 * 1024);
+        #[cfg(target_os = "macos")]
+        assert_eq!(observed.metrics.memory_limit_bytes, None);
+        #[cfg(all(unix, not(target_os = "macos")))]
+        assert_eq!(
+            observed.metrics.memory_limit_bytes,
+            Some(2 * 1024 * 1024 * 1024)
+        );
         assert_eq!(
             observed.metrics.operation,
             match version {

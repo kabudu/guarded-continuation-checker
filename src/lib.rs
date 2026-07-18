@@ -6,6 +6,8 @@
 
 use std::fmt;
 use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
@@ -15,13 +17,23 @@ use std::time::{Duration, Instant};
 pub const PREDICATE_API_VERSION: u32 = 1;
 pub const DEFAULT_EXECUTION_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DEFAULT_OUTPUT_LIMIT_BYTES: usize = 1024 * 1024;
+pub const DEFAULT_FILE_LIMIT_BYTES: u64 = 32 * 1024 * 1024;
+#[cfg(all(unix, not(target_os = "macos")))]
+pub const DEFAULT_MEMORY_LIMIT_BYTES: Option<u64> = Some(2 * 1024 * 1024 * 1024);
+#[cfg(any(not(unix), target_os = "macos"))]
+pub const DEFAULT_MEMORY_LIMIT_BYTES: Option<u64> = None;
 const MAX_OUTPUT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+const MIN_MEMORY_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_MEMORY_LIMIT_BYTES: u64 = 1024 * 1024 * 1024 * 1024;
+const MAX_FILE_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Runtime bounds applied independently to every executable invocation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExecutionPolicy {
     timeout: Duration,
     output_limit_bytes: usize,
+    memory_limit_bytes: Option<u64>,
+    file_limit_bytes: u64,
 }
 
 impl ExecutionPolicy {
@@ -39,6 +51,8 @@ impl ExecutionPolicy {
         Ok(Self {
             timeout,
             output_limit_bytes,
+            memory_limit_bytes: DEFAULT_MEMORY_LIMIT_BYTES,
+            file_limit_bytes: DEFAULT_FILE_LIMIT_BYTES,
         })
     }
 
@@ -49,6 +63,47 @@ impl ExecutionPolicy {
     pub fn output_limit_bytes(self) -> usize {
         self.output_limit_bytes
     }
+
+    pub fn memory_limit_bytes(self) -> Option<u64> {
+        self.memory_limit_bytes
+    }
+
+    pub fn file_limit_bytes(self) -> u64 {
+        self.file_limit_bytes
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    pub fn with_memory_limit(mut self, bytes: u64) -> Result<Self, PredicateApiError> {
+        if !(MIN_MEMORY_LIMIT_BYTES..=MAX_MEMORY_LIMIT_BYTES).contains(&bytes) {
+            return Err(PredicateApiError::InvalidPolicy(format!(
+                "memory limit must be in {MIN_MEMORY_LIMIT_BYTES}..={MAX_MEMORY_LIMIT_BYTES} bytes"
+            )));
+        }
+        self.memory_limit_bytes = Some(bytes);
+        Ok(self)
+    }
+
+    #[cfg(any(not(unix), target_os = "macos"))]
+    pub fn with_memory_limit(self, bytes: u64) -> Result<Self, PredicateApiError> {
+        if !(MIN_MEMORY_LIMIT_BYTES..=MAX_MEMORY_LIMIT_BYTES).contains(&bytes) {
+            return Err(PredicateApiError::InvalidPolicy(format!(
+                "memory limit must be in {MIN_MEMORY_LIMIT_BYTES}..={MAX_MEMORY_LIMIT_BYTES} bytes"
+            )));
+        }
+        Err(PredicateApiError::InvalidPolicy(
+            "address-space limits are unavailable on this platform".to_string(),
+        ))
+    }
+
+    pub fn with_file_limit(mut self, bytes: u64) -> Result<Self, PredicateApiError> {
+        if !(1..=MAX_FILE_LIMIT_BYTES).contains(&bytes) {
+            return Err(PredicateApiError::InvalidPolicy(format!(
+                "file limit must be in 1..={MAX_FILE_LIMIT_BYTES} bytes"
+            )));
+        }
+        self.file_limit_bytes = bytes;
+        Ok(self)
+    }
 }
 
 impl Default for ExecutionPolicy {
@@ -56,6 +111,8 @@ impl Default for ExecutionPolicy {
         Self {
             timeout: DEFAULT_EXECUTION_TIMEOUT,
             output_limit_bytes: DEFAULT_OUTPUT_LIMIT_BYTES,
+            memory_limit_bytes: DEFAULT_MEMORY_LIMIT_BYTES,
+            file_limit_bytes: DEFAULT_FILE_LIMIT_BYTES,
         }
     }
 }
@@ -123,6 +180,9 @@ pub struct InvocationMetrics {
     pub stderr_bytes: usize,
     pub timeout: Duration,
     pub output_limit_bytes: usize,
+    pub memory_limit_bytes: Option<u64>,
+    pub file_limit_bytes: u64,
+    pub process_group_containment: bool,
     pub exit_code: Option<i32>,
     pub status: InvocationStatus,
 }
@@ -257,7 +317,7 @@ impl PredicateApiError {
 
 #[derive(Debug)]
 pub struct PredicateOperationError {
-    pub error: PredicateApiError,
+    pub error: Box<PredicateApiError>,
     pub metrics: InvocationMetrics,
 }
 
@@ -269,7 +329,7 @@ impl fmt::Display for PredicateOperationError {
 
 impl std::error::Error for PredicateOperationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.error)
+        Some(self.error.as_ref())
     }
 }
 
@@ -337,7 +397,7 @@ impl PredicateTool {
     ) -> Result<Self, PredicateApiError> {
         Self::discover_observed(executable, policy)
             .map(|observed| observed.value)
-            .map_err(|failure| failure.error)
+            .map_err(|failure| *failure.error)
     }
 
     pub fn discover_observed(
@@ -352,7 +412,7 @@ impl PredicateTool {
         let capabilities = parse_capabilities(&stdout).map_err(|error| {
             metrics.status = InvocationStatus::Failed(error.failure_class());
             PredicateOperationError {
-                error,
+                error: Box::new(error),
                 metrics: metrics.clone(),
             }
         })?;
@@ -395,7 +455,7 @@ impl PredicateTool {
     ) -> Result<PredicateResult, PredicateApiError> {
         self.certify_observed(version, model, bad_output, transcript, certificate)
             .map(|observed| observed.value)
-            .map_err(|failure| failure.error)
+            .map_err(|failure| *failure.error)
     }
 
     pub fn certify_observed(
@@ -427,7 +487,7 @@ impl PredicateTool {
     ) -> Result<PredicateResult, PredicateApiError> {
         self.verify_observed(version, model, certificate)
             .map(|observed| observed.value)
-            .map_err(|failure| failure.error)
+            .map_err(|failure| *failure.error)
     }
 
     pub fn verify_observed(
@@ -461,13 +521,14 @@ impl PredicateTool {
                     self.policy,
                     InvocationStatus::Failed(error.failure_class()),
                 ),
-                error,
+                error: Box::new(error),
             });
         }
         Ok(())
     }
 }
 
+#[derive(Debug)]
 struct ManagedOutput {
     status: ExitStatus,
     stdout: Vec<u8>,
@@ -488,6 +549,9 @@ fn empty_metrics(
         stderr_bytes: 0,
         timeout: policy.timeout,
         output_limit_bytes: policy.output_limit_bytes,
+        memory_limit_bytes: policy.memory_limit_bytes,
+        file_limit_bytes: policy.file_limit_bytes,
+        process_group_containment: cfg!(unix),
         exit_code: None,
         status,
     }
@@ -511,10 +575,13 @@ fn operation_failure(
             stderr_bytes,
             timeout: policy.timeout,
             output_limit_bytes: policy.output_limit_bytes,
+            memory_limit_bytes: policy.memory_limit_bytes,
+            file_limit_bytes: policy.file_limit_bytes,
+            process_group_containment: cfg!(unix),
             exit_code,
             status: InvocationStatus::Failed(error.failure_class()),
         },
-        error,
+        error: Box::new(error),
     }
 }
 
@@ -538,6 +605,74 @@ fn join_output(
         .map_err(PredicateApiError::Io)
 }
 
+fn configure_process(
+    command: &mut Command,
+    policy: ExecutionPolicy,
+) -> Result<(), PredicateApiError> {
+    #[cfg(unix)]
+    {
+        let file_limit = libc::rlim_t::try_from(policy.file_limit_bytes).map_err(|_| {
+            PredicateApiError::InvalidPolicy(
+                "file limit is not representable on this platform".to_string(),
+            )
+        })?;
+        #[cfg(not(target_os = "macos"))]
+        let memory_limit = policy
+            .memory_limit_bytes
+            .map(libc::rlim_t::try_from)
+            .transpose()
+            .map_err(|_| {
+                PredicateApiError::InvalidPolicy(
+                    "memory limit is not representable on this platform".to_string(),
+                )
+            })?;
+        // SAFETY: this closure runs after fork and before exec and only calls
+        // async-signal-safe libc functions with values prepared above.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                #[cfg(not(target_os = "macos"))]
+                if let Some(memory_limit) = memory_limit {
+                    let memory = libc::rlimit {
+                        rlim_cur: memory_limit,
+                        rlim_max: memory_limit,
+                    };
+                    if libc::setrlimit(libc::RLIMIT_AS, &memory) == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                let file = libc::rlimit {
+                    rlim_cur: file_limit,
+                    rlim_max: file_limit,
+                };
+                if libc::setrlimit(libc::RLIMIT_FSIZE, &file) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = (command, policy);
+    Ok(())
+}
+
+fn stop_process(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        if let Ok(group) = i32::try_from(child.id()) {
+            // SAFETY: the child creates a new session before exec; negating its
+            // PID addresses that process group. ESRCH simply means it exited.
+            let _ = unsafe { libc::kill(-group, libc::SIGKILL) };
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn run_bounded(
     operation: OperationKind,
     mut command: Command,
@@ -545,6 +680,8 @@ fn run_bounded(
 ) -> Result<ManagedOutput, PredicateOperationError> {
     let started = Instant::now();
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    configure_process(&mut command, policy)
+        .map_err(|error| operation_failure(operation, policy, started, 0, 0, None, error))?;
     let mut child = command
         .spawn()
         .map_err(|error| operation_failure(operation, policy, started, 0, 0, None, error.into()))?;
@@ -580,8 +717,7 @@ fn run_bounded(
             break status;
         }
         if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
+            stop_process(&mut child);
             let stdout_bytes = join_output(stdout_reader)
                 .map(|bytes| bytes.len())
                 .unwrap_or(0);
@@ -652,6 +788,9 @@ fn run_bounded(
         stderr_bytes: stderr.len(),
         timeout: policy.timeout,
         output_limit_bytes: policy.output_limit_bytes,
+        memory_limit_bytes: policy.memory_limit_bytes,
+        file_limit_bytes: policy.file_limit_bytes,
+        process_group_containment: cfg!(unix),
         exit_code: status.code(),
         status: InvocationStatus::Success,
     };
@@ -673,7 +812,7 @@ fn successful_stdout(
         };
         output.metrics.status = InvocationStatus::Failed(error.failure_class());
         return Err(PredicateOperationError {
-            error,
+            error: Box::new(error),
             metrics: output.metrics,
         });
     }
@@ -681,7 +820,7 @@ fn successful_stdout(
         let error = PredicateApiError::InvalidResponse("stdout is not UTF-8".to_string());
         output.metrics.status = InvocationStatus::Failed(error.failure_class());
         PredicateOperationError {
-            error,
+            error: Box::new(error),
             metrics: output.metrics.clone(),
         }
     })?;
@@ -695,7 +834,7 @@ fn parse_observed_result(
     let value = parse_result(&stdout).map_err(|error| {
         metrics.status = InvocationStatus::Failed(error.failure_class());
         PredicateOperationError {
-            error,
+            error: Box::new(error),
             metrics: metrics.clone(),
         }
     })?;
@@ -811,6 +950,12 @@ mod tests {
         assert!(ExecutionPolicy::new(Duration::ZERO, 1).is_err());
         assert!(ExecutionPolicy::new(Duration::from_secs(1), 0).is_err());
         assert!(ExecutionPolicy::new(Duration::from_secs(1), MAX_OUTPUT_LIMIT_BYTES + 1).is_err());
+        assert!(
+            ExecutionPolicy::new(Duration::from_secs(1), 1024)
+                .unwrap()
+                .with_file_limit(0)
+                .is_err()
+        );
         assert_eq!(
             ExecutionPolicy::new(Duration::from_secs(2), 4096)
                 .unwrap()
@@ -829,6 +974,9 @@ mod tests {
             stderr_bytes: 6,
             timeout: Duration::from_millis(700),
             output_limit_bytes: 8192,
+            memory_limit_bytes: Some(1024 * 1024 * 1024),
+            file_limit_bytes: 32 * 1024 * 1024,
+            process_group_containment: true,
             exit_code: Some(2),
             status: InvocationStatus::Failed(FailureClass::ExitStatus),
         };
@@ -845,43 +993,63 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn bounded_runner_reports_deadline_and_output_classes() {
-        let mut delayed = Command::new("sleep");
-        delayed.arg("1");
-        assert!(matches!(
-            run_bounded(
-                OperationKind::VerifyV2,
-                delayed,
-                ExecutionPolicy::new(Duration::from_millis(10), 1024).unwrap()
-            ),
-            Err(PredicateOperationError {
-                error: PredicateApiError::TimedOut { .. },
-                metrics: InvocationMetrics {
-                    status: InvocationStatus::Failed(FailureClass::Timeout),
-                    ..
-                },
-            })
-        ));
+        let mut delayed = Command::new("sh");
+        delayed.arg("-c").arg("sleep 5 & wait");
+        let started = Instant::now();
+        let failure = run_bounded(
+            OperationKind::VerifyV2,
+            delayed,
+            ExecutionPolicy::new(Duration::from_millis(10), 1024).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(*failure.error, PredicateApiError::TimedOut { .. }));
+        assert_eq!(
+            failure.metrics.status,
+            InvocationStatus::Failed(FailureClass::Timeout)
+        );
+        assert!(started.elapsed() < Duration::from_secs(1));
 
         let mut verbose = Command::new("printf");
         verbose.arg("0123456789");
+        let failure = run_bounded(
+            OperationKind::CertifyV2,
+            verbose,
+            ExecutionPolicy::new(Duration::from_secs(1), 4).unwrap(),
+        )
+        .unwrap_err();
         assert!(matches!(
-            run_bounded(
-                OperationKind::CertifyV2,
-                verbose,
-                ExecutionPolicy::new(Duration::from_secs(1), 4).unwrap()
-            ),
-            Err(PredicateOperationError {
-                error: PredicateApiError::OutputLimitExceeded {
-                    stream: "stdout",
-                    limit_bytes: 4,
-                },
-                metrics: InvocationMetrics {
-                    operation: OperationKind::CertifyV2,
-                    stdout_bytes: 5,
-                    status: InvocationStatus::Failed(FailureClass::OutputLimit),
-                    ..
-                },
-            })
+            *failure.error,
+            PredicateApiError::OutputLimitExceeded {
+                stream: "stdout",
+                limit_bytes: 4,
+            }
         ));
+        assert_eq!(failure.metrics.operation, OperationKind::CertifyV2);
+        assert_eq!(failure.metrics.stdout_bytes, 5);
+        assert_eq!(
+            failure.metrics.status,
+            InvocationStatus::Failed(FailureClass::OutputLimit)
+        );
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn bounded_runner_applies_address_space_ceiling() {
+        let bytes = 128 * 1024 * 1024;
+        let policy = ExecutionPolicy::new(Duration::from_secs(1), 1024)
+            .unwrap()
+            .with_memory_limit(bytes)
+            .unwrap();
+        let mut command = Command::new("sh");
+        command.arg("-c").arg("ulimit -v");
+        let output = run_bounded(OperationKind::Discover, command, policy).unwrap();
+        let reported_kib = String::from_utf8(output.stdout)
+            .unwrap()
+            .trim()
+            .parse::<u64>()
+            .unwrap();
+        assert!(reported_kib > 0);
+        assert!(reported_kib <= bytes / 1024);
+        assert_eq!(output.metrics.memory_limit_bytes, Some(bytes));
     }
 }
