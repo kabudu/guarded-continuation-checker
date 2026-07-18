@@ -2,7 +2,7 @@
 
 This experiment asks whether CQ-SAT/GCC's preparation cost can be amortised by
 explaining many bounded failures from one sequential design. It is an exact,
-bounded research benchmark—not a claim of a new causal definition or a
+bounded research benchmark, not a claim of a new causal definition or a
 production performance result.
 
 ## Workload

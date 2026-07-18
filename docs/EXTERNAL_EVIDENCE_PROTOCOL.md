@@ -80,7 +80,7 @@ and independent retest before the technical-review gate can close.
 
 ## Design-partner pilot cohort
 
-The production gate requires a cohort—not a single demonstration—with all of
+The production gate requires a cohort, not a single demonstration, with all of
 the following minimum coverage:
 
 - at least two independent embedded-product organisations;
@@ -220,7 +220,7 @@ and the checker requires that tag to peel to the exact attested 40-character
 Git SHA-1 commit. A missing, lightweight, or mismatched tag fails the gate.
 
 The maintainer receives only the completed non-confidential outcome report,
-aggregate counts and limitations, gate result, and agreed public references—not
+aggregate counts and limitations, gate result, and agreed public references, not
 the private register. The production-readiness checklist may be changed only by
 a PR whose public references and independently attributable outcome demonstrate
 every acceptance criterion without exposing partner data. Until then, external

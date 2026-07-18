@@ -4,7 +4,7 @@ Imagine nine Boolean latches representing watchdog expiry, interlock activation,
 and fault-propagation signals in a controller. Each next-frame latch depends on
 four neighbouring current-frame signals through a fixed interlock rule. Engineers
 repeatedly ask whether sparse observations from logs, alarms, and injected faults
-can coexist in one valid trace—and need the complete trace when the answer is yes.
+can coexist in one valid trace, and need the complete trace when the answer is yes.
 
 Run the executable example:
 

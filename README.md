@@ -301,7 +301,7 @@ that contract.
 
 RTL synthesis is contained in a dedicated Unix process group. A timeout kills
 the entire group, including descendants, and every run has a 512 MiB output-file
-limit. Linux—the supported production-evaluation host—also enforces a 2 GiB
+limit. Linux, the supported production-evaluation host, also enforces a 2 GiB
 address-space limit. macOS remains supported for development and records
 `synthesis_memory_limit_kind=unavailable`; its process-tree, file-size, timeout,
 and model limits still apply, but it must not be used as evidence of hard memory

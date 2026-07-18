@@ -18,8 +18,8 @@ that target-false alternative unsatisfiable.
 The retained segments are therefore a **sufficient cause under the documented
 intervention model**: fixing those observations makes the same bad output at the
 original counterexample's earliest frame unavoidable. Other permitted input
-values may make a different output—or the same output—fail earlier; that is not
-excluded by this intervention model. The certificate is **1-minimal**—removing
+values may make a different output, or the same output, fail earlier; that is not
+excluded by this intervention model. The certificate is **1-minimal**: removing
 any one retained segment makes an alternative with the target output false at
 that frame satisfiable. It is not guaranteed to have globally minimum
 cardinality, establish physical-world causation, locate the defective RTL

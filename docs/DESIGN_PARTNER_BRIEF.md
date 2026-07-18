@@ -128,7 +128,7 @@ reviewed configurations, subject to the partner's actual projects and approval.
 - operator time for qualification, execution, replay, repetition, and runbook
   exercises;
 - attributable private approval or rejection of each evidence row; and
-- permission for an agreed, redacted aggregate report—or an explicit decision
+- permission for an agreed, redacted aggregate report, or an explicit decision
   that the pilot cannot count toward the public production cohort; and
 - delivery to the maintainer of only the final non-confidential outcome and
   suitability report required by `OUTCOME_REPORT_TEMPLATE.md`.

@@ -61,7 +61,7 @@ for a SAFE result.
 
 After CQ returns 0 or 1, a second read-only container validates the schema-v4
 bundle. The wrapper compares validated status with the original exit and writes
-an isolation report beside—not inside—the immutable evidence bundle.
+an isolation report beside, rather than inside, the immutable evidence bundle.
 
 ## Trust boundary and limitations
 

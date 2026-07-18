@@ -2,8 +2,8 @@
 
 This product-shaped example shows CQ-SAT/GCC protecting a firmware pull request
 starting from readable SystemVerilog, not a hand-authored solver model. The
-fictional pump controller has two external inputs—`motor_request` and
-`door_open`—and one safety requirement:
+fictional pump controller has two external inputs, `motor_request` and
+`door_open`, and one safety requirement:
 
 > The delivered motor enable must never be active while the medication door is
 > open.

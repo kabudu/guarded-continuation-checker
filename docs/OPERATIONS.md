@@ -133,7 +133,7 @@ as confidential design data. Store each completed bundle read-only with access
 logging and a separately trusted copy of the manifest digest or signed CI
 attestation. Validate after transfer and before use.
 
-The RTL owner—not Guarded Continuation Checker—sets the retention period. Document the purpose,
+The RTL owner, not Guarded Continuation Checker, sets the retention period. Document the purpose,
 owner, access group, expiry, legal hold, backup location, and deletion method
 before the first run. On expiry, delete primary and backup copies according to
 that policy and retain only non-sensitive operational metadata when authorized.
