@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.28.0 - 2026-07-18
+
 - Add an experimental bounded exact BDD predicate interface for 9–16 relevant
   AIGER inputs, powered temporal relation composition, original-AIG trace
   replay, a dense 16-sensor fixture, and a reproducible reuse sweep. Low-reuse
