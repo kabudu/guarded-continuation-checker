@@ -208,6 +208,13 @@ with a separately encoded exact CDCL control, but CQ-SAT is 1.09x to 36.20x
 slower on the current three-product cohort. This is a semantic capability with
 a retained negative performance result, not a portfolio or novelty claim.
 
+The follow-up [proof-carrying event-contract primitive](docs/EVENT_CONTRACT_PROOF_EXPERIMENT.md)
+rebuilds CNF-constrained relation and terminal completeness obligations without
+trusting the BDD, checks native UNSAT proofs, and directly replays every claimed
+witness. Across the same 9, 12, and 16-input cohort, median evidence checking is
+0.261 to 1.051 ms with 7.8 to 33.9 KiB of proofs. This establishes certificate-v3
+feasibility, not a frozen artifact, portfolio admission, or novelty claim.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

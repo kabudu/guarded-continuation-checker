@@ -44,7 +44,9 @@ close either register by itself.
    implemented experimentally).** Strict named CNF now preserves non-cube
    interrupt, interlock, and recovery rules through bounded phase composition,
    CDCL agreement, and direct-AIG witness replay. The three-product performance
-   result is negative at 1.09x to 36.20x slower than CDCL. Certificate v3,
+   result is negative at 1.09x to 36.20x slower than CDCL. Independently checked
+   CNF relation/terminal proof primitives now verify in 0.261 to 1.051 ms, making
+   certificate v3 feasible without yet freezing it. Whole-certificate checking,
    timing-free portfolio admission, watchdog/DMA/shared-peripheral semantics,
    and public design evidence remain open.
 

@@ -22,7 +22,8 @@ sufficient.
 
 Event-contract v1 is not a production-supported interface. It has exact
 agreement and replay evidence across three product-shaped fixtures, strict
-parser bounds, and explicit negative performance data. It does not yet have a
+parser bounds, explicit negative performance data, and independently checked
+one-step/terminal proof primitives. It does not yet have a
 stable public API, certificate format, independent whole-contract verifier,
 portfolio fallback integration, parser mutation corpus, hard per-invocation
 resource governance, compatibility commitment, public-design evidence, or

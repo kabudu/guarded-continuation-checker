@@ -9654,7 +9654,37 @@ fn predicate_relation_completeness_clauses(
     constraints: &[Option<bool>],
     claimed_targets: u16,
 ) -> Result<Vec<Clause>, String> {
-    if constraints.len() != relevant_inputs.len()
+    if constraints.len() != relevant_inputs.len() {
+        return Err("predicate proof obligation dimensions mismatch".to_string());
+    }
+    let predicate = InputPredicate {
+        clauses: constraints
+            .iter()
+            .enumerate()
+            .filter_map(|(input, required)| required.map(|value| vec![(input, value)]))
+            .collect(),
+    };
+    predicate_relation_completeness_clauses_for_predicate(
+        model,
+        relevant_inputs,
+        source,
+        &predicate,
+        claimed_targets,
+    )
+}
+
+fn predicate_relation_completeness_clauses_for_predicate(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    source: usize,
+    predicate: &InputPredicate,
+    claimed_targets: u16,
+) -> Result<Vec<Clause>, String> {
+    if predicate
+        .clauses
+        .iter()
+        .flatten()
+        .any(|(input, _)| *input >= relevant_inputs.len())
         || model.latches.len() > u16::BITS as usize
         || source >= 1usize << model.latches.len()
     {
@@ -9663,7 +9693,7 @@ fn predicate_relation_completeness_clauses(
     let mut clauses = Vec::with_capacity(
         model.ands.len() * 3
             + model.latches.len()
-            + constraints.len()
+            + predicate.clauses.len()
             + claimed_targets.count_ones() as usize,
     );
     for (bit, latch) in model.latches.iter().enumerate() {
@@ -9675,17 +9705,17 @@ fn predicate_relation_completeness_clauses(
             ))],
         );
     }
-    for (projected, required) in constraints.iter().enumerate() {
-        if let Some(value) = required {
-            let input = relevant_inputs[projected];
-            push_simplified_clause(
-                &mut clauses,
-                &[AagCnfLiteral::Variable((
-                    model.inputs[input] / 2 - 1,
-                    *value,
-                ))],
-            );
-        }
+    for clause in &predicate.clauses {
+        let mapped = clause
+            .iter()
+            .map(|(projected, positive)| {
+                AagCnfLiteral::Variable((
+                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
+                    *positive,
+                ))
+            })
+            .collect::<Vec<_>>();
+        push_simplified_clause(&mut clauses, &mapped);
     }
     for gate in &model.ands {
         let output = aag_cnf_literal(model, 0, gate.output);
@@ -9724,26 +9754,59 @@ fn predicate_terminal_completeness_clauses(
     bad_output: usize,
     claimed_safe_states: u16,
 ) -> Result<Vec<Clause>, String> {
-    if constraints.len() != relevant_inputs.len()
+    if constraints.len() != relevant_inputs.len() {
+        return Err("predicate terminal proof obligation dimensions mismatch".to_string());
+    }
+    let predicate = InputPredicate {
+        clauses: constraints
+            .iter()
+            .enumerate()
+            .filter_map(|(input, required)| required.map(|value| vec![(input, value)]))
+            .collect(),
+    };
+    predicate_terminal_completeness_clauses_for_predicate(
+        model,
+        relevant_inputs,
+        &predicate,
+        bad_output,
+        claimed_safe_states,
+    )
+}
+
+fn predicate_terminal_completeness_clauses_for_predicate(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    predicate: &InputPredicate,
+    bad_output: usize,
+    claimed_safe_states: u16,
+) -> Result<Vec<Clause>, String> {
+    if predicate
+        .clauses
+        .iter()
+        .flatten()
+        .any(|(input, _)| *input >= relevant_inputs.len())
         || model.latches.len() > u16::BITS as usize
         || bad_output >= model.outputs.len()
     {
         return Err("predicate terminal proof obligation dimensions mismatch".to_string());
     }
     let mut clauses = Vec::with_capacity(
-        model.ands.len() * 3 + constraints.len() + claimed_safe_states.count_ones() as usize + 1,
+        model.ands.len() * 3
+            + predicate.clauses.len()
+            + claimed_safe_states.count_ones() as usize
+            + 1,
     );
-    for (projected, required) in constraints.iter().enumerate() {
-        if let Some(value) = required {
-            let input = relevant_inputs[projected];
-            push_simplified_clause(
-                &mut clauses,
-                &[AagCnfLiteral::Variable((
-                    model.inputs[input] / 2 - 1,
-                    *value,
-                ))],
-            );
-        }
+    for clause in &predicate.clauses {
+        let mapped = clause
+            .iter()
+            .map(|(projected, positive)| {
+                AagCnfLiteral::Variable((
+                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
+                    *positive,
+                ))
+            })
+            .collect::<Vec<_>>();
+        push_simplified_clause(&mut clauses, &mapped);
     }
     for gate in &model.ands {
         let output = aag_cnf_literal(model, 0, gate.output);
@@ -11249,6 +11312,212 @@ fn benchmark_aiger_event_contract(
     publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
     println!(
         "event-contract-benchmark status=VALID trials={repeats} output={}",
+        output.display()
+    );
+    Ok(())
+}
+
+#[derive(Debug)]
+struct EventContractProofMetrics {
+    producer_ns: u128,
+    proof_generation_ns: u128,
+    proof_verification_ns: u128,
+    obligations: usize,
+    witnesses: usize,
+    proof_bytes: usize,
+}
+
+fn declared_input_satisfies_predicate(
+    declared_input_count: usize,
+    relevant_inputs: &[usize],
+    predicate: &InputPredicate,
+    declared: u64,
+) -> bool {
+    if declared_input_count < u64::BITS as usize && declared >> declared_input_count != 0 {
+        return false;
+    }
+    let projected = relevant_inputs
+        .iter()
+        .enumerate()
+        .fold(0usize, |input, (bit, declared_index)| {
+            input | (((declared >> declared_index) & 1) as usize) << bit
+        });
+    predicate.allows(projected)
+}
+
+fn event_contract_proof_experiment(
+    model: &AagModel,
+    bad_output: usize,
+    contract: &EventContract,
+) -> Result<EventContractProofMetrics, String> {
+    if bad_output >= model.outputs.len() {
+        return Err("event contract proof output is out of range".to_string());
+    }
+    let producer_start = Instant::now();
+    let mut quotient = PredicateQuotient::new(model)?;
+    let relevant_inputs = quotient.interface.projected_inputs.clone();
+    let states_count = 1usize << model.latches.len();
+    let mut phase_rows = Vec::with_capacity(contract.phases.len());
+    let mut edge_witnesses = Vec::new();
+    for (phase_index, phase) in contract.phases.iter().enumerate() {
+        let relation = quotient.interface.relation_predicate(&phase.predicate)?;
+        let rows = relation
+            .rows
+            .iter()
+            .map(|row| row[0] as u16)
+            .collect::<Vec<_>>();
+        for (source, &targets) in rows.iter().enumerate() {
+            for target in 0..states_count {
+                if targets & (1u16 << target) != 0 {
+                    let input = quotient
+                        .interface
+                        .witness_input_predicate(source, Some(target), None, &phase.predicate)?
+                        .ok_or_else(|| {
+                            "event contract proof relation edge lacks witness".to_string()
+                        })?;
+                    edge_witnesses.push((source, target, input, phase_index));
+                }
+            }
+        }
+        phase_rows.push((phase.predicate.clone(), rows));
+    }
+    let mut terminal_safe_states = 0u16;
+    let mut terminal_witnesses = Vec::new();
+    for state in 0..states_count {
+        if let Some(input) = quotient.interface.witness_input_predicate(
+            state,
+            None,
+            Some(bad_output),
+            &contract.terminal,
+        )? {
+            terminal_safe_states |= 1u16 << state;
+            terminal_witnesses.push((state, input));
+        }
+    }
+    let producer_ns = producer_start.elapsed().as_nanos();
+
+    let generation_start = Instant::now();
+    let mut obligations = Vec::with_capacity(phase_rows.len() * states_count + 1);
+    let mut total_proof_bytes = 0usize;
+    for (predicate, rows) in &phase_rows {
+        for (source, &targets) in rows.iter().enumerate() {
+            let clauses = predicate_relation_completeness_clauses_for_predicate(
+                model,
+                &relevant_inputs,
+                source,
+                predicate,
+                targets,
+            )?;
+            let proof = generate_varisat_unsat_proof(&clauses)?;
+            if proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+                return Err("event contract proof exceeds the individual limit".to_string());
+            }
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof.len())
+                .ok_or_else(|| "event contract aggregate proof size overflow".to_string())?;
+            if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+                return Err("event contract proofs exceed the aggregate limit".to_string());
+            }
+            obligations.push((clauses, proof));
+        }
+    }
+    let terminal_clauses = predicate_terminal_completeness_clauses_for_predicate(
+        model,
+        &relevant_inputs,
+        &contract.terminal,
+        bad_output,
+        terminal_safe_states,
+    )?;
+    let terminal_proof = generate_varisat_unsat_proof(&terminal_clauses)?;
+    if terminal_proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+        return Err("event contract terminal proof exceeds the individual limit".to_string());
+    }
+    total_proof_bytes = total_proof_bytes
+        .checked_add(terminal_proof.len())
+        .ok_or_else(|| "event contract aggregate proof size overflow".to_string())?;
+    if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+        return Err("event contract proofs exceed the aggregate limit".to_string());
+    }
+    obligations.push((terminal_clauses, terminal_proof));
+    let proof_generation_ns = generation_start.elapsed().as_nanos();
+
+    let verification_start = Instant::now();
+    let mut checker = IndependentPredicateChecker::new(model)?;
+    for (source, target, input, phase_index) in &edge_witnesses {
+        let predicate = &contract.phases[*phase_index].predicate;
+        if !declared_input_satisfies_predicate(
+            model.inputs.len(),
+            &relevant_inputs,
+            predicate,
+            *input,
+        ) || checker.evaluate(*source, *input)?.0 != *target
+        {
+            return Err("event contract proof relation witness is invalid".to_string());
+        }
+    }
+    for &(state, input) in &terminal_witnesses {
+        if !declared_input_satisfies_predicate(
+            model.inputs.len(),
+            &relevant_inputs,
+            &contract.terminal,
+            input,
+        ) || checker.evaluate(state, input)?.1 & (1u128 << bad_output) != 0
+        {
+            return Err("event contract proof terminal witness is invalid".to_string());
+        }
+    }
+    for (clauses, proof) in &obligations {
+        verify_varisat_unsat_proof(clauses, proof)?;
+    }
+    let proof_verification_ns = verification_start.elapsed().as_nanos();
+    Ok(EventContractProofMetrics {
+        producer_ns,
+        proof_generation_ns,
+        proof_verification_ns,
+        obligations: obligations.len(),
+        witnesses: edge_witnesses.len() + terminal_witnesses.len(),
+        proof_bytes: total_proof_bytes,
+    })
+}
+
+fn benchmark_aiger_event_contract_proofs(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=100).contains(&repeats) {
+        return Err("event contract proof benchmark repeats must be in 1..=100".to_string());
+    }
+    if output.exists() {
+        return Err("event contract proof benchmark refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let input_sha256 = sha256_file(input)?;
+    let contract_sha256 = sha256_file(contract_path)?;
+    let mut lines = vec!["schema_version,input_sha256,contract_sha256,bad_output,horizon,relevant_inputs,latches,phases,trial,producer_ns,proof_generation_ns,proof_verification_ns,obligations,witnesses,proof_bytes,status".to_string()];
+    for trial in 0..repeats {
+        let metrics = event_contract_proof_experiment(&model, bad_output, &contract)?;
+        lines.push(format!(
+            "1,{input_sha256},{contract_sha256},{bad_output},{},{},{},{},{trial},{},{},{},{},{},{},ok",
+            contract.horizon,
+            relevant_inputs.len(),
+            model.latches.len(),
+            contract.phases.len(),
+            metrics.producer_ns,
+            metrics.proof_generation_ns,
+            metrics.proof_verification_ns,
+            metrics.obligations,
+            metrics.witnesses,
+            metrics.proof_bytes,
+        ));
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "event-contract-proof-benchmark status=VALID trials={repeats} output={}",
         output.display()
     );
     Ok(())
@@ -23039,6 +23308,25 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
+        "benchmark-aiger-event-contract-proofs" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker benchmark-aiger-event-contract-proofs INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt REPEATS OUTPUT.csv".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract proof output index".to_string())?;
+            let repeats = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract proof repeat count".to_string())?;
+            benchmark_aiger_event_contract_proofs(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                repeats,
+                Path::new(&args[5]),
+            )?;
+            Ok(true)
+        }
         "query-aiger-predicate-quotient" => {
             if args.len() != 4 {
                 return Err("usage: guarded-continuation-checker query-aiger-predicate-quotient INPUT.aag|INPUT.aig HORIZON OUTPUT_INDEX".to_string());
@@ -34414,6 +34702,70 @@ mod tests {
             assert!(body.lines().nth(1).unwrap().ends_with(",true,true,ok"));
             fs::remove_file(output).unwrap();
         }
+    }
+
+    #[test]
+    fn event_contract_cnf_relations_have_independently_checked_proof_primitives() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for (model_path, contract_path) in [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/event-contracts/interrupt-priority-v1.contract",
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-interlock-v1.contract",
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                "examples/event-contracts/robot-recovery-v1.contract",
+            ),
+        ] {
+            let model = parse_aag(&root.join(model_path)).unwrap();
+            let relevant = IndependentPredicateChecker::support(&model).unwrap();
+            let contract =
+                parse_event_contract(&root.join(contract_path), &model, &relevant).unwrap();
+            let metrics = event_contract_proof_experiment(&model, 0, &contract).unwrap();
+            assert_eq!(
+                metrics.obligations,
+                contract.phases.len() * (1usize << model.latches.len()) + 1
+            );
+            assert!(metrics.witnesses > 0);
+            assert!(metrics.proof_bytes > 0);
+        }
+    }
+
+    #[test]
+    fn event_contract_proof_rejects_an_omitted_relation_target() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let contract = parse_event_contract(
+            &root.join("examples/event-contracts/interrupt-priority-v1.contract"),
+            &model,
+            &relevant,
+        )
+        .unwrap();
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        let relation = quotient
+            .interface
+            .relation_predicate(&contract.phases[0].predicate)
+            .unwrap();
+        let targets = relation.rows[0][0] as u16;
+        let omitted = targets & !(1u16 << targets.trailing_zeros());
+        let clauses = predicate_relation_completeness_clauses_for_predicate(
+            &model,
+            &relevant,
+            0,
+            &contract.phases[0].predicate,
+            omitted,
+        )
+        .unwrap();
+        assert!(generate_varisat_unsat_proof(&clauses).is_err());
     }
 
     #[test]
