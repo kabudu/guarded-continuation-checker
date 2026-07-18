@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add exact AIG cone-support projection for CIQ, admitting up to 64 declared
+  firmware or robotics inputs when no more than eight affect the combined
+  transition/property interface, with full-input witness lifting and fail-closed
+  dense-support rejection.
+- Add a 16-input mobile-robot obstacle-stop fixture, exhaustive projection
+  tests, independent causal replay, a reproducible ten-trial scaling harness,
+  and bounded evidence showing 2.46x–10.74x median end-to-end speedups.
+
 ## 0.26.0 - 2026-07-18
 
 - Add an exact Counterfactual Interface Quotient experiment for small

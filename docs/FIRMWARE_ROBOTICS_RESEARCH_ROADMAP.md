@@ -21,9 +21,11 @@ predeclared baselines, repeated trials, and claim-bounded documentation.
    Exact powered summaries preserve constant firmware input phases and show a
    robust 1.42x–7.00x median scaling curve on the bounded infusion-pump model.
 
-2. **Symbolic input projection.** Replace explicit input enumeration with
-   certified predicates over relevant sensor/input cones. Target controllers
-   with 9–64 inputs while retaining small state interfaces.
+2. **Symbolic input projection — first exact support-projection stage
+   implemented experimentally.** Wide declared buses are projected onto the
+   exact transition/property support. A 16-input mobile-robot controller with a
+   two-input cone shows a robust 2.46x–10.74x median scaling curve. Dense-support
+   predicate projection remains open.
 
 3. **Proof-carrying interface composition.** Emit independently checkable
    certificates for leaf projection, relational composition, semantic no-op
@@ -57,4 +59,3 @@ predeclared baselines, repeated trials, and claim-bounded documentation.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
-
