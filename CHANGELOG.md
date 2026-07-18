@@ -51,6 +51,11 @@
   output, both answer classes, all product widths, changing phases and semantic,
   proof, source, ordering and canonical-text tampering. Keep v1 as the portfolio
   format pending v2 hardening and cost gates.
+- Add an answer-balanced canonical-v2 cost harness and ten preserved release
+  trials per row. V2 reduces the 16-input end-to-end independent check from
+  136.045 ms to 0.831 ms (163.71x), while honestly retaining its 33–39 ms
+  production cost, 9.7–52.1 KiB artifacts and 1.38–5.89x verification overhead
+  against the exact CDCL control.
 
 ## 0.28.0 - 2026-07-18
 

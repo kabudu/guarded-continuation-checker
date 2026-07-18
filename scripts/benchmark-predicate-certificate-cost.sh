@@ -29,3 +29,23 @@ binary="$repo/target/release/continuation-quotient-sat"
   examples/products/actuator-controller/firmware/dense-actuator-interlock.aag 0 \
   examples/predicate-certificate-cost/actuator-h1-unavoidable.transcript \
   "$repeats" "$output_dir/actuator-h1-unavoidable.csv"
+
+"$binary" benchmark-aiger-predicate-certificate-v2-cost \
+  examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag 0 \
+  examples/predicate-certificate-cost/interrupt-h8-avoidable.transcript \
+  "$repeats" "$output_dir/interrupt-h8-v2.csv"
+
+"$binary" benchmark-aiger-predicate-certificate-v2-cost \
+  examples/products/actuator-controller/firmware/dense-actuator-interlock.aag 0 \
+  examples/predicate-certificate-cost/actuator-h16-avoidable.transcript \
+  "$repeats" "$output_dir/actuator-h16-v2.csv"
+
+"$binary" benchmark-aiger-predicate-certificate-v2-cost \
+  examples/products/mobile-robot/firmware/dense-sensor-fusion.aag 0 \
+  examples/predicate-certificate-cost/sensor-h32-avoidable.transcript \
+  "$repeats" "$output_dir/sensor-h32-v2.csv"
+
+"$binary" benchmark-aiger-predicate-certificate-v2-cost \
+  examples/products/actuator-controller/firmware/dense-actuator-interlock.aag 0 \
+  examples/predicate-certificate-cost/actuator-h1-unavoidable.transcript \
+  "$repeats" "$output_dir/actuator-h1-unavoidable-v2.csv"

@@ -104,9 +104,11 @@ remains the portfolio format.
 The experimental [proof-carrying predicate certificate v2](docs/PREDICATE_CERTIFICATE_V2.md)
 now packages both proof primitives, deterministic phase powers, terminal
 evidence and the final trace into a bounded canonical artifact. Its independent
-verifier avoids the BDD producer and exhaustive input enumeration. V1 remains
-the portfolio default while v2 cost, hostile-input and checker-diversity gates
-are still open.
+verifier avoids the BDD producer and exhaustive input enumeration. On the
+answer-balanced cohort, v2 cuts the 16-input end-to-end check from 136.045 ms to
+0.831 ms (163.71x), at the cost of a 52-KiB artifact and slower production. V1
+remains the portfolio default while hostile-input, checker-diversity and broader
+performance gates are still open.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,

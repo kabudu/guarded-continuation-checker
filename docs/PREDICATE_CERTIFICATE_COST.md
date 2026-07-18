@@ -85,7 +85,37 @@ while retaining a smaller trusted base than the BDD producer.
 
 The follow-up [proof-carrying relation experiment](PREDICATE_PROOF_RELATION_EXPERIMENT.md)
 achieves that target for one-step relation reconstruction, including a 280.32x
-checker speedup at 16 inputs. It is not yet integrated into certificate v2.
+checker speedup at 16 inputs. It is integrated into certificate v2 below.
+
+## Canonical certificate v2 result
+
+`benchmark-aiger-predicate-certificate-v2-cost` measures end-to-end production
+and independent verification of the canonical v2 artifact. The verifier rebuilds
+the CNF obligations, checks every native proof with `varisat-checker`, evaluates
+the concrete witnesses directly, and recomputes relation powers, composition and
+the final answer without invoking the BDD producer.
+
+| Model/query | Result | V2 generation | V2 verification | CDCL query | V2 artifact | Raw proofs | Proofs | Direct evaluations | V2 check/CDCL |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Interrupt, 9 inputs, h8 | avoidable | 33.273 ms | 0.308 ms | 0.212 ms | 9,706 B | 4,237 B | 5 | 29 | 1.46x |
+| Actuator, 12 inputs, h16 | avoidable | 37.872 ms | 0.348 ms | 0.253 ms | 14,626 B | 5,954 B | 9 | 89 | 1.38x |
+| Sensor fusion, 16 inputs, h32 | avoidable | 38.777 ms | 0.831 ms | 0.548 ms | 52,119 B | 21,853 B | 17 | 305 | 1.52x |
+| Actuator, 12 inputs, h1 | unavoidable | 34.947 ms | 0.273 ms | 0.046 ms | 10,851 B | 4,788 B | 9 | 15 | 5.89x |
+
+Raw v2 evidence:
+
+- [`predicate-certificate-v2-cost-interrupt-h8-v1.csv`](../results/predicate-certificate-v2-cost-interrupt-h8-v1.csv)
+- [`predicate-certificate-v2-cost-actuator-h16-v1.csv`](../results/predicate-certificate-v2-cost-actuator-h16-v1.csv)
+- [`predicate-certificate-v2-cost-sensor-h32-v1.csv`](../results/predicate-certificate-v2-cost-sensor-h32-v1.csv)
+- [`predicate-certificate-v2-cost-actuator-h1-unavoidable-v1.csv`](../results/predicate-certificate-v2-cost-actuator-h1-unavoidable-v1.csv)
+
+V2 removes the v1 verifier's exponential input enumeration: at 16 inputs the
+median check falls from 136.045 ms to 0.831 ms, a 163.71x end-to-end reduction.
+It also makes the evidence substantially larger and production about three times
+slower than v1. Verification remains 1.38–1.52x CDCL on the three avoidable rows
+and 5.89x on the short unavoidable row. This is a successful checker-complexity
+result, not a claim that proof-carrying queries beat CDCL or that v2 is ready to
+replace the portfolio default.
 
 ## Closest-tool boundary
 
@@ -104,7 +134,8 @@ Build with `cargo build --release`, then run the command above for each model an
 matching transcript with ten repeats. Output publication is no-overwrite; remove
 or rename an existing result deliberately before regeneration.
 
-The complete answer-balanced cohort can be regenerated into a new directory:
+The complete answer-balanced v1 and v2 cohorts can be regenerated into a new
+directory:
 
 ```sh
 ./scripts/benchmark-predicate-certificate-cost.sh /tmp/cq-certificate-cost 10

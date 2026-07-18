@@ -8676,6 +8676,7 @@ const PREDICATE_CERTIFICATE_V2_MAX_BYTES: u64 = 16 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES: usize = 1024 * 1024;
 const PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES: usize = 8 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_COST_SCHEMA_VERSION: usize = 1;
+const PREDICATE_CERTIFICATE_V2_COST_SCHEMA_VERSION: usize = 1;
 const PREDICATE_PROOF_RELATION_SCHEMA_VERSION: usize = 1;
 const PREDICATE_PROOF_TERMINAL_SCHEMA_VERSION: usize = 1;
 
@@ -11618,6 +11619,106 @@ fn benchmark_aiger_predicate_certificate_cost(
     publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
     println!(
         "predicate-certificate-cost status=VALID trials={repeats} output={}",
+        output.display()
+    );
+    Ok(())
+}
+
+fn benchmark_aiger_predicate_certificate_v2_cost(
+    input: &Path,
+    bad_output: usize,
+    transcript: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=1_000).contains(&repeats) {
+        return Err("predicate certificate v2 cost repeats must be in 1..=1000".to_string());
+    }
+    if output.exists() {
+        return Err("predicate certificate v2 cost refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    if bad_output >= model.outputs.len() {
+        return Err("predicate certificate v2 cost bad output is out of range".to_string());
+    }
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let constraints = parse_predicate_transcript(transcript, relevant_inputs.len())?;
+    let horizon = constraints.len() - 1;
+    let input_sha256 = sha256_file(input)?;
+    let transcript_sha256 = sha256_file(transcript)?;
+    let mut lines = vec!["schema_version,input_sha256,transcript_sha256,bad_output,horizon,relevant_inputs,latches,trial,result,certificate_generate_ns,certificate_verify_ns,cdcl_query_ns,certificate_bytes,raw_proof_bytes,proof_count,direct_evaluations,answers_agree,status".to_string()];
+    for trial in 0..repeats {
+        let certificate_path = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-certificate-v2-cost-{}-{trial}.cert2",
+            std::process::id()
+        ));
+        if fs::symlink_metadata(&certificate_path).is_ok() {
+            return Err(format!(
+                "predicate certificate v2 cost temporary path already exists: {}",
+                certificate_path.display()
+            ));
+        }
+        let run = (|| {
+            let generation_start = Instant::now();
+            certify_aiger_predicate_v2(input, bad_output, transcript, &certificate_path)?;
+            let certificate_generate_ns = generation_start.elapsed().as_nanos();
+            let certificate_bytes = fs::symlink_metadata(&certificate_path)
+                .map_err(|error| format!("inspect benchmark v2 certificate: {error}"))?
+                .len();
+            let certificate = parse_predicate_certificate_v2(&certificate_path)?;
+            let raw_proof_bytes = certificate
+                .phases
+                .iter()
+                .flat_map(|phase| &phase.proofs)
+                .map(Vec::len)
+                .sum::<usize>()
+                + certificate.terminal_proof.len();
+            let proof_count = certificate
+                .phases
+                .iter()
+                .map(|phase| phase.proofs.len())
+                .sum::<usize>()
+                + 1;
+            let direct_evaluations = certificate
+                .phases
+                .iter()
+                .map(|phase| phase.edges.len())
+                .sum::<usize>()
+                + certificate.terminal_witnesses.len()
+                + certificate.states.len();
+
+            let verification_start = Instant::now();
+            verify_aiger_predicate_certificate_v2(input, &certificate_path)?;
+            let certificate_verify_ns = verification_start.elapsed().as_nanos();
+
+            let cdcl_start = Instant::now();
+            let cdcl_result = solve_counterfactual_persistent(
+                &model,
+                bad_output,
+                &relevant_inputs,
+                &constraints,
+            )?;
+            let cdcl_query_ns = cdcl_start.elapsed().as_nanos();
+            if certificate.avoidable != cdcl_result {
+                return Err("predicate certificate v2 cost backends disagree".to_string());
+            }
+            lines.push(format!(
+                "{PREDICATE_CERTIFICATE_V2_COST_SCHEMA_VERSION},{input_sha256},{transcript_sha256},{bad_output},{horizon},{},{},{trial},{},{certificate_generate_ns},{certificate_verify_ns},{cdcl_query_ns},{certificate_bytes},{raw_proof_bytes},{proof_count},{direct_evaluations},true,ok",
+                relevant_inputs.len(),
+                model.latches.len(),
+                if cdcl_result { "avoidable" } else { "unavoidable" },
+            ));
+            Ok(())
+        })();
+        let cleanup = fs::remove_file(&certificate_path);
+        if let Err(error) = run {
+            return Err(error);
+        }
+        cleanup.map_err(|error| format!("remove benchmark v2 certificate: {error}"))?;
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "predicate-certificate-v2-cost status=VALID trials={repeats} output={}",
         output.display()
     );
     Ok(())
@@ -22081,6 +22182,25 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
+        "benchmark-aiger-predicate-certificate-v2-cost" => {
+            if args.len() != 6 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-certificate-v2-cost INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate certificate v2 cost output index".to_string())?;
+            let repeats = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate certificate v2 cost repeats".to_string())?;
+            benchmark_aiger_predicate_certificate_v2_cost(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                repeats,
+                Path::new(&args[5]),
+            )?;
+            Ok(true)
+        }
         "benchmark-aiger-predicate-proof-relation" => {
             if args.len() != 5 {
                 return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-proof-relation INPUT.aag|INPUT.aig TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
@@ -31830,6 +31950,38 @@ mod tests {
         }
         assert!(
             benchmark_aiger_predicate_certificate_cost(&input, 0, &transcript, 1, &output,)
+                .unwrap_err()
+                .contains("overwrite")
+        );
+        fs::remove_file(transcript).unwrap();
+        fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn predicate_certificate_v2_cost_benchmark_preserves_every_agreeing_trial() {
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let stem = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-certificate-v2-cost-test-{}",
+            std::process::id()
+        ));
+        let transcript = stem.with_extension("transcript");
+        let output = stem.with_extension("csv");
+        fs::write(&transcript, vec!["x".repeat(9); 9].join("\n") + "\n").unwrap();
+        benchmark_aiger_predicate_certificate_v2_cost(&input, 0, &transcript, 2, &output).unwrap();
+        let body = fs::read_to_string(&output).unwrap();
+        let lines = body.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].starts_with("schema_version,input_sha256,transcript_sha256,"));
+        for (trial, row) in lines[1..].iter().enumerate() {
+            let fields = row.split(',').collect::<Vec<_>>();
+            assert_eq!(fields.len(), 18);
+            assert_eq!(fields[0], "1");
+            assert_eq!(fields[7], trial.to_string());
+            assert_eq!(&fields[16..], &["true", "ok"]);
+        }
+        assert!(
+            benchmark_aiger_predicate_certificate_v2_cost(&input, 0, &transcript, 1, &output)
                 .unwrap_err()
                 .contains("overwrite")
         );

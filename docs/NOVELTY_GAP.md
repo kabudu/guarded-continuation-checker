@@ -62,10 +62,12 @@ producer and independent exhaustive verifier implementations for both answer
 classes. This closes only the specification gate, not the novelty claim.
 
 The internal [certificate cost experiment](PREDICATE_CERTIFICATE_COST.md)
-preserves ten trials for both answer classes and records a strong negative
-result for proof overhead, especially at 16 inputs. It informs gate 4 but does
-not close it because an obligation-equivalent maintained external certifying
-tool comparison has not yet been run.
+preserves ten trials for both answer classes. V1 records a strong negative
+result for exhaustive proof checking; canonical v2 removes that bottleneck and
+cuts the 16-input check by 163.71x, but remains slower than CDCL and increases
+production and artifact cost. It informs gate 4 but does not close it because an
+obligation-equivalent maintained external certifying-tool comparison has not yet
+been run.
 
 The [proof-carrying one-step relation experiment](PREDICATE_PROOF_RELATION_EXPERIMENT.md)
 uses concrete edge witnesses plus checked UNSAT completeness obligations. It
