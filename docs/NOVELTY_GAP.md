@@ -41,7 +41,8 @@ Primary starting points:
 
 ## Claim gates
 
-1. Freeze a precise certificate language and trusted-checker semantics.
+1. **Closed for candidate v1:** freeze a precise certificate language and
+   trusted-checker semantics.
 2. Implement the checker independently from the producer's BDD and cache code.
 3. Demonstrate rejection of structural, semantic, ordering, truncation and
    source-binding tampering.
@@ -54,7 +55,7 @@ Primary starting points:
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
 
-Gate 1 is now represented by the frozen candidate
-[`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md). It remains open
-until producer and independent verifier implementations demonstrate that the
-contract is sufficient without revision.
+Gate 1 is represented by the frozen
+[`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md), with working
+producer and independent exhaustive verifier implementations for both answer
+classes. This closes only the specification gate, not the novelty claim.

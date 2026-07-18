@@ -121,6 +121,22 @@ Every parse, source-binding, dimensional, arithmetic, resource, semantic or
 replay failure is an invalid certificate. It must never be interpreted as an
 `avoidable` or `unavoidable` answer.
 
+## Transcript input
+
+The producer accepts a separate strict transcript file. It contains exactly one
+constraint string per frame, including the terminal frame, in the same `0`, `1`,
+`x` relevant-input order used by the certificate. It is LF newline terminated,
+has no headers or whitespace, is a regular non-symlink file no larger than 1
+MiB, and contains 1–65 frames. The horizon is the number of lines minus one.
+
+```sh
+continuation-quotient-sat certify-aiger-predicate \
+  INPUT.aag OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert
+
+continuation-quotient-sat verify-aiger-predicate-certificate \
+  INPUT.aag CERTIFICATE.cert
+```
+
 ## Trust and novelty boundary
 
 The checker still trusts the Rust compiler, process environment, AIGER parser,

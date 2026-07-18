@@ -7,10 +7,10 @@ sufficient.
 
 | Gate | Current evidence | Closure requirement | Status |
 |---|---|---|---|
-| Exact specialised backend | Original-AIG trace replay and CQ/CDCL/Yosys agreement on bounded fixtures | Independent certificate verifier covers positive and negative answers without trusting the specialised backend | Open |
+| Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; positive traces replay and negative claims prove empty safe intersection | Preserve this coverage across the public compatibility corpus and future API changes | Closed for bounded v1 |
 | Portfolio integration | Dense predicate commands are explicit experiments | Public API selects the backend only through a versioned static rule and falls back exactly to CDCL on every rejection or resource failure | Open |
 | Resource governance | Static input, latch, horizon, node and cache bounds | Wall-clock, memory, output-size and child-process limits with stable machine-readable failure classes | Open |
-| Hostile inputs | AIGER parser bounds and existing isolated RTL workflow | Fuzzing corpus for predicate certificates, path-safe external-tool invocation, denial-of-service tests and documented threat model | Open |
+| Hostile inputs | Strict certificate/transcript sizes, canonical syntax, unknown/duplicate/truncation rejection and symlink refusal | Add parser fuzz corpus, denial-of-service tests and a documented certificate threat model | In progress |
 | Stable interface | Research CLI commands and CSV schemas | Versioned API/CLI contract, compatibility tests, migration policy and deprecation window | Open |
 | Observability | Benchmark timings and status fields | Structured logs/metrics for admission, fallback, cache use, resource rejection, certificate generation and verification | Open |
 | Cross-platform distribution | Rust package and Linux/macOS CI paths | Reproducible signed artifacts and smoke tests for supported Linux targets and macOS, with an SBOM and provenance | Open |

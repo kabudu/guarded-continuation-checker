@@ -14,6 +14,11 @@
   analysis, exhaustive transition/property evaluation, one-step relations,
   deterministic powers, composition and terminal safe-state reconstruction,
   cross-checked against the BDD producer on all three product controllers.
+- Add strict self-service `certify-aiger-predicate` and
+  `verify-aiger-predicate-certificate` commands for positive and negative
+  certificate v1 results, with deterministic source/phase/terminal evidence,
+  direct-AIG replay, atomic publication and structural, semantic, canonical-text
+  and symlink tamper rejection.
 
 ## 0.28.0 - 2026-07-18
 
