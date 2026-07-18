@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add bounded, certificate-producing causal analysis for input-driven AIGER
+  counterexamples, with exact 1-minimal sufficient-cause semantics and an
+  evidence-replaying certificate verifier and atomic, no-overwrite v1 bundle.
+- Compare continuation-quotient intervention reuse against fresh and persistent
+  CDCL on the identical minimisation sequence, with conservative admission and
+  work limits and explicit query-only versus amortised measurements.
+
 ## 0.22.0 - 2026-07-17
 
 - Rewrite external communication in the individual maintainer's first person

@@ -1,8 +1,12 @@
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::env;
+#[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
+use std::ffi::CString;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
+#[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -11974,6 +11978,890 @@ fn earliest_aag_counterexample(
     Ok((encoding, run))
 }
 
+const CAUSAL_CERTIFICATE_VERSION: usize = 1;
+const CAUSAL_MAX_EVENTS: usize = 512;
+const CAUSAL_MAX_QUERY_WORK: usize = 250_000_000;
+const CAUSAL_CQ_MAX_VARIABLES: usize = 256;
+const CAUSAL_CQ_MAX_CLAUSES: usize = 4_096;
+const CAUSAL_METRICS_HEADER: &str = "input_sha256,requested_horizon,bad_frame,bad_output,candidates,causes,queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_compile_ns,cq_query_ns,persistent_cdcl_ns,fresh_cdcl_ns,cq_query_speedup,cq_amortized_speedup,agreement,certificate_valid,status";
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CausalEvent {
+    input: usize,
+    start_frame: usize,
+    end_frame: usize,
+    value: bool,
+}
+
+#[derive(Clone, Debug)]
+struct CausalCertificate {
+    input_sha256: String,
+    requested_horizon: usize,
+    bad_frame: usize,
+    bad_output: usize,
+    bad_output_name: String,
+    candidate_count: usize,
+    events: Vec<CausalEvent>,
+}
+
+struct CausalMetrics {
+    queries: usize,
+    fresh_cdcl_ns: u128,
+    persistent_cdcl_ns: u128,
+    cq_ns: u128,
+    cq_compile_ns: u128,
+    cq_bound_bits: Option<usize>,
+    cq_peak_classes: Option<usize>,
+    cq_admitted: bool,
+}
+
+struct CausalProblem {
+    encoding: AagBmcEncoding,
+    run: AagBmcRun,
+    clauses: Vec<Clause>,
+    fixed: Vec<(usize, bool)>,
+}
+
+fn causal_events_from_witness(
+    model: &AagModel,
+    witness: &[bool],
+    bad_frame: usize,
+) -> Vec<CausalEvent> {
+    let mut events = Vec::new();
+    for (input, &literal) in model.inputs.iter().enumerate() {
+        let mut start = 0usize;
+        let mut value = witness[literal / 2 - 1];
+        for frame in 1..=bad_frame {
+            let next = witness[frame * model.max_variable + literal / 2 - 1];
+            if next != value {
+                events.push(CausalEvent {
+                    input,
+                    start_frame: start,
+                    end_frame: frame - 1,
+                    value,
+                });
+                start = frame;
+                value = next;
+            }
+        }
+        events.push(CausalEvent {
+            input,
+            start_frame: start,
+            end_frame: bad_frame,
+            value,
+        });
+    }
+    events
+}
+
+fn causal_assumptions(
+    model: &AagModel,
+    variables: usize,
+    fixed: &[(usize, bool)],
+    events: &[CausalEvent],
+    active: &[bool],
+) -> Result<Vec<Option<bool>>, String> {
+    if events.len() != active.len() {
+        return Err("causal event selection length mismatch".to_string());
+    }
+    let mut assumptions = vec![None; variables];
+    for &(variable, value) in fixed {
+        assumptions[variable] = Some(value);
+    }
+    for (event, &retained) in events.iter().zip(active) {
+        if !retained {
+            continue;
+        }
+        let literal = *model
+            .inputs
+            .get(event.input)
+            .ok_or_else(|| "causal event input index is out of range".to_string())?;
+        for frame in event.start_frame..=event.end_frame {
+            let variable = frame
+                .checked_mul(model.max_variable)
+                .and_then(|offset| offset.checked_add(literal / 2 - 1))
+                .ok_or_else(|| "causal event variable overflow".to_string())?;
+            if variable >= variables {
+                return Err("causal event exceeds encoded horizon".to_string());
+            }
+            if assumptions[variable].is_some_and(|existing| existing != event.value) {
+                return Err("causal event assumptions conflict".to_string());
+            }
+            assumptions[variable] = Some(event.value);
+        }
+    }
+    Ok(assumptions)
+}
+
+fn solve_causal_fresh(clauses: &[Clause], assumptions: &[Option<bool>]) -> Result<bool, String> {
+    let mut solver = Solver::new();
+    add_to_varisat(&mut solver, clauses);
+    let literals = assumptions
+        .iter()
+        .enumerate()
+        .filter_map(|(variable, value)| {
+            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+        })
+        .collect::<Vec<_>>();
+    solver.assume(&literals);
+    solver
+        .solve()
+        .map_err(|error| format!("solve fresh causal intervention: {error}"))
+}
+
+fn solve_causal_persistent(
+    solver: &mut Solver<'_>,
+    assumptions: &[Option<bool>],
+) -> Result<bool, String> {
+    let literals = assumptions
+        .iter()
+        .enumerate()
+        .filter_map(|(variable, value)| {
+            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+        })
+        .collect::<Vec<_>>();
+    solver.assume(&literals);
+    solver
+        .solve()
+        .map_err(|error| format!("solve persistent causal intervention: {error}"))
+}
+
+fn minimize_causal_events<F>(count: usize, mut is_unsat: F) -> Result<Vec<bool>, String>
+where
+    F: FnMut(&[bool]) -> Result<bool, String>,
+{
+    let mut active = vec![true; count];
+    if !is_unsat(&active)? {
+        return Err(
+            "complete counterexample observations do not force the target failure".to_string(),
+        );
+    }
+    // UNSAT is monotonic under adding observations: once removing an event makes
+    // the formula SAT, removing still more events cannot make it UNSAT again.
+    // One deterministic deletion pass therefore reaches a 1-minimal set.
+    for index in 0..count {
+        active[index] = false;
+        if !is_unsat(&active)? {
+            active[index] = true;
+        }
+    }
+    for index in 0..count {
+        if active[index] {
+            active[index] = false;
+            let still_unsat = is_unsat(&active)?;
+            active[index] = true;
+            if still_unsat {
+                return Err("causal minimizer failed its 1-minimality check".to_string());
+            }
+        }
+    }
+    Ok(active)
+}
+
+fn ensure_causal_query_work(
+    variables: usize,
+    clause_count: usize,
+    query_count: usize,
+) -> Result<(), String> {
+    let per_query = clause_count
+        .checked_add(variables)
+        .ok_or_else(|| "causal query work overflow".to_string())?;
+    let work = per_query
+        .checked_mul(query_count)
+        .ok_or_else(|| "causal query work overflow".to_string())?;
+    if work > CAUSAL_MAX_QUERY_WORK {
+        return Err(format!(
+            "causal analysis conservative work bound {work} exceeds {CAUSAL_MAX_QUERY_WORK}"
+        ));
+    }
+    Ok(())
+}
+
+fn causal_base_formula(
+    model: &AagModel,
+    requested_horizon: usize,
+) -> Result<CausalProblem, String> {
+    let (encoding, run) = earliest_aag_counterexample(model, requested_horizon, &[])?;
+    let query_index = run
+        .first_sat_query
+        .ok_or_else(|| "AIGER model has no counterexample in the requested horizon".to_string())?;
+    let query = &encoding.queries[query_index];
+    let mut clauses = encoding.clauses.clone();
+    push_simplified_clause(&mut clauses, &[query.assumption.negate()]);
+    let witness = run
+        .first_witness
+        .as_ref()
+        .ok_or_else(|| "counterexample is missing its witness".to_string())?;
+    let fixed = model
+        .latches
+        .iter()
+        .filter(|latch| latch.initial.is_none())
+        .map(|latch| {
+            let variable = latch.current / 2 - 1;
+            (variable, witness[variable])
+        })
+        .collect();
+    Ok(CausalProblem {
+        encoding,
+        run,
+        clauses,
+        fixed,
+    })
+}
+
+fn causal_certificate_body(
+    input: &Path,
+    model: &AagModel,
+    certificate: &CausalCertificate,
+) -> Result<String, String> {
+    let bad_name = model
+        .output_names
+        .get(certificate.bad_output)
+        .ok_or_else(|| "causal certificate bad output is out of range".to_string())?;
+    let mut lines = vec![
+        format!("causal_certificate_version={CAUSAL_CERTIFICATE_VERSION}"),
+        format!("input={}", input.display()),
+        format!("input_sha256={}", certificate.input_sha256),
+        format!("requested_horizon={}", certificate.requested_horizon),
+        format!("bad_frame={}", certificate.bad_frame),
+        format!("bad_output={}", certificate.bad_output),
+        format!("bad_output_name={bad_name}"),
+        "semantics=minimal-sufficient-input-segments".to_string(),
+        "minimality=1-minimal".to_string(),
+        format!("candidate_count={}", certificate.candidate_count),
+        format!("cause_count={}", certificate.events.len()),
+    ];
+    for (index, event) in certificate.events.iter().enumerate() {
+        lines.push(format!(
+            "cause_{index}={},{},{},{}",
+            event.input,
+            event.start_frame,
+            event.end_frame,
+            usize::from(event.value)
+        ));
+    }
+    Ok(lines.join("\n") + "\n")
+}
+
+fn parse_causal_certificate(path: &Path) -> Result<CausalCertificate, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect causal certificate {}: {error}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.len() > 1_048_576 {
+        return Err(
+            "causal certificate must be a regular file no larger than 1048576 bytes".to_string(),
+        );
+    }
+    let body = fs::read_to_string(path)
+        .map_err(|error| format!("read causal certificate {}: {error}", path.display()))?;
+    let mut fields = BTreeMap::new();
+    for (line_number, line) in body.lines().enumerate() {
+        let (key, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid causal certificate line {}", line_number + 1))?;
+        if key.is_empty()
+            || value.is_empty()
+            || fields.insert(key.to_string(), value.to_string()).is_some()
+        {
+            return Err(format!(
+                "invalid or duplicate causal certificate field at line {}",
+                line_number + 1
+            ));
+        }
+    }
+    let value = |key: &str| {
+        fields
+            .get(key)
+            .map(String::as_str)
+            .ok_or_else(|| format!("missing causal certificate field `{key}`"))
+    };
+    if value("causal_certificate_version")? != CAUSAL_CERTIFICATE_VERSION.to_string()
+        || value("semantics")? != "minimal-sufficient-input-segments"
+        || value("minimality")? != "1-minimal"
+    {
+        return Err("unsupported causal certificate contract".to_string());
+    }
+    let parse_usize = |key: &str| {
+        value(key)?
+            .parse::<usize>()
+            .map_err(|_| format!("invalid causal certificate numeric field `{key}`"))
+    };
+    let candidate_count = parse_usize("candidate_count")?;
+    let cause_count = parse_usize("cause_count")?;
+    if candidate_count > CAUSAL_MAX_EVENTS || cause_count > candidate_count {
+        return Err("causal certificate event counts exceed bounds".to_string());
+    }
+    let mut events = Vec::with_capacity(cause_count);
+    for index in 0..cause_count {
+        let raw = value(&format!("cause_{index}"))?;
+        let parts = raw.split(',').collect::<Vec<_>>();
+        if parts.len() != 4 {
+            return Err(format!("invalid causal certificate cause_{index}"));
+        }
+        let input = parts[0]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid causal certificate cause_{index} input"))?;
+        let start_frame = parts[1]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid causal certificate cause_{index} start frame"))?;
+        let end_frame = parts[2]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid causal certificate cause_{index} end frame"))?;
+        let value = match parts[3] {
+            "0" => false,
+            "1" => true,
+            _ => return Err(format!("invalid causal certificate cause_{index} value")),
+        };
+        if start_frame > end_frame {
+            return Err(format!(
+                "invalid causal certificate cause_{index} frame range"
+            ));
+        }
+        events.push(CausalEvent {
+            input,
+            start_frame,
+            end_frame,
+            value,
+        });
+    }
+    let allowed = 11usize
+        .checked_add(cause_count)
+        .ok_or_else(|| "causal certificate field count overflow".to_string())?;
+    if fields.len() != allowed {
+        return Err("causal certificate contains unexpected fields".to_string());
+    }
+    let digest = value("input_sha256")?.to_string();
+    if digest.len() != 64
+        || !digest
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err("causal certificate input SHA-256 is malformed".to_string());
+    }
+    Ok(CausalCertificate {
+        input_sha256: digest,
+        requested_horizon: parse_usize("requested_horizon")?,
+        bad_frame: parse_usize("bad_frame")?,
+        bad_output: parse_usize("bad_output")?,
+        bad_output_name: value("bad_output_name")?.to_string(),
+        candidate_count,
+        events,
+    })
+}
+
+fn verify_causal_certificate(input: &Path, certificate_path: &Path) -> Result<(), String> {
+    let model = parse_aag(input)?;
+    let certificate = parse_causal_certificate(certificate_path)?;
+    if sha256_file(input)? != certificate.input_sha256 {
+        return Err("causal certificate input SHA-256 mismatch".to_string());
+    }
+    if certificate.requested_horizon == 0 || certificate.bad_frame > certificate.requested_horizon {
+        return Err("causal certificate horizon is invalid".to_string());
+    }
+    let problem = causal_base_formula(&model, certificate.requested_horizon)?;
+    let CausalProblem {
+        encoding,
+        run,
+        clauses,
+        fixed,
+    } = problem;
+    let query_index = run.first_sat_query.unwrap();
+    let query = &encoding.queries[query_index];
+    if query.frame != certificate.bad_frame || query.output != certificate.bad_output {
+        return Err(
+            "causal certificate target disagrees with the earliest counterexample".to_string(),
+        );
+    }
+    if model.output_names[query.output] != certificate.bad_output_name {
+        return Err("causal certificate output name disagrees with the source model".to_string());
+    }
+    let witness = run
+        .first_witness
+        .as_ref()
+        .ok_or_else(|| "counterexample is missing its witness".to_string())?;
+    let candidates = causal_events_from_witness(&model, witness, query.frame);
+    if candidates.len() != certificate.candidate_count {
+        return Err(
+            "causal certificate candidate count disagrees with the counterexample".to_string(),
+        );
+    }
+    let verification_queries = certificate
+        .events
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| "causal verification query count overflow".to_string())?;
+    ensure_causal_query_work(encoding.variables, clauses.len(), verification_queries)?;
+    let mut unique = BTreeSet::new();
+    for event in &certificate.events {
+        if !candidates.contains(event) {
+            return Err(
+                "causal certificate contains an event outside the counterexample segmentation"
+                    .to_string(),
+            );
+        }
+        if !unique.insert((event.input, event.start_frame, event.end_frame, event.value)) {
+            return Err("causal certificate contains a duplicate cause event".to_string());
+        }
+    }
+    let active = vec![true; certificate.events.len()];
+    let assumptions = causal_assumptions(
+        &model,
+        encoding.variables,
+        &fixed,
+        &certificate.events,
+        &active,
+    )?;
+    if solve_causal_fresh(&clauses, &assumptions)? {
+        return Err("causal certificate does not force the target failure".to_string());
+    }
+    for index in 0..certificate.events.len() {
+        let mut reduced = active.clone();
+        reduced[index] = false;
+        let assumptions = causal_assumptions(
+            &model,
+            encoding.variables,
+            &fixed,
+            &certificate.events,
+            &reduced,
+        )?;
+        if !solve_causal_fresh(&clauses, &assumptions)? {
+            return Err(format!(
+                "causal certificate is not 1-minimal at cause_{index}"
+            ));
+        }
+    }
+    println!(
+        "causal-certificate-verify status=VALID causes={} target={}@{} certificate={}",
+        certificate.events.len(),
+        model.output_names[certificate.bad_output],
+        certificate.bad_frame,
+        certificate_path.display()
+    );
+    Ok(())
+}
+
+fn parse_small_key_value_file(
+    path: &Path,
+    label: &str,
+) -> Result<BTreeMap<String, String>, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect {label} {}: {error}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.len() > 1_048_576 {
+        return Err(format!(
+            "{label} must be a regular file no larger than 1048576 bytes"
+        ));
+    }
+    let body = fs::read_to_string(path)
+        .map_err(|error| format!("read {label} {}: {error}", path.display()))?;
+    let mut fields = BTreeMap::new();
+    for (line_number, line) in body.lines().enumerate() {
+        let (key, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid {label} line {}", line_number + 1))?;
+        if key.is_empty()
+            || value.is_empty()
+            || fields.insert(key.to_string(), value.to_string()).is_some()
+        {
+            return Err(format!(
+                "invalid or duplicate {label} field at line {}",
+                line_number + 1
+            ));
+        }
+    }
+    Ok(fields)
+}
+
+fn write_causal_file(path: &Path, body: &[u8]) -> Result<(), String> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("create causal evidence {}: {error}", path.display()))?;
+    file.write_all(body)
+        .map_err(|error| format!("write causal evidence {}: {error}", path.display()))?;
+    file.sync_all()
+        .map_err(|error| format!("sync causal evidence {}: {error}", path.display()))
+}
+
+#[cfg(any(target_os = "android", target_os = "linux"))]
+fn rename_causal_bundle_noreplace(from: &Path, to: &Path) -> Result<(), String> {
+    let from = CString::new(from.as_os_str().as_bytes())
+        .map_err(|_| "causal staging path contains a NUL byte".to_string())?;
+    let to = CString::new(to.as_os_str().as_bytes())
+        .map_err(|_| "causal output path contains a NUL byte".to_string())?;
+    // SAFETY: both pointers are valid NUL-terminated strings for the duration of
+    // the syscall. RENAME_NOREPLACE provides the required atomic no-clobber step.
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
+            from.as_ptr(),
+            libc::AT_FDCWD,
+            to.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "publish causal output atomically: {}",
+            std::io::Error::last_os_error()
+        ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn rename_causal_bundle_noreplace(from: &Path, to: &Path) -> Result<(), String> {
+    let from = CString::new(from.as_os_str().as_bytes())
+        .map_err(|_| "causal staging path contains a NUL byte".to_string())?;
+    let to = CString::new(to.as_os_str().as_bytes())
+        .map_err(|_| "causal output path contains a NUL byte".to_string())?;
+    // SAFETY: both pointers are valid NUL-terminated strings for the duration of
+    // renamex_np. RENAME_EXCL provides the required atomic no-clobber step.
+    let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "publish causal output atomically: {}",
+            std::io::Error::last_os_error()
+        ))
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "linux", target_os = "macos")))]
+fn rename_causal_bundle_noreplace(from: &Path, to: &Path) -> Result<(), String> {
+    if to.exists() {
+        return Err(format!(
+            "causal output directory already exists: {}",
+            to.display()
+        ));
+    }
+    fs::rename(from, to).map_err(|error| format!("publish causal output atomically: {error}"))
+}
+
+fn sync_causal_directory(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        fs::File::open(path)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| format!("sync causal directory {}: {error}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn causal_output_parent(output: &Path) -> &Path {
+    output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
+fn verify_causal_bundle(input: &Path, bundle: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(bundle)
+        .map_err(|error| format!("inspect causal bundle {}: {error}", bundle.display()))?;
+    if !metadata.file_type().is_dir() {
+        return Err("causal bundle must be a directory".to_string());
+    }
+    let mut names = Vec::new();
+    for entry in fs::read_dir(bundle)
+        .map_err(|error| format!("read causal bundle {}: {error}", bundle.display()))?
+    {
+        let entry = entry.map_err(|error| format!("read causal bundle entry: {error}"))?;
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|error| format!("inspect causal bundle entry: {error}"))?;
+        if !metadata.file_type().is_file() || metadata.len() > 1_048_576 {
+            return Err(
+                "causal bundle may contain only regular files no larger than 1048576 bytes"
+                    .to_string(),
+            );
+        }
+        names.push(entry.file_name().to_string_lossy().into_owned());
+    }
+    names.sort();
+    if names
+        != [
+            "causal-certificate.txt",
+            "causal-manifest.txt",
+            "causal-metrics.csv",
+        ]
+    {
+        return Err("causal bundle file inventory is invalid".to_string());
+    }
+    let manifest = parse_small_key_value_file(
+        &bundle.join("causal-manifest.txt"),
+        "causal bundle manifest",
+    )?;
+    let expected_keys = BTreeSet::from([
+        "causal_bundle_version",
+        "input_sha256",
+        "certificate",
+        "certificate_sha256",
+        "metrics",
+        "metrics_sha256",
+    ]);
+    if manifest.keys().map(String::as_str).collect::<BTreeSet<_>>() != expected_keys {
+        return Err("causal bundle manifest fields are invalid".to_string());
+    }
+    if manifest["causal_bundle_version"] != "1"
+        || manifest["certificate"] != "causal-certificate.txt"
+        || manifest["metrics"] != "causal-metrics.csv"
+    {
+        return Err("unsupported causal bundle contract".to_string());
+    }
+    if sha256_file(input)? != manifest["input_sha256"] {
+        return Err("causal bundle input SHA-256 mismatch".to_string());
+    }
+    if sha256_file(&bundle.join("causal-certificate.txt"))? != manifest["certificate_sha256"]
+        || sha256_file(&bundle.join("causal-metrics.csv"))? != manifest["metrics_sha256"]
+    {
+        return Err("causal bundle evidence SHA-256 mismatch".to_string());
+    }
+    let certificate = parse_causal_certificate(&bundle.join("causal-certificate.txt"))?;
+    let metrics = fs::read_to_string(bundle.join("causal-metrics.csv"))
+        .map_err(|error| format!("read causal metrics: {error}"))?;
+    let lines = metrics.lines().collect::<Vec<_>>();
+    if metrics.len() > 1_048_576 || lines.len() != 2 || lines[0] != CAUSAL_METRICS_HEADER {
+        return Err("causal metrics contract is invalid".to_string());
+    }
+    let values = lines[1].split(',').collect::<Vec<_>>();
+    if values.len() != 19
+        || values[0] != certificate.input_sha256
+        || values[1] != certificate.requested_horizon.to_string()
+        || values[2] != certificate.bad_frame.to_string()
+        || values[3] != certificate.bad_output.to_string()
+        || values[4] != certificate.candidate_count.to_string()
+        || values[5] != certificate.events.len().to_string()
+        || values[16..] != ["true", "true", "ok"]
+    {
+        return Err("causal metrics disagree with the certificate".to_string());
+    }
+    for index in [6usize, 10, 11, 12, 13] {
+        values[index]
+            .parse::<u128>()
+            .map_err(|_| "causal metrics contain an invalid integer".to_string())?;
+    }
+    if values[6] == "0" || !matches!(values[7], "true" | "false") {
+        return Err("causal metrics contain an invalid query result".to_string());
+    }
+    for index in [8usize, 9] {
+        if values[index] != "none" {
+            values[index]
+                .parse::<usize>()
+                .map_err(|_| "causal metrics contain an invalid CQ bound".to_string())?;
+        }
+    }
+    if (values[7] == "true" && (values[8] == "none" || values[9] == "none"))
+        || (values[7] == "false" && values[9] != "none")
+    {
+        return Err("causal metrics contain inconsistent CQ admission data".to_string());
+    }
+    for index in [14usize, 15] {
+        let value = values[index]
+            .parse::<f64>()
+            .map_err(|_| "causal metrics contain an invalid ratio".to_string())?;
+        if !value.is_finite() || value < 0.0 {
+            return Err("causal metrics contain an invalid ratio".to_string());
+        }
+    }
+    verify_causal_certificate(input, &bundle.join("causal-certificate.txt"))?;
+    println!(
+        "causal-bundle-verify status=VALID bundle={}",
+        bundle.display()
+    );
+    Ok(())
+}
+
+fn explain_aiger_counterexample(
+    input: &Path,
+    requested_horizon: usize,
+    max_bound_bits: usize,
+    output_dir: &Path,
+) -> Result<(), String> {
+    if output_dir.exists() {
+        return Err(format!(
+            "causal output directory already exists: {}",
+            output_dir.display()
+        ));
+    }
+    let model = parse_aag(input)?;
+    if model.inputs.is_empty() {
+        return Err("causal analysis requires at least one primary input".to_string());
+    }
+    let CausalProblem {
+        encoding,
+        run,
+        clauses,
+        fixed,
+    } = causal_base_formula(&model, requested_horizon)?;
+    let query_index = run.first_sat_query.unwrap();
+    let query = &encoding.queries[query_index];
+    let witness = run.first_witness.as_ref().unwrap();
+    let events = causal_events_from_witness(&model, witness, query.frame);
+    if events.is_empty() || events.len() > CAUSAL_MAX_EVENTS {
+        return Err(format!(
+            "causal analysis event count {} is outside supported range 1..={CAUSAL_MAX_EVENTS}",
+            events.len()
+        ));
+    }
+    // Includes minimisation, its explicit 1-minimality pass, and the two
+    // independent certificate verifications performed before publication.
+    let maximum_queries = events
+        .len()
+        .checked_mul(4)
+        .and_then(|value| value.checked_add(3))
+        .ok_or_else(|| "causal query count overflow".to_string())?;
+    ensure_causal_query_work(encoding.variables, clauses.len(), maximum_queries)?;
+
+    let mut persistent = Solver::new();
+    add_to_varisat(&mut persistent, &clauses);
+    let mut cq_compile_ns = 0u128;
+    let mut cq_bound_bits = None;
+    let mut compiled = None;
+    let mut scratch = None;
+    if encoding.variables <= CAUSAL_CQ_MAX_VARIABLES && clauses.len() <= CAUSAL_CQ_MAX_CLAUSES {
+        let order = min_fill_order(encoding.variables, &clauses);
+        let bound = continuation_frontier_bound_bits(encoding.variables, &clauses, &order);
+        cq_bound_bits = Some(bound);
+        if bound <= max_bound_bits {
+            let start = Instant::now();
+            let value = compile_continuation(&clauses, &order);
+            cq_compile_ns = start.elapsed().as_nanos();
+            scratch = Some(ContinuationScratch::new(&value));
+            compiled = Some(value);
+        }
+    }
+    let mut metrics = CausalMetrics {
+        queries: 0,
+        fresh_cdcl_ns: 0,
+        persistent_cdcl_ns: 0,
+        cq_ns: 0,
+        cq_compile_ns,
+        cq_bound_bits,
+        cq_peak_classes: compiled.as_ref().map(|value| value.peak_classes),
+        cq_admitted: compiled.is_some(),
+    };
+    let active = minimize_causal_events(events.len(), |active| {
+        let assumptions = causal_assumptions(&model, encoding.variables, &fixed, &events, active)?;
+        let fresh_start = Instant::now();
+        let fresh_sat = solve_causal_fresh(&clauses, &assumptions)?;
+        metrics.fresh_cdcl_ns += fresh_start.elapsed().as_nanos();
+        let persistent_start = Instant::now();
+        let persistent_sat = solve_causal_persistent(&mut persistent, &assumptions)?;
+        metrics.persistent_cdcl_ns += persistent_start.elapsed().as_nanos();
+        if fresh_sat != persistent_sat {
+            return Err("fresh and persistent CDCL disagree on causal intervention".to_string());
+        }
+        if let (Some(compiled), Some(scratch)) = (compiled.as_ref(), scratch.as_mut()) {
+            let cq_start = Instant::now();
+            let cq_sat = query_continuation(compiled, &assumptions, scratch).is_some();
+            metrics.cq_ns += cq_start.elapsed().as_nanos();
+            if cq_sat != fresh_sat {
+                return Err("CQ and CDCL disagree on causal intervention".to_string());
+            }
+        }
+        metrics.queries += 1;
+        Ok(!fresh_sat)
+    })?;
+    let retained = events
+        .iter()
+        .zip(&active)
+        .filter_map(|(event, &active)| active.then_some(event.clone()))
+        .collect::<Vec<_>>();
+    let certificate = CausalCertificate {
+        input_sha256: sha256_file(input)?,
+        requested_horizon,
+        bad_frame: query.frame,
+        bad_output: query.output,
+        bad_output_name: model.output_names[query.output].clone(),
+        candidate_count: events.len(),
+        events: retained,
+    };
+    let cq_query_ratio = if metrics.cq_admitted {
+        metrics.persistent_cdcl_ns as f64 / metrics.cq_ns.max(1) as f64
+    } else {
+        0.0
+    };
+    let cq_amortized_ratio = if metrics.cq_admitted {
+        metrics.persistent_cdcl_ns as f64
+            / metrics.cq_ns.saturating_add(metrics.cq_compile_ns).max(1) as f64
+    } else {
+        0.0
+    };
+    let metrics_body = format!(
+        "{CAUSAL_METRICS_HEADER}\n{},{requested_horizon},{},{},{},{},{},{},{},{},{},{},{},{},{cq_query_ratio:.6},{cq_amortized_ratio:.6},true,true,ok\n",
+        certificate.input_sha256,
+        query.frame,
+        query.output,
+        events.len(),
+        certificate.events.len(),
+        metrics.queries,
+        metrics.cq_admitted,
+        metrics
+            .cq_bound_bits
+            .map_or_else(|| "none".to_string(), |value| value.to_string()),
+        metrics
+            .cq_peak_classes
+            .map_or_else(|| "none".to_string(), |value| value.to_string()),
+        metrics.cq_compile_ns,
+        metrics.cq_ns,
+        metrics.persistent_cdcl_ns,
+        metrics.fresh_cdcl_ns,
+    );
+    let parent = causal_output_parent(output_dir);
+    fs::create_dir_all(parent).map_err(|error| format!("create causal output parent: {error}"))?;
+    let name = output_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "causal output directory requires a valid final component".to_string())?;
+    let staging = parent.join(format!(".{name}.stage-{}", std::process::id()));
+    if staging.exists() {
+        return Err(format!(
+            "causal staging directory already exists: {}",
+            staging.display()
+        ));
+    }
+    fs::create_dir(&staging)
+        .map_err(|error| format!("create causal staging directory: {error}"))?;
+    let publish = (|| {
+        let certificate_path = staging.join("causal-certificate.txt");
+        let metrics_path = staging.join("causal-metrics.csv");
+        write_causal_file(
+            &certificate_path,
+            causal_certificate_body(input, &model, &certificate)?.as_bytes(),
+        )?;
+        write_causal_file(&metrics_path, metrics_body.as_bytes())?;
+        verify_causal_certificate(input, &certificate_path)?;
+        let manifest = format!(
+            "causal_bundle_version=1\ninput_sha256={}\ncertificate=causal-certificate.txt\ncertificate_sha256={}\nmetrics=causal-metrics.csv\nmetrics_sha256={}\n",
+            certificate.input_sha256,
+            sha256_file(&certificate_path)?,
+            sha256_file(&metrics_path)?,
+        );
+        write_causal_file(&staging.join("causal-manifest.txt"), manifest.as_bytes())?;
+        verify_causal_bundle(input, &staging)?;
+        sync_causal_directory(&staging)?;
+        rename_causal_bundle_noreplace(&staging, output_dir)?;
+        sync_causal_directory(parent)
+    })();
+    if publish.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    publish?;
+    println!(
+        "causal-explanation status=VALID target={}@{} candidates={} causes={} queries={} cq_admitted={} bundle={}",
+        model.output_names[query.output],
+        query.frame,
+        events.len(),
+        certificate.events.len(),
+        metrics.queries,
+        metrics.cq_admitted,
+        output_dir.display(),
+    );
+    Ok(())
+}
+
 fn report_csv_field(value: &str) -> String {
     if value
         .chars()
@@ -15328,6 +16216,44 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         return Ok(false);
     };
     match command {
+        "explain-aiger-counterexample" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat explain-aiger-counterexample INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT_DIR".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal analysis horizon".to_string())?;
+            if horizon == 0 {
+                return Err("causal analysis horizon must be at least one".to_string());
+            }
+            let max_bound_bits = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal CQ frontier bound".to_string())?;
+            if max_bound_bits > 20 {
+                return Err("causal CQ frontier bound must not exceed 20 bits".to_string());
+            }
+            explain_aiger_counterexample(
+                Path::new(&args[1]),
+                horizon,
+                max_bound_bits,
+                Path::new(&args[4]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-causal-bundle" => {
+            if args.len() != 3 {
+                return Err("usage: continuation-quotient-sat verify-aiger-causal-bundle INPUT.aag OUTPUT_DIR".to_string());
+            }
+            verify_causal_bundle(Path::new(&args[1]), Path::new(&args[2]))?;
+            Ok(true)
+        }
+        "verify-aiger-causal-certificate" => {
+            if args.len() != 3 {
+                return Err("usage: continuation-quotient-sat verify-aiger-causal-certificate INPUT.aag CERTIFICATE.cert".to_string());
+            }
+            verify_causal_certificate(Path::new(&args[1]), Path::new(&args[2]))?;
+            Ok(true)
+        }
         "benchmark-continuation-quotients" => {
             if args.len() != 7 {
                 return Err("usage: layered-sat benchmark-continuation-quotients FAMILY VARS RATIO SEED STRATEGIES OUTPUT.csv".to_string());
@@ -23816,6 +24742,123 @@ mod tests {
         assert!(result.contains("frame,latch_bits_low_to_high,input_bits_low_to_high\n"));
         assert!(result.contains("0,0,1\n"));
         assert!(result.contains("1,1,"));
+    }
+
+    #[test]
+    fn causal_minimizer_returns_a_verified_one_minimal_cause() {
+        let stem = format!("cq-sat-causal-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aag"));
+        let bundle = std::env::temp_dir().join(format!("{stem}.bundle"));
+        let certificate = bundle.join("causal-certificate.txt");
+        let metrics = bundle.join("causal-metrics.csv");
+        fs::write(
+            &input,
+            "aag 4 2 1 1 1\n2\n4\n6 6 0\n8\n8 2 4\ni0 left_request\ni1 right_request\no0 simultaneous_request\n",
+        )
+        .unwrap();
+        explain_aiger_counterexample(&input, 1, 16, &bundle).unwrap();
+        verify_causal_bundle(&input, &bundle).unwrap();
+        verify_causal_certificate(&input, &certificate).unwrap();
+        let report = fs::read_to_string(&certificate).unwrap();
+        let measurements = fs::read_to_string(&metrics).unwrap();
+        assert!(report.contains("bad_output_name=simultaneous_request\n"));
+        assert!(report.contains("candidate_count=2\n"));
+        assert!(report.contains("cause_count=2\n"));
+        assert!(report.contains("minimality=1-minimal\n"));
+        assert!(measurements.contains(",true,true,ok\n"));
+
+        let wrong_name = report.replace(
+            "bad_output_name=simultaneous_request",
+            "bad_output_name=unrelated_output",
+        );
+        fs::write(&certificate, wrong_name).unwrap();
+        assert!(verify_causal_certificate(&input, &certificate).is_err());
+        fs::write(&certificate, &report).unwrap();
+
+        let mut tampered = report.replace("cause_1=1,0,0,1", "cause_1=1,0,0,0");
+        if tampered == report {
+            tampered = report.replace("cause_0=0,0,0,1", "cause_0=0,0,0,0");
+        }
+        fs::write(&certificate, tampered).unwrap();
+        assert!(verify_causal_certificate(&input, &certificate).is_err());
+        assert!(verify_causal_bundle(&input, &bundle).is_err());
+        std::fs::remove_file(input).unwrap();
+        std::fs::remove_dir_all(bundle).unwrap();
+    }
+
+    #[test]
+    fn causal_bundle_rejects_overwrite_and_tampered_metrics() {
+        let stem = format!("cq-sat-causal-bundle-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aag"));
+        let bundle = std::env::temp_dir().join(format!("{stem}.bundle"));
+        fs::write(
+            &input,
+            "aag 4 2 1 1 1\n2\n4\n6 6 0\n8\n8 2 4\ni0 left_request\ni1 right_request\no0 simultaneous_request\n",
+        )
+        .unwrap();
+        explain_aiger_counterexample(&input, 1, 16, &bundle).unwrap();
+        assert!(
+            explain_aiger_counterexample(&input, 1, 16, &bundle)
+                .unwrap_err()
+                .contains("already exists")
+        );
+        let original_metrics = fs::read_to_string(bundle.join("causal-metrics.csv")).unwrap();
+        fs::write(bundle.join("causal-metrics.csv"), "tampered\n").unwrap();
+        assert!(verify_causal_bundle(&input, &bundle).is_err());
+        fs::write(bundle.join("causal-metrics.csv"), original_metrics).unwrap();
+        assert!(verify_causal_bundle(&input, &bundle).is_ok());
+
+        fs::write(bundle.join("unexpected.txt"), "unexpected\n").unwrap();
+        assert!(verify_causal_bundle(&input, &bundle).is_err());
+        fs::remove_file(bundle.join("unexpected.txt")).unwrap();
+
+        let changed_input = std::env::temp_dir().join(format!("{stem}-changed.aag"));
+        fs::write(
+            &changed_input,
+            "aag 4 2 1 1 1\n2\n4\n6 6 0\n8\n8 2 4\ni0 left_request\ni1 right_request\no0 renamed_output\n",
+        )
+        .unwrap();
+        assert!(verify_causal_bundle(&changed_input, &bundle).is_err());
+        std::fs::remove_file(input).unwrap();
+        std::fs::remove_file(changed_input).unwrap();
+        std::fs::remove_dir_all(bundle).unwrap();
+    }
+
+    #[test]
+    fn causal_analysis_rejects_models_without_primary_inputs_without_publishing() {
+        let stem = format!("cq-sat-causal-no-input-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aag"));
+        let bundle = std::env::temp_dir().join(format!("{stem}.bundle"));
+        fs::write(&input, "aag 1 0 1 1 0\n2 2\n2\n").unwrap();
+        assert!(
+            explain_aiger_counterexample(&input, 1, 16, &bundle)
+                .unwrap_err()
+                .contains("at least one primary input")
+        );
+        assert!(!bundle.exists());
+        std::fs::remove_file(input).unwrap();
+    }
+
+    #[test]
+    fn causal_relative_output_uses_the_current_directory_as_its_parent() {
+        assert_eq!(
+            causal_output_parent(Path::new("causal-bundle")),
+            Path::new(".")
+        );
+        assert_eq!(
+            causal_output_parent(Path::new("nested/causal-bundle")),
+            Path::new("nested")
+        );
+    }
+
+    #[test]
+    fn causal_minimizer_rejects_a_non_forcing_observation_set() {
+        let result = minimize_causal_events(2, |_| Ok(false));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("do not force the target failure")
+        );
     }
 
     #[test]

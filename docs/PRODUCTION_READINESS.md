@@ -25,6 +25,10 @@ tool production-grade.
   signatures and exit meanings. Direct AIGER input is bounded to 256 MiB.
 - CI executes 25,000 deterministic mutations over persistent AIGER,
   assumptions, project-config, and CLI parser regression corpora.
+- Certified causal analysis has exact segment semantics, conservative resource
+  limits, three-way CQ/persistent-CDCL/fresh-CDCL agreement, a replaying
+  certificate verifier, and durable atomic no-clobber evidence bundles. Its
+  research novelty and external RTL usefulness remain unvalidated.
 - A revision-pinned public corpus combines five unmodified Yosys RTL sources
   with twelve separately owned properties (six SAFE and six UNSAFE). All twelve
   match expected results on Yosys 0.67+post and digest-pinned Yosys 0.36; the

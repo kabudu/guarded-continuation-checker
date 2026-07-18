@@ -565,6 +565,33 @@ Peterson and SPI fixtures, yielding a measured no-regression selection on this
 corpus. This is a bounded engineering result, not evidence that reuse universally
 dominates BMC.
 
+## Certified causal counterexample analysis
+
+The causal extension asks a different question after an unsafe result: which
+maximal constant segments of the observed primary-input waveforms are sufficient
+to make the same named output fail at the original counterexample's earliest
+frame? A deterministic deletion pass produces a 1-minimal answer, and a
+replaying verifier rebuilds the bounded model and re-proves sufficiency and
+every single-event removal.
+
+Two checked-in v1 evidence bundles record the first predeclared examples. The
+infusion-pump regression has four candidate segments and a two-segment cause at
+frame 1. CQ was structurally admitted with a four-bit frontier and answered the
+seven intervention queries 1.30x faster than persistent CDCL, but only 0.031x
+as fast after its compilation cost. The SPI model has 26 candidates and a
+23-segment cause at frame 16. CQ was rejected statically, and the exact CDCL
+fallback completed all 50 queries. Fresh CDCL, persistent CDCL, and CQ agree
+where CQ is admitted; both certificates independently verify. The input-free
+counter fixture is rejected because there can be no primary-input cause.
+
+These are single-run timings from an arm64 macOS host and are illustrative, not
+a performance claim. The useful result is the exact, replayable explanation and
+the fail-closed CQ comparison. The experiment combines established ideas from
+counterexample minimisation, minimal UNSAT reasoning, incremental SAT, and
+causal explanation. The specific waveform-segment, continuation-quotient, and
+machine-verifiable bundle pipeline is a research hypothesis whose scholarly
+novelty still requires a systematic prior-art review and independent evaluation.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
