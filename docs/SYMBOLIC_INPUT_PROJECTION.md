@@ -64,7 +64,9 @@ This establishes a useful exact regime: wide firmware or robotics interfaces
 whose individual safety property has a narrow input cone. It does not establish
 an advantage for controllers whose transition/property support is itself wide.
 
-The next boundary is predicate projection within a genuinely wide support:
-represent correlated input families as certified BDD or SAT-backed predicates
-instead of enumerating all support patterns. Baselines must include persistent
-CDCL and a maintained symbolic model checker, with no per-formula calibration.
+The next boundary is predicate projection within a genuinely wide support. A
+first bounded exact BDD prototype is documented in
+[`DENSE_PREDICATE_QUOTIENT.md`](DENSE_PREDICATE_QUOTIENT.md): it removes input
+enumeration, composes temporal relations, and recovers witnesses. Promotion
+still requires a maintained symbolic model-checker baseline and broader
+fixtures, with no per-formula calibration.

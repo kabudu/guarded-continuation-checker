@@ -104,7 +104,15 @@ analysis proves that at most eight affect the combined transition/property
 interface. On a 16-input mobile-robot obstacle-stop regression projected to two
 inputs, median end-to-end speedup scales from 2.46x at horizon 8 to 10.74x at
 horizon 64, with complete-input witness lifting and fresh-CDCL replay. Dense
-wide-support predicates remain an open boundary.
+wide-support predicates remain an open boundary for the released portfolio.
+
+The next [dense predicate quotient experiment](docs/DENSE_PREDICATE_QUOTIENT.md)
+replaces explicit enumeration for 9–16 relevant inputs with a bounded exact BDD
+predicate and composes its latch relations across repeated phases. The
+16-input fixture compiles to 159 BDD nodes and reconstructs an exact 32-frame
+trace. Predicate-query amortisation is negative at 1–10 reuses, positive at 100,
+and reaches a 4.36x median workload speedup at 1,000 reuses. This is promising
+prototype evidence, not yet a portfolio or novelty claim.
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

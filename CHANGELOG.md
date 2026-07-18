@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an experimental bounded exact BDD predicate interface for 9–16 relevant
+  AIGER inputs, powered temporal relation composition, original-AIG trace
+  replay, a dense 16-sensor fixture, and a reproducible reuse sweep. Low-reuse
+  results remain negative; 100 and 1,000 reuses show positive amortisation.
+
 ## 0.27.0 - 2026-07-18
 
 - Add exact AIG cone-support projection for CIQ, admitting up to 64 declared
