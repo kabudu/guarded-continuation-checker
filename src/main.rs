@@ -14757,6 +14757,134 @@ fn query_aiger_predicate_quotient(
     Ok(())
 }
 
+fn benchmark_aiger_predicate_symbolic(
+    input: &Path,
+    horizon: usize,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err(format!(
+            "predicate symbolic horizon exceeds {INTERFACE_QUOTIENT_MAX_HORIZON}"
+        ));
+    }
+    if !(1..=100).contains(&repeats) {
+        return Err("predicate symbolic repeats must be in 1..=100".to_string());
+    }
+    let canonical = input
+        .canonicalize()
+        .map_err(|error| format!("canonicalize predicate symbolic input: {error}"))?;
+    let path = canonical.to_string_lossy();
+    if !path
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || "/._-".contains(character))
+    {
+        return Err("predicate symbolic input path contains unsupported characters".to_string());
+    }
+    let model = parse_aag(&canonical)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err(
+            "predicate symbolic benchmark requires declared initial latch values".to_string(),
+        );
+    }
+    let output_name = model
+        .output_names
+        .first()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "predicate symbolic benchmark requires a named output zero".to_string())?;
+    if !output_name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || "_.$".contains(character))
+    {
+        return Err("predicate symbolic output name contains unsupported characters".to_string());
+    }
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let compile_start = Instant::now();
+    let mut quotient = PredicateQuotient::new(&model)?;
+    let predicate_compile_ns = compile_start.elapsed().as_nanos();
+    let constraints = vec![vec![None; quotient.interface.projected_inputs.len()]; horizon + 1];
+    let query_start = Instant::now();
+    for _ in 0..repeats {
+        let witness = quotient
+            .query(initial_state, 0, &constraints)?
+            .ok_or_else(|| {
+                "predicate quotient unexpectedly found the output unavoidable".to_string()
+            })?;
+        if !validate_predicate_witness(
+            &model,
+            &quotient.interface.projected_inputs,
+            0,
+            &constraints,
+            &witness,
+        ) {
+            return Err("predicate quotient witness failed original-AIG replay".to_string());
+        }
+    }
+    let predicate_query_ns = query_start.elapsed().as_nanos();
+
+    let mut script = format!("read_aiger {path}; hierarchy -auto-top;");
+    for _ in 0..repeats {
+        script.push_str(&format!(
+            " sat -seq {} -set-at {} {} 0;",
+            horizon + 1,
+            horizon + 1,
+            output_name
+        ));
+    }
+    let yosys_start = Instant::now();
+    let yosys = Command::new("yosys")
+        .args(["-Q", "-p", &script])
+        .output()
+        .map_err(|error| format!("run maintained Yosys symbolic baseline: {error}"))?;
+    let yosys_ns = yosys_start.elapsed().as_nanos();
+    if !yosys.status.success() {
+        return Err(format!(
+            "maintained Yosys symbolic baseline failed: {}",
+            String::from_utf8_lossy(&yosys.stderr)
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&yosys.stdout);
+    let models = stdout
+        .matches("SAT solving finished - model found:")
+        .count();
+    if models != repeats {
+        return Err(format!(
+            "maintained Yosys symbolic baseline returned {models} SAT results; expected {repeats}"
+        ));
+    }
+    let predicate_total_ns = predicate_compile_ns.saturating_add(predicate_query_ns);
+    let body = format!(
+        "predicate_symbolic_schema_version,input_sha256,horizon,repeats,relevant_inputs,bdd_nodes,predicate_compile_ns,predicate_query_ns,predicate_total_ns,yosys_version,yosys_total_ns,yosys_over_predicate_speedup,agreement,witness_valid,status\n1,{},{horizon},{repeats},{},{},{predicate_compile_ns},{predicate_query_ns},{predicate_total_ns},{},{yosys_ns},{:.6},true,true,ok\n",
+        sha256_file(&canonical)?,
+        quotient.interface.projected_inputs.len(),
+        quotient.interface.manager.nodes.len(),
+        report_csv_field(
+            &String::from_utf8_lossy(
+                &Command::new("yosys")
+                    .arg("-V")
+                    .output()
+                    .map_err(|error| format!("read Yosys version: {error}"))?
+                    .stdout
+            )
+            .trim()
+            .replace(',', ";")
+        ),
+        yosys_ns as f64 / predicate_total_ns.max(1) as f64
+    );
+    publish_causal_comparison(output, body.as_bytes())?;
+    println!(
+        "predicate-symbolic status=VALID agreement=true witness_valid=true output={}",
+        output.display()
+    );
+    Ok(())
+}
+
 fn benchmark_aiger_interface_quotient(
     input: &Path,
     horizon: usize,
@@ -19226,6 +19354,24 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .parse::<usize>()
                 .map_err(|_| "invalid predicate quotient output index".to_string())?;
             query_aiger_predicate_quotient(Path::new(&args[1]), horizon, output)?;
+            Ok(true)
+        }
+        "benchmark-aiger-predicate-symbolic" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-symbolic INPUT.aag|INPUT.aig HORIZON REPEATS OUTPUT.csv".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate symbolic horizon".to_string())?;
+            let repeats = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate symbolic repeat count".to_string())?;
+            benchmark_aiger_predicate_symbolic(
+                Path::new(&args[1]),
+                horizon,
+                repeats,
+                Path::new(&args[4]),
+            )?;
             Ok(true)
         }
         "benchmark-continuation-quotients" => {
@@ -27907,6 +28053,26 @@ mod tests {
 
         constraints[horizon][15] = Some(true);
         assert!(quotient.query(0, 0, &constraints).unwrap().is_none());
+    }
+
+    #[test]
+    fn predicate_symbolic_baseline_agrees_when_yosys_is_available() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping predicate symbolic baseline because Yosys is unavailable");
+            return;
+        }
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/mobile-robot/firmware/dense-sensor-consensus.aag");
+        let output = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-symbolic-{}.csv",
+            std::process::id()
+        ));
+        benchmark_aiger_predicate_symbolic(&input, 2, 1, &output).unwrap();
+        let report = fs::read_to_string(&output).unwrap();
+        fs::remove_file(output).unwrap();
+        assert_eq!(report.lines().count(), 2);
+        assert!(report.contains(",true,true,ok\n"));
+        assert!(report.lines().all(|line| line.split(',').count() == 15));
     }
 
     #[test]

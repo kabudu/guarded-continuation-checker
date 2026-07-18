@@ -41,7 +41,13 @@ continuation-quotient-sat query-aiger-predicate-quotient \
 ## Evidence boundary
 
 This cycle establishes compact exact representation, temporal composition, and
-witness recovery on controlled fixtures. It does not yet establish performance
-against a maintained symbolic model checker, broad controller generality, or
-scholarly novelty. Those remain release gates for promoting this backend into
-the default CQ-SAT/GCC portfolio.
+witness recovery on controlled fixtures. The
+`benchmark-aiger-predicate-symbolic` command runs the identical existential
+bounded query through maintained Yosys as an external agreement and workload
+baseline. Its process-level timing includes Yosys startup and must not be
+presented as an in-process query comparison. On ten 32-frame trials with ten
+queries per trial, all answers agreed and all CQ-SAT witnesses replayed; the
+end-to-end Yosys/predicate time ratio ranged from 262.30x to 407.55x, with a
+394.73x median. Most of this gap is process and generic-model setup overhead.
+Broad controller generality and scholarly novelty remain release gates for
+promoting this backend into the default CQ-SAT/GCC portfolio.

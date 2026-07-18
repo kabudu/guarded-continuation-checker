@@ -113,6 +113,9 @@ predicate and composes its latch relations across repeated phases. The
 trace. Predicate-query amortisation is negative at 1–10 reuses, positive at 100,
 and reaches a 4.36x median workload speedup at 1,000 reuses. This is promising
 prototype evidence, not yet a portfolio or novelty claim.
+An external maintained-Yosys bounded-query check also agrees across ten trials;
+its process-level timing is reported separately and is not treated as an
+in-process solver comparison.
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

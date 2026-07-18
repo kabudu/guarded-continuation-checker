@@ -26,8 +26,9 @@ predeclared baselines, repeated trials, and claim-bounded documentation.
    exact transition/property support. A 16-input mobile-robot controller with a
    two-input cone shows a robust 2.46x–10.74x median scaling curve. Dense-support
    predicate projection remains open in the released portfolio. A bounded
-   exact BDD prototype now handles 9–16 relevant inputs, powers relations, and
-   recovers traces; maintained symbolic-baseline evidence remains outstanding.
+   exact BDD prototype now handles 9–16 relevant inputs, powers relations,
+   recovers traces, and agrees with an external Yosys bounded query. Broader
+   controller evidence remains outstanding.
 
 3. **Proof-carrying interface composition.** Emit independently checkable
    certificates for leaf projection, relational composition, semantic no-op
