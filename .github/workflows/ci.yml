@@ -52,6 +52,8 @@ jobs:
             verify-aiger-causal-bundle \
             examples/products/infusion-pump/firmware/door-interlock-regression.aag \
             results/causal-analysis-v1/infusion-pump
+          scripts/test-causal-strategy-results.sh \
+            target/release/continuation-quotient-sat
       - name: Cross-check RTL examples with SymbiYosys
         working-directory: examples/products/infusion-pump/rtl
         run: |

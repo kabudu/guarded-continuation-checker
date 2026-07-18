@@ -592,6 +592,29 @@ causal explanation. The specific waveform-segment, continuation-quotient, and
 machine-verifiable bundle pipeline is a research hypothesis whose scholarly
 novelty still requires a systematic prior-art review and independent evaluation.
 
+## Closest-method causal comparison
+
+The first closest-method experiment compares ordered deletion with the
+established QuickXplain divide-and-conquer algorithm. Every discovery query is
+answered by fresh CDCL, recorded, then replayed identically through persistent
+CDCL and CQ when structurally admitted. A separate validation phase checks
+sufficiency and each retained event's necessity. All eight rows agree and are
+1-minimal.
+
+QuickXplain reduces discovery queries from 17 to 10 for a controlled sparse
+2-of-16 cause. It loses to deletion on the dense control (32 versus 17),
+infusion pump (8 versus 5), and SPI (52 versus 27). This is the expected
+sparsity tradeoff, not a new minimisation result. Persistent CDCL beats fresh
+solver construction in all rows.
+
+CQ is admitted in six rows and is 1.77x--5.82x faster for query replay alone.
+Preparation dominates: total CQ speed is only 0.017x--0.099x persistent CDCL,
+so every admitted row loses after compilation. The comparison refutes an
+amortised performance claim for current causal workloads. What remains
+potentially distinctive is the exact waveform-segment intervention model,
+CQ/CDCL cross-check, and replay-verified evidence pipeline as a combination;
+scholarly novelty is still unproven.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.

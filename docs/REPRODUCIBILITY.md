@@ -40,6 +40,19 @@ The verifier re-solves sufficiency and every 1-minimality obligation. Timing
 fields are observations from the originating host and are not expected to match.
 See [causal evidence bundle v1](CAUSAL_BUNDLE_V1.md) for the exact contract.
 
+Compare deletion and QuickXplain on the identical intervention workload:
+
+```sh
+target/release/continuation-quotient-sat \
+  benchmark-aiger-causal-strategies \
+  examples/aiger/causal-sparse-16.aag \
+  1 16 target/causal-sparse-strategies.csv
+```
+
+Repeat with `causal-dense-16.aag`, the infusion-pump regression at horizon 8,
+and the SPI fixture at horizon 16 to reproduce the cohort described in
+[the closest-method comparison](CAUSAL_STRATEGY_COMPARISON.md).
+
 ## Modular DIMACS result
 
 ```sh

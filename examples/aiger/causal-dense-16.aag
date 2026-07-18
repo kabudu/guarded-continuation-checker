@@ -1,0 +1,52 @@
+aag 32 16 1 1 15
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+22
+24
+26
+28
+30
+32
+34 34
+64
+36 2 4
+38 36 6
+40 38 8
+42 40 10
+44 42 12
+46 44 14
+48 46 16
+50 48 18
+52 50 20
+54 52 22
+56 54 24
+58 56 26
+60 58 28
+62 60 30
+64 62 32
+i0 required_00
+i1 required_01
+i2 required_02
+i3 required_03
+i4 required_04
+i5 required_05
+i6 required_06
+i7 required_07
+i8 required_08
+i9 required_09
+i10 required_10
+i11 required_11
+i12 required_12
+i13 required_13
+i14 required_14
+i15 required_15
+l0 fixed_state
+o0 dense_failure

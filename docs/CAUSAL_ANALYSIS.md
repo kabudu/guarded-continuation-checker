@@ -49,6 +49,8 @@ target/release/continuation-quotient-sat \
 The exact file and validation contract is specified in
 [Causal evidence bundle v1](CAUSAL_BUNDLE_V1.md). For a self-contained run, use
 `scripts/run-causal-analysis.sh INPUT.aag OUTPUT_DIR [HORIZON] [MAX_BOUND_BITS]`.
+The separate [closest-method comparison](CAUSAL_STRATEGY_COMPARISON.md) explains
+how deletion and QuickXplain are compared without claiming either as new.
 
 `MAX_BOUND_BITS` controls the CQ admission threshold and cannot exceed 20. A
 rejected quotient does not weaken correctness: persistent and fresh CDCL remain

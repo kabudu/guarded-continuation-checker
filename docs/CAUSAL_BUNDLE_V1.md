@@ -18,6 +18,8 @@ causal-metrics.csv
 The producer refuses to overwrite an existing output path. It writes and
 verifies a sibling staging directory before one atomic rename publishes the
 bundle. A failed generation does not publish a successful-looking bundle.
+Atomic no-clobber publication is supported on Linux, Android, and macOS and
+fails closed on other operating systems.
 
 All files are UTF-8 text, no file may exceed 1 MiB, and symbolic links,
 subdirectories, missing files, and additional files are rejected.
