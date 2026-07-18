@@ -4,6 +4,11 @@ This roadmap turns CQ-SAT/GCC into a sequence of falsifiable research cycles.
 Items move forward only with exact agreement, reconstructed witnesses,
 predeclared baselines, repeated trials, and claim-bounded documentation.
 
+The authoritative gates for the programme's higher bar are the
+[production-readiness](PRODUCTION_READINESS_GAP.md) and
+[novelty](NOVELTY_GAP.md) gap registers. A bounded research release does not
+close either register by itself.
+
 ## Programme principles
 
 - Firmware and embedded verification remain the primary domain.

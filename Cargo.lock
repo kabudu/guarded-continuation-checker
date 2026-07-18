@@ -51,6 +51,7 @@ dependencies = [
  "libc",
  "sha2",
  "varisat",
+ "varisat-checker",
 ]
 
 [[package]]

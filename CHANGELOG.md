@@ -2,6 +2,91 @@
 
 ## Unreleased
 
+- Add authoritative production-readiness and novelty gap registers, with
+  measurable closure gates and a scoped proof-carrying predicate-composition
+  candidate contribution grounded against closest certifying-model-checking
+  methods.
+- Freeze the candidate dense predicate certificate v1 contract, including
+  deterministic phase relations, source binding, positive trace evidence,
+  negative terminal-set evidence, an independent exhaustive checking algorithm
+  and explicit fail-closed limits.
+- Add the certificate verifier's independent trusted core: separate AIG support
+  analysis, exhaustive transition/property evaluation, one-step relations,
+  deterministic powers, composition and terminal safe-state reconstruction,
+  cross-checked against the BDD producer on all three product controllers.
+- Add strict self-service `certify-aiger-predicate` and
+  `verify-aiger-predicate-certificate` commands for positive and negative
+  certificate v1 results, with deterministic source/phase/terminal evidence,
+  direct-AIG replay, atomic publication and structural, semantic, canonical-text
+  and symlink tamper rejection.
+- Add counterfactual portfolio v1: a no-overwrite self-service command and
+  versioned report that selects independently verified predicate certificates
+  through the calibration-free static gate, preserves exact persistent-CDCL
+  fallback on rejection or bounded predicate failure, and regression-tests
+  both avoidable and unavoidable fallback answers.
+- Add the strict `verify-aiger-counterfactual-report` consumer, which recomputes
+  admission and dimensions, binds the complete transcript to independently
+  checked predicate evidence, and re-solves CDCL reports. Restrict fallback to
+  explicit resource errors, add deterministic resource-exhaustion coverage,
+  canonical-report rejection tests, and exercise the admitted certificate
+  contract across all three product-shaped controllers.
+- Add an answer-balanced certificate-cost benchmark with source/transcript
+  bindings and ten preserved release trials per case. Record the negative
+  evidence that proof publication costs 10–13 ms and exhaustive checking reaches
+  136 ms at 16 inputs despite sub-1-KiB certificates, establishing a concrete
+  non-enumerative-checker target without claiming an external-tool comparison.
+- Add a certificate-v2 feasibility experiment that proves every one-step
+  relation through concrete edge witnesses and native Varisat UNSAT completeness
+  proofs checked by `varisat-checker`. Preserve ten trials across the 9/12/16
+  input cohort, including a 280.32x checker speedup at 16 inputs, proof-size and
+  generation tradeoffs, truncation rejection and omitted-edge detection.
+- Extend the v2 feasibility result to terminal safe-state evidence: concrete
+  safe witnesses plus one checked UNSAT completeness proof, omitted-safe-state
+  detection, and six preserved unconstrained/constrained cohorts. Retain the
+  negative easy-terminal rows and the 26.20x constrained 16-input speedup.
+- Add the bounded canonical predicate certificate v2 producer and independent
+  verifier. Bind ordered edge witnesses, per-source native UNSAT proofs,
+  deterministic powered phases, terminal witnesses/proof and the final trace;
+  enforce individual/aggregate proof and artifact limits; cover deterministic
+  output, both answer classes, all product widths, changing phases and semantic,
+  proof, source, ordering and canonical-text tampering. Keep v1 as the portfolio
+  format pending v2 hardening and cost gates.
+- Add an answer-balanced canonical-v2 cost harness and ten preserved release
+  trials per row. V2 reduces the 16-input end-to-end independent check from
+  136.045 ms to 0.831 ms (163.71x), while honestly retaining its 33–39 ms
+  production cost, 9.7–52.1 KiB artifacts and 1.38–5.89x verification overhead
+  against the exact CDCL control.
+- Add the certificate-v2 reliability boundary and deterministic robustness
+  corpus: 5,000 parser transformations, bounded-file/proof cases and 128 native
+  proof transformations. Structurally preflight proof integers, dimensions,
+  lists and termination before the third-party checker and convert unexpected
+  dependency failures into fail-closed verification errors.
+- Freeze predicate CLI contract v1 with a strict machine-readable version query
+  declaring certificate/proof formats and bounded dimensions. Stabilise command
+  arguments and exit meanings, distinguish the portfolio's v1 format from
+  explicit v2 operation, and define migration plus a multi-release deprecation
+  window.
+- Add predicate Rust API v1: a typed, shell-free client that discovers and
+  validates CLI capabilities, separates avoidable/unavoidable results from
+  operational failures, and produces or checks certificate v1/v2 artifacts.
+  Exercise it as a separate downstream-style integration-test crate against the
+  real built executable and product fixture.
+- Add configurable per-invocation governance to predicate Rust API v1: a
+  five-minute/1-MiB default, validated custom deadlines and 1-B–64-MiB stream
+  caps, concurrent bounded output collection, and stable typed timeout and
+  output-limit failures. Preserve operating-system memory/process-tree controls
+  as an explicit remaining deployment gate.
+- Add predicate invocation metrics schema v1. Observed discovery,
+  certification and verification return duration, stream sizes, configured
+  limits, exit status and a stable failure class on both success and error
+  paths, with canonical privacy-preserving CSV rows for build/fleet aggregation.
+- Extend predicate API governance to the operating-system boundary. Unix jobs
+  run in isolated process groups with complete-group deadline termination and
+  configurable file ceilings; supported non-macOS Unix targets add a 2-GiB
+  default configurable address-space ceiling. Metrics report which controls
+  were enforced, while macOS remains explicitly unavailable for hard memory
+  evidence.
+
 ## 0.28.0 - 2026-07-18
 
 - Add an experimental bounded exact BDD predicate interface for 9–16 relevant

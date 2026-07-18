@@ -17,6 +17,11 @@ states reconstruct complete assignments.
 This is a research release, not a general-purpose replacement for CDCL SAT
 solvers and not evidence that P = NP.
 
+The project does not currently claim production readiness or scholarly novelty.
+Those higher bars are tracked explicitly in the
+[production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
+[novelty](docs/NOVELTY_GAP.md) gap registers.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual
@@ -74,6 +79,63 @@ and persistent CDCL. Results are published as an atomic, SHA-256-bound
 [causal evidence bundle v1](docs/CAUSAL_BUNDLE_V1.md). This is a precisely
 bounded experiment, not a claim that counterexample minimisation or causal
 explanation is new.
+
+The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
+single exact evaluation command over partial AIGER input transcripts. Its
+timing-free structural gate selects the independently checked dense predicate
+certificate backend only inside the measured regime and otherwise preserves the
+query through persistent-CDCL fallback. It is a bounded research contract, not
+a production interface.
+
+The answer-balanced [predicate certificate cost experiment](docs/PREDICATE_CERTIFICATE_COST.md)
+shows that raw predicate queries are competitive on the admitted cohort, while
+certificate publication and exhaustive checking are currently much more
+expensive than CDCL. All raw trials and sub-1-KiB artifact sizes are retained;
+this is a checker-optimisation target, not a hidden positive benchmark.
+
+The follow-up [proof-carrying relation experiment](docs/PREDICATE_PROOF_RELATION_EXPERIMENT.md)
+replaces exhaustive one-step input enumeration with direct edge witnesses and
+independently checked UNSAT completeness proofs. It improves relation checking
+by 280.32x at 16 inputs, with a 20.9-KiB proof tradeoff. This is a certificate-v2
+candidate primitive. Terminal safe-set proofs also preserve exactness, ranging
+from negative easy-case overhead to a 26.20x constrained 16-input speedup. v1
+remains the portfolio format.
+
+The experimental [proof-carrying predicate certificate v2](docs/PREDICATE_CERTIFICATE_V2.md)
+now packages both proof primitives, deterministic phase powers, terminal
+evidence and the final trace into a bounded canonical artifact. Its independent
+verifier avoids the BDD producer and exhaustive input enumeration. On the
+answer-balanced cohort, v2 cuts the 16-input end-to-end check from 136.045 ms to
+0.831 ms (163.71x), at the cost of a 52-KiB artifact and slower production. V1
+remains the portfolio default while process-isolation, checker-diversity and
+broader performance gates are still open. Its documented
+[reliability boundary](docs/PREDICATE_CERTIFICATE_V2_RELIABILITY.md) covers
+corrupted artifacts, structural proof preflight and fail-closed dependency
+errors; cross-checker diversity remains open.
+
+Firmware automation can discover the frozen
+[predicate CLI contract v1](docs/PREDICATE_CLI_V1.md) with
+`predicate-cli-version`. Its single machine-readable line declares supported
+certificate formats, the portfolio format, proof format and all primary v2
+dimension and evidence limits. The contract also fixes argument order, exit
+meanings, migration rules and a multi-release deprecation window.
+
+Rust integrations can use the typed
+[predicate Rust API v1](docs/PREDICATE_RUST_API_V1.md). `PredicateTool` discovers
+and validates a compatible executable, invokes it without a shell, and exposes
+typed v1/v2 production and verification with logical results separated from
+operational errors. The current API intentionally preserves an out-of-process
+boundary for resource governance; it is not yet an in-process verifier. Every
+call now has a configurable deadline and bounded stdout/stderr with typed timeout
+and output-limit errors. Observed API calls return metrics schema v1
+with operation, duration, stream sizes, limits, exit status and a stable failure
+class, plus canonical CSV output for build and fleet aggregation.
+
+Unix API jobs now run in their own process groups and apply a configurable
+file-size ceiling; a deadline ends and reaps the full group. Linux and other
+supported non-macOS Unix targets also apply a configurable address-space ceiling
+(2 GiB by default). macOS reports memory containment as unavailable while
+retaining process-group, deadline, stream and file controls.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,
