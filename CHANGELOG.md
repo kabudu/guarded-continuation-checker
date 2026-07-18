@@ -56,6 +56,11 @@
   136.045 ms to 0.831 ms (163.71x), while honestly retaining its 33–39 ms
   production cost, 9.7–52.1 KiB artifacts and 1.38–5.89x verification overhead
   against the exact CDCL control.
+- Add the certificate-v2 reliability boundary and deterministic robustness
+  corpus: 5,000 parser transformations, bounded-file/proof cases and 128 native
+  proof transformations. Structurally preflight proof integers, dimensions,
+  lists and termination before the third-party checker and convert unexpected
+  dependency failures into fail-closed verification errors.
 
 ## 0.28.0 - 2026-07-18
 

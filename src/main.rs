@@ -9564,21 +9564,140 @@ fn generate_varisat_unsat_proof(clauses: &[Clause]) -> Result<Vec<u8>, String> {
     Ok(proof)
 }
 
-fn verify_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
-    let mut checker = VarisatProofChecker::new();
-    for clause in clauses {
-        let literals = clause
-            .0
-            .iter()
-            .map(|&(variable, positive)| Lit::from_var(Var::from_index(variable), positive))
-            .collect::<Vec<_>>();
-        checker
-            .add_clause(&literals)
-            .map_err(|error| format!("load predicate proof obligation: {error}"))?;
+fn read_predicate_proof_vli(proof: &[u8], offset: &mut usize) -> Result<u64, String> {
+    let start = *offset;
+    let mut marker = None;
+    for byte_index in 0..10 {
+        let byte = *proof
+            .get(start + byte_index)
+            .ok_or_else(|| "predicate native proof has a truncated integer".to_string())?;
+        if byte != 0 {
+            marker = Some(byte_index * 8 + byte.trailing_zeros() as usize);
+            break;
+        }
     }
-    checker
-        .check_proof(proof)
-        .map_err(|error| format!("check predicate proof obligation: {error}"))
+    let marker = marker.ok_or_else(|| "predicate native proof integer is invalid".to_string())?;
+    let encoded_len = marker + 1;
+    if encoded_len > 10 || start + encoded_len > proof.len() {
+        return Err("predicate native proof integer is out of bounds".to_string());
+    }
+    let mut raw = 0u128;
+    for (index, &byte) in proof[start..start + encoded_len].iter().enumerate() {
+        raw |= u128::from(byte) << (index * 8);
+    }
+    let value = raw >> encoded_len;
+    if value > u128::from(u64::MAX) {
+        return Err("predicate native proof integer exceeds u64".to_string());
+    }
+    *offset += encoded_len;
+    Ok(value as u64)
+}
+
+fn preflight_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
+    const CODE_END: u64 = 0x9ac3_391f_4294_c211;
+    const MAX_PROOF_STEPS: usize = 100_000;
+    let max_variable = clauses
+        .iter()
+        .flat_map(|clause| clause.0.iter().map(|&(variable, _)| variable))
+        .max()
+        .unwrap_or(0);
+    let max_literal_code = max_variable
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(1))
+        .ok_or_else(|| "predicate native proof variable bound overflow".to_string())?
+        as u64;
+    let mut offset = 0usize;
+    let mut steps = 0usize;
+    let read_variable = |offset: &mut usize| -> Result<(), String> {
+        let variable = read_predicate_proof_vli(proof, offset)?;
+        if variable > max_variable as u64 {
+            return Err("predicate native proof variable exceeds obligation".to_string());
+        }
+        Ok(())
+    };
+    let read_list = |offset: &mut usize, literals: bool| -> Result<(), String> {
+        let count = read_predicate_proof_vli(proof, offset)?;
+        if count > (proof.len() - *offset) as u64 {
+            return Err("predicate native proof list count exceeds remaining input".to_string());
+        }
+        for _ in 0..count {
+            let value = read_predicate_proof_vli(proof, offset)?;
+            if literals && value > max_literal_code {
+                return Err("predicate native proof literal exceeds obligation".to_string());
+            }
+        }
+        Ok(())
+    };
+    while offset < proof.len() {
+        steps += 1;
+        if steps > MAX_PROOF_STEPS {
+            return Err("predicate native proof step count exceeds limit".to_string());
+        }
+        match read_predicate_proof_vli(proof, &mut offset)? {
+            0 | 2 => {
+                read_variable(&mut offset)?;
+                read_variable(&mut offset)?;
+            }
+            1 | 3 | 4 | 5 | 6 => read_variable(&mut offset)?,
+            7 | 8 | 17 => {
+                read_list(&mut offset, true)?;
+                read_list(&mut offset, false)?;
+            }
+            9 => {
+                let count = read_predicate_proof_vli(proof, &mut offset)?;
+                if count > ((proof.len() - offset) / 2) as u64 {
+                    return Err(
+                        "predicate native proof unit count exceeds remaining input".to_string()
+                    );
+                }
+                for _ in 0..count {
+                    let literal = read_predicate_proof_vli(proof, &mut offset)?;
+                    if literal > max_literal_code {
+                        return Err("predicate native proof literal exceeds obligation".to_string());
+                    }
+                    let _ = read_predicate_proof_vli(proof, &mut offset)?;
+                }
+            }
+            10 | 11 | 12 | 14 | 15 | 16 => read_list(&mut offset, true)?,
+            13 => {
+                if read_predicate_proof_vli(proof, &mut offset)? > 64 {
+                    return Err("predicate native proof hash width exceeds 64".to_string());
+                }
+            }
+            CODE_END => {
+                if offset != proof.len() {
+                    return Err("predicate native proof has trailing bytes".to_string());
+                }
+                return Ok(());
+            }
+            _ => return Err("predicate native proof step code is invalid".to_string()),
+        }
+    }
+    Err("predicate native proof has no end step".to_string())
+}
+
+fn verify_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
+    preflight_varisat_unsat_proof(clauses, proof)?;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut checker = VarisatProofChecker::new();
+        for clause in clauses {
+            let literals = clause
+                .0
+                .iter()
+                .map(|&(variable, positive)| Lit::from_var(Var::from_index(variable), positive))
+                .collect::<Vec<_>>();
+            checker
+                .add_clause(&literals)
+                .map_err(|error| format!("load predicate proof obligation: {error}"))?;
+        }
+        checker
+            .check_proof(proof)
+            .map_err(|error| format!("check predicate proof obligation: {error}"))
+    }));
+    match result {
+        Ok(result) => result,
+        Err(_) => Err("check predicate proof obligation: malformed proof was rejected".to_string()),
+    }
 }
 
 #[derive(Debug)]
@@ -31595,6 +31714,92 @@ mod tests {
     }
 
     #[test]
+    fn predicate_certificate_v2_corrupt_inputs_are_bounded_and_process_safe() {
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let transcript = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/predicate-certificate-cost/interrupt-h8-avoidable.transcript");
+        let scratch = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-certificate-v2-reliability-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+        let valid = scratch.join("valid.cert2");
+        certify_aiger_predicate_v2(&input, 0, &transcript, &valid).unwrap();
+        let seed = fs::read(&valid).unwrap();
+
+        let mutated = scratch.join("mutated.cert2");
+        for iteration in 0..5_000 {
+            fs::write(
+                &mutated,
+                deterministic_input_mutation(&seed, iteration ^ 0xc2c2),
+            )
+            .unwrap();
+            let _ = parse_predicate_certificate_v2(&mutated);
+        }
+
+        let invalid_utf8 = scratch.join("invalid-utf8.cert2");
+        fs::write(&invalid_utf8, [0xff, b'\n']).unwrap();
+        assert!(parse_predicate_certificate_v2(&invalid_utf8).is_err());
+
+        let oversized = scratch.join("oversized.cert2");
+        fs::File::create(&oversized)
+            .unwrap()
+            .set_len(PREDICATE_CERTIFICATE_V2_MAX_BYTES + 1)
+            .unwrap();
+        assert!(
+            parse_predicate_certificate_v2(&oversized)
+                .unwrap_err()
+                .contains("no larger")
+        );
+
+        let body = String::from_utf8(seed).unwrap();
+        let excessive_proof = scratch.join("excessive-proof.cert2");
+        let excessive_hex = "00".repeat(PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES + 1);
+        let replaced = body
+            .lines()
+            .map(|line| {
+                if line.starts_with("phase_0_proof_0=") {
+                    format!("phase_0_proof_0={excessive_hex}")
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+        fs::write(&excessive_proof, replaced).unwrap();
+        assert!(
+            parse_predicate_certificate_v2(&excessive_proof)
+                .unwrap_err()
+                .contains("bounded canonical byte hex")
+        );
+
+        let certificate = parse_predicate_certificate_v2(&valid).unwrap();
+        let mut rejected_proof_mutations = 0usize;
+        let mut contained_dependency_failures = 0usize;
+        for iteration in 0..128 {
+            let mut corrupted = certificate.clone();
+            let proof =
+                &mut corrupted.phases[0].proofs[iteration % certificate.phases[0].proofs.len()];
+            let byte = (iteration * 131 + 17) % proof.len();
+            proof[byte] ^= 1 << (iteration % 8);
+            let corrupted_path = scratch.join(format!("corrupt-proof-{iteration}.cert2"));
+            fs::write(&corrupted_path, predicate_certificate_v2_body(&corrupted)).unwrap();
+            if let Err(error) = verify_aiger_predicate_certificate_v2(&input, &corrupted_path) {
+                rejected_proof_mutations += 1;
+                if error.contains("malformed proof was rejected") {
+                    contained_dependency_failures += 1;
+                }
+            }
+        }
+        assert!(rejected_proof_mutations > 0);
+        assert_eq!(contained_dependency_failures, 0);
+
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
     fn predicate_certificate_v2_covers_product_and_multiphase_contracts() {
         let fixtures = [
             (
@@ -33011,7 +33216,7 @@ mod tests {
         }
     }
 
-    fn fuzz_mutation(seed: &[u8], iteration: usize) -> Vec<u8> {
+    fn deterministic_input_mutation(seed: &[u8], iteration: usize) -> Vec<u8> {
         let mut bytes = seed.to_vec();
         if bytes.is_empty() {
             bytes.push(0);
@@ -33053,17 +33258,20 @@ mod tests {
     }
 
     #[test]
-    fn parser_fuzz_regression_corpora_are_panic_free_and_bounded() {
+    fn parser_mutation_regression_corpora_are_bounded_and_process_safe() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let scratch =
-            std::env::temp_dir().join(format!("cq-sat-parser-fuzz-{}", std::process::id()));
+            std::env::temp_dir().join(format!("cq-sat-parser-reliability-{}", std::process::id()));
         fs::create_dir(&scratch).unwrap();
 
         let mut aiger_seeds = corpus_files(&root.join("tests/fuzz-corpus/aiger"));
         aiger_seeds.push(fs::read(root.join("examples/aiger/counter-overflow-4.aag")).unwrap());
         let aiger_input = scratch.join("mutated.aag");
         for iteration in 0..5_000 {
-            let bytes = fuzz_mutation(&aiger_seeds[iteration % aiger_seeds.len()], iteration);
+            let bytes = deterministic_input_mutation(
+                &aiger_seeds[iteration % aiger_seeds.len()],
+                iteration,
+            );
             fs::write(&aiger_input, bytes).unwrap();
             let _ = parse_aag(&aiger_input);
         }
@@ -33085,7 +33293,7 @@ mod tests {
         );
         let assumption_input = scratch.join("mutated.assumptions");
         for iteration in 0..5_000 {
-            let bytes = fuzz_mutation(
+            let bytes = deterministic_input_mutation(
                 &assumption_seeds[iteration % assumption_seeds.len()],
                 iteration ^ 0x5a5a,
             );
@@ -33096,7 +33304,7 @@ mod tests {
         let config_seeds = corpus_files(&root.join("tests/fuzz-corpus/project-config"));
         let config_input = scratch.join("mutated.conf");
         for iteration in 0..5_000 {
-            let bytes = fuzz_mutation(
+            let bytes = deterministic_input_mutation(
                 &config_seeds[iteration % config_seeds.len()],
                 iteration ^ 0x3c3c,
             );
@@ -33107,7 +33315,10 @@ mod tests {
         let cli_seeds = corpus_files(&root.join("tests/fuzz-corpus/cli"));
         let cli_artifacts = scratch.join("cli-artifacts");
         for iteration in 0..10_000 {
-            let bytes = fuzz_mutation(&cli_seeds[iteration % cli_seeds.len()], iteration ^ 0xa5a5);
+            let bytes = deterministic_input_mutation(
+                &cli_seeds[iteration % cli_seeds.len()],
+                iteration ^ 0xa5a5,
+            );
             let text = String::from_utf8_lossy(&bytes);
             for line in text.lines().take(32) {
                 let mut args = line

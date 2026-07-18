@@ -107,8 +107,11 @@ evidence and the final trace into a bounded canonical artifact. Its independent
 verifier avoids the BDD producer and exhaustive input enumeration. On the
 answer-balanced cohort, v2 cuts the 16-input end-to-end check from 136.045 ms to
 0.831 ms (163.71x), at the cost of a 52-KiB artifact and slower production. V1
-remains the portfolio default while hostile-input, checker-diversity and broader
-performance gates are still open.
+remains the portfolio default while process-isolation, checker-diversity and
+broader performance gates are still open. Its documented
+[reliability boundary](docs/PREDICATE_CERTIFICATE_V2_RELIABILITY.md) covers
+corrupted artifacts, structural proof preflight and fail-closed dependency
+errors; process-level resource limits and checker diversity remain open.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,

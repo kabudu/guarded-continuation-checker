@@ -9,6 +9,10 @@ completeness proofs.
 V2 is not yet the portfolio default, a production interface, or evidence of a
 scholarly novelty claim.
 
+Corrupted-artifact handling, dependency containment and residual availability
+limits are specified in the
+[certificate v2 reliability boundary](PREDICATE_CERTIFICATE_V2_RELIABILITY.md).
+
 ## Query semantics
 
 Given an AIGER model, declared initial latch state, selected bad output, horizon
@@ -116,6 +120,11 @@ The parser rejects symlinks, CRLF, truncation, unknown/reordered/duplicate
 fields, non-canonical numbers and hex, count mismatches, oversized evidence and
 unsupported proof formats before semantic acceptance.
 
+Malformed native proofs can trigger unexpected failures in `varisat-checker`
+0.2.2. A structural preflight rejects unsafe dimensions before checking, and a
+final unwind boundary converts an unexpected dependency failure to a fail-closed
+error.
+
 The producer additionally refuses overwrite and publishes atomically. Proof,
 witness, source, phase, ordering, powered-row, terminal, or trace disagreement
 is an error; it is never converted into a verification answer.
@@ -153,4 +162,4 @@ for checker diversity.
 
 Any incompatible field, order, proof-format, semantic, or limit change requires
 a new certificate version. V1 remains supported and remains the portfolio
-format until v2 hostile-input, resource, cost and compatibility gates close.
+format until v2 reliability, resource, cost and compatibility gates close.
