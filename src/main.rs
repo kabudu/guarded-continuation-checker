@@ -11984,6 +11984,7 @@ const CAUSAL_MAX_QUERY_WORK: usize = 250_000_000;
 const CAUSAL_CQ_MAX_VARIABLES: usize = 256;
 const CAUSAL_CQ_MAX_CLAUSES: usize = 4_096;
 const CAUSAL_METRICS_HEADER: &str = "input_sha256,requested_horizon,bad_frame,bad_output,candidates,causes,queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_compile_ns,cq_query_ns,persistent_cdcl_ns,fresh_cdcl_ns,cq_query_speedup,cq_amortized_speedup,agreement,certificate_valid,status";
+const CAUSAL_STRATEGY_HEADER: &str = "causal_strategy_schema_version,input_sha256,requested_horizon,bad_frame,bad_output,strategy,candidates,causes,cause_indices,cause_sha256,search_queries,validation_queries,total_queries,unique_queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_prepare_ns,cq_query_ns,persistent_setup_ns,persistent_query_ns,fresh_total_ns,persistent_total_speedup_vs_fresh,cq_query_speedup_vs_persistent,cq_total_speedup_vs_persistent,agreement,minimality_valid,status";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CausalEvent {
@@ -12020,6 +12021,21 @@ struct CausalProblem {
     run: AagBmcRun,
     clauses: Vec<Clause>,
     fixed: Vec<(usize, bool)>,
+}
+
+#[derive(Clone)]
+struct CausalQueryRecord {
+    active: Vec<bool>,
+    unsat: bool,
+}
+
+struct CausalStrategyResult {
+    name: &'static str,
+    active: Vec<bool>,
+    search_queries: usize,
+    validation_queries: usize,
+    transcript: Vec<CausalQueryRecord>,
+    fresh_total_ns: u128,
 }
 
 fn causal_events_from_witness(
@@ -12156,6 +12172,80 @@ where
         }
     }
     Ok(active)
+}
+
+fn quickxplain_causal_recursive<F>(
+    background: &[bool],
+    candidates: &[usize],
+    is_unsat: &mut F,
+) -> Result<Vec<usize>, String>
+where
+    F: FnMut(&[bool]) -> Result<bool, String>,
+{
+    if candidates.is_empty() || is_unsat(background)? {
+        return Ok(Vec::new());
+    }
+    if candidates.len() == 1 {
+        return Ok(vec![candidates[0]]);
+    }
+    let middle = candidates.len() / 2;
+    let (left, right) = candidates.split_at(middle);
+
+    let mut background_with_left = background.to_vec();
+    for &index in left {
+        background_with_left[index] = true;
+    }
+    let right_cause = quickxplain_causal_recursive(&background_with_left, right, is_unsat)?;
+
+    let mut background_with_right_cause = background.to_vec();
+    for &index in &right_cause {
+        background_with_right_cause[index] = true;
+    }
+    let mut left_cause =
+        quickxplain_causal_recursive(&background_with_right_cause, left, is_unsat)?;
+    left_cause.extend(right_cause);
+    Ok(left_cause)
+}
+
+fn quickxplain_causal_events<F>(count: usize, mut is_unsat: F) -> Result<Vec<bool>, String>
+where
+    F: FnMut(&[bool]) -> Result<bool, String>,
+{
+    let full = vec![true; count];
+    if !is_unsat(&full)? {
+        return Err(
+            "complete counterexample observations do not force the target failure".to_string(),
+        );
+    }
+    let candidates = (0..count).collect::<Vec<_>>();
+    let selected = quickxplain_causal_recursive(&vec![false; count], &candidates, &mut is_unsat)?;
+    let mut active = vec![false; count];
+    for index in selected {
+        active[index] = true;
+    }
+    Ok(active)
+}
+
+fn validate_causal_selection<F>(active: &[bool], mut is_unsat: F) -> Result<(), String>
+where
+    F: FnMut(&[bool]) -> Result<bool, String>,
+{
+    if !is_unsat(active)? {
+        return Err("causal selection does not force the target failure".to_string());
+    }
+    for index in 0..active.len() {
+        if !active[index] {
+            continue;
+        }
+        let mut reduced = active.to_vec();
+        reduced[index] = false;
+        if is_unsat(&reduced)? {
+            return Err(format!(
+                "causal selection is not 1-minimal at event {index}"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn ensure_causal_query_work(
@@ -12530,14 +12620,11 @@ fn rename_causal_bundle_noreplace(from: &Path, to: &Path) -> Result<(), String> 
 }
 
 #[cfg(not(any(target_os = "android", target_os = "linux", target_os = "macos")))]
-fn rename_causal_bundle_noreplace(from: &Path, to: &Path) -> Result<(), String> {
-    if to.exists() {
-        return Err(format!(
-            "causal output directory already exists: {}",
-            to.display()
-        ));
-    }
-    fs::rename(from, to).map_err(|error| format!("publish causal output atomically: {error}"))
+fn rename_causal_bundle_noreplace(_from: &Path, _to: &Path) -> Result<(), String> {
+    Err(
+        "atomic no-clobber causal publication currently requires Linux, Android, or macOS"
+            .to_string(),
+    )
 }
 
 fn sync_causal_directory(path: &Path) -> Result<(), String> {
@@ -12858,6 +12945,274 @@ fn explain_aiger_counterexample(
         metrics.queries,
         metrics.cq_admitted,
         output_dir.display(),
+    );
+    Ok(())
+}
+
+fn causal_selection_fingerprint(events: &[CausalEvent], active: &[bool]) -> Result<String, String> {
+    if events.len() != active.len() {
+        return Err("causal fingerprint selection length mismatch".to_string());
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"cq-causal-selection-v1\0");
+    for (index, (event, selected)) in events.iter().zip(active).enumerate() {
+        if !selected {
+            continue;
+        }
+        hasher.update((index as u64).to_le_bytes());
+        hasher.update((event.input as u64).to_le_bytes());
+        hasher.update((event.start_frame as u64).to_le_bytes());
+        hasher.update((event.end_frame as u64).to_le_bytes());
+        hasher.update([u8::from(event.value)]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn publish_causal_comparison(path: &Path, body: &[u8]) -> Result<(), String> {
+    if path.exists() {
+        return Err(format!(
+            "causal comparison output already exists: {}",
+            path.display()
+        ));
+    }
+    let parent = causal_output_parent(path);
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("create causal comparison parent: {error}"))?;
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "causal comparison output requires a valid final component".to_string())?;
+    let staging = parent.join(format!(".{name}.stage-{}", std::process::id()));
+    if staging.exists() {
+        return Err(format!(
+            "causal comparison staging path already exists: {}",
+            staging.display()
+        ));
+    }
+    let publish = (|| {
+        write_causal_file(&staging, body)?;
+        rename_causal_bundle_noreplace(&staging, path)?;
+        sync_causal_directory(parent)
+    })();
+    if publish.is_err() {
+        let _ = fs::remove_file(staging);
+    }
+    publish
+}
+
+fn benchmark_aiger_causal_strategies(
+    input: &Path,
+    requested_horizon: usize,
+    max_bound_bits: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if output.exists() {
+        return Err(format!(
+            "causal comparison output already exists: {}",
+            output.display()
+        ));
+    }
+    let model = parse_aag(input)?;
+    if model.inputs.is_empty() {
+        return Err("causal comparison requires at least one primary input".to_string());
+    }
+    let CausalProblem {
+        encoding,
+        run,
+        clauses,
+        fixed,
+    } = causal_base_formula(&model, requested_horizon)?;
+    let query_index = run.first_sat_query.unwrap();
+    let query = &encoding.queries[query_index];
+    let witness = run.first_witness.as_ref().unwrap();
+    let events = causal_events_from_witness(&model, witness, query.frame);
+    if events.is_empty() || events.len() > CAUSAL_MAX_EVENTS {
+        return Err(format!(
+            "causal comparison event count {} is outside supported range 1..={CAUSAL_MAX_EVENTS}",
+            events.len()
+        ));
+    }
+
+    // Across both strategies: fresh discovery/validation plus identical replay
+    // through persistent CDCL and CQ. The bound deliberately assumes CQ is used.
+    let maximum_backend_queries = events
+        .len()
+        .checked_mul(15)
+        .and_then(|value| value.checked_add(12))
+        .ok_or_else(|| "causal comparison query count overflow".to_string())?;
+    ensure_causal_query_work(encoding.variables, clauses.len(), maximum_backend_queries)?;
+
+    let cq_prepare_start = Instant::now();
+    let mut cq_bound_bits = None;
+    let mut compiled = None;
+    if encoding.variables <= CAUSAL_CQ_MAX_VARIABLES && clauses.len() <= CAUSAL_CQ_MAX_CLAUSES {
+        let order = min_fill_order(encoding.variables, &clauses);
+        let bound = continuation_frontier_bound_bits(encoding.variables, &clauses, &order);
+        cq_bound_bits = Some(bound);
+        if bound <= max_bound_bits {
+            compiled = Some(compile_continuation(&clauses, &order));
+        }
+    }
+    let cq_prepare_ns = cq_prepare_start.elapsed().as_nanos();
+    let cq_peak_classes = compiled.as_ref().map(|value| value.peak_classes);
+    let input_sha256 = sha256_file(input)?;
+    let per_strategy_limit = events
+        .len()
+        .checked_mul(3)
+        .and_then(|value| value.checked_add(2))
+        .ok_or_else(|| "causal strategy query limit overflow".to_string())?;
+    let mut results = Vec::new();
+
+    for strategy in ["deletion", "quickxplain"] {
+        let mut transcript = Vec::new();
+        let mut fresh_total_ns = 0u128;
+        let query_count = std::cell::Cell::new(0usize);
+        let (active, search_queries, validation_queries) = {
+            let mut oracle = |active: &[bool]| -> Result<bool, String> {
+                if query_count.get() >= per_strategy_limit {
+                    return Err(format!(
+                        "causal strategy `{strategy}` exceeded query limit {per_strategy_limit}"
+                    ));
+                }
+                let assumptions =
+                    causal_assumptions(&model, encoding.variables, &fixed, &events, active)?;
+                let start = Instant::now();
+                let sat = solve_causal_fresh(&clauses, &assumptions)?;
+                fresh_total_ns += start.elapsed().as_nanos();
+                let unsat = !sat;
+                transcript.push(CausalQueryRecord {
+                    active: active.to_vec(),
+                    unsat,
+                });
+                query_count.set(query_count.get() + 1);
+                Ok(unsat)
+            };
+            let active = match strategy {
+                "deletion" => {
+                    let mut active = vec![true; events.len()];
+                    if !oracle(&active)? {
+                        return Err(
+                            "complete counterexample observations do not force the target failure"
+                                .to_string(),
+                        );
+                    }
+                    for index in 0..active.len() {
+                        active[index] = false;
+                        if !oracle(&active)? {
+                            active[index] = true;
+                        }
+                    }
+                    active
+                }
+                "quickxplain" => quickxplain_causal_events(events.len(), &mut oracle)?,
+                _ => unreachable!(),
+            };
+            let search_queries = query_count.get();
+            validate_causal_selection(&active, &mut oracle)?;
+            let validation_queries = query_count.get() - search_queries;
+            (active, search_queries, validation_queries)
+        };
+        results.push(CausalStrategyResult {
+            name: strategy,
+            active,
+            search_queries,
+            validation_queries,
+            transcript,
+            fresh_total_ns,
+        });
+    }
+
+    let mut lines = vec![CAUSAL_STRATEGY_HEADER.to_string()];
+    for result in results {
+        let persistent_setup_start = Instant::now();
+        let mut persistent = Solver::new();
+        add_to_varisat(&mut persistent, &clauses);
+        let persistent_setup_ns = persistent_setup_start.elapsed().as_nanos();
+        let mut persistent_query_ns = 0u128;
+        let mut cq_query_ns = 0u128;
+        let mut scratch = compiled.as_ref().map(ContinuationScratch::new);
+        for record in &result.transcript {
+            let assumptions =
+                causal_assumptions(&model, encoding.variables, &fixed, &events, &record.active)?;
+            let persistent_start = Instant::now();
+            let persistent_unsat = !solve_causal_persistent(&mut persistent, &assumptions)?;
+            persistent_query_ns += persistent_start.elapsed().as_nanos();
+            if persistent_unsat != record.unsat {
+                return Err(format!(
+                    "persistent CDCL disagrees with fresh CDCL for `{}`",
+                    result.name
+                ));
+            }
+            if let (Some(compiled), Some(scratch)) = (compiled.as_ref(), scratch.as_mut()) {
+                let cq_start = Instant::now();
+                let cq_unsat = query_continuation(compiled, &assumptions, scratch).is_none();
+                cq_query_ns += cq_start.elapsed().as_nanos();
+                if cq_unsat != record.unsat {
+                    return Err(format!(
+                        "CQ disagrees with fresh CDCL for `{}`",
+                        result.name
+                    ));
+                }
+            }
+        }
+        let persistent_total_ns = persistent_setup_ns.saturating_add(persistent_query_ns);
+        let persistent_total_speedup =
+            result.fresh_total_ns as f64 / persistent_total_ns.max(1) as f64;
+        let cq_query_speedup = if compiled.is_some() {
+            persistent_query_ns as f64 / cq_query_ns.max(1) as f64
+        } else {
+            0.0
+        };
+        let cq_total_speedup = if compiled.is_some() {
+            persistent_total_ns as f64 / cq_prepare_ns.saturating_add(cq_query_ns).max(1) as f64
+        } else {
+            0.0
+        };
+        let cause_indices = result
+            .active
+            .iter()
+            .enumerate()
+            .filter_map(|(index, active)| active.then_some(index.to_string()))
+            .collect::<Vec<_>>()
+            .join(";");
+        let unique_queries = result
+            .transcript
+            .iter()
+            .map(|record| record.active.clone())
+            .collect::<BTreeSet<_>>()
+            .len();
+        lines.push(format!(
+            "1,{input_sha256},{requested_horizon},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{cq_prepare_ns},{cq_query_ns},{persistent_setup_ns},{persistent_query_ns},{},{persistent_total_speedup:.6},{cq_query_speedup:.6},{cq_total_speedup:.6},true,true,ok",
+            query.frame,
+            query.output,
+            result.name,
+            events.len(),
+            result.active.iter().filter(|active| **active).count(),
+            cause_indices,
+            causal_selection_fingerprint(&events, &result.active)?,
+            result.search_queries,
+            result.validation_queries,
+            result.transcript.len(),
+            unique_queries,
+            compiled.is_some(),
+            cq_bound_bits.map_or_else(|| "none".to_string(), |value| value.to_string()),
+            cq_peak_classes.map_or_else(|| "none".to_string(), |value| value.to_string()),
+            result.fresh_total_ns,
+        ));
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "causal-strategy-comparison status=VALID target={}@{} candidates={} cq_admitted={} output={}",
+        model.output_names[query.output],
+        query.frame,
+        events.len(),
+        compiled.is_some(),
+        output.display()
     );
     Ok(())
 }
@@ -16252,6 +16607,32 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: continuation-quotient-sat verify-aiger-causal-certificate INPUT.aag CERTIFICATE.cert".to_string());
             }
             verify_causal_certificate(Path::new(&args[1]), Path::new(&args[2]))?;
+            Ok(true)
+        }
+        "benchmark-aiger-causal-strategies" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-causal-strategies INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT.csv".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal comparison horizon".to_string())?;
+            if horizon == 0 {
+                return Err("causal comparison horizon must be at least one".to_string());
+            }
+            let max_bound_bits = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal comparison CQ frontier bound".to_string())?;
+            if max_bound_bits > 20 {
+                return Err(
+                    "causal comparison CQ frontier bound must not exceed 20 bits".to_string(),
+                );
+            }
+            benchmark_aiger_causal_strategies(
+                Path::new(&args[1]),
+                horizon,
+                max_bound_bits,
+                Path::new(&args[4]),
+            )?;
             Ok(true)
         }
         "benchmark-continuation-quotients" => {
@@ -24852,6 +25233,38 @@ mod tests {
     }
 
     #[test]
+    fn causal_strategy_comparison_is_exact_strict_and_no_overwrite() {
+        let stem = format!("cq-sat-causal-strategies-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aag"));
+        let output = std::env::temp_dir().join(format!("{stem}.csv"));
+        fs::write(
+            &input,
+            "aag 4 2 1 1 1\n2\n4\n6 6 0\n8\n8 2 4\ni0 left_request\ni1 right_request\no0 simultaneous_request\n",
+        )
+        .unwrap();
+        benchmark_aiger_causal_strategies(&input, 1, 16, &output).unwrap();
+        let report = fs::read_to_string(&output).unwrap();
+        let rows = report.lines().collect::<Vec<_>>();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0], CAUSAL_STRATEGY_HEADER);
+        assert!(rows[1].contains(",deletion,2,2,0;1,"));
+        assert!(rows[2].contains(",quickxplain,2,2,0;1,"));
+        assert!(rows.iter().all(|row| row.split(',').count() == 28));
+        assert!(
+            rows.iter()
+                .skip(1)
+                .all(|row| row.ends_with(",true,true,ok"))
+        );
+        assert!(
+            benchmark_aiger_causal_strategies(&input, 1, 16, &output)
+                .unwrap_err()
+                .contains("already exists")
+        );
+        fs::remove_file(input).unwrap();
+        fs::remove_file(output).unwrap();
+    }
+
+    #[test]
     fn causal_minimizer_rejects_a_non_forcing_observation_set() {
         let result = minimize_causal_events(2, |_| Ok(false));
         assert!(
@@ -24859,6 +25272,50 @@ mod tests {
                 .unwrap_err()
                 .contains("do not force the target failure")
         );
+    }
+
+    #[test]
+    fn quickxplain_and_deletion_are_one_minimal_for_all_small_monotone_oracles() {
+        for count in 1..=4usize {
+            let assignments = 1usize << count;
+            for table in 0usize..(1usize << assignments) {
+                let conflict = |active: &[bool]| {
+                    let mask = active
+                        .iter()
+                        .enumerate()
+                        .fold(0usize, |mask, (index, value)| {
+                            mask | (usize::from(*value) << index)
+                        });
+                    (table >> mask) & 1 == 1
+                };
+                if !conflict(&vec![true; count]) {
+                    continue;
+                }
+                let monotone = (0..assignments).all(|mask| {
+                    if (table >> mask) & 1 == 0 {
+                        return true;
+                    }
+                    (0..assignments)
+                        .all(|superset| mask & superset != mask || (table >> superset) & 1 == 1)
+                });
+                if !monotone {
+                    continue;
+                }
+
+                let deletion =
+                    minimize_causal_events(count, |active| Ok(conflict(active))).unwrap();
+                validate_causal_selection(&deletion, |active| Ok(conflict(active))).unwrap();
+
+                let mut quick_queries = 0usize;
+                let quickxplain = quickxplain_causal_events(count, |active| {
+                    quick_queries += 1;
+                    Ok(conflict(active))
+                })
+                .unwrap();
+                validate_causal_selection(&quickxplain, |active| Ok(conflict(active))).unwrap();
+                assert!(quick_queries <= count.saturating_mul(2).saturating_add(1));
+            }
+        }
     }
 
     #[test]

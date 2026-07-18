@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a bounded closest-method causal benchmark comparing ordered deletion and
+  QuickXplain over identical fresh-CDCL transcripts replayed through persistent
+  CDCL and admitted continuation quotients.
+- Add exhaustive small monotone-oracle correctness tests, controlled sparse and
+  dense AIGER fixtures, an eight-row reproducible result, and claim-bounded
+  prior-art documentation.
+
 ## 0.23.0 - 2026-07-18
 
 - Add bounded, certificate-producing causal analysis for input-driven AIGER

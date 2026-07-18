@@ -75,6 +75,11 @@ and persistent CDCL. Results are published as an atomic, SHA-256-bound
 bounded experiment, not a claim that counterexample minimisation or causal
 explanation is new.
 
+The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
+deletion and QuickXplain intervention transcripts through fresh CDCL,
+persistent CDCL, and admitted CQ. It records the negative result that CQ does
+not amortise its preparation cost on the current cohort.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

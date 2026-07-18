@@ -1,0 +1,38 @@
+aag 18 16 1 1 1
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+22
+24
+26
+28
+30
+32
+34 34
+36
+36 2 4
+i0 trigger_a
+i1 trigger_b
+i2 unrelated_02
+i3 unrelated_03
+i4 unrelated_04
+i5 unrelated_05
+i6 unrelated_06
+i7 unrelated_07
+i8 unrelated_08
+i9 unrelated_09
+i10 unrelated_10
+i11 unrelated_11
+i12 unrelated_12
+i13 unrelated_13
+i14 unrelated_14
+i15 unrelated_15
+l0 fixed_state
+o0 sparse_failure
