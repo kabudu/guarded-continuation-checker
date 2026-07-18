@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.27.0 - 2026-07-18
+
 - Add exact AIG cone-support projection for CIQ, admitting up to 64 declared
   firmware or robotics inputs when no more than eight affect the combined
   transition/property interface, with full-input witness lifting and fail-closed
