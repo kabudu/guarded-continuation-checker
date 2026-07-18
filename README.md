@@ -120,6 +120,13 @@ certificate formats, the portfolio format, proof format and all primary v2
 dimension and evidence limits. The contract also fixes argument order, exit
 meanings, migration rules and a multi-release deprecation window.
 
+Rust integrations can use the typed
+[predicate Rust API v1](docs/PREDICATE_RUST_API_V1.md). `PredicateTool` discovers
+and validates a compatible executable, invokes it without a shell, and exposes
+typed v1/v2 production and verification with logical results separated from
+operational errors. The current API intentionally preserves an out-of-process
+boundary for future resource governance; it is not yet an in-process verifier.
+
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,
 persistent CDCL, and admitted CQ. It records the negative result that CQ does

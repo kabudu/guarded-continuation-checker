@@ -66,6 +66,11 @@
   arguments and exit meanings, distinguish the portfolio's v1 format from
   explicit v2 operation, and define migration plus a multi-release deprecation
   window.
+- Add predicate Rust API v1: a typed, shell-free client that discovers and
+  validates CLI capabilities, separates avoidable/unavoidable results from
+  operational failures, and produces or checks certificate v1/v2 artifacts.
+  Exercise it as a separate downstream-style integration-test crate against the
+  real built executable and product fixture.
 
 ## 0.28.0 - 2026-07-18
 
