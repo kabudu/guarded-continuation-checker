@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.24.0 - 2026-07-18
+
 - Add a bounded closest-method causal benchmark comparing ordered deletion and
   QuickXplain over identical fresh-CDCL transcripts replayed through persistent
   CDCL and admitted continuation quotients.
