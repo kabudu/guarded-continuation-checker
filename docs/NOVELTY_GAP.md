@@ -1,6 +1,6 @@
 # Novelty gap register
 
-No scholarly novelty claim has been established for CQ-SAT/GCC's dense
+No scholarly novelty claim has been established for CQ-SAT's dense
 predicate quotient. Exact BDD representation, symbolic model checking,
 counterexample witnesses and model-checking certificates all have substantial
 prior art. The candidate contribution must therefore be narrower and tested

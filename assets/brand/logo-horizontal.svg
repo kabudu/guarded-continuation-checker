@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" role="img" aria-labelledby="title desc">
+  <title id="title">Guarded Continuation Checker, powered by CQ-SAT</title>
+  <desc id="desc">Brand mark followed by the Guarded Continuation Checker wordmark.</desc>
+  <g transform="translate(12 22) scale(1.16)">
+    <path d="M82 88H25C17.8 88 12 82.2 12 75V25C12 17.8 17.8 12 25 12H82V31" fill="none" stroke="#081F3D" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M22 31H39L55 47" fill="none" stroke="#0A9A92" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M22 50H55" fill="none" stroke="#08A9F0" stroke-width="7" stroke-linecap="round"/>
+    <path d="M22 69H39L55 53" fill="none" stroke="#6956D9" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="61" cy="50" r="11" fill="#FFFFFF" stroke="#0A9A92" stroke-width="7"/>
+    <path d="M72 50H91M84 42L92 50L84 58" fill="none" stroke="#081F3D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="150" y="69" fill="#081F3D" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="42" font-weight="750" letter-spacing="-1.2">Guarded Continuation</text>
+  <text x="151" y="109" fill="#24415E" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="30" font-weight="560" letter-spacing="2.4">CHECKER</text>
+  <text x="383" y="109" fill="#557087" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="20" font-weight="500">powered by</text>
+  <text x="496" y="109" fill="#0A9A92" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="23" font-weight="700">CQ-SAT</text>
+</svg>

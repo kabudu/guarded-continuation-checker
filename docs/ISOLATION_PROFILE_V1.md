@@ -1,6 +1,6 @@
 # Hostile-RTL isolation profile v1
 
-Isolation profile v1 places CQ-SAT/GCC and Yosys inside a fail-closed Docker
+Isolation profile v1 places Guarded Continuation Checker and Yosys inside a fail-closed Docker
 boundary before parsing partner RTL. It is the required baseline for inputs that
 are not already trusted by the evaluation worker owner.
 

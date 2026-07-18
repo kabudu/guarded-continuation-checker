@@ -1,6 +1,6 @@
 # Security policy and threat model
 
-CQ-SAT/GCC is a research preview. Please report suspected vulnerabilities
+Guarded Continuation Checker is a research preview. Please report suspected vulnerabilities
 privately through GitHub Security Advisories for this repository. Do not include
 confidential RTL, logs, traces, or credentials in a public issue.
 
@@ -17,7 +17,8 @@ does not provide the Linux address-space containment guarantee.
 - Yosys is an external parser and synthesizer. Local Linux runs receive process-
   group and resource bounds. The hostile-RTL profile additionally applies a
   probed, networkless, read-only, capability-free Docker boundary.
-- The CQ-SAT/GCC process, selected Yosys binary, operating-system account, CI
+- The Guarded Continuation Checker process, selected Yosys binary,
+  operating-system account, CI
   runner, and artifact destination are trusted in the current model.
 - Artifact schema v4 detects evidence changes relative to its manifest. It does
   not sign or remotely attest the manifest.
@@ -27,7 +28,7 @@ does not provide the Linux address-space containment guarantee.
 - Run evaluations on an ephemeral, least-privilege Linux worker with no
   production credentials, no unnecessary network access, and a dedicated
   artifact directory. Treat RTL and all generated evidence as confidential.
-- Pin CQ-SAT/GCC, Rust, Yosys, SymbiYosys, Z3, and CI actions to reviewed
+- Pin Guarded Continuation Checker, Rust, Yosys, SymbiYosys, Z3, and CI actions to reviewed
   revisions or immutable image digests. Preserve `Cargo.lock` and build with
   `--locked`.
 - Validate completed bundles before retention or consumption. Copy the manifest

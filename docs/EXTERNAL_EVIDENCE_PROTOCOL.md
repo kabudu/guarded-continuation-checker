@@ -1,6 +1,6 @@
 # External review and design-partner evidence protocol
 
-This protocol defines the evidence required to close CQ-SAT/GCC's remaining
+This protocol defines the evidence required to close Guarded Continuation Checker's remaining
 production gates. Publishing this protocol does not close them. Only completed,
 independently attributable review records and pilot results can do that.
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Position the project as Guarded Continuation Checker, powered by CQ-SAT,
+  while retaining the crate and executable names for compatibility. Add a
+  collision-aware brand architecture, original guard-aperture SVG identity,
+  partner-facing naming transition and canonical future repository URL.
+
 - Add deterministic predicate-v2 obligation bundle v1 export: source- and
   certificate-bound canonical DIMACS for every relation/terminal completeness
   claim plus a selector-guarded aggregate that is UNSAT exactly when every

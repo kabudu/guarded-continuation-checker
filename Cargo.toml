@@ -3,11 +3,11 @@ name = "continuation-quotient-sat"
 version = "0.28.0"
 edition = "2024"
 rust-version = "1.97"
-description = "Research implementation of exact continuation-quotient compilation for structured SAT"
+description = "Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT"
 license = "Apache-2.0"
-repository = "https://github.com/kabudu/continuation-quotient-sat"
-keywords = ["sat", "knowledge-compilation", "research"]
-categories = ["algorithms", "science"]
+repository = "https://github.com/kabudu/guarded-continuation-checker"
+keywords = ["verification", "embedded", "sat", "aiger", "firmware"]
+categories = ["development-tools", "science", "algorithms"]
 
 [profile.release]
 debug = true
