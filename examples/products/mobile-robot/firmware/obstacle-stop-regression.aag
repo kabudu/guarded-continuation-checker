@@ -1,0 +1,42 @@
+aag 18 16 1 1 1
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+22
+24
+26
+28
+30
+32
+34 2 0
+36
+36 4 2
+i0 drive_enabled
+i1 obstacle_near
+i2 left_bumper
+i3 right_bumper
+i4 cliff_left
+i5 cliff_right
+i6 wheel_stall_left
+i7 wheel_stall_right
+i8 localisation_lost
+i9 battery_critical
+i10 motor_overtemperature
+i11 remote_estop
+i12 lidar_degraded
+i13 camera_degraded
+i14 imu_fault
+i15 service_mode
+l0 previous_drive_enabled
+o0 drive_enabled_with_obstacle
+c
+Mobile-robot obstacle-stop regression fixture. The declared sensor vector is
+wide, while this isolated bad output and the transition relation depend only
+on drive_enabled and obstacle_near.

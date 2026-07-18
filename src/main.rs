@@ -8629,30 +8629,61 @@ fn evaluate_aag_literal(literal: usize, values: &[bool]) -> bool {
 }
 
 const INTERFACE_QUOTIENT_MAX_LATCHES: usize = 8;
-const INTERFACE_QUOTIENT_MAX_INPUTS: usize = 8;
+const INTERFACE_QUOTIENT_MAX_DECLARED_INPUTS: usize = 64;
+const INTERFACE_QUOTIENT_MAX_PROJECTED_INPUTS: usize = 8;
 const INTERFACE_QUOTIENT_MAX_HORIZON: usize = 64;
 const INTERFACE_QUOTIENT_MAX_TABLE_CELLS: usize = 1_048_576;
 const INTERFACE_QUOTIENT_MAX_SUMMARIES: usize = 16_384;
 
+#[derive(Debug)]
 struct AagInterfaceTable {
     width: usize,
+    declared_input_count: usize,
     input_count: usize,
+    projected_inputs: Vec<usize>,
     next: Vec<Vec<usize>>,
     bad_masks: Vec<Vec<u128>>,
 }
 
 impl AagInterfaceTable {
+    fn projected_input_support(model: &AagModel) -> Result<Vec<usize>, String> {
+        if model.inputs.is_empty() || model.inputs.len() > INTERFACE_QUOTIENT_MAX_DECLARED_INPUTS {
+            return Err(format!(
+                "interface quotient requires 1..={INTERFACE_QUOTIENT_MAX_DECLARED_INPUTS} declared inputs; found {}",
+                model.inputs.len()
+            ));
+        }
+        let mut support = vec![0u64; model.max_variable + 1];
+        for (input, literal) in model.inputs.iter().enumerate() {
+            support[literal / 2] = 1u64 << input;
+        }
+        for gate in &model.ands {
+            support[gate.output / 2] = support[gate.left / 2] | support[gate.right / 2];
+        }
+        let mask = model
+            .latches
+            .iter()
+            .map(|latch| support[latch.next / 2])
+            .chain(model.outputs.iter().map(|literal| support[literal / 2]))
+            .fold(0u64, |combined, item| combined | item);
+        Ok((0..model.inputs.len())
+            .filter(|input| mask & (1u64 << input) != 0)
+            .collect())
+    }
+
     fn compile(model: &AagModel) -> Result<Self, String> {
         let width = model.latches.len();
-        let input_count = model.inputs.len();
+        let projected_inputs = Self::projected_input_support(model)?;
+        let input_count = projected_inputs.len();
         if width == 0 || width > INTERFACE_QUOTIENT_MAX_LATCHES {
             return Err(format!(
                 "interface quotient requires 1..={INTERFACE_QUOTIENT_MAX_LATCHES} latches; found {width}"
             ));
         }
-        if input_count == 0 || input_count > INTERFACE_QUOTIENT_MAX_INPUTS {
+        if input_count == 0 || input_count > INTERFACE_QUOTIENT_MAX_PROJECTED_INPUTS {
             return Err(format!(
-                "interface quotient requires 1..={INTERFACE_QUOTIENT_MAX_INPUTS} inputs; found {input_count}"
+                "interface quotient projected support requires 1..={INTERFACE_QUOTIENT_MAX_PROJECTED_INPUTS} inputs; found {input_count} across {} declared inputs",
+                model.inputs.len()
             ));
         }
         if model.outputs.len() > u128::BITS as usize {
@@ -8679,8 +8710,8 @@ impl AagInterfaceTable {
                 for (bit, latch) in model.latches.iter().enumerate() {
                     values[latch.current / 2] = state >> bit & 1 == 1;
                 }
-                for (bit, literal) in model.inputs.iter().enumerate() {
-                    values[literal / 2] = input_pattern >> bit & 1 == 1;
+                for (bit, input) in projected_inputs.iter().enumerate() {
+                    values[model.inputs[*input] / 2] = input_pattern >> bit & 1 == 1;
                 }
                 for gate in &model.ands {
                     values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
@@ -8702,7 +8733,9 @@ impl AagInterfaceTable {
         }
         Ok(Self {
             width,
+            declared_input_count: model.inputs.len(),
             input_count,
+            projected_inputs,
             next,
             bad_masks,
         })
@@ -8712,6 +8745,24 @@ impl AagInterfaceTable {
         constraints.iter().enumerate().all(|(input, required)| {
             required.is_none_or(|value| (input_pattern >> input & 1 == 1) == value)
         })
+    }
+
+    fn project_input(&self, declared_pattern: u64) -> usize {
+        self.projected_inputs
+            .iter()
+            .enumerate()
+            .fold(0usize, |pattern, (bit, input)| {
+                pattern | (((declared_pattern >> input) & 1) as usize) << bit
+            })
+    }
+
+    fn lift_input(&self, projected_pattern: usize) -> u64 {
+        self.projected_inputs
+            .iter()
+            .enumerate()
+            .fold(0u64, |pattern, (bit, input)| {
+                pattern | (((projected_pattern >> bit) & 1) as u64) << input
+            })
     }
 }
 
@@ -8807,6 +8858,7 @@ struct InterfaceQuotientTree<'a> {
 struct InterfaceQueryResult {
     states: Vec<usize>,
     inputs: Vec<usize>,
+    declared_inputs: Vec<u64>,
 }
 
 #[derive(Debug)]
@@ -9101,9 +9153,17 @@ impl<'a> InterfaceQuotientTree<'a> {
         states.truncate(self.horizon + 1);
         inputs.truncate(self.horizon + 1);
         inputs[self.horizon] = terminal_input;
+        let declared_inputs = inputs
+            .iter()
+            .map(|input| self.table.lift_input(*input))
+            .collect();
         Ok(InterfaceQueryOutcome {
             avoidable: true,
-            witness: Some(InterfaceQueryResult { states, inputs }),
+            witness: Some(InterfaceQueryResult {
+                states,
+                inputs,
+                declared_inputs,
+            }),
             repaired_leaves,
             repaired_internal_nodes,
         })
@@ -12708,7 +12768,7 @@ struct CausalEnumeration {
 }
 
 fn causal_interface_constraints(
-    input_count: usize,
+    table: &AagInterfaceTable,
     horizon: usize,
     events: &[CausalEvent],
     active: &[bool],
@@ -12716,16 +12776,23 @@ fn causal_interface_constraints(
     if events.len() != active.len() {
         return Err("interface quotient event selection length mismatch".to_string());
     }
-    let mut constraints = vec![vec![None; input_count]; horizon + 1];
+    let mut constraints = vec![vec![None; table.input_count]; horizon + 1];
     for (event, selected) in events.iter().zip(active) {
         if !selected {
             continue;
         }
-        if event.input >= input_count || event.end_frame > horizon {
+        let Some(projected_input) = table
+            .projected_inputs
+            .iter()
+            .position(|input| *input == event.input)
+        else {
+            return Err("interface quotient event is outside projected support".to_string());
+        };
+        if event.end_frame > horizon {
             return Err("interface quotient event is out of range".to_string());
         }
         for frame in event.start_frame..=event.end_frame {
-            let slot = &mut constraints[frame][event.input];
+            let slot = &mut constraints[frame][projected_input];
             if slot.is_some_and(|value| value != event.value) {
                 return Err("interface quotient events conflict".to_string());
             }
@@ -12736,21 +12803,54 @@ fn causal_interface_constraints(
 }
 
 fn validate_interface_witness(
+    model: &AagModel,
     table: &AagInterfaceTable,
     output: usize,
     constraints: &[Vec<Option<bool>>],
     witness: &InterfaceQueryResult,
 ) -> bool {
-    if witness.states.len() != constraints.len() || witness.inputs.len() != constraints.len() {
+    if witness.states.len() != constraints.len()
+        || witness.inputs.len() != constraints.len()
+        || witness.declared_inputs.len() != constraints.len()
+    {
         return false;
     }
     for frame in 0..constraints.len() {
+        let declared_input = witness.declared_inputs[frame];
+        if table.project_input(declared_input) != witness.inputs[frame]
+            || (table.declared_input_count < u64::BITS as usize
+                && declared_input >> table.declared_input_count != 0)
+        {
+            return false;
+        }
         if !table.input_allowed(witness.inputs[frame], &constraints[frame]) {
             return false;
         }
-        if frame + 1 < constraints.len()
-            && table.next[witness.states[frame]][witness.inputs[frame]] != witness.states[frame + 1]
-        {
+        let mut values = vec![false; model.max_variable + 1];
+        for (bit, latch) in model.latches.iter().enumerate() {
+            values[latch.current / 2] = witness.states[frame] >> bit & 1 == 1;
+        }
+        for (input, literal) in model.inputs.iter().enumerate() {
+            values[literal / 2] = declared_input >> input & 1 == 1;
+        }
+        for gate in &model.ands {
+            values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                && evaluate_aag_literal(gate.right, &values);
+        }
+        if frame + 1 < constraints.len() {
+            let successor = model
+                .latches
+                .iter()
+                .enumerate()
+                .fold(0usize, |state, (bit, latch)| {
+                    state | (usize::from(evaluate_aag_literal(latch.next, &values)) << bit)
+                });
+            if successor != witness.states[frame + 1]
+                || table.next[witness.states[frame]][witness.inputs[frame]] != successor
+            {
+                return false;
+            }
+        } else if evaluate_aag_literal(model.outputs[output], &values) {
             return false;
         }
     }
@@ -12764,8 +12864,18 @@ fn causal_events_from_witness(
     witness: &[bool],
     bad_frame: usize,
 ) -> Vec<CausalEvent> {
+    causal_events_from_witness_for_inputs(model, witness, bad_frame, 0..model.inputs.len())
+}
+
+fn causal_events_from_witness_for_inputs(
+    model: &AagModel,
+    witness: &[bool],
+    bad_frame: usize,
+    inputs: impl IntoIterator<Item = usize>,
+) -> Vec<CausalEvent> {
     let mut events = Vec::new();
-    for (input, &literal) in model.inputs.iter().enumerate() {
+    for input in inputs {
+        let literal = model.inputs[input];
         let mut start = 0usize;
         let mut value = witness[literal / 2 - 1];
         for frame in 1..=bad_frame {
@@ -14079,7 +14189,12 @@ fn benchmark_aiger_interface_quotient(
         else {
             continue;
         };
-        let events = causal_events_from_witness(&model, &witness, query.frame);
+        let events = causal_events_from_witness_for_inputs(
+            &model,
+            &witness,
+            query.frame,
+            table.projected_inputs.iter().copied(),
+        );
         if events.is_empty() || events.len() > CAUSAL_MAX_EVENTS {
             return Err(format!(
                 "interface quotient event count {} is outside 1..={CAUSAL_MAX_EVENTS}",
@@ -14122,12 +14237,8 @@ fn benchmark_aiger_interface_quotient(
         ensure_causal_query_work(encoding.variables, encoding.clauses.len(), replay_queries)?;
         for _ in 0..repeats {
             for record in &enumeration.transcript {
-                let constraints = causal_interface_constraints(
-                    table.input_count,
-                    query.frame,
-                    &events,
-                    &record.active,
-                )?;
+                let constraints =
+                    causal_interface_constraints(&table, query.frame, &events, &record.active)?;
                 let start = Instant::now();
                 let interface_outcome =
                     tree.query_avoiding(&model, query.output, &constraints, false)?;
@@ -14157,18 +14268,14 @@ fn benchmark_aiger_interface_quotient(
             }
         }
         if let Some(record) = enumeration.transcript.iter().find(|record| !record.unsat) {
-            let constraints = causal_interface_constraints(
-                table.input_count,
-                query.frame,
-                &events,
-                &record.active,
-            )?;
+            let constraints =
+                causal_interface_constraints(&table, query.frame, &events, &record.active)?;
             let start = Instant::now();
             let recovered = tree.query_avoiding(&model, query.output, &constraints, true)?;
             interface_witness_ns = start.elapsed().as_nanos();
             witnesses_valid &= recovered.avoidable
                 && recovered.witness.as_ref().is_some_and(|witness| {
-                    validate_interface_witness(&table, query.output, &constraints, witness)
+                    validate_interface_witness(&model, &table, query.output, &constraints, witness)
                 });
 
             let mut assumptions =
@@ -14231,10 +14338,11 @@ fn benchmark_aiger_interface_quotient(
     }
     publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
     println!(
-        "interface-quotient status=VALID rows={} states={} inputs={} output={}",
+        "interface-quotient status=VALID rows={} states={} declared_inputs={} projected_inputs={} output={}",
         lines.len() - 1,
         1usize << table.width,
-        1usize << table.input_count,
+        table.declared_input_count,
+        table.input_count,
         output.display()
     );
     Ok(())
@@ -14320,7 +14428,12 @@ fn verify_aiger_interface_quotient(input: &Path, report: &Path) -> Result<(), St
         let witness = witness_cache
             .get(&(bad_frame, bad_output))
             .ok_or_else(|| "interface quotient target is unreachable".to_string())?;
-        let events = causal_events_from_witness(&model, witness, bad_frame);
+        let events = causal_events_from_witness_for_inputs(
+            &model,
+            witness,
+            bad_frame,
+            table.projected_inputs.iter().copied(),
+        );
         if events.len() != candidate_count {
             return Err("interface quotient candidate count mismatch".to_string());
         }
@@ -14339,27 +14452,19 @@ fn verify_aiger_interface_quotient(input: &Path, report: &Path) -> Result<(), St
         }
         let mut tree = InterfaceQuotientTree::new(&table, bad_frame)?;
         for record in &enumeration.transcript {
-            let constraints = causal_interface_constraints(
-                table.input_count,
-                bad_frame,
-                &events,
-                &record.active,
-            )?;
+            let constraints =
+                causal_interface_constraints(&table, bad_frame, &events, &record.active)?;
             let answer = tree.query_avoiding(&model, bad_output, &constraints, false)?;
             if answer.avoidable == record.unsat {
                 return Err("interface quotient replay disagrees with fresh CDCL".to_string());
             }
         }
         if let Some(record) = enumeration.transcript.iter().find(|record| !record.unsat) {
-            let constraints = causal_interface_constraints(
-                table.input_count,
-                bad_frame,
-                &events,
-                &record.active,
-            )?;
+            let constraints =
+                causal_interface_constraints(&table, bad_frame, &events, &record.active)?;
             let recovered = tree.query_avoiding(&model, bad_output, &constraints, true)?;
             if !recovered.witness.as_ref().is_some_and(|witness| {
-                validate_interface_witness(&table, bad_output, &constraints, witness)
+                validate_interface_witness(&model, &table, bad_output, &constraints, witness)
             }) {
                 return Err("interface quotient replay witness is invalid".to_string());
             }
@@ -26903,6 +27008,36 @@ mod tests {
         bytes
     }
 
+    fn wide_sparse_aiger_fixture() -> Vec<u8> {
+        let mut source = String::from("aag 18 16 1 1 1\n");
+        for variable in 1..=16 {
+            source.push_str(&format!("{}\n", variable * 2));
+        }
+        source.push_str("34 2 0\n36\n36 4 2\n");
+        for input in 0..16 {
+            source.push_str(&format!("i{input} sensor_{input}\n"));
+        }
+        source.push_str("l0 mode\no0 conflicting_primary_sensors\nc\nwide sparse fixture\n");
+        source.into_bytes()
+    }
+
+    fn wide_dense_aiger_fixture() -> Vec<u8> {
+        let mut source = String::from("aag 25 16 1 1 8\n");
+        for variable in 1..=16 {
+            source.push_str(&format!("{}\n", variable * 2));
+        }
+        source.push_str("34 2 0\n50\n");
+        let mut accumulated = 2usize;
+        for (gate, input) in (1..=8).enumerate() {
+            let output = (18 + gate) * 2;
+            source.push_str(&format!("{output} {accumulated} {}\n", (input + 1) * 2));
+            accumulated = output;
+        }
+        source.extend(std::iter::once('c'));
+        source.push_str("\nwide dense fixture\n");
+        source.into_bytes()
+    }
+
     #[test]
     fn binary_aiger_import_matches_ascii_semantics() {
         let ascii = b"aag 4 2 1 1 1\n2\n4\n6 6 0\n8\n8 4 2\ni0 left_request\ni1 right_request\nl0 state\no0 simultaneous_request\nc\nfixture\n";
@@ -26968,6 +27103,78 @@ mod tests {
             .unwrap();
         assert_eq!(driven.repaired_leaves, 1);
         assert_eq!(driven.repaired_internal_nodes, 1);
+    }
+
+    #[test]
+    fn interface_projection_is_exact_for_sixteen_declared_inputs() {
+        let model = parse_aiger_bytes(&wide_sparse_aiger_fixture()).unwrap();
+        let table = AagInterfaceTable::compile(&model).unwrap();
+        assert_eq!(table.declared_input_count, 16);
+        assert_eq!(table.projected_inputs, vec![0, 1]);
+        assert_eq!(table.input_count, 2);
+
+        for state in 0..2usize {
+            for declared in 0..=u16::MAX {
+                let declared = u64::from(declared);
+                let projected = table.project_input(declared);
+                assert_eq!(table.next[state][projected], usize::from(declared & 1 == 1));
+                assert_eq!(
+                    table.bad_masks[state][projected] & 1 != 0,
+                    declared & 0b11 == 0b11
+                );
+            }
+        }
+
+        let constraints = vec![vec![None; 2]; 2];
+        let mut tree = InterfaceQuotientTree::new(&table, 1).unwrap();
+        let witness = tree
+            .query_avoiding(&model, 0, &constraints, true)
+            .unwrap()
+            .witness
+            .unwrap();
+        assert!(validate_interface_witness(
+            &model,
+            &table,
+            0,
+            &constraints,
+            &witness
+        ));
+        assert!(witness.declared_inputs.iter().all(|input| input >> 2 == 0));
+    }
+
+    #[test]
+    fn interface_projection_rejects_support_wider_than_eight() {
+        let model = parse_aiger_bytes(&wide_dense_aiger_fixture()).unwrap();
+        let error = AagInterfaceTable::compile(&model).unwrap_err();
+        assert!(error.contains("projected support"));
+        assert!(error.contains("found 9"));
+    }
+
+    #[test]
+    fn interface_projection_handles_bit_sixty_three_and_rejects_sixty_five_inputs() {
+        let mut boundary = String::from("aag 66 64 1 1 1\n");
+        for variable in 1..=64 {
+            boundary.push_str(&format!("{}\n", variable * 2));
+        }
+        boundary.push_str("130 2 0\n132\n132 128 2\nc\n64-input boundary\n");
+        let model = parse_aiger_bytes(boundary.as_bytes()).unwrap();
+        let table = AagInterfaceTable::compile(&model).unwrap();
+        assert_eq!(table.declared_input_count, 64);
+        assert_eq!(table.projected_inputs, vec![0, 63]);
+        assert_eq!(table.project_input((1u64 << 63) | 1), 0b11);
+        assert_eq!(table.lift_input(0b10), 1u64 << 63);
+
+        let mut excessive = String::from("aag 66 65 1 1 0\n");
+        for variable in 1..=65 {
+            excessive.push_str(&format!("{}\n", variable * 2));
+        }
+        excessive.push_str("132 2 0\n2\nc\n65-input rejection\n");
+        let model = parse_aiger_bytes(excessive.as_bytes()).unwrap();
+        assert!(
+            AagInterfaceTable::compile(&model)
+                .unwrap_err()
+                .contains("1..=64 declared inputs")
+        );
     }
 
     #[test]
@@ -27336,6 +27543,21 @@ mod tests {
         );
         fs::remove_file(input).unwrap();
         fs::remove_file(output).unwrap();
+
+        let wide_input = std::env::temp_dir().join(format!("{stem}-wide.aag"));
+        let wide_output = std::env::temp_dir().join(format!("{stem}-wide.csv"));
+        fs::write(&wide_input, wide_sparse_aiger_fixture()).unwrap();
+        benchmark_aiger_interface_quotient(&wide_input, 1, 4, 2, &wide_output).unwrap();
+        let wide_report = fs::read_to_string(&wide_output).unwrap();
+        assert!(
+            wide_report
+                .lines()
+                .skip(1)
+                .all(|row| row.ends_with(",true,true,ok"))
+        );
+        verify_aiger_interface_quotient(&wide_input, &wide_output).unwrap();
+        fs::remove_file(wide_input).unwrap();
+        fs::remove_file(wide_output).unwrap();
     }
 
     #[test]

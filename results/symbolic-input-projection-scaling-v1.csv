@@ -1,0 +1,5 @@
+symbolic_input_projection_scaling_schema_version,declared_inputs,projected_inputs,horizon,trials,repeats,reachable_targets,min_workload_speedup,median_workload_speedup,max_workload_speedup,agreement,witness_valid,status
+1,16,2,8,10,100,9,2.346074,2.463242,2.533033,true,true,ok
+1,16,2,16,10,100,17,3.851742,4.000373,4.081832,true,true,ok
+1,16,2,32,10,100,33,6.608600,6.756984,7.067718,true,true,ok
+1,16,2,64,10,100,65,9.673462,10.742359,11.796102,true,true,ok

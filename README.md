@@ -98,6 +98,14 @@ robust positive result on one narrow controller class, not a general or novel
 algorithm claim. The broader sequence is tracked in the
 [firmware and robotics research roadmap](docs/FIRMWARE_ROBOTICS_RESEARCH_ROADMAP.md).
 
+The second [exact symbolic input projection](docs/SYMBOLIC_INPUT_PROJECTION.md)
+experiment admits up to 64 declared firmware inputs when static AIG support
+analysis proves that at most eight affect the combined transition/property
+interface. On a 16-input mobile-robot obstacle-stop regression projected to two
+inputs, median end-to-end speedup scales from 2.46x at horizon 8 to 10.74x at
+horizon 64, with complete-input witness lifting and fresh-CDCL replay. Dense
+wide-support predicates remain an open boundary.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

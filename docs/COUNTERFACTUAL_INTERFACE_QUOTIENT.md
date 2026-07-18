@@ -32,11 +32,13 @@ complete state/input trace.
   against the observations, transition table, bad output, and original CNF.
 - Any disagreement or invalid witness aborts publication.
 
-The current fail-closed envelope is one to eight latches, one to eight primary
-inputs, at most 64 frames, at most 128 bad outputs, at most 1,048,576 explicit
-state/input cells, and the existing bounded causal work limits. Designs outside
-that envelope remain on persistent CDCL. There is no approximation or
-per-formula calibration.
+The current fail-closed envelope is one to eight latches, one to 64 declared
+primary inputs with no more than eight in the exact combined
+transition/property support, at most 64 frames, at most 128 bad outputs, at
+most 1,048,576 explicit state/projected-input cells, and the existing bounded
+causal work limits. Designs outside that envelope remain on persistent CDCL.
+There is no approximation or per-formula calibration. The wide-input extension
+is documented in [Exact symbolic input projection](SYMBOLIC_INPUT_PROJECTION.md).
 
 ## Run
 
@@ -123,8 +125,8 @@ remain required before making such a claim.
   run.
 - Caching tiny leaf relations adds hashing and cloning overhead and regresses
   the result.
-- Raising explicit input enumeration to 16 inputs produces only 0.06x–0.13x on
-  the controlled sparse/dense fixtures.
+- Raising explicit input enumeration to 16 relevant inputs produces only
+  0.06x–0.13x on the controlled sparse/dense fixtures.
 
 The next technical boundary is therefore symbolic input projection: preserve a
 compact input predicate at the interface instead of enumerating all input
