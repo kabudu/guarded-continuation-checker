@@ -204,7 +204,7 @@ The bounded [event-contract experiment](docs/EVENT_CONTRACT_EXPERIMENT.md)
 extends phase predicates from input cubes to strict named CNF. It exactly
 preserves mutual-exclusion, priority, interlock, and recovery rules through
 phase composition and concrete witness replay. All 30 release-mode rows agree
-with independently encoded persistent CDCL, but CQ-SAT is 1.09x to 36.20x
+with a separately encoded exact CDCL control, but CQ-SAT is 1.09x to 36.20x
 slower on the current three-product cohort. This is a semantic capability with
 a retained negative performance result, not a portfolio or novelty claim.
 

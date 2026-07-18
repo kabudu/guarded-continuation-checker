@@ -4,9 +4,11 @@ use std::env;
 #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
 use std::ffi::CString;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -8684,7 +8686,7 @@ const PREDICATE_PROOF_TERMINAL_SCHEMA_VERSION: usize = 1;
 const EVENT_CONTRACT_VERSION: usize = 1;
 const EVENT_CONTRACT_BENCHMARK_SCHEMA_VERSION: usize = 1;
 const EVENT_CONTRACT_MAX_BYTES: u64 = 1024 * 1024;
-const EVENT_CONTRACT_MAX_PHASES: usize = 65;
+const EVENT_CONTRACT_MAX_PHASES: usize = INTERFACE_QUOTIENT_MAX_HORIZON;
 const EVENT_CONTRACT_MAX_CLAUSES: usize = 64;
 const EVENT_CONTRACT_MAX_LITERALS: usize = 16;
 
@@ -10947,8 +10949,32 @@ fn parse_event_contract(
             "event contract must be a regular file no larger than {EVENT_CONTRACT_MAX_BYTES} bytes"
         ));
     }
-    let body = fs::read_to_string(path)
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    options.custom_flags(libc::O_NOFOLLOW);
+    let file = options
+        .open(path)
+        .map_err(|error| format!("open event contract {}: {error}", path.display()))?;
+    let opened_metadata = file
+        .metadata()
+        .map_err(|error| format!("inspect open event contract {}: {error}", path.display()))?;
+    if !opened_metadata.is_file() || opened_metadata.len() > EVENT_CONTRACT_MAX_BYTES {
+        return Err(format!(
+            "event contract must be a regular file no larger than {EVENT_CONTRACT_MAX_BYTES} bytes"
+        ));
+    }
+    let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
+    file.take(EVENT_CONTRACT_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
         .map_err(|error| format!("read event contract {}: {error}", path.display()))?;
+    if bytes.len() as u64 > EVENT_CONTRACT_MAX_BYTES {
+        return Err(format!(
+            "event contract must be a regular file no larger than {EVENT_CONTRACT_MAX_BYTES} bytes"
+        ));
+    }
+    let body = String::from_utf8(bytes)
+        .map_err(|_| "event contract must contain valid UTF-8".to_string())?;
     if !body.ends_with('\n') || body.contains('\r') {
         return Err("event contract must use canonical newline-terminated LF text".to_string());
     }
@@ -11082,15 +11108,16 @@ fn solve_event_contract_cdcl(
             ));
         }
     }
+    let mut assumptions = vec![None; encoding.variables];
     let target = aag_cnf_literal(model, contract.horizon, model.outputs[bad_output]);
     match target {
-        AagCnfLiteral::Constant(false) => return Ok(true),
+        AagCnfLiteral::Constant(false) => {}
         AagCnfLiteral::Constant(true) => return Ok(false),
-        AagCnfLiteral::Variable(_) => {}
-    }
-    let mut assumptions = vec![None; encoding.variables];
-    if add_causal_counterfactual_assumption(&mut assumptions, target)? {
-        return Ok(false);
+        AagCnfLiteral::Variable(_) => {
+            if add_causal_counterfactual_assumption(&mut assumptions, target)? {
+                return Ok(false);
+            }
+        }
     }
     let mut solver = Solver::new();
     add_to_varisat(&mut solver, &encoding.clauses);
@@ -34294,6 +34321,62 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(allowed, vec![0, 1, 2]);
         assert!(!allowed.len().is_power_of_two());
+    }
+
+    #[test]
+    fn event_contract_constant_false_property_still_requires_an_admissible_trace() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        model.outputs[0] = 0;
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        assert_eq!(relevant.len(), 9);
+        let contract = EventContract {
+            horizon: 1,
+            phases: vec![EventContractPhase {
+                start: 0,
+                length: 1,
+                predicate: InputPredicate {
+                    clauses: vec![vec![(0, true)], vec![(0, false)]],
+                },
+            }],
+            terminal: InputPredicate { clauses: vec![] },
+        };
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        assert!(
+            quotient
+                .query_event_contract(0, 0, &contract)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!solve_event_contract_cdcl(&model, &relevant, 0, &contract).unwrap());
+    }
+
+    #[test]
+    fn event_contract_unavoidable_answer_agrees_with_exact_cdcl() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model = parse_aag(
+            &root.join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag"),
+        )
+        .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let contract = EventContract {
+            horizon: 1,
+            phases: vec![EventContractPhase {
+                start: 0,
+                length: 1,
+                predicate: InputPredicate { clauses: vec![] },
+            }],
+            terminal: InputPredicate {
+                clauses: vec![vec![(0, true)], vec![(0, false)]],
+            },
+        };
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        assert!(quotient.query_event_contract(0, 0, &contract).unwrap().is_none());
+        assert!(!solve_event_contract_cdcl(&model, &relevant, 0, &contract).unwrap());
     }
 
     #[test]

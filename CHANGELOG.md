@@ -4,7 +4,7 @@
 
 - Add experimental bounded event-contract v1 semantics: strict named CNF over
   relevant AIGER inputs, exact BDD phase composition, concrete witness recovery,
-  direct-AIG replay, and a separately encoded persistent-CDCL control. Preserve
+  direct-AIG replay, and a separately encoded exact CDCL control. Preserve
   30 release-mode product trials and the negative 1.09x to 36.20x query overhead
   instead of admitting the backend universally. Add canonical parser bounds,
   hostile-input rejection, three firmware/robotics contracts, and a

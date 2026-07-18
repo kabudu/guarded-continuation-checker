@@ -24,8 +24,8 @@ concrete input/state trace when an avoiding execution exists. Independent replay
 checks every frame against the original AIG, the phase predicate, the transition
 function, and the terminal property.
 
-The control path independently encodes the same per-frame CNF into persistent
-CDCL. A benchmark is published only when both answer paths agree and witness
+The control path independently encodes the same per-frame CNF into exact CDCL.
+A benchmark is published only when both answer paths agree and witness
 replay succeeds.
 
 ## Canonical bounded format
@@ -48,7 +48,7 @@ through `horizon`. Literals use exact AIG symbol names, `!` means negation, and
 clauses. The parser rejects unknown or ambiguous fields, unknown inputs,
 duplicate clauses, duplicate literals, tautologies, empty clauses, noncanonical
 line endings, symlinks, nonfiles, and inputs over 1 MiB. Bounds are 64 clauses
-per predicate, 16 literals per clause, and 65 phases.
+per predicate, 16 literals per clause, and 64 phases.
 
 ## Self-service command
 

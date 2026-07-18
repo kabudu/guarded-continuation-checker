@@ -1,8 +1,8 @@
 # Event-contract CNF experiment v1
 
 These CSV files preserve ten release-mode trials per product-shaped fixture.
-Every row records exact agreement with separately encoded persistent CDCL and a
-successful replay of any reconstructed witness against the source AIG.
+Every row records exact agreement with a separately encoded exact CDCL control
+and a successful replay of any reconstructed witness against the source AIG.
 
 The evidence was generated on 19 July 2026 with Rust 1.97.0 on an Apple Silicon
 Mac. Timing is evidence for this machine and cohort, not a portable guarantee.
