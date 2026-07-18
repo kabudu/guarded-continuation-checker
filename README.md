@@ -97,7 +97,9 @@ The follow-up [proof-carrying relation experiment](docs/PREDICATE_PROOF_RELATION
 replaces exhaustive one-step input enumeration with direct edge witnesses and
 independently checked UNSAT completeness proofs. It improves relation checking
 by 280.32x at 16 inputs, with a 20.9-KiB proof tradeoff. This is a certificate-v2
-candidate primitive; v1 remains the portfolio format.
+candidate primitive. Terminal safe-set proofs also preserve exactness, ranging
+from negative easy-case overhead to a 26.20x constrained 16-input speedup. v1
+remains the portfolio format.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,

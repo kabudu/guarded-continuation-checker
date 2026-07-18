@@ -24,3 +24,17 @@ binary="$repo/target/release/continuation-quotient-sat"
   examples/products/mobile-robot/firmware/dense-sensor-fusion.aag \
   examples/predicate-certificate-cost/sensor-h32-avoidable.transcript \
   "$repeats" "$output_dir/sensor.csv"
+
+for entry in \
+  "interrupt-controller/firmware/dense-interrupt-arbiter.aag interrupt-h8-avoidable.transcript interrupt-unconstrained.csv" \
+  "actuator-controller/firmware/dense-actuator-interlock.aag actuator-h16-avoidable.transcript actuator-unconstrained.csv" \
+  "mobile-robot/firmware/dense-sensor-fusion.aag sensor-h32-avoidable.transcript sensor-unconstrained.csv" \
+  "interrupt-controller/firmware/dense-interrupt-arbiter.aag interrupt-terminal-constrained.transcript interrupt-constrained.csv" \
+  "actuator-controller/firmware/dense-actuator-interlock.aag actuator-terminal-constrained.transcript actuator-constrained.csv" \
+  "mobile-robot/firmware/dense-sensor-fusion.aag sensor-terminal-constrained.transcript sensor-constrained.csv"
+do
+  read -r model transcript output <<<"$entry"
+  "$binary" benchmark-aiger-predicate-proof-terminal \
+    "examples/products/$model" 0 "examples/predicate-certificate-cost/$transcript" \
+    "$repeats" "$output_dir/$output"
+done

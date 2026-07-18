@@ -40,6 +40,10 @@
   proofs checked by `varisat-checker`. Preserve ten trials across the 9/12/16
   input cohort, including a 280.32x checker speedup at 16 inputs, proof-size and
   generation tradeoffs, truncation rejection and omitted-edge detection.
+- Extend the v2 feasibility result to terminal safe-state evidence: concrete
+  safe witnesses plus one checked UNSAT completeness proof, omitted-safe-state
+  detection, and six preserved unconstrained/constrained cohorts. Retain the
+  negative easy-terminal rows and the 26.20x constrained 16-input speedup.
 
 ## 0.28.0 - 2026-07-18
 

@@ -7,7 +7,7 @@ sufficient.
 
 | Gate | Current evidence | Closure requirement | Status |
 |---|---|---|---|
-| Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; candidate v2 relation proofs preserve exactness while removing exhaustive input enumeration | Complete terminal obligations and a bounded canonical v2 format before replacing v1; preserve compatibility coverage | Closed for bounded v1; v2 in progress |
+| Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; candidate v2 relation and terminal proofs preserve exactness while removing exhaustive input enumeration | Complete a bounded canonical v2 format before replacing v1; preserve compatibility coverage | Closed for bounded v1; v2 in progress |
 | Portfolio integration | Counterfactual portfolio v1 uses the versioned static rule; its strict consumer rechecks certificates or CDCL answers; forced resource exhaustion and both answer directions are covered across the three-product compatibility cohort | Preserve the contract and coverage across future API changes | Closed for bounded v1 |
 | Resource governance | Static input, latch, horizon, node and cache bounds | Wall-clock, memory, output-size and child-process limits with stable machine-readable failure classes | Open |
 | Hostile inputs | Strict certificate/transcript sizes, canonical syntax, unknown/duplicate/truncation rejection and symlink refusal | Add parser fuzz corpus, denial-of-service tests and a documented certificate threat model | In progress |

@@ -1,8 +1,9 @@
 # Proof-carrying one-step relation experiment
 
-This experiment tests a candidate certificate-v2 primitive: replace exhaustive
-enumeration of every projected input assignment with independently checked SAT
-and UNSAT obligations for the exact one-step state relation.
+This experiment tests candidate certificate-v2 primitives that replace
+exhaustive enumeration of every projected input assignment with independently
+checked SAT and UNSAT obligations for the exact one-step state relation and
+terminal safe-state set.
 
 It is a strong performance result on a bounded synthetic/product-shaped cohort,
 not yet a certificate-v2 format, production claim, or scholarly novelty claim.
@@ -24,6 +25,11 @@ Witnesses prevent extra edges; the UNSAT proof prevents omitted edges. Powered
 phase composition remains deterministic arithmetic over the checked base
 relation.
 
+For the terminal set, every claimed safe state carries a concrete input witness.
+One completeness formula requires a state outside the claimed set and an allowed
+input that makes the selected bad output false. Its checked UNSAT proof shows
+that no safe state was omitted.
+
 The producer and checker are distinct components but currently come from the
 same Varisat 0.2.2 release family. This is a smaller trust path than trusting the
 BDD producer, but external proof-format/checker diversity remains an open gate.
@@ -37,6 +43,10 @@ The regression suite:
 - rejects a truncated native proof; and
 - removes a real claimed target and confirms that the completeness obligation
   becomes satisfiable, so no UNSAT proof can be produced.
+- compares terminal proof sets against exhaustive checking under unconstrained
+  and fully constrained inputs; and
+- removes a real safe state and confirms the terminal obligation becomes
+  satisfiable.
 
 ## Benchmark
 
@@ -50,6 +60,13 @@ and proof generation, independent proof checking, exhaustive checking,
 exhaustive evaluation count, witness count, proof bytes and exact agreement.
 The transcript must contain one repeated constraint phase. The command accepts
 1–100 repeats and refuses to overwrite output.
+
+Terminal obligations have a separate answer-preserving schema:
+
+```sh
+continuation-quotient-sat benchmark-aiger-predicate-proof-terminal \
+  INPUT.aag|INPUT.aig OUTPUT_INDEX REPEATED_PHASE_TRANSCRIPT.txt REPEATS OUTPUT.csv
+```
 
 ## Release result
 
@@ -67,6 +84,27 @@ Raw evidence:
 - [`predicate-proof-relation-interrupt-v1.csv`](../results/predicate-proof-relation-interrupt-v1.csv)
 - [`predicate-proof-relation-actuator-v1.csv`](../results/predicate-proof-relation-actuator-v1.csv)
 - [`predicate-proof-relation-sensor-v1.csv`](../results/predicate-proof-relation-sensor-v1.csv)
+
+## Terminal result
+
+Terminal proofs are intentionally reported separately. On unconstrained cases
+where the first input tried makes every state safe, exhaustive checking is
+already faster. Under constrained inputs, the old checker still scans the full
+projected space to find the sole allowed pattern or establish an unsafe state.
+
+| Model/constraints | Safe states | Proof generation | Proof checking | Exhaustive checking | Checker speedup | Proof bytes |
+|---|---:|---:|---:|---:|---:|---:|
+| Interrupt/unconstrained | 4/4 | 0.027 ms | 0.025 ms | 0.001 ms | 0.03x | 695 |
+| Actuator/unconstrained | 8/8 | 0.026 ms | 0.020 ms | 0.001 ms | 0.05x | 536 |
+| Sensor/unconstrained | 16/16 | 0.033 ms | 0.031 ms | 0.002 ms | 0.06x | 959 |
+| Interrupt/constrained | 4/4 | 0.028 ms | 0.029 ms | 0.003 ms | 0.09x | 1,271 |
+| Actuator/constrained | 7/8 | 0.026 ms | 0.025 ms | 0.032 ms | 1.26x | 1,031 |
+| Sensor/constrained | 16/16 | 0.034 ms | 0.038 ms | 0.997 ms | 26.20x | 1,443 |
+
+All six ten-trial CSVs are retained under `results/` with the
+`predicate-proof-terminal-*-v1.csv` prefix. The negative unconstrained rows
+show that terminal proofs are an assurance mechanism, not a universal speed
+optimisation. Even their worst measured proof-check cost is only 0.038 ms.
 
 Reproduce into a new directory:
 
@@ -92,12 +130,11 @@ approximately 0.54 ms on the case where certificate-v1 checking was about
 Before this can replace certificate v1:
 
 1. freeze a canonical, bounded proof bundle and source/obligation binding;
-2. add equivalent proof obligations for terminal safe-state completeness;
-3. verify every powered phase from checked one-step relations;
-4. add proof-count, aggregate-size, clause-count and wall-clock limits;
-5. reject proof swapping, reordering, truncation and decompression/resource
+2. verify every powered phase from checked one-step relations;
+3. add proof-count, aggregate-size, clause-count and wall-clock limits;
+4. reject proof swapping, reordering, truncation and decompression/resource
    attacks;
-6. compare a standard externally checkable proof format and maintained checker;
-7. rerun full certificate and portfolio costs for both answer classes.
+5. compare a standard externally checkable proof format and maintained checker;
+6. rerun full certificate and portfolio costs for both answer classes.
 
 Until those close, v1 remains the portfolio evidence format.
