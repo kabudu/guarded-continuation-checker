@@ -130,10 +130,10 @@ has no headers or whitespace, is a regular non-symlink file no larger than 1
 MiB, and contains 1–65 frames. The horizon is the number of lines minus one.
 
 ```sh
-continuation-quotient-sat certify-aiger-predicate \
+guarded-continuation-checker certify-aiger-predicate \
   INPUT.aag OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert
 
-continuation-quotient-sat verify-aiger-predicate-certificate \
+guarded-continuation-checker verify-aiger-predicate-certificate \
   INPUT.aag CERTIFICATE.cert
 ```
 

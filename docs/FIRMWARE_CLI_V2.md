@@ -4,7 +4,7 @@ Contract v2 adds the versioned RTL project-config gate while retaining the v1
 commands and exit meanings. Query the active contract without touching files:
 
 ```sh
-continuation-quotient-sat firmware-cli-version
+guarded-continuation-checker firmware-cli-version
 ```
 
 The single output line is:

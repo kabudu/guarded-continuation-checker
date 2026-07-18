@@ -2,7 +2,7 @@
 set -eu
 
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-binary="$repository/target/release/continuation-quotient-sat"
+binary="$repository/target/release/guarded-continuation-checker"
 output=${1:-"$repository/target/dense-predicate-product-matrix"}
 trials=${TRIALS:-10}
 repeats=${REPEATS:-100}

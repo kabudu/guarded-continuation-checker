@@ -10,7 +10,7 @@ input=$1
 output=$2
 horizon=${3:-8}
 max_bound_bits=${4:-16}
-binary=${CQ_SAT_BINARY:-target/release/continuation-quotient-sat}
+binary=${CQ_SAT_BINARY:-target/release/guarded-continuation-checker}
 
 if [[ ! -x "$binary" ]]; then
   echo "CQ-SAT/GCC binary is not executable: $binary" >&2

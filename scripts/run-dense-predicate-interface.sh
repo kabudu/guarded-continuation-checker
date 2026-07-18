@@ -2,7 +2,7 @@
 set -eu
 
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-binary="$repository/target/release/continuation-quotient-sat"
+binary="$repository/target/release/guarded-continuation-checker"
 fixture="$repository/examples/products/mobile-robot/firmware/dense-sensor-consensus.aag"
 output=${1:-"$repository/target/dense-predicate-interface"}
 trials=${TRIALS:-10}

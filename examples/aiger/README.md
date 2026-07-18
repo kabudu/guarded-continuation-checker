@@ -12,7 +12,7 @@ Copyright © 2023 Tobias Nießen. Used under the MIT License reproduced in
 Run the exact portfolio benchmark:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger examples/aiger/counter-overflow-4.aag \
   137 10 200000 results/local-aiger-counter.csv \
   results/local-aiger-counter-safety.txt
@@ -33,7 +33,7 @@ both threads occupy the critical section.
 [Upstream Peterson model](https://github.com/tniessen/aiger-safety-properties/blob/c8efd0251c0548dd46168db8410e6777c5f82b73/petersons-algorithm/petersons-algorithm-2-threads-1-core.aag)
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger \
   examples/aiger/petersons-algorithm-2-threads-1-core.aag \
   100 10 200000 results/local-aiger-peterson.csv \
@@ -53,7 +53,7 @@ bit sequence.
 [Upstream SPI model](https://github.com/tniessen/aiger-safety-properties/blob/c8efd0251c0548dd46168db8410e6777c5f82b73/spi-sub-receive-e/spi-bus-receive-e-08-bits.aag)
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger examples/aiger/spi-bus-receive-e-08-bits.aag \
   50 10 200000 results/local-aiger-spi.csv \
   results/local-aiger-spi-safety.txt

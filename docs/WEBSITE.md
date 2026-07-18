@@ -25,18 +25,18 @@ as certified or production-qualified while the corresponding gates remain open.
 
 ## Initial site map
 
-- `/` — bounded value proposition, qualification, architecture, evidence, and
+- `/`: bounded value proposition, qualification, architecture, evidence, and
   two clear actions: inspect the evidence or run an evaluation;
-- `/how-it-works` — Guarded Continuation Checker workflow and CQ-SAT backend;
-- `/use-cases` — embedded firmware and RTL examples, including the infusion-pump
+- `/how-it-works`: Guarded Continuation Checker workflow and CQ-SAT backend;
+- `/use-cases`: embedded firmware and RTL examples, including the infusion-pump
   configuration-safety example;
-- `/evidence` — independent baselines, public corpus, certificates,
+- `/evidence`: independent baselines, public corpus, certificates,
   reproducibility, negative results, and open production gaps;
-- `/evaluate` — self-service design-partner brief, runbook, templates, and
+- `/evaluate`: self-service design-partner brief, runbook, templates, and
   outcome route;
-- `/docs` — curated links into versioned repository documentation;
-- `/releases` — links to signed/tagged GitHub releases and changelog; and
-- `/about` — individual-maintainer status, licence, citation, and contact route.
+- `/docs`: curated links into versioned repository documentation;
+- `/releases`: links to signed/tagged GitHub releases and changelog; and
+- `/about`: individual-maintainer status, licence, citation, and contact route.
 
 Security reports must continue through private GitHub Security Advisories. The
 site must not collect partner RTL, properties, traces, credentials, identity

@@ -45,12 +45,12 @@ is documented in [Exact symbolic input projection](SYMBOLIC_INPUT_PROJECTION.md)
 ```sh
 cargo build --release --locked
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   benchmark-aiger-interface-quotient \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   64 8 100 target/interface-quotient.csv
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   verify-aiger-interface-quotient \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   target/interface-quotient.csv

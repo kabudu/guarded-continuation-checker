@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-binary=${1:-target/release/continuation-quotient-sat}
+binary=${1:-target/release/guarded-continuation-checker}
 expected=results/causal-strategy-comparison-v1.csv
 
 if [[ ! -x "$binary" ]]; then

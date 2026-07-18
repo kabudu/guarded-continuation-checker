@@ -8,7 +8,7 @@ repeats="${2:-10}"
 mkdir -p "$output_dir"
 cd "$repo"
 cargo build --release
-binary="$repo/target/release/continuation-quotient-sat"
+binary="$repo/target/release/guarded-continuation-checker"
 
 "$binary" benchmark-aiger-predicate-certificate-cost \
   examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag 0 \

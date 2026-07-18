@@ -18,8 +18,8 @@ that target-false alternative unsatisfiable.
 The retained segments are therefore a **sufficient cause under the documented
 intervention model**: fixing those observations makes the same bad output at the
 original counterexample's earliest frame unavoidable. Other permitted input
-values may make a different output—or the same output—fail earlier; that is not
-excluded by this intervention model. The certificate is **1-minimal**—removing
+values may make a different output, or the same output, fail earlier; that is not
+excluded by this intervention model. The certificate is **1-minimal**: removing
 any one retained segment makes an alternative with the target output false at
 that frame satisfiable. It is not guaranteed to have globally minimum
 cardinality, establish physical-world causation, locate the defective RTL
@@ -35,12 +35,12 @@ candidate segmentation, sufficiency, or per-event minimality check disagrees.
 ```sh
 cargo build --release --locked
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   explain-aiger-counterexample \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   8 16 target/causal/door-interlock
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   verify-aiger-causal-bundle \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   target/causal/door-interlock

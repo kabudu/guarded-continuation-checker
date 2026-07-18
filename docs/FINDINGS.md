@@ -273,7 +273,7 @@ persistent CDCL work after paying the failed BDD attempt.
 
 This closes the operational completeness gap but does not make explosive cases
 faster. The next representation experiment should reuse the already composed
-prefix—via an exact circuit/AIG checkpoint—instead of restarting from the full
+prefix through an exact circuit/AIG checkpoint instead of restarting from the full
 CNF when the guard fires.
 
 ## Exact BDD-prefix CDCL checkpoint
@@ -355,7 +355,7 @@ phase speedups were 0.639× and 0.608×, and the unseen horizon-7,777 holdout wa
 
 The checkpoint relation is therefore higher-order: unary and binary propagation
 cannot convey enough of the native BDD to CDCL. A credible next step is conflict
-generalization—derive a smaller BDD explanation for each rejected full state—so
+generalization: derive a smaller BDD explanation for each rejected full state, so
 one learned clause excludes a whole incompatible subcube rather than one state.
 
 ## BDD conflict generalization
@@ -480,8 +480,8 @@ MIT-licensed AIGER safety suite exposed a gate counterexample. Transition densit
 alone selected CQ-SAT/GCC, whose query path was approximately 0.22× the CDCL
 baseline on the first 50 property queries. Full-state property enumeration has a
 different cost profile from sparse trace observations. The v0.3.0 gate
-therefore also reads average assumption count—a static property of the declared
-batch—and rejects batches averaging more than one state-width of assumptions.
+therefore also reads average assumption count, a static property of the declared
+batch, and rejects batches averaging more than one state-width of assumptions.
 With that correction the external model selects exact CDCL, agrees on all 50
 sampled queries, validates all witnesses, and finds three reachable bad-state
 queries. The exhaustive 137-query safety run reports `UNSAFE` at frame 15, finds

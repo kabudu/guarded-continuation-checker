@@ -9,7 +9,7 @@ evidence and does not describe the current producer.
 Validate a completed bundle with:
 
 ```sh
-continuation-quotient-sat firmware-artifact-validate ARTIFACT_DIR
+guarded-continuation-checker firmware-artifact-validate ARTIFACT_DIR
 ```
 
 Successful validation exits 0. Missing, reordered, duplicated, unknown, or

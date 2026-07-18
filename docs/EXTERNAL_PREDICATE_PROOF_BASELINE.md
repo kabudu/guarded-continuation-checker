@@ -91,7 +91,7 @@ Build the project, produce a v2 certificate, and export its obligations:
 
 ```bash
 cargo build --release
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   export-aiger-predicate-v2-obligations \
   MODEL.aag CERTIFICATE.cert2 target/obligations
 ```

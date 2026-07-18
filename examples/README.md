@@ -1,7 +1,7 @@
 # Executable verification examples
 
 These examples connect the research engine to repeated bounded-model-checking
-workloads. They are deliberately small, stylized transition models—not certified
+workloads. They are deliberately small, stylized transition models, not certified
 industrial controllers. Each command constructs exact layered CNF, issues a fixed
 batch of partial observations, compares the selected backend with persistent
 CDCL, and validates every returned witness.

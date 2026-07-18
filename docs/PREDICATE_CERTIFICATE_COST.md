@@ -23,7 +23,7 @@ columns, certificate byte count, result, agreement and status are never
 aggregated or filtered by the producer.
 
 ```sh
-continuation-quotient-sat benchmark-aiger-predicate-certificate-cost \
+guarded-continuation-checker benchmark-aiger-predicate-certificate-cost \
   INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv
 ```
 

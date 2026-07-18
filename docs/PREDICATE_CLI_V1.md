@@ -4,7 +4,7 @@ This contract freezes the self-service command surface for bounded dense
 predicate certificates. Query it without reading a model or creating files:
 
 ```sh
-continuation-quotient-sat predicate-cli-version
+guarded-continuation-checker predicate-cli-version
 ```
 
 The command emits exactly one space-delimited `key=value` line:

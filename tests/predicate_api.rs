@@ -1,4 +1,4 @@
-use continuation_quotient_sat::{
+use guarded_continuation_checker::{
     CertificateVersion, INVOCATION_METRICS_SCHEMA_VERSION, InvocationStatus, OperationKind,
     PredicateResult, PredicateTool,
 };
@@ -6,7 +6,7 @@ use std::path::Path;
 
 #[test]
 fn downstream_api_discovers_certifies_and_verifies_both_formats() {
-    let tool = PredicateTool::discover(env!("CARGO_BIN_EXE_continuation-quotient-sat")).unwrap();
+    let tool = PredicateTool::discover(env!("CARGO_BIN_EXE_guarded-continuation-checker")).unwrap();
     assert_eq!(tool.capabilities().cli_version, 1);
     assert_eq!(tool.capabilities().max_relevant_inputs, 16);
 

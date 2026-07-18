@@ -2,7 +2,7 @@
 set -eu
 
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-binary="$repository/target/release/continuation-quotient-sat"
+binary="$repository/target/release/guarded-continuation-checker"
 fixture="$repository/examples/products/infusion-pump/firmware/door-interlock-regression.aag"
 output=${1:-"$repository/target/interface-quotient-scaling"}
 trials=${TRIALS:-10}

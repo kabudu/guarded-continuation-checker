@@ -18,9 +18,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes yosys
       - name: Install CQ-SAT/GCC
-        run: cargo install --git https://github.com/kabudu/continuation-quotient-sat --tag v0.6.0 --locked
+        run: cargo install --git https://github.com/kabudu/guarded-continuation-checker --tag v0.6.0 --locked
       - name: Prove the motor cannot run with the door open
-        run: continuation-quotient-sat firmware-rtl-safety-gate firmware/controller.sv infusion_pump_controller 100 safety-artifacts
+        run: guarded-continuation-checker firmware-rtl-safety-gate firmware/controller.sv infusion_pump_controller 100 safety-artifacts
       - uses: actions/upload-artifact@v4
         if: always()
         with:

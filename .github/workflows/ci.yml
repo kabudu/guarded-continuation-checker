@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check repository writing style
+        run: scripts/check-style.sh
       - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
         with:
           components: rustfmt, clippy
@@ -31,29 +33,29 @@ jobs:
         run: |
           cargo build --release --locked
           scripts/production-evaluation-check.sh \
-            target/release/continuation-quotient-sat /tmp/cq-operations-check
+            target/release/guarded-continuation-checker /tmp/cq-operations-check
       - name: Certified causal-analysis smoke test
         run: |
-          target/release/continuation-quotient-sat \
+          target/release/guarded-continuation-checker \
             explain-aiger-counterexample \
             examples/products/infusion-pump/firmware/door-interlock-regression.aag \
             8 16 /tmp/cq-causal
-          target/release/continuation-quotient-sat \
+          target/release/guarded-continuation-checker \
             verify-aiger-causal-bundle \
             examples/products/infusion-pump/firmware/door-interlock-regression.aag \
             /tmp/cq-causal
           grep -q '^minimality=1-minimal$' /tmp/cq-causal/causal-certificate.txt
           grep -q ',true,true,ok$' /tmp/cq-causal/causal-metrics.csv
-          target/release/continuation-quotient-sat \
+          target/release/guarded-continuation-checker \
             verify-aiger-causal-bundle \
             examples/aiger/spi-bus-receive-e-08-bits.aag \
             results/causal-analysis-v1/spi
-          target/release/continuation-quotient-sat \
+          target/release/guarded-continuation-checker \
             verify-aiger-causal-bundle \
             examples/products/infusion-pump/firmware/door-interlock-regression.aag \
             results/causal-analysis-v1/infusion-pump
           scripts/test-causal-strategy-results.sh \
-            target/release/continuation-quotient-sat
+            target/release/guarded-continuation-checker
       - name: Cross-check RTL examples with SymbiYosys
         working-directory: examples/products/infusion-pump/rtl
         run: |
@@ -97,7 +99,7 @@ jobs:
       - name: Run current distribution Yosys with independent oracle
         run: |
           scripts/run-rtl-corpus.sh \
-            target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             corpus/rtl/yosys-simple /tmp/corpus-current /tmp/sby/sbysrc/sby.py
           cat /tmp/corpus-current/results.csv
       - name: Run pinned historical Yosys 0.36
@@ -106,7 +108,7 @@ jobs:
             --volume "$PWD:/work" --workdir /work \
             hdlc/yosys@sha256:58c0c80e41fd96b4b90da53c730aa3c43051f0cf2a6c6e336bd012281479df22 \
             scripts/run-rtl-corpus.sh \
-              target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+              target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
               corpus/rtl/yosys-simple /work/target/corpus-yosys-036 -
           cat target/corpus-yosys-036/results.csv
       - name: Exercise hostile-RTL isolation profile
@@ -114,7 +116,7 @@ jobs:
           set +e
           watchdog_output=$(CQ_ISOLATION_WATCHDOG_SELF_TEST=1 \
             scripts/isolated-rtl-evaluation.sh \
-              target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+              target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
               corpus/rtl/yosys-simple/always01-safe.conf target/isolated-watchdog-test)
           watchdog_exit=$?
           set -e
@@ -123,11 +125,11 @@ jobs:
           test ! -e target/isolated-watchdog-test
           test ! -e target/isolated-watchdog-test.isolation-report.txt
           scripts/isolated-rtl-evaluation.sh \
-            target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             corpus/rtl/yosys-simple/always01-safe.conf target/isolated-safe
           set +e
           scripts/isolated-rtl-evaluation.sh \
-            target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             corpus/rtl/yosys-simple/always01-unsafe.conf target/isolated-unsafe
           unsafe_exit=$?
           set -e

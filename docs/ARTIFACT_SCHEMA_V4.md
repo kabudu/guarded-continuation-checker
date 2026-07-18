@@ -7,7 +7,7 @@ metric, and safety report. The active strict validator accepts only v4.
 Validate a completed bundle with:
 
 ```sh
-continuation-quotient-sat firmware-artifact-validate ARTIFACT_DIR
+guarded-continuation-checker firmware-artifact-validate ARTIFACT_DIR
 ```
 
 Successful validation exits 0. Missing, reordered, duplicated, unknown, or

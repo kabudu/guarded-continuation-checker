@@ -13,7 +13,7 @@ close either register by itself.
 
 - Firmware and embedded verification remain the primary domain.
 - Robotics work starts from controller, sensor, actuator, scheduling, and
-  bounded planning semantics—not from marketing analogies.
+  bounded planning semantics, not from marketing analogies.
 - Every specialised backend fails closed to maintained SAT/SMT baselines.
 - No per-formula timing calibration is allowed in an admission decision.
 - Negative results and rejected variants are retained.
@@ -22,12 +22,12 @@ close either register by itself.
 
 ## Research cycles
 
-1. **Phase-preserving counterfactual interfaces — implemented experimentally.**
+1. **Phase-preserving counterfactual interfaces (implemented experimentally).**
    Exact powered summaries preserve constant firmware input phases and show a
    robust 1.42x–7.00x median scaling curve on the bounded infusion-pump model.
 
-2. **Symbolic input projection — first exact support-projection stage
-   implemented experimentally.** Wide declared buses are projected onto the
+2. **Symbolic input projection (first exact support-projection stage
+   implemented experimentally).** Wide declared buses are projected onto the
    exact transition/property support. A 16-input mobile-robot controller with a
    two-input cone shows a robust 2.46x–10.74x median scaling curve. Dense-support
    predicate projection remains open in the released portfolio. A bounded
