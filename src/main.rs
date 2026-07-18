@@ -8183,21 +8183,21 @@ fn temporal_composition_formula(
     Ok((width * (horizon + 1), formula))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct AagLatch {
     current: usize,
     next: usize,
     initial: Option<bool>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct AagAnd {
     output: usize,
     left: usize,
     right: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct AagModel {
     max_variable: usize,
     inputs: Vec<usize>,
@@ -8220,30 +8220,199 @@ fn parse_aag_usize(token: Option<&str>, context: &str) -> Result<usize, String> 
 }
 
 fn parse_aag(path: &Path) -> Result<AagModel, String> {
-    let metadata = fs::metadata(path)
-        .map_err(|error| format!("inspect ASCII AIGER {}: {error}", path.display()))?;
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("inspect AIGER {}: {error}", path.display()))?;
     if !metadata.is_file() {
-        return Err(format!(
-            "ASCII AIGER input is not a file: {}",
-            path.display()
-        ));
+        return Err(format!("AIGER input is not a file: {}", path.display()));
     }
     if metadata.len() > AAG_INPUT_LIMIT_BYTES {
         return Err(format!(
-            "ASCII AIGER input exceeds safety limit {AAG_INPUT_LIMIT_BYTES} bytes"
+            "AIGER input exceeds safety limit {AAG_INPUT_LIMIT_BYTES} bytes"
         ));
     }
     let bytes =
-        fs::read(path).map_err(|error| format!("read ASCII AIGER {}: {error}", path.display()))?;
+        fs::read(path).map_err(|error| format!("read AIGER {}: {error}", path.display()))?;
     if bytes.len() as u64 > AAG_INPUT_LIMIT_BYTES {
         return Err(format!(
-            "ASCII AIGER input exceeds safety limit {AAG_INPUT_LIMIT_BYTES} bytes"
+            "AIGER input exceeds safety limit {AAG_INPUT_LIMIT_BYTES} bytes"
         ));
     }
+    parse_aiger_bytes(&bytes)
+}
+
+fn parse_aiger_bytes(bytes: &[u8]) -> Result<AagModel, String> {
+    if bytes.starts_with(b"aag ") {
+        parse_ascii_aiger(bytes)
+    } else if bytes.starts_with(b"aig ") {
+        parse_binary_aiger(bytes)
+    } else {
+        Err("only ASCII (`aag`) or binary (`aig`) AIGER input is supported".to_string())
+    }
+}
+
+fn parse_binary_aiger_delta(bytes: &[u8], cursor: &mut usize) -> Result<usize, String> {
+    let mut value = 0usize;
+    let mut shift = 0u32;
+    loop {
+        let byte = *bytes
+            .get(*cursor)
+            .ok_or_else(|| "truncated binary AIGER delta".to_string())?;
+        *cursor += 1;
+        let payload = usize::from(byte & 0x7f);
+        if payload > (usize::MAX >> shift) {
+            return Err("binary AIGER delta overflow".to_string());
+        }
+        let shifted = payload << shift;
+        value = value
+            .checked_add(shifted)
+            .ok_or_else(|| "binary AIGER delta overflow".to_string())?;
+        if byte & 0x80 == 0 {
+            return Ok(value);
+        }
+        shift = shift
+            .checked_add(7)
+            .ok_or_else(|| "binary AIGER delta overflow".to_string())?;
+        if shift >= usize::BITS {
+            return Err("binary AIGER delta overflow".to_string());
+        }
+    }
+}
+
+fn binary_aiger_line<'a>(
+    bytes: &'a [u8],
+    cursor: &mut usize,
+    context: &str,
+) -> Result<&'a str, String> {
+    let remaining = bytes
+        .get(*cursor..)
+        .ok_or_else(|| format!("truncated binary AIGER {context}"))?;
+    let length = remaining
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .ok_or_else(|| format!("unterminated binary AIGER {context}"))?;
+    let line = &remaining[..length];
+    *cursor = (*cursor)
+        .checked_add(length + 1)
+        .ok_or_else(|| "binary AIGER cursor overflow".to_string())?;
+    if line.contains(&b'\r') || !line.is_ascii() {
+        return Err(format!("invalid binary AIGER {context}"));
+    }
+    std::str::from_utf8(line).map_err(|_| format!("invalid binary AIGER {context}"))
+}
+
+fn parse_binary_aiger(bytes: &[u8]) -> Result<AagModel, String> {
+    let mut cursor = 0usize;
+    let header_line = binary_aiger_line(bytes, &mut cursor, "header")?;
+    let mut header = header_line.split_whitespace();
+    if header.next() != Some("aig") {
+        return Err("invalid binary AIGER header".to_string());
+    }
+    let max_variable = parse_aag_usize(header.next(), "AIGER maximum variable")?;
+    let input_count = parse_aag_usize(header.next(), "AIGER input count")?;
+    let latch_count = parse_aag_usize(header.next(), "AIGER latch count")?;
+    let output_count = parse_aag_usize(header.next(), "AIGER output count")?;
+    let and_count = parse_aag_usize(header.next(), "AIGER AND count")?;
+    if header.next().is_some() {
+        return Err("extended binary AIGER headers are not supported yet".to_string());
+    }
+    if max_variable > 1_000_000 {
+        return Err("AIGER maximum variable exceeds safety limit 1000000".to_string());
+    }
+    let definitions = input_count
+        .checked_add(latch_count)
+        .and_then(|value| value.checked_add(and_count))
+        .ok_or_else(|| "AIGER definition count overflow".to_string())?;
+    if definitions != max_variable {
+        return Err(format!(
+            "AIGER header requires M = I + L + A; found {max_variable} != {definitions}"
+        ));
+    }
+    if latch_count == 0 {
+        return Err("AIGER model must contain at least one latch".to_string());
+    }
+    if output_count > 1_000_000 {
+        return Err("AIGER output count exceeds safety limit 1000000".to_string());
+    }
+
+    let estimated_ascii_bytes = definitions
+        .checked_add(output_count)
+        .and_then(|lines| lines.checked_add(1))
+        .and_then(|lines| lines.checked_mul(32))
+        .ok_or_else(|| "binary AIGER decoded-size estimate overflow".to_string())?;
+    let mut ascii = String::new();
+    ascii
+        .try_reserve(estimated_ascii_bytes)
+        .map_err(|_| "cannot allocate decoded binary AIGER buffer".to_string())?;
+    ascii.push_str(&format!(
+        "aag {max_variable} {input_count} {latch_count} {output_count} {and_count}\n"
+    ));
+    for variable in 1..=input_count {
+        ascii.push_str(&format!("{}\n", variable * 2));
+    }
+    for index in 0..latch_count {
+        let line = binary_aiger_line(bytes, &mut cursor, "latch section")?;
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        if !(1..=2).contains(&fields.len()) {
+            return Err(format!("invalid binary AIGER latch {index}"));
+        }
+        let current = input_count
+            .checked_add(index + 1)
+            .and_then(|variable| variable.checked_mul(2))
+            .ok_or_else(|| "binary AIGER latch literal overflow".to_string())?;
+        ascii.push_str(&current.to_string());
+        ascii.push(' ');
+        ascii.push_str(fields[0]);
+        if let Some(initial) = fields.get(1) {
+            ascii.push(' ');
+            ascii.push_str(initial);
+        }
+        ascii.push('\n');
+    }
+    for index in 0..output_count {
+        let line = binary_aiger_line(bytes, &mut cursor, "output section")?;
+        let mut fields = line.split_whitespace();
+        let literal = parse_aag_usize(fields.next(), "output literal")?;
+        if fields.next().is_some() {
+            return Err(format!("invalid binary AIGER output {index}"));
+        }
+        ascii.push_str(&format!("{literal}\n"));
+    }
+    for index in 0..and_count {
+        let lhs_variable = input_count
+            .checked_add(latch_count)
+            .and_then(|value| value.checked_add(index + 1))
+            .ok_or_else(|| "binary AIGER AND literal overflow".to_string())?;
+        let lhs = lhs_variable
+            .checked_mul(2)
+            .ok_or_else(|| "binary AIGER AND literal overflow".to_string())?;
+        let delta_zero = parse_binary_aiger_delta(bytes, &mut cursor)?;
+        let right_zero = lhs
+            .checked_sub(delta_zero)
+            .ok_or_else(|| format!("invalid binary AIGER first delta at gate {index}"))?;
+        let delta_one = parse_binary_aiger_delta(bytes, &mut cursor)?;
+        let right_one = right_zero
+            .checked_sub(delta_one)
+            .ok_or_else(|| format!("invalid binary AIGER second delta at gate {index}"))?;
+        ascii.push_str(&format!("{lhs} {right_zero} {right_one}\n"));
+    }
+    let tail = bytes
+        .get(cursor..)
+        .ok_or_else(|| "binary AIGER cursor exceeds input".to_string())?;
+    if !tail.is_ascii() || tail.contains(&b'\r') {
+        return Err("binary AIGER symbol or comment section contains invalid bytes".to_string());
+    }
+    ascii.push_str(
+        std::str::from_utf8(tail)
+            .map_err(|_| "binary AIGER symbol or comment section is not UTF-8".to_string())?,
+    );
+    parse_ascii_aiger(ascii.as_bytes())
+}
+
+fn parse_ascii_aiger(bytes: &[u8]) -> Result<AagModel, String> {
     if !bytes.is_ascii() {
         return Err("ASCII AIGER input contains non-ASCII bytes".to_string());
     }
-    let source = std::str::from_utf8(&bytes)
+    let source = std::str::from_utf8(bytes)
         .map_err(|_| "ASCII AIGER input is not valid UTF-8".to_string())?;
     let mut lines = source.lines();
     let mut header = lines
@@ -11985,6 +12154,12 @@ const CAUSAL_CQ_MAX_VARIABLES: usize = 256;
 const CAUSAL_CQ_MAX_CLAUSES: usize = 4_096;
 const CAUSAL_METRICS_HEADER: &str = "input_sha256,requested_horizon,bad_frame,bad_output,candidates,causes,queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_compile_ns,cq_query_ns,persistent_cdcl_ns,fresh_cdcl_ns,cq_query_speedup,cq_amortized_speedup,agreement,certificate_valid,status";
 const CAUSAL_STRATEGY_HEADER: &str = "causal_strategy_schema_version,input_sha256,requested_horizon,bad_frame,bad_output,strategy,candidates,causes,cause_indices,cause_sha256,search_queries,validation_queries,total_queries,unique_queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_prepare_ns,cq_query_ns,persistent_setup_ns,persistent_query_ns,fresh_total_ns,persistent_total_speedup_vs_fresh,cq_query_speedup_vs_persistent,cq_total_speedup_vs_persistent,agreement,minimality_valid,status";
+const CAUSAL_BATCH_SCHEMA_VERSION: usize = 1;
+const CAUSAL_BATCH_MAX_TARGETS: usize = 256;
+const CAUSAL_BATCH_MAX_CAUSES: usize = 16;
+const CAUSAL_BATCH_MAX_REPEATS: usize = 10_000;
+const CAUSAL_BATCH_MAX_MAP_QUERIES: usize = 4_096;
+const CAUSAL_BATCH_HEADER: &str = "causal_batch_schema_version,input_sha256,horizon,bad_frame,bad_output,vocabulary,candidates,causes,cause_indices,enumeration_complete,oracle_queries,unique_queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_prepare_ns,cq_query_ns,persistent_setup_ns,persistent_query_ns,repeats,workload_measured_break_even_query,workload_projected_break_even_query,agreement,minimality_valid,status";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CausalEvent {
@@ -12036,6 +12211,12 @@ struct CausalStrategyResult {
     validation_queries: usize,
     transcript: Vec<CausalQueryRecord>,
     fresh_total_ns: u128,
+}
+
+struct CausalEnumeration {
+    causes: Vec<Vec<bool>>,
+    transcript: Vec<CausalQueryRecord>,
+    complete: bool,
 }
 
 fn causal_events_from_witness(
@@ -12972,6 +13153,264 @@ fn causal_selection_fingerprint(events: &[CausalEvent], active: &[bool]) -> Resu
         .collect())
 }
 
+fn causal_point_events(model: &AagModel, witness: &[bool], bad_frame: usize) -> Vec<CausalEvent> {
+    let mut events = Vec::new();
+    for input in 0..model.inputs.len() {
+        let literal = model.inputs[input];
+        for frame in 0..=bad_frame {
+            events.push(CausalEvent {
+                input,
+                start_frame: frame,
+                end_frame: frame,
+                value: witness[frame * model.max_variable + literal / 2 - 1],
+            });
+        }
+    }
+    events
+}
+
+fn causal_dyadic_events(model: &AagModel, witness: &[bool], bad_frame: usize) -> Vec<CausalEvent> {
+    let mut events = Vec::new();
+    for input in 0..model.inputs.len() {
+        let literal = model.inputs[input];
+        let frame_count = bad_frame + 1;
+        let mut length = 1usize;
+        while length <= frame_count {
+            for start in (0..frame_count).step_by(length) {
+                let Some(end) = start.checked_add(length - 1) else {
+                    break;
+                };
+                if end >= frame_count {
+                    continue;
+                }
+                let value = witness[start * model.max_variable + literal / 2 - 1];
+                if (start + 1..=end)
+                    .all(|frame| witness[frame * model.max_variable + literal / 2 - 1] == value)
+                {
+                    events.push(CausalEvent {
+                        input,
+                        start_frame: start,
+                        end_frame: end,
+                        value,
+                    });
+                }
+            }
+            let Some(next) = length.checked_mul(2) else {
+                break;
+            };
+            length = next;
+        }
+    }
+    events
+}
+
+fn add_causal_counterfactual_assumption(
+    assumptions: &mut [Option<bool>],
+    target: AagCnfLiteral,
+) -> Result<bool, String> {
+    match target {
+        // Negating a constant-true bad output makes the counterfactual formula
+        // immediately UNSAT: the failure is unconditional.
+        AagCnfLiteral::Constant(true) => Ok(true),
+        AagCnfLiteral::Constant(false) => {
+            Err("constant-false AIGER target cannot have a counterexample".to_string())
+        }
+        AagCnfLiteral::Variable((variable, value)) => {
+            let slot = assumptions
+                .get_mut(variable)
+                .ok_or_else(|| "AIGER target variable is out of range".to_string())?;
+            if slot.is_some_and(|existing| existing == value) {
+                return Ok(true);
+            }
+            *slot = Some(!value);
+            Ok(false)
+        }
+    }
+}
+
+fn causal_query_witness(
+    solver: &mut Solver<'_>,
+    variables: usize,
+    target: AagCnfLiteral,
+) -> Result<Option<Vec<bool>>, String> {
+    match target {
+        AagCnfLiteral::Constant(false) => return Ok(None),
+        AagCnfLiteral::Constant(true) => solver.assume(&[]),
+        AagCnfLiteral::Variable((variable, value)) => {
+            solver.assume(&[Lit::from_var(Var::from_index(variable), value)])
+        }
+    }
+    if !solver
+        .solve()
+        .map_err(|error| format!("solve causal batch target: {error}"))?
+    {
+        return Ok(None);
+    }
+    let mut assignment = vec![false; variables];
+    for literal in solver
+        .model()
+        .ok_or_else(|| "causal batch SAT result has no model".to_string())?
+    {
+        if literal.var().index() < variables {
+            assignment[literal.var().index()] = literal.is_positive();
+        }
+    }
+    Ok(Some(assignment))
+}
+
+fn enumerate_minimal_causal_sets<F>(
+    count: usize,
+    max_causes: usize,
+    mut is_unsat: F,
+) -> Result<CausalEnumeration, String>
+where
+    F: FnMut(&[bool]) -> Result<bool, String>,
+{
+    let mut map = Solver::new();
+    for index in 0..count {
+        let variable = Var::from_index(index);
+        map.add_clause(&[
+            Lit::from_var(variable, true),
+            Lit::from_var(variable, false),
+        ]);
+    }
+    let mut causes = Vec::new();
+    let mut transcript = Vec::new();
+    let mut complete = false;
+    for _ in 0..CAUSAL_BATCH_MAX_MAP_QUERIES {
+        if !map
+            .solve()
+            .map_err(|error| format!("solve causal subset map: {error}"))?
+        {
+            complete = true;
+            break;
+        }
+        if causes.len() >= max_causes {
+            break;
+        }
+        let mut seed = vec![false; count];
+        for literal in map
+            .model()
+            .ok_or_else(|| "causal subset map SAT result has no model".to_string())?
+        {
+            if literal.var().index() < count {
+                seed[literal.var().index()] = literal.is_positive();
+            }
+        }
+        if transcript.len() >= CAUSAL_BATCH_MAX_MAP_QUERIES {
+            break;
+        }
+        let unsat = is_unsat(&seed)?;
+        transcript.push(CausalQueryRecord {
+            active: seed.clone(),
+            unsat,
+        });
+        if unsat {
+            for index in 0..count {
+                if !seed[index] {
+                    continue;
+                }
+                seed[index] = false;
+                if transcript.len() >= CAUSAL_BATCH_MAX_MAP_QUERIES {
+                    return Ok(CausalEnumeration {
+                        causes,
+                        transcript,
+                        complete: false,
+                    });
+                }
+                let reduced_unsat = is_unsat(&seed)?;
+                transcript.push(CausalQueryRecord {
+                    active: seed.clone(),
+                    unsat: reduced_unsat,
+                });
+                if !reduced_unsat {
+                    seed[index] = true;
+                }
+            }
+            let blocker = seed
+                .iter()
+                .enumerate()
+                .filter_map(|(index, selected)| {
+                    selected.then_some(Lit::from_var(Var::from_index(index), false))
+                })
+                .collect::<Vec<_>>();
+            map.add_clause(&blocker);
+            causes.push(seed);
+        } else {
+            for index in 0..count {
+                if seed[index] {
+                    continue;
+                }
+                seed[index] = true;
+                if transcript.len() >= CAUSAL_BATCH_MAX_MAP_QUERIES {
+                    return Ok(CausalEnumeration {
+                        causes,
+                        transcript,
+                        complete: false,
+                    });
+                }
+                let grown_unsat = is_unsat(&seed)?;
+                transcript.push(CausalQueryRecord {
+                    active: seed.clone(),
+                    unsat: grown_unsat,
+                });
+                if grown_unsat {
+                    seed[index] = false;
+                }
+            }
+            let blocker = seed
+                .iter()
+                .enumerate()
+                .filter_map(|(index, selected)| {
+                    (!selected).then_some(Lit::from_var(Var::from_index(index), true))
+                })
+                .collect::<Vec<_>>();
+            map.add_clause(&blocker);
+        }
+    }
+    Ok(CausalEnumeration {
+        causes,
+        transcript,
+        complete,
+    })
+}
+
+fn causal_break_even(
+    cq_prepare_ns: u128,
+    persistent_setup_ns: u128,
+    cq_samples: &[u128],
+    persistent_samples: &[u128],
+) -> (Option<usize>, Option<usize>) {
+    let mut cq_total = cq_prepare_ns;
+    let mut persistent_total = persistent_setup_ns;
+    let mut measured = None;
+    for (index, (&cq, &persistent)) in cq_samples.iter().zip(persistent_samples).enumerate() {
+        cq_total = cq_total.saturating_add(cq);
+        persistent_total = persistent_total.saturating_add(persistent);
+        if measured.is_none() && cq_total <= persistent_total {
+            measured = Some(index + 1);
+        }
+    }
+    let cq_average = cq_samples
+        .iter()
+        .fold(0u128, |total, sample| total.saturating_add(*sample))
+        / cq_samples.len().max(1) as u128;
+    let persistent_average = persistent_samples
+        .iter()
+        .fold(0u128, |total, sample| total.saturating_add(*sample))
+        / persistent_samples.len().max(1) as u128;
+    let projected = if cq_average < persistent_average && cq_prepare_ns > persistent_setup_ns {
+        let deficit = cq_prepare_ns - persistent_setup_ns;
+        let saving = persistent_average - cq_average;
+        usize::try_from(deficit.div_ceil(saving)).ok()
+    } else if cq_prepare_ns <= persistent_setup_ns {
+        Some(0)
+    } else {
+        None
+    };
+    (measured, projected)
+}
+
 fn publish_causal_comparison(path: &Path, body: &[u8]) -> Result<(), String> {
     if path.exists() {
         return Err(format!(
@@ -13003,6 +13442,390 @@ fn publish_causal_comparison(path: &Path, body: &[u8]) -> Result<(), String> {
         let _ = fs::remove_file(staging);
     }
     publish
+}
+
+fn benchmark_aiger_causal_batch(
+    input: &Path,
+    horizon: usize,
+    max_bound_bits: usize,
+    max_causes: usize,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=CAUSAL_BATCH_MAX_CAUSES).contains(&max_causes) {
+        return Err(format!(
+            "causal batch cause limit must be in 1..={CAUSAL_BATCH_MAX_CAUSES}"
+        ));
+    }
+    if !(1..=CAUSAL_BATCH_MAX_REPEATS).contains(&repeats) {
+        return Err(format!(
+            "causal batch repeats must be in 1..={CAUSAL_BATCH_MAX_REPEATS}"
+        ));
+    }
+    let model = parse_aag(input)?;
+    if model.inputs.is_empty() {
+        return Err("causal batch requires at least one primary input".to_string());
+    }
+    let encoding = aag_bmc_encoding(&model, horizon)?;
+    if encoding.queries.len() > CAUSAL_BATCH_MAX_TARGETS {
+        return Err(format!(
+            "causal batch has {} targets; safety limit is {CAUSAL_BATCH_MAX_TARGETS}",
+            encoding.queries.len()
+        ));
+    }
+    let cq_prepare_start = Instant::now();
+    let mut cq_bound_bits = None;
+    let mut compiled = None;
+    if encoding.variables <= CAUSAL_CQ_MAX_VARIABLES
+        && encoding.clauses.len() <= CAUSAL_CQ_MAX_CLAUSES
+    {
+        let order = min_fill_order(encoding.variables, &encoding.clauses);
+        let bound = continuation_frontier_bound_bits(encoding.variables, &encoding.clauses, &order);
+        cq_bound_bits = Some(bound);
+        if bound <= max_bound_bits {
+            compiled = Some(compile_continuation(&encoding.clauses, &order));
+        }
+    }
+    let cq_prepare_ns = cq_prepare_start.elapsed().as_nanos();
+    let cq_peak_classes = compiled.as_ref().map(|value| value.peak_classes);
+    let persistent_setup_start = Instant::now();
+    let mut persistent = Solver::new();
+    add_to_varisat(&mut persistent, &encoding.clauses);
+    let persistent_setup_ns = persistent_setup_start.elapsed().as_nanos();
+    let mut target_solver = Solver::new();
+    add_to_varisat(&mut target_solver, &encoding.clauses);
+    let input_sha256 = sha256_file(input)?;
+    let mut lines = vec![CAUSAL_BATCH_HEADER.to_string()];
+    let mut failing_targets = 0usize;
+    let mut workload_persistent_samples = Vec::new();
+    let mut workload_cq_samples = Vec::new();
+
+    for query in &encoding.queries {
+        let Some(witness) =
+            causal_query_witness(&mut target_solver, encoding.variables, query.assumption)?
+        else {
+            continue;
+        };
+        failing_targets += 1;
+        let fixed = model
+            .latches
+            .iter()
+            .filter(|latch| latch.initial.is_none())
+            .map(|latch| {
+                let variable = latch.current / 2 - 1;
+                (variable, witness[variable])
+            })
+            .collect::<Vec<_>>();
+        let vocabularies = [
+            (
+                "segments",
+                causal_events_from_witness(&model, &witness, query.frame),
+            ),
+            ("points", causal_point_events(&model, &witness, query.frame)),
+            (
+                "dyadic",
+                causal_dyadic_events(&model, &witness, query.frame),
+            ),
+        ];
+        for (vocabulary, events) in vocabularies {
+            if events.is_empty() || events.len() > CAUSAL_MAX_EVENTS {
+                return Err(format!(
+                    "causal batch {vocabulary} vocabulary has {} events; supported range is 1..={CAUSAL_MAX_EVENTS}",
+                    events.len()
+                ));
+            }
+            ensure_causal_query_work(
+                encoding.variables,
+                encoding.clauses.len(),
+                CAUSAL_BATCH_MAX_MAP_QUERIES,
+            )?;
+            let mut discovery = Solver::new();
+            add_to_varisat(&mut discovery, &encoding.clauses);
+            let enumeration = enumerate_minimal_causal_sets(events.len(), max_causes, |active| {
+                let mut assumptions =
+                    causal_assumptions(&model, encoding.variables, &fixed, &events, active)?;
+                if add_causal_counterfactual_assumption(&mut assumptions, query.assumption)? {
+                    Ok(true)
+                } else {
+                    Ok(!solve_causal_persistent(&mut discovery, &assumptions)?)
+                }
+            })?;
+            if enumeration.causes.is_empty() {
+                return Err(format!(
+                    "causal batch found no sufficient cause for {}@{} using {vocabulary}",
+                    query.output, query.frame
+                ));
+            }
+            let replay_count = enumeration
+                .transcript
+                .len()
+                .checked_mul(repeats)
+                .ok_or_else(|| "causal batch replay count overflow".to_string())?;
+            ensure_causal_query_work(encoding.variables, encoding.clauses.len(), replay_count)?;
+            let mut persistent_samples = Vec::with_capacity(replay_count);
+            let mut cq_samples = Vec::with_capacity(replay_count);
+            let mut scratch = compiled.as_ref().map(ContinuationScratch::new);
+            for _ in 0..repeats {
+                for record in &enumeration.transcript {
+                    let mut assumptions = causal_assumptions(
+                        &model,
+                        encoding.variables,
+                        &fixed,
+                        &events,
+                        &record.active,
+                    )?;
+                    let unconditional =
+                        add_causal_counterfactual_assumption(&mut assumptions, query.assumption)?;
+                    let start = Instant::now();
+                    let persistent_unsat =
+                        unconditional || !solve_causal_persistent(&mut persistent, &assumptions)?;
+                    persistent_samples.push(start.elapsed().as_nanos());
+                    if persistent_unsat != record.unsat {
+                        return Err("causal batch persistent CDCL replay disagrees".to_string());
+                    }
+                    if let (Some(compiled), Some(scratch)) = (compiled.as_ref(), scratch.as_mut()) {
+                        let start = Instant::now();
+                        let cq_unsat = unconditional
+                            || query_continuation(compiled, &assumptions, scratch).is_none();
+                        cq_samples.push(start.elapsed().as_nanos());
+                        if cq_unsat != record.unsat {
+                            return Err("causal batch CQ replay disagrees".to_string());
+                        }
+                    }
+                }
+            }
+            workload_persistent_samples.extend_from_slice(&persistent_samples);
+            workload_cq_samples.extend_from_slice(&cq_samples);
+            let (measured, projected) = if compiled.is_some() {
+                causal_break_even(
+                    cq_prepare_ns,
+                    persistent_setup_ns,
+                    &workload_cq_samples,
+                    &workload_persistent_samples,
+                )
+            } else {
+                (None, None)
+            };
+            let causes = enumeration
+                .causes
+                .iter()
+                .map(|cause| {
+                    let indices = cause
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, selected)| selected.then_some(index.to_string()))
+                        .collect::<Vec<_>>()
+                        .join(";");
+                    if indices.is_empty() {
+                        "-".to_string()
+                    } else {
+                        indices
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("|");
+            let unique_queries = enumeration
+                .transcript
+                .iter()
+                .map(|record| record.active.clone())
+                .collect::<BTreeSet<_>>()
+                .len();
+            let cq_query_ns = cq_samples
+                .iter()
+                .fold(0u128, |total, sample| total.saturating_add(*sample));
+            let persistent_query_ns = persistent_samples
+                .iter()
+                .fold(0u128, |total, sample| total.saturating_add(*sample));
+            lines.push(format!(
+                "{CAUSAL_BATCH_SCHEMA_VERSION},{input_sha256},{horizon},{},{},{vocabulary},{},{},{causes},{},{},{},{},{},{},{cq_prepare_ns},{cq_query_ns},{persistent_setup_ns},{persistent_query_ns},{repeats},{},{},true,true,ok",
+                query.frame,
+                query.output,
+                events.len(),
+                enumeration.causes.len(),
+                enumeration.complete,
+                enumeration.transcript.len(),
+                unique_queries,
+                compiled.is_some(),
+                cq_bound_bits.map_or_else(|| "none".to_string(), |value| value.to_string()),
+                cq_peak_classes.map_or_else(|| "none".to_string(), |value| value.to_string()),
+                measured.map_or_else(|| "none".to_string(), |value| value.to_string()),
+                projected.map_or_else(|| "none".to_string(), |value| value.to_string()),
+            ));
+        }
+    }
+    if failing_targets == 0 {
+        return Err("AIGER model has no failing target within the requested horizon".to_string());
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "causal-batch status=VALID failing_targets={failing_targets} rows={} cq_admitted={} output={}",
+        lines.len() - 1,
+        compiled.is_some(),
+        output.display()
+    );
+    Ok(())
+}
+
+fn parse_causal_batch_usize(value: &str, field: &str) -> Result<usize, String> {
+    value
+        .parse::<usize>()
+        .map_err(|_| format!("invalid causal batch {field}"))
+}
+
+fn verify_aiger_causal_batch(input: &Path, report: &Path) -> Result<(), String> {
+    let body = fs::read_to_string(report)
+        .map_err(|error| format!("read causal batch report {}: {error}", report.display()))?;
+    if body.len() > 16 * 1024 * 1024 {
+        return Err("causal batch report exceeds 16 MiB safety limit".to_string());
+    }
+    let mut rows = body.lines();
+    if rows.next() != Some(CAUSAL_BATCH_HEADER) {
+        return Err("invalid causal batch report header".to_string());
+    }
+    let model = parse_aag(input)?;
+    let input_sha256 = sha256_file(input)?;
+    let mut validated = 0usize;
+    let mut witness_cache = BTreeMap::<(usize, usize, usize), Vec<bool>>::new();
+    let mut report_horizon = None;
+    let mut seen = BTreeSet::new();
+    for (row_index, row) in rows.enumerate() {
+        let fields = row.split(',').collect::<Vec<_>>();
+        if fields.len() != 25 {
+            return Err(format!(
+                "causal batch row {} has {} fields; expected 25",
+                row_index + 2,
+                fields.len()
+            ));
+        }
+        if fields[0] != CAUSAL_BATCH_SCHEMA_VERSION.to_string() || fields[1] != input_sha256 {
+            return Err(format!(
+                "causal batch row {} has wrong schema or input digest",
+                row_index + 2
+            ));
+        }
+        if fields[22..] != ["true", "true", "ok"] {
+            return Err(format!(
+                "causal batch row {} is not a valid agreeing result",
+                row_index + 2
+            ));
+        }
+        let horizon = parse_causal_batch_usize(fields[2], "horizon")?;
+        if report_horizon
+            .replace(horizon)
+            .is_some_and(|value| value != horizon)
+        {
+            return Err("causal batch report mixes horizons".to_string());
+        }
+        let bad_frame = parse_causal_batch_usize(fields[3], "bad frame")?;
+        let bad_output = parse_causal_batch_usize(fields[4], "bad output")?;
+        if bad_frame > horizon {
+            return Err("causal batch bad frame exceeds horizon".to_string());
+        }
+        let encoding = aag_bmc_encoding(&model, horizon)?;
+        let query = encoding
+            .queries
+            .iter()
+            .find(|query| query.frame == bad_frame && query.output == bad_output)
+            .ok_or_else(|| "causal batch target does not exist in encoded model".to_string())?;
+        if !witness_cache.contains_key(&(horizon, bad_frame, bad_output)) {
+            let mut target_solver = Solver::new();
+            add_to_varisat(&mut target_solver, &encoding.clauses);
+            for candidate in &encoding.queries {
+                if let Some(witness) = causal_query_witness(
+                    &mut target_solver,
+                    encoding.variables,
+                    candidate.assumption,
+                )? {
+                    witness_cache.insert((horizon, candidate.frame, candidate.output), witness);
+                }
+            }
+        }
+        let witness = witness_cache
+            .get(&(horizon, bad_frame, bad_output))
+            .ok_or_else(|| "causal batch target is not reachable".to_string())?;
+        let fixed = model
+            .latches
+            .iter()
+            .filter(|latch| latch.initial.is_none())
+            .map(|latch| {
+                let variable = latch.current / 2 - 1;
+                (variable, witness[variable])
+            })
+            .collect::<Vec<_>>();
+        let events = match fields[5] {
+            "segments" => causal_events_from_witness(&model, witness, bad_frame),
+            "points" => causal_point_events(&model, witness, bad_frame),
+            "dyadic" => causal_dyadic_events(&model, witness, bad_frame),
+            _ => return Err("unknown causal batch vocabulary".to_string()),
+        };
+        if !seen.insert((bad_frame, bad_output, fields[5].to_string())) {
+            return Err(
+                "causal batch report contains a duplicate target/vocabulary row".to_string(),
+            );
+        }
+        if parse_causal_batch_usize(fields[6], "candidate count")? != events.len() {
+            return Err("causal batch candidate count mismatch".to_string());
+        }
+        let encoded_causes = if fields[8].is_empty() {
+            Vec::new()
+        } else {
+            fields[8].split('|').collect::<Vec<_>>()
+        };
+        if parse_causal_batch_usize(fields[7], "cause count")? != encoded_causes.len() {
+            return Err("causal batch cause count mismatch".to_string());
+        }
+        for encoded in encoded_causes {
+            let mut active = vec![false; events.len()];
+            if encoded != "-" {
+                for token in encoded.split(';') {
+                    let index = parse_causal_batch_usize(token, "cause index")?;
+                    let slot = active
+                        .get_mut(index)
+                        .ok_or_else(|| "causal batch cause index is out of range".to_string())?;
+                    if *slot {
+                        return Err("causal batch cause contains duplicate index".to_string());
+                    }
+                    *slot = true;
+                }
+            }
+            let mut oracle = |selection: &[bool]| -> Result<bool, String> {
+                let mut assumptions =
+                    causal_assumptions(&model, encoding.variables, &fixed, &events, selection)?;
+                if add_causal_counterfactual_assumption(&mut assumptions, query.assumption)? {
+                    return Ok(true);
+                }
+                Ok(!solve_causal_fresh(&encoding.clauses, &assumptions)?)
+            };
+            validate_causal_selection(&active, &mut oracle)?;
+        }
+        validated += 1;
+    }
+    if validated == 0 {
+        return Err("causal batch report contains no data rows".to_string());
+    }
+    let horizon = report_horizon.unwrap();
+    let encoding = aag_bmc_encoding(&model, horizon)?;
+    let mut expected = BTreeSet::new();
+    let mut target_solver = Solver::new();
+    add_to_varisat(&mut target_solver, &encoding.clauses);
+    for query in &encoding.queries {
+        if causal_query_witness(&mut target_solver, encoding.variables, query.assumption)?.is_some()
+        {
+            for vocabulary in ["segments", "points", "dyadic"] {
+                expected.insert((query.frame, query.output, vocabulary.to_string()));
+            }
+        }
+    }
+    if seen != expected {
+        return Err(
+            "causal batch report does not cover every reachable target/vocabulary".to_string(),
+        );
+    }
+    println!(
+        "causal-batch-verify status=VALID rows={validated} report={}",
+        report.display()
+    );
+    Ok(())
 }
 
 fn benchmark_aiger_causal_strategies(
@@ -16633,6 +17456,45 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 max_bound_bits,
                 Path::new(&args[4]),
             )?;
+            Ok(true)
+        }
+        "benchmark-aiger-causal-batch" => {
+            if args.len() != 7 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-causal-batch INPUT.aag|INPUT.aig HORIZON MAX_BOUND_BITS MAX_CAUSES REPEATS OUTPUT.csv".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal batch horizon".to_string())?;
+            if horizon == 0 {
+                return Err("causal batch horizon must be at least one".to_string());
+            }
+            let max_bound_bits = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal batch CQ frontier bound".to_string())?;
+            if max_bound_bits > 20 {
+                return Err("causal batch CQ frontier bound must not exceed 20 bits".to_string());
+            }
+            let max_causes = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal batch cause limit".to_string())?;
+            let repeats = args[5]
+                .parse::<usize>()
+                .map_err(|_| "invalid causal batch repeat count".to_string())?;
+            benchmark_aiger_causal_batch(
+                Path::new(&args[1]),
+                horizon,
+                max_bound_bits,
+                max_causes,
+                repeats,
+                Path::new(&args[6]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-causal-batch" => {
+            if args.len() != 3 {
+                return Err("usage: continuation-quotient-sat verify-aiger-causal-batch INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
+            }
+            verify_aiger_causal_batch(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "benchmark-continuation-quotients" => {
@@ -25060,6 +25922,80 @@ mod tests {
         assert!(satisfies(&formula, &assignment));
     }
 
+    fn binary_aiger_fixture() -> Vec<u8> {
+        let mut bytes = b"aig 4 2 1 1 1\n6 0\n8\n".to_vec();
+        // lhs=8, rhs0=4, rhs1=2; binary AIGER stores the two deltas.
+        bytes.extend([4, 2]);
+        bytes.extend_from_slice(
+            b"i0 left_request\ni1 right_request\nl0 state\no0 simultaneous_request\nc\nfixture\n",
+        );
+        bytes
+    }
+
+    #[test]
+    fn binary_aiger_import_matches_ascii_semantics() {
+        let ascii = b"aag 4 2 1 1 1\n2\n4\n6 6 0\n8\n8 4 2\ni0 left_request\ni1 right_request\nl0 state\no0 simultaneous_request\nc\nfixture\n";
+        let expected = parse_aiger_bytes(ascii).unwrap();
+        let actual = parse_aiger_bytes(&binary_aiger_fixture()).unwrap();
+        assert_eq!(actual, expected);
+
+        let encoding = aag_bmc_encoding(&actual, 2).unwrap();
+        let run = run_aag_bmc(&actual, 2, &encoding).unwrap();
+        assert!(run.first_sat_query.is_some());
+        assert!(run.witnesses_valid);
+    }
+
+    #[test]
+    fn binary_aiger_rejects_malformed_delta_streams() {
+        let mut truncated = b"aig 3 1 1 1 1\n2 0\n6\n".to_vec();
+        truncated.push(0x80);
+        assert!(
+            parse_aiger_bytes(&truncated)
+                .unwrap_err()
+                .contains("truncated binary AIGER delta")
+        );
+
+        let mut underflow = b"aig 3 1 1 1 1\n2 0\n6\n".to_vec();
+        underflow.extend([7, 0]);
+        assert!(
+            parse_aiger_bytes(&underflow)
+                .unwrap_err()
+                .contains("invalid binary AIGER first delta")
+        );
+
+        let mut overflow = b"aig 3 1 1 1 1\n2 0\n6\n".to_vec();
+        overflow.extend(std::iter::repeat_n(0xff, (usize::BITS as usize / 7) + 1));
+        assert!(
+            parse_aiger_bytes(&overflow)
+                .unwrap_err()
+                .contains("binary AIGER delta overflow")
+        );
+    }
+
+    #[test]
+    fn binary_aiger_fixture_is_accepted_by_yosys_when_available() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping binary AIGER interoperability test because Yosys is unavailable");
+            return;
+        }
+        let path = std::env::temp_dir().join(format!(
+            "cq-sat-binary-aiger-yosys-{}.aig",
+            std::process::id()
+        ));
+        fs::write(&path, binary_aiger_fixture()).unwrap();
+        let script = format!("read_aiger {}; hierarchy -check", path.display());
+        let output = Command::new("yosys")
+            .args(["-Q", "-q", "-p", &script])
+            .output()
+            .unwrap();
+        fs::remove_file(path).unwrap();
+        assert!(
+            output.status.success(),
+            "Yosys rejected binary fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn external_aiger_counter_reports_exact_unsafe_trace() {
         let input =
@@ -25257,6 +26193,57 @@ mod tests {
         );
         assert!(
             benchmark_aiger_causal_strategies(&input, 1, 16, &output)
+                .unwrap_err()
+                .contains("already exists")
+        );
+        fs::remove_file(input).unwrap();
+        fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn causal_subset_map_enumerates_distinct_minimal_causes() {
+        let result = enumerate_minimal_causal_sets(4, 8, |active| {
+            Ok((active[0] && active[1]) || (active[2] && active[3]))
+        })
+        .unwrap();
+        assert!(result.complete);
+        let causes = result
+            .causes
+            .iter()
+            .map(|cause| {
+                cause
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, selected)| selected.then_some(index))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(causes, BTreeSet::from([vec![0, 1], vec![2, 3]]));
+    }
+
+    #[test]
+    fn causal_batch_compiles_once_and_explains_all_failing_targets() {
+        let stem = format!("cq-sat-causal-batch-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aig"));
+        let output = std::env::temp_dir().join(format!("{stem}.csv"));
+        fs::write(&input, binary_aiger_fixture()).unwrap();
+        benchmark_aiger_causal_batch(&input, 1, 16, 4, 2, &output).unwrap();
+        let report = fs::read_to_string(&output).unwrap();
+        let rows = report.lines().collect::<Vec<_>>();
+        assert_eq!(rows[0], CAUSAL_BATCH_HEADER);
+        assert_eq!(rows.len(), 7); // two failing frame/output targets, three vocabularies.
+        assert!(rows.iter().skip(1).all(|row| row.split(',').count() == 25));
+        assert!(
+            rows.iter()
+                .skip(1)
+                .all(|row| row.ends_with(",true,true,ok"))
+        );
+        assert!(rows.iter().skip(1).any(|row| row.contains(",segments,")));
+        assert!(rows.iter().skip(1).any(|row| row.contains(",points,")));
+        assert!(rows.iter().skip(1).any(|row| row.contains(",dyadic,")));
+        verify_aiger_causal_batch(&input, &output).unwrap();
+        assert!(
+            benchmark_aiger_causal_batch(&input, 1, 16, 4, 2, &output)
                 .unwrap_err()
                 .contains("already exists")
         );
