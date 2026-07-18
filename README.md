@@ -17,6 +17,11 @@ states reconstruct complete assignments.
 This is a research release, not a general-purpose replacement for CDCL SAT
 solvers and not evidence that P = NP.
 
+The project does not currently claim production readiness or scholarly novelty.
+Those higher bars are tracked explicitly in the
+[production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
+[novelty](docs/NOVELTY_GAP.md) gap registers.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

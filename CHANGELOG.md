@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add authoritative production-readiness and novelty gap registers, with
+  measurable closure gates and a scoped proof-carrying predicate-composition
+  candidate contribution grounded against closest certifying-model-checking
+  methods.
+
 ## 0.28.0 - 2026-07-18
 
 - Add an experimental bounded exact BDD predicate interface for 9–16 relevant
