@@ -87,6 +87,17 @@ of distinct 1-minimal causes over segment, point, and dyadic observation
 vocabularies and measures actual and projected break-even against persistent
 CDCL. A separate command replays every published cause from the source model.
 
+The first [Counterfactual Interface Quotient](docs/COUNTERFACTUAL_INTERFACE_QUOTIENT.md)
+experiment stops expanding long constant input phases into individual frames.
+It composes exact powered relations over the controller's latch-state boundary
+and reconstructs a concrete trace only when requested. On the bounded
+infusion-pump regression, ten trials per horizon produced median end-to-end
+speedups of 1.42x, 2.38x, 4.15x, and 7.00x at horizons 8, 16, 32, and 64,
+respectively, with exact CDCL agreement and validated witnesses. This is a
+robust positive result on one narrow controller class, not a general or novel
+algorithm claim. The broader sequence is tracked in the
+[firmware and robotics research roadmap](docs/FIRMWARE_ROBOTICS_RESEARCH_ROADMAP.md).
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

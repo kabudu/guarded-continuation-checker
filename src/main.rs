@@ -8628,6 +8628,492 @@ fn evaluate_aag_literal(literal: usize, values: &[bool]) -> bool {
     if literal & 1 == 1 { !base } else { base }
 }
 
+const INTERFACE_QUOTIENT_MAX_LATCHES: usize = 8;
+const INTERFACE_QUOTIENT_MAX_INPUTS: usize = 8;
+const INTERFACE_QUOTIENT_MAX_HORIZON: usize = 64;
+const INTERFACE_QUOTIENT_MAX_TABLE_CELLS: usize = 1_048_576;
+const INTERFACE_QUOTIENT_MAX_SUMMARIES: usize = 16_384;
+
+struct AagInterfaceTable {
+    width: usize,
+    input_count: usize,
+    next: Vec<Vec<usize>>,
+    bad_masks: Vec<Vec<u128>>,
+}
+
+impl AagInterfaceTable {
+    fn compile(model: &AagModel) -> Result<Self, String> {
+        let width = model.latches.len();
+        let input_count = model.inputs.len();
+        if width == 0 || width > INTERFACE_QUOTIENT_MAX_LATCHES {
+            return Err(format!(
+                "interface quotient requires 1..={INTERFACE_QUOTIENT_MAX_LATCHES} latches; found {width}"
+            ));
+        }
+        if input_count == 0 || input_count > INTERFACE_QUOTIENT_MAX_INPUTS {
+            return Err(format!(
+                "interface quotient requires 1..={INTERFACE_QUOTIENT_MAX_INPUTS} inputs; found {input_count}"
+            ));
+        }
+        if model.outputs.len() > u128::BITS as usize {
+            return Err(format!(
+                "interface quotient supports at most {} bad outputs",
+                u128::BITS
+            ));
+        }
+        let states = 1usize << width;
+        let inputs = 1usize << input_count;
+        let cells = states
+            .checked_mul(inputs)
+            .ok_or_else(|| "interface quotient table size overflow".to_string())?;
+        if cells > INTERFACE_QUOTIENT_MAX_TABLE_CELLS {
+            return Err(format!(
+                "interface quotient table requires {cells} state/input cells; limit is {INTERFACE_QUOTIENT_MAX_TABLE_CELLS}"
+            ));
+        }
+        let mut next = vec![vec![0usize; inputs]; states];
+        let mut bad_masks = vec![vec![0u128; inputs]; states];
+        for state in 0..states {
+            for input_pattern in 0..inputs {
+                let mut values = vec![false; model.max_variable + 1];
+                for (bit, latch) in model.latches.iter().enumerate() {
+                    values[latch.current / 2] = state >> bit & 1 == 1;
+                }
+                for (bit, literal) in model.inputs.iter().enumerate() {
+                    values[literal / 2] = input_pattern >> bit & 1 == 1;
+                }
+                for gate in &model.ands {
+                    values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                        && evaluate_aag_literal(gate.right, &values);
+                }
+                let mut successor = 0usize;
+                for (bit, latch) in model.latches.iter().enumerate() {
+                    if evaluate_aag_literal(latch.next, &values) {
+                        successor |= 1usize << bit;
+                    }
+                }
+                next[state][input_pattern] = successor;
+                for (output, literal) in model.outputs.iter().enumerate() {
+                    if evaluate_aag_literal(*literal, &values) {
+                        bad_masks[state][input_pattern] |= 1u128 << output;
+                    }
+                }
+            }
+        }
+        Ok(Self {
+            width,
+            input_count,
+            next,
+            bad_masks,
+        })
+    }
+
+    fn input_allowed(&self, input_pattern: usize, constraints: &[Option<bool>]) -> bool {
+        constraints.iter().enumerate().all(|(input, required)| {
+            required.is_none_or(|value| (input_pattern >> input & 1 == 1) == value)
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct InterfaceRelation {
+    states: usize,
+    words: usize,
+    rows: Vec<Vec<u64>>,
+}
+
+impl InterfaceRelation {
+    fn empty(states: usize) -> Self {
+        let words = states.div_ceil(u64::BITS as usize);
+        Self {
+            states,
+            words,
+            rows: vec![vec![0; words]; states],
+        }
+    }
+
+    fn identity(states: usize) -> Self {
+        let mut relation = Self::empty(states);
+        for state in 0..states {
+            relation.insert(state, state);
+        }
+        relation
+    }
+
+    fn insert(&mut self, source: usize, target: usize) {
+        self.rows[source][target / u64::BITS as usize] |= 1u64 << (target % u64::BITS as usize);
+    }
+
+    fn contains(&self, source: usize, target: usize) -> bool {
+        self.rows[source][target / u64::BITS as usize] & (1u64 << (target % u64::BITS as usize))
+            != 0
+    }
+
+    fn targets(&self, source: usize) -> impl Iterator<Item = usize> + '_ {
+        let states = self.states;
+        self.rows[source]
+            .iter()
+            .enumerate()
+            .flat_map(move |(word_index, word)| {
+                let mut remaining = *word;
+                std::iter::from_fn(move || {
+                    if remaining == 0 {
+                        return None;
+                    }
+                    let bit = remaining.trailing_zeros() as usize;
+                    remaining &= remaining - 1;
+                    let target = word_index * u64::BITS as usize + bit;
+                    (target < states).then_some(target)
+                })
+            })
+    }
+
+    fn compose(left: &Self, right: &Self) -> Result<Self, String> {
+        if left.states != right.states {
+            return Err("interface relation state-space mismatch".to_string());
+        }
+        let mut result = Self::empty(left.states);
+        for source in 0..left.states {
+            for middle in left.targets(source) {
+                for word in 0..result.words {
+                    result.rows[source][word] |= right.rows[middle][word];
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn pairs(&self) -> usize {
+        self.rows
+            .iter()
+            .flat_map(|row| row.iter())
+            .map(|word| word.count_ones() as usize)
+            .sum()
+    }
+}
+
+struct InterfaceQuotientTree<'a> {
+    table: &'a AagInterfaceTable,
+    horizon: usize,
+    leaf_count: usize,
+    nodes: Vec<InterfaceRelation>,
+    constraints: Vec<Vec<Option<bool>>>,
+    summary_cache: HashMap<(Vec<Option<bool>>, usize), InterfaceRelation>,
+    summary_cache_hits: usize,
+    summary_cache_misses: usize,
+}
+
+#[derive(Debug)]
+struct InterfaceQueryResult {
+    states: Vec<usize>,
+    inputs: Vec<usize>,
+}
+
+#[derive(Debug)]
+struct InterfaceQueryOutcome {
+    avoidable: bool,
+    witness: Option<InterfaceQueryResult>,
+    repaired_leaves: usize,
+    repaired_internal_nodes: usize,
+}
+
+impl<'a> InterfaceQuotientTree<'a> {
+    fn new(table: &'a AagInterfaceTable, horizon: usize) -> Result<Self, String> {
+        if horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+            return Err(format!(
+                "interface quotient horizon {horizon} exceeds {INTERFACE_QUOTIENT_MAX_HORIZON}"
+            ));
+        }
+        let leaf_count = horizon.max(1).next_power_of_two();
+        let states = table.next.len();
+        let mut tree = Self {
+            table,
+            horizon,
+            leaf_count,
+            nodes: vec![InterfaceRelation::identity(states); leaf_count * 2],
+            constraints: vec![vec![None; table.input_count]; horizon + 1],
+            summary_cache: HashMap::new(),
+            summary_cache_hits: 0,
+            summary_cache_misses: 0,
+        };
+        for frame in 0..horizon {
+            tree.nodes[leaf_count + frame] = tree.leaf_relation(frame);
+        }
+        for node in (1..leaf_count).rev() {
+            tree.nodes[node] =
+                InterfaceRelation::compose(&tree.nodes[node * 2], &tree.nodes[node * 2 + 1])?;
+        }
+        Ok(tree)
+    }
+
+    fn leaf_relation(&self, frame: usize) -> InterfaceRelation {
+        let mut relation = InterfaceRelation::empty(self.table.next.len());
+        for state in 0..self.table.next.len() {
+            for input in 0..self.table.next[state].len() {
+                if self.table.input_allowed(input, &self.constraints[frame]) {
+                    relation.insert(state, self.table.next[state][input]);
+                }
+            }
+        }
+        relation
+    }
+
+    fn relation_for_constraints(&self, constraints: &[Option<bool>]) -> InterfaceRelation {
+        let mut relation = InterfaceRelation::empty(self.table.next.len());
+        for state in 0..self.table.next.len() {
+            for input in 0..self.table.next[state].len() {
+                if self.table.input_allowed(input, constraints) {
+                    relation.insert(state, self.table.next[state][input]);
+                }
+            }
+        }
+        relation
+    }
+
+    fn relation_power(
+        &mut self,
+        constraints: &[Option<bool>],
+        length: usize,
+    ) -> Result<InterfaceRelation, String> {
+        let key = (constraints.to_vec(), length);
+        if let Some(relation) = self.summary_cache.get(&key) {
+            self.summary_cache_hits += 1;
+            return Ok(relation.clone());
+        }
+        let relation = if length == 0 {
+            InterfaceRelation::identity(self.table.next.len())
+        } else if length == 1 {
+            self.relation_for_constraints(constraints)
+        } else {
+            let left_length = length / 2;
+            let left = self.relation_power(constraints, left_length)?;
+            let right = self.relation_power(constraints, length - left_length)?;
+            InterfaceRelation::compose(&left, &right)?
+        };
+        if self.summary_cache.len() >= INTERFACE_QUOTIENT_MAX_SUMMARIES {
+            return Err(format!(
+                "interface quotient summary cache exceeds {INTERFACE_QUOTIENT_MAX_SUMMARIES} entries"
+            ));
+        }
+        self.summary_cache.insert(key, relation.clone());
+        self.summary_cache_misses += 1;
+        Ok(relation)
+    }
+
+    fn compressed_relation(
+        &mut self,
+        constraints: &[Vec<Option<bool>>],
+    ) -> Result<InterfaceRelation, String> {
+        let mut result = InterfaceRelation::identity(self.table.next.len());
+        let mut start = 0usize;
+        while start < self.horizon {
+            let mut end = start + 1;
+            while end < self.horizon && constraints[end] == constraints[start] {
+                end += 1;
+            }
+            let block = self.relation_power(&constraints[start], end - start)?;
+            result = InterfaceRelation::compose(&result, &block)?;
+            start = end;
+        }
+        Ok(result)
+    }
+
+    fn update_constraints(
+        &mut self,
+        constraints: &[Vec<Option<bool>>],
+    ) -> Result<(usize, usize), String> {
+        if constraints.len() != self.horizon + 1
+            || constraints
+                .iter()
+                .any(|frame| frame.len() != self.table.input_count)
+        {
+            return Err("interface quotient constraint dimensions mismatch".to_string());
+        }
+        let mut dirty = BTreeSet::new();
+        let mut repaired_leaves = 0usize;
+        for (frame, constraint) in constraints.iter().enumerate().take(self.horizon) {
+            if self.constraints[frame] != *constraint {
+                self.constraints[frame] = constraint.clone();
+                let leaf = self.leaf_count + frame;
+                let relation = self.leaf_relation(frame);
+                if self.nodes[leaf] != relation {
+                    self.nodes[leaf] = relation;
+                    dirty.insert(leaf / 2);
+                    repaired_leaves += 1;
+                }
+            }
+        }
+        self.constraints[self.horizon] = constraints[self.horizon].clone();
+        let mut repaired_internal_nodes = 0usize;
+        while !dirty.is_empty() {
+            let current = std::mem::take(&mut dirty);
+            for node in current {
+                let composed =
+                    InterfaceRelation::compose(&self.nodes[node * 2], &self.nodes[node * 2 + 1])?;
+                if self.nodes[node] != composed {
+                    self.nodes[node] = composed;
+                    if node > 1 {
+                        dirty.insert(node / 2);
+                    }
+                }
+                repaired_internal_nodes += 1;
+            }
+        }
+        Ok((repaired_leaves, repaired_internal_nodes))
+    }
+
+    fn initial_allowed(model: &AagModel, state: usize) -> bool {
+        model.latches.iter().enumerate().all(|(bit, latch)| {
+            latch
+                .initial
+                .is_none_or(|value| (state >> bit & 1 == 1) == value)
+        })
+    }
+
+    fn terminal_input(&self, state: usize, output: usize) -> Option<usize> {
+        (0..self.table.next[state].len()).find(|&input| {
+            self.table
+                .input_allowed(input, &self.constraints[self.horizon])
+                && self.table.bad_masks[state][input] & (1u128 << output) == 0
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn recover_node(
+        &self,
+        node: usize,
+        start: usize,
+        end: usize,
+        source: usize,
+        target: usize,
+        states: &mut [usize],
+        inputs: &mut [usize],
+    ) -> Result<(), String> {
+        if end - start == 1 {
+            if start >= self.horizon {
+                if source != target {
+                    return Err("interface quotient padding witness changed state".to_string());
+                }
+                states[start] = source;
+                states[end] = target;
+                return Ok(());
+            }
+            let input = (0..self.table.next[source].len())
+                .find(|&input| {
+                    self.table.input_allowed(input, &self.constraints[start])
+                        && self.table.next[source][input] == target
+                })
+                .ok_or_else(|| "interface quotient leaf witness is missing".to_string())?;
+            states[start] = source;
+            states[end] = target;
+            inputs[start] = input;
+            return Ok(());
+        }
+        let middle_frame = start + (end - start) / 2;
+        let middle_state = self.nodes[node * 2]
+            .targets(source)
+            .find(|&middle| self.nodes[node * 2 + 1].contains(middle, target))
+            .ok_or_else(|| "interface quotient composition witness is missing".to_string())?;
+        self.recover_node(
+            node * 2,
+            start,
+            middle_frame,
+            source,
+            middle_state,
+            states,
+            inputs,
+        )?;
+        self.recover_node(
+            node * 2 + 1,
+            middle_frame,
+            end,
+            middle_state,
+            target,
+            states,
+            inputs,
+        )
+    }
+
+    fn query_avoiding(
+        &mut self,
+        model: &AagModel,
+        output: usize,
+        constraints: &[Vec<Option<bool>>],
+        recover_witness: bool,
+    ) -> Result<InterfaceQueryOutcome, String> {
+        if output >= model.outputs.len() {
+            return Err("interface quotient output is out of range".to_string());
+        }
+        let (repaired_leaves, repaired_internal_nodes, relation) = if recover_witness {
+            let (leaves, internal) = self.update_constraints(constraints)?;
+            (leaves, internal, self.nodes[1].clone())
+        } else {
+            if constraints.len() != self.horizon + 1
+                || constraints
+                    .iter()
+                    .any(|frame| frame.len() != self.table.input_count)
+            {
+                return Err("interface quotient constraint dimensions mismatch".to_string());
+            }
+            self.constraints[self.horizon] = constraints[self.horizon].clone();
+            (0, 0, self.compressed_relation(constraints)?)
+        };
+        let candidate = (0..self.table.next.len()).find_map(|source| {
+            if !Self::initial_allowed(model, source) {
+                return None;
+            }
+            relation.targets(source).find_map(|target| {
+                self.terminal_input(target, output)
+                    .map(|input| (source, target, input))
+            })
+        });
+        let Some((source, target, terminal_input)) = candidate else {
+            return Ok(InterfaceQueryOutcome {
+                avoidable: false,
+                witness: None,
+                repaired_leaves,
+                repaired_internal_nodes,
+            });
+        };
+        if !recover_witness {
+            return Ok(InterfaceQueryOutcome {
+                avoidable: true,
+                witness: None,
+                repaired_leaves,
+                repaired_internal_nodes,
+            });
+        }
+        let mut states = vec![0usize; self.leaf_count + 1];
+        let mut inputs = vec![0usize; self.leaf_count + 1];
+        if self.horizon == 0 {
+            states[0] = source;
+        } else {
+            self.recover_node(
+                1,
+                0,
+                self.leaf_count,
+                source,
+                target,
+                &mut states,
+                &mut inputs,
+            )?;
+        }
+        states.truncate(self.horizon + 1);
+        inputs.truncate(self.horizon + 1);
+        inputs[self.horizon] = terminal_input;
+        Ok(InterfaceQueryOutcome {
+            avoidable: true,
+            witness: Some(InterfaceQueryResult { states, inputs }),
+            repaired_leaves,
+            repaired_internal_nodes,
+        })
+    }
+
+    fn root_pairs(&self) -> usize {
+        self.nodes[1].pairs()
+    }
+}
+
 fn aag_temporal_formula(model: &AagModel, horizon: usize) -> Result<AagTemporalEncoding, String> {
     if horizon == 0 {
         return Err("AIGER horizon must be at least one".to_string());
@@ -12160,6 +12646,8 @@ const CAUSAL_BATCH_MAX_CAUSES: usize = 16;
 const CAUSAL_BATCH_MAX_REPEATS: usize = 10_000;
 const CAUSAL_BATCH_MAX_MAP_QUERIES: usize = 4_096;
 const CAUSAL_BATCH_HEADER: &str = "causal_batch_schema_version,input_sha256,horizon,bad_frame,bad_output,vocabulary,candidates,causes,cause_indices,enumeration_complete,oracle_queries,unique_queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_prepare_ns,cq_query_ns,persistent_setup_ns,persistent_query_ns,repeats,workload_measured_break_even_query,workload_projected_break_even_query,agreement,minimality_valid,status";
+const INTERFACE_QUOTIENT_SCHEMA_VERSION: usize = 1;
+const INTERFACE_QUOTIENT_HEADER: &str = "interface_quotient_schema_version,input_sha256,horizon,bad_frame,bad_output,candidates,causes,oracle_queries,repeats,interface_compile_ns,tree_prepare_ns,interface_query_ns,interface_witness_ns,persistent_setup_ns,persistent_query_ns,persistent_witness_ns,repaired_leaves,repaired_internal_nodes,root_pairs,summary_cache_hits,summary_cache_misses,interface_query_speedup,workload_total_speedup,agreement,witness_valid,status";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CausalEvent {
@@ -12217,6 +12705,58 @@ struct CausalEnumeration {
     causes: Vec<Vec<bool>>,
     transcript: Vec<CausalQueryRecord>,
     complete: bool,
+}
+
+fn causal_interface_constraints(
+    input_count: usize,
+    horizon: usize,
+    events: &[CausalEvent],
+    active: &[bool],
+) -> Result<Vec<Vec<Option<bool>>>, String> {
+    if events.len() != active.len() {
+        return Err("interface quotient event selection length mismatch".to_string());
+    }
+    let mut constraints = vec![vec![None; input_count]; horizon + 1];
+    for (event, selected) in events.iter().zip(active) {
+        if !selected {
+            continue;
+        }
+        if event.input >= input_count || event.end_frame > horizon {
+            return Err("interface quotient event is out of range".to_string());
+        }
+        for frame in event.start_frame..=event.end_frame {
+            let slot = &mut constraints[frame][event.input];
+            if slot.is_some_and(|value| value != event.value) {
+                return Err("interface quotient events conflict".to_string());
+            }
+            *slot = Some(event.value);
+        }
+    }
+    Ok(constraints)
+}
+
+fn validate_interface_witness(
+    table: &AagInterfaceTable,
+    output: usize,
+    constraints: &[Vec<Option<bool>>],
+    witness: &InterfaceQueryResult,
+) -> bool {
+    if witness.states.len() != constraints.len() || witness.inputs.len() != constraints.len() {
+        return false;
+    }
+    for frame in 0..constraints.len() {
+        if !table.input_allowed(witness.inputs[frame], &constraints[frame]) {
+            return false;
+        }
+        if frame + 1 < constraints.len()
+            && table.next[witness.states[frame]][witness.inputs[frame]] != witness.states[frame + 1]
+        {
+            return false;
+        }
+    }
+    table.bad_masks[*witness.states.last().unwrap()][*witness.inputs.last().unwrap()]
+        & (1u128 << output)
+        == 0
 }
 
 fn causal_events_from_witness(
@@ -12321,6 +12861,37 @@ fn solve_causal_persistent(
     solver
         .solve()
         .map_err(|error| format!("solve persistent causal intervention: {error}"))
+}
+
+fn solve_causal_persistent_assignment(
+    solver: &mut Solver<'_>,
+    variables: usize,
+    assumptions: &[Option<bool>],
+) -> Result<Option<Vec<bool>>, String> {
+    let literals = assumptions
+        .iter()
+        .enumerate()
+        .filter_map(|(variable, value)| {
+            value.map(|value| Lit::from_var(Var::from_index(variable), value))
+        })
+        .collect::<Vec<_>>();
+    solver.assume(&literals);
+    if !solver
+        .solve()
+        .map_err(|error| format!("solve persistent causal intervention: {error}"))?
+    {
+        return Ok(None);
+    }
+    let mut assignment = vec![false; variables];
+    for literal in solver
+        .model()
+        .ok_or_else(|| "persistent causal SAT result has no model".to_string())?
+    {
+        if literal.var().index() < variables {
+            assignment[literal.var().index()] = literal.is_positive();
+        }
+    }
+    Ok(Some(assignment))
 }
 
 fn minimize_causal_events<F>(count: usize, mut is_unsat: F) -> Result<Vec<bool>, String>
@@ -13442,6 +14013,377 @@ fn publish_causal_comparison(path: &Path, body: &[u8]) -> Result<(), String> {
         let _ = fs::remove_file(staging);
     }
     publish
+}
+
+fn benchmark_aiger_interface_quotient(
+    input: &Path,
+    horizon: usize,
+    max_causes: usize,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err(format!(
+            "interface quotient horizon exceeds {INTERFACE_QUOTIENT_MAX_HORIZON}"
+        ));
+    }
+    if !(1..=CAUSAL_BATCH_MAX_CAUSES).contains(&max_causes) {
+        return Err(format!(
+            "interface quotient cause limit must be in 1..={CAUSAL_BATCH_MAX_CAUSES}"
+        ));
+    }
+    if !(1..=CAUSAL_BATCH_MAX_REPEATS).contains(&repeats) {
+        return Err(format!(
+            "interface quotient repeats must be in 1..={CAUSAL_BATCH_MAX_REPEATS}"
+        ));
+    }
+    let model = parse_aag(input)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err(
+            "interface quotient benchmark requires every initial latch value to be declared"
+                .to_string(),
+        );
+    }
+    let interface_compile_start = Instant::now();
+    let table = AagInterfaceTable::compile(&model)?;
+    let interface_compile_ns = interface_compile_start.elapsed().as_nanos();
+    let encoding = aag_bmc_encoding(&model, horizon)?;
+    if encoding.queries.len() > CAUSAL_BATCH_MAX_TARGETS {
+        return Err(format!(
+            "interface quotient has {} targets; safety limit is {CAUSAL_BATCH_MAX_TARGETS}",
+            encoding.queries.len()
+        ));
+    }
+    ensure_causal_query_work(
+        encoding.variables,
+        encoding.clauses.len(),
+        CAUSAL_BATCH_MAX_MAP_QUERIES,
+    )?;
+    let persistent_setup_start = Instant::now();
+    let mut persistent = Solver::new();
+    add_to_varisat(&mut persistent, &encoding.clauses);
+    let persistent_setup_ns = persistent_setup_start.elapsed().as_nanos();
+    let mut target_solver = Solver::new();
+    add_to_varisat(&mut target_solver, &encoding.clauses);
+    let input_sha256 = sha256_file(input)?;
+    let mut lines = vec![INTERFACE_QUOTIENT_HEADER.to_string()];
+    let mut workload_tree_prepare_ns = 0u128;
+    let mut workload_interface_query_ns = 0u128;
+    let mut workload_interface_witness_ns = 0u128;
+    let mut workload_persistent_query_ns = 0u128;
+    let mut workload_persistent_witness_ns = 0u128;
+
+    for query in &encoding.queries {
+        let Some(witness) =
+            causal_query_witness(&mut target_solver, encoding.variables, query.assumption)?
+        else {
+            continue;
+        };
+        let events = causal_events_from_witness(&model, &witness, query.frame);
+        if events.is_empty() || events.len() > CAUSAL_MAX_EVENTS {
+            return Err(format!(
+                "interface quotient event count {} is outside 1..={CAUSAL_MAX_EVENTS}",
+                events.len()
+            ));
+        }
+        let mut discovery = Solver::new();
+        add_to_varisat(&mut discovery, &encoding.clauses);
+        let enumeration = enumerate_minimal_causal_sets(events.len(), max_causes, |active| {
+            let mut assumptions =
+                causal_assumptions(&model, encoding.variables, &[], &events, active)?;
+            if add_causal_counterfactual_assumption(&mut assumptions, query.assumption)? {
+                Ok(true)
+            } else {
+                Ok(!solve_causal_persistent(&mut discovery, &assumptions)?)
+            }
+        })?;
+        if enumeration.causes.is_empty() {
+            return Err(format!(
+                "interface quotient found no cause for output {} at frame {}",
+                query.output, query.frame
+            ));
+        }
+        let tree_prepare_start = Instant::now();
+        let mut tree = InterfaceQuotientTree::new(&table, query.frame)?;
+        let tree_prepare_ns = tree_prepare_start.elapsed().as_nanos();
+        let root_pairs = tree.root_pairs();
+        let mut interface_query_ns = 0u128;
+        let mut interface_witness_ns = 0u128;
+        let mut persistent_query_ns = 0u128;
+        let mut persistent_witness_ns = 0u128;
+        let mut repaired_leaves = 0usize;
+        let mut repaired_internal_nodes = 0usize;
+        let mut witnesses_valid = true;
+        let replay_queries = enumeration
+            .transcript
+            .len()
+            .checked_mul(repeats)
+            .ok_or_else(|| "interface quotient replay count overflow".to_string())?;
+        ensure_causal_query_work(encoding.variables, encoding.clauses.len(), replay_queries)?;
+        for _ in 0..repeats {
+            for record in &enumeration.transcript {
+                let constraints = causal_interface_constraints(
+                    table.input_count,
+                    query.frame,
+                    &events,
+                    &record.active,
+                )?;
+                let start = Instant::now();
+                let interface_outcome =
+                    tree.query_avoiding(&model, query.output, &constraints, false)?;
+                interface_query_ns = interface_query_ns.saturating_add(start.elapsed().as_nanos());
+                repaired_leaves = repaired_leaves.saturating_add(interface_outcome.repaired_leaves);
+                repaired_internal_nodes = repaired_internal_nodes
+                    .saturating_add(interface_outcome.repaired_internal_nodes);
+                let mut assumptions =
+                    causal_assumptions(&model, encoding.variables, &[], &events, &record.active)?;
+                let immediate_unsat =
+                    add_causal_counterfactual_assumption(&mut assumptions, query.assumption)?;
+                let start = Instant::now();
+                let persistent_unsat = if immediate_unsat {
+                    true
+                } else {
+                    !solve_causal_persistent(&mut persistent, &assumptions)?
+                };
+                persistent_query_ns =
+                    persistent_query_ns.saturating_add(start.elapsed().as_nanos());
+                let interface_unsat = !interface_outcome.avoidable;
+                if interface_unsat != record.unsat || persistent_unsat != record.unsat {
+                    return Err(format!(
+                        "interface quotient disagrees at output {} frame {}",
+                        query.output, query.frame
+                    ));
+                }
+            }
+        }
+        if let Some(record) = enumeration.transcript.iter().find(|record| !record.unsat) {
+            let constraints = causal_interface_constraints(
+                table.input_count,
+                query.frame,
+                &events,
+                &record.active,
+            )?;
+            let start = Instant::now();
+            let recovered = tree.query_avoiding(&model, query.output, &constraints, true)?;
+            interface_witness_ns = start.elapsed().as_nanos();
+            witnesses_valid &= recovered.avoidable
+                && recovered.witness.as_ref().is_some_and(|witness| {
+                    validate_interface_witness(&table, query.output, &constraints, witness)
+                });
+
+            let mut assumptions =
+                causal_assumptions(&model, encoding.variables, &[], &events, &record.active)?;
+            if add_causal_counterfactual_assumption(&mut assumptions, query.assumption)? {
+                return Err("SAT transcript unexpectedly has an unconditional failure".to_string());
+            }
+            let start = Instant::now();
+            let mut witness_solver = Solver::new();
+            add_to_varisat(&mut witness_solver, &encoding.clauses);
+            let persistent_witness = solve_causal_persistent_assignment(
+                &mut witness_solver,
+                encoding.variables,
+                &assumptions,
+            )?;
+            persistent_witness_ns = start.elapsed().as_nanos();
+            witnesses_valid &= persistent_witness.as_ref().is_some_and(|assignment| {
+                satisfies(&encoding.clauses, assignment)
+                    && validate_aag_trace(&model, horizon, assignment)
+                    && assumptions.iter().enumerate().all(|(variable, required)| {
+                        required.is_none_or(|value| assignment[variable] == value)
+                    })
+            });
+        }
+        if !witnesses_valid {
+            return Err("interface quotient reconstructed an invalid witness".to_string());
+        }
+        let interface_query_speedup = persistent_query_ns as f64 / interface_query_ns.max(1) as f64;
+        workload_tree_prepare_ns = workload_tree_prepare_ns.saturating_add(tree_prepare_ns);
+        workload_interface_query_ns =
+            workload_interface_query_ns.saturating_add(interface_query_ns);
+        workload_interface_witness_ns =
+            workload_interface_witness_ns.saturating_add(interface_witness_ns);
+        workload_persistent_query_ns =
+            workload_persistent_query_ns.saturating_add(persistent_query_ns);
+        workload_persistent_witness_ns =
+            workload_persistent_witness_ns.saturating_add(persistent_witness_ns);
+        let workload_total_speedup = persistent_setup_ns
+            .saturating_add(workload_persistent_query_ns)
+            .saturating_add(workload_persistent_witness_ns)
+            as f64
+            / interface_compile_ns
+                .saturating_add(workload_tree_prepare_ns)
+                .saturating_add(workload_interface_query_ns)
+                .saturating_add(workload_interface_witness_ns)
+                .max(1) as f64;
+        lines.push(format!(
+            "{INTERFACE_QUOTIENT_SCHEMA_VERSION},{input_sha256},{horizon},{},{},{},{},{},{repeats},{interface_compile_ns},{tree_prepare_ns},{interface_query_ns},{interface_witness_ns},{persistent_setup_ns},{persistent_query_ns},{persistent_witness_ns},{repaired_leaves},{repaired_internal_nodes},{root_pairs},{},{},{interface_query_speedup:.6},{workload_total_speedup:.6},true,true,ok",
+            query.frame,
+            query.output,
+            events.len(),
+            enumeration.causes.len(),
+            enumeration.transcript.len(),
+            tree.summary_cache_hits,
+            tree.summary_cache_misses,
+        ));
+    }
+    if lines.len() == 1 {
+        return Err("AIGER model has no failing target within the requested horizon".to_string());
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "interface-quotient status=VALID rows={} states={} inputs={} output={}",
+        lines.len() - 1,
+        1usize << table.width,
+        1usize << table.input_count,
+        output.display()
+    );
+    Ok(())
+}
+
+fn verify_aiger_interface_quotient(input: &Path, report: &Path) -> Result<(), String> {
+    let body = fs::read_to_string(report).map_err(|error| {
+        format!(
+            "read interface quotient report {}: {error}",
+            report.display()
+        )
+    })?;
+    if body.len() > 16 * 1024 * 1024 {
+        return Err("interface quotient report exceeds 16 MiB safety limit".to_string());
+    }
+    let mut rows = body.lines();
+    if rows.next() != Some(INTERFACE_QUOTIENT_HEADER) {
+        return Err("invalid interface quotient report header".to_string());
+    }
+    let model = parse_aag(input)?;
+    let table = AagInterfaceTable::compile(&model)?;
+    let input_sha256 = sha256_file(input)?;
+    let mut report_horizon = None;
+    let mut seen = BTreeSet::new();
+    let mut validated = 0usize;
+    let mut witness_cache = BTreeMap::<(usize, usize), Vec<bool>>::new();
+
+    for (row_index, row) in rows.enumerate() {
+        let fields = row.split(',').collect::<Vec<_>>();
+        if fields.len() != 26 {
+            return Err(format!(
+                "interface quotient row {} has {} fields; expected 26",
+                row_index + 2,
+                fields.len()
+            ));
+        }
+        if fields[0] != INTERFACE_QUOTIENT_SCHEMA_VERSION.to_string()
+            || fields[1] != input_sha256
+            || fields[23..] != ["true", "true", "ok"]
+        {
+            return Err(format!(
+                "interface quotient row {} has invalid identity or status",
+                row_index + 2
+            ));
+        }
+        let horizon = parse_causal_batch_usize(fields[2], "interface horizon")?;
+        if report_horizon
+            .replace(horizon)
+            .is_some_and(|old| old != horizon)
+        {
+            return Err("interface quotient report mixes horizons".to_string());
+        }
+        let bad_frame = parse_causal_batch_usize(fields[3], "interface bad frame")?;
+        let bad_output = parse_causal_batch_usize(fields[4], "interface bad output")?;
+        let candidate_count = parse_causal_batch_usize(fields[5], "interface candidates")?;
+        let cause_count = parse_causal_batch_usize(fields[6], "interface causes")?;
+        if !(1..=CAUSAL_BATCH_MAX_CAUSES).contains(&cause_count) {
+            return Err(
+                "interface quotient cause count is outside the supported range".to_string(),
+            );
+        }
+        let oracle_queries = parse_causal_batch_usize(fields[7], "interface oracle queries")?;
+        if !seen.insert((bad_frame, bad_output)) {
+            return Err("interface quotient report contains a duplicate target".to_string());
+        }
+        let encoding = aag_bmc_encoding(&model, horizon)?;
+        let query = encoding
+            .queries
+            .iter()
+            .find(|query| query.frame == bad_frame && query.output == bad_output)
+            .ok_or_else(|| "interface quotient target does not exist".to_string())?;
+        if !witness_cache.contains_key(&(bad_frame, bad_output)) {
+            let mut solver = Solver::new();
+            add_to_varisat(&mut solver, &encoding.clauses);
+            for candidate in &encoding.queries {
+                if let Some(witness) =
+                    causal_query_witness(&mut solver, encoding.variables, candidate.assumption)?
+                {
+                    witness_cache.insert((candidate.frame, candidate.output), witness);
+                }
+            }
+        }
+        let witness = witness_cache
+            .get(&(bad_frame, bad_output))
+            .ok_or_else(|| "interface quotient target is unreachable".to_string())?;
+        let events = causal_events_from_witness(&model, witness, bad_frame);
+        if events.len() != candidate_count {
+            return Err("interface quotient candidate count mismatch".to_string());
+        }
+        let enumeration = enumerate_minimal_causal_sets(events.len(), cause_count, |active| {
+            let mut assumptions =
+                causal_assumptions(&model, encoding.variables, &[], &events, active)?;
+            if add_causal_counterfactual_assumption(&mut assumptions, query.assumption)? {
+                Ok(true)
+            } else {
+                Ok(!solve_causal_fresh(&encoding.clauses, &assumptions)?)
+            }
+        })?;
+        if enumeration.causes.len() != cause_count || enumeration.transcript.len() != oracle_queries
+        {
+            return Err("interface quotient enumeration metadata mismatch".to_string());
+        }
+        let mut tree = InterfaceQuotientTree::new(&table, bad_frame)?;
+        for record in &enumeration.transcript {
+            let constraints = causal_interface_constraints(
+                table.input_count,
+                bad_frame,
+                &events,
+                &record.active,
+            )?;
+            let answer = tree.query_avoiding(&model, bad_output, &constraints, false)?;
+            if answer.avoidable == record.unsat {
+                return Err("interface quotient replay disagrees with fresh CDCL".to_string());
+            }
+        }
+        if let Some(record) = enumeration.transcript.iter().find(|record| !record.unsat) {
+            let constraints = causal_interface_constraints(
+                table.input_count,
+                bad_frame,
+                &events,
+                &record.active,
+            )?;
+            let recovered = tree.query_avoiding(&model, bad_output, &constraints, true)?;
+            if !recovered.witness.as_ref().is_some_and(|witness| {
+                validate_interface_witness(&table, bad_output, &constraints, witness)
+            }) {
+                return Err("interface quotient replay witness is invalid".to_string());
+            }
+        }
+        validated += 1;
+    }
+    let horizon = report_horizon.ok_or_else(|| "interface report has no rows".to_string())?;
+    let encoding = aag_bmc_encoding(&model, horizon)?;
+    let mut expected = BTreeSet::new();
+    let mut solver = Solver::new();
+    add_to_varisat(&mut solver, &encoding.clauses);
+    for query in &encoding.queries {
+        if causal_query_witness(&mut solver, encoding.variables, query.assumption)?.is_some() {
+            expected.insert((query.frame, query.output));
+        }
+    }
+    if seen != expected {
+        return Err("interface quotient report omits a reachable target".to_string());
+    }
+    println!(
+        "interface-quotient-verify status=VALID rows={validated} report={}",
+        report.display()
+    );
+    Ok(())
 }
 
 fn benchmark_aiger_causal_batch(
@@ -17495,6 +18437,35 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: continuation-quotient-sat verify-aiger-causal-batch INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
             }
             verify_aiger_causal_batch(Path::new(&args[1]), Path::new(&args[2]))?;
+            Ok(true)
+        }
+        "benchmark-aiger-interface-quotient" => {
+            if args.len() != 6 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-interface-quotient INPUT.aag|INPUT.aig HORIZON MAX_CAUSES REPEATS OUTPUT.csv".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid interface quotient horizon".to_string())?;
+            let max_causes = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid interface quotient cause limit".to_string())?;
+            let repeats = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid interface quotient repeat count".to_string())?;
+            benchmark_aiger_interface_quotient(
+                Path::new(&args[1]),
+                horizon,
+                max_causes,
+                repeats,
+                Path::new(&args[5]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-interface-quotient" => {
+            if args.len() != 3 {
+                return Err("usage: continuation-quotient-sat verify-aiger-interface-quotient INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
+            }
+            verify_aiger_interface_quotient(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "benchmark-continuation-quotients" => {
@@ -25946,6 +26917,76 @@ mod tests {
     }
 
     #[test]
+    fn interface_quotient_repairs_locally_and_recovers_an_avoiding_trace() {
+        let model = parse_aiger_bytes(&binary_aiger_fixture()).unwrap();
+        let table = AagInterfaceTable::compile(&model).unwrap();
+        let mut tree = InterfaceQuotientTree::new(&table, 1).unwrap();
+        let mut constraints = vec![vec![None; 2]; 2];
+
+        constraints[1] = vec![Some(true), Some(true)];
+        assert!(
+            tree.query_avoiding(&model, 0, &constraints, true)
+                .unwrap()
+                .witness
+                .is_none()
+        );
+
+        constraints[1][1] = None;
+        let recovered_outcome = tree.query_avoiding(&model, 0, &constraints, true).unwrap();
+        let recovered = recovered_outcome.witness.unwrap();
+        assert_eq!(recovered.states, vec![0, 0]);
+        assert_eq!(recovered.inputs[1] & 1, 1);
+        assert_eq!(recovered.inputs[1] >> 1 & 1, 0);
+        assert_eq!(recovered_outcome.repaired_leaves, 0); // terminal-only change
+        assert_eq!(recovered_outcome.repaired_internal_nodes, 0);
+
+        constraints[0][0] = Some(true);
+        let repaired_outcome = tree.query_avoiding(&model, 0, &constraints, true).unwrap();
+        let repaired = repaired_outcome.witness.unwrap();
+        // This input does not affect the latch transition, so the semantic leaf
+        // quotient is unchanged and no ancestor is needlessly recomposed.
+        assert_eq!(repaired_outcome.repaired_leaves, 0);
+        assert_eq!(repaired_outcome.repaired_internal_nodes, 0);
+        for (input, constraint) in repaired.inputs.iter().zip(&constraints).take(2) {
+            assert!(table.input_allowed(*input, constraint));
+        }
+        assert_eq!(
+            table.next[repaired.states[0]][repaired.inputs[0]],
+            repaired.states[1]
+        );
+        assert_eq!(
+            table.bad_masks[repaired.states[1]][repaired.inputs[1]] & 1,
+            0
+        );
+
+        let input_driven = parse_aiger_bytes(b"aag 2 1 1 1 0\n2\n4 2 0\n4\n").unwrap();
+        let driven_table = AagInterfaceTable::compile(&input_driven).unwrap();
+        let mut driven_tree = InterfaceQuotientTree::new(&driven_table, 1).unwrap();
+        let driven_constraints = vec![vec![Some(true)], vec![None]];
+        let driven = driven_tree
+            .query_avoiding(&input_driven, 0, &driven_constraints, true)
+            .unwrap();
+        assert_eq!(driven.repaired_leaves, 1);
+        assert_eq!(driven.repaired_internal_nodes, 1);
+    }
+
+    #[test]
+    fn interface_relation_composition_is_exact() {
+        let mut left = InterfaceRelation::empty(4);
+        left.insert(0, 1);
+        left.insert(0, 2);
+        left.insert(3, 0);
+        let mut right = InterfaceRelation::empty(4);
+        right.insert(1, 3);
+        right.insert(2, 0);
+        right.insert(0, 2);
+        let composed = InterfaceRelation::compose(&left, &right).unwrap();
+        assert_eq!(composed.targets(0).collect::<Vec<_>>(), vec![0, 3]);
+        assert_eq!(composed.targets(3).collect::<Vec<_>>(), vec![2]);
+        assert_eq!(composed.pairs(), 3);
+    }
+
+    #[test]
     fn binary_aiger_rejects_malformed_delta_streams() {
         let mut truncated = b"aig 3 1 1 1 1\n2 0\n6\n".to_vec();
         truncated.push(0x80);
@@ -26244,6 +27285,52 @@ mod tests {
         verify_aiger_causal_batch(&input, &output).unwrap();
         assert!(
             benchmark_aiger_causal_batch(&input, 1, 16, 4, 2, &output)
+                .unwrap_err()
+                .contains("already exists")
+        );
+        fs::remove_file(input).unwrap();
+        fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn interface_quotient_replays_causal_transcripts_against_cdcl() {
+        let stem = format!("cq-sat-interface-quotient-{}", std::process::id());
+        let input = std::env::temp_dir().join(format!("{stem}.aig"));
+        let output = std::env::temp_dir().join(format!("{stem}.csv"));
+        fs::write(&input, binary_aiger_fixture()).unwrap();
+        benchmark_aiger_interface_quotient(&input, 1, 4, 2, &output).unwrap();
+        let report = fs::read_to_string(&output).unwrap();
+        let rows = report.lines().collect::<Vec<_>>();
+        assert_eq!(rows[0], INTERFACE_QUOTIENT_HEADER);
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().skip(1).all(|row| row.split(',').count() == 26));
+        assert!(
+            rows.iter()
+                .skip(1)
+                .all(|row| row.ends_with(",true,true,ok"))
+        );
+        verify_aiger_interface_quotient(&input, &output).unwrap();
+
+        let omitted = rows[..rows.len() - 1].join("\n") + "\n";
+        fs::write(&output, omitted).unwrap();
+        assert!(
+            verify_aiger_interface_quotient(&input, &output)
+                .unwrap_err()
+                .contains("omits a reachable target")
+        );
+
+        let mut tampered = report.clone();
+        let digest = report.lines().nth(1).unwrap().split(',').nth(1).unwrap();
+        tampered = tampered.replacen(digest, &"0".repeat(64), 1);
+        fs::write(&output, tampered).unwrap();
+        assert!(
+            verify_aiger_interface_quotient(&input, &output)
+                .unwrap_err()
+                .contains("invalid identity or status")
+        );
+        fs::write(&output, report).unwrap();
+        assert!(
+            benchmark_aiger_interface_quotient(&input, 1, 4, 2, &output)
                 .unwrap_err()
                 .contains("already exists")
         );
