@@ -26,6 +26,7 @@ certify-aiger-predicate INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFIC
 verify-aiger-predicate-certificate INPUT.aag|INPUT.aig CERTIFICATE.cert
 certify-aiger-predicate-v2 INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert2
 verify-aiger-predicate-certificate-v2 INPUT.aag|INPUT.aig CERTIFICATE.cert2
+export-aiger-predicate-v2-obligations INPUT.aag|INPUT.aig CERTIFICATE.cert2 OUTPUT_DIR
 verify-aiger-counterfactual INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt EXPECTED_QUERIES REPORT.txt CERTIFICATE.cert
 verify-aiger-counterfactual-report INPUT.aag|INPUT.aig TRANSCRIPT.txt REPORT.txt CERTIFICATE.cert
 ```
@@ -34,6 +35,12 @@ Argument order and query semantics are stable for contract v1. Output paths are
 no-overwrite and are published only after successful construction. Verifiers
 accept no transcript argument because the canonical certificate binds the
 complete query evidence needed by its versioned semantics.
+
+The additive export command publishes obligation bundle v1: canonical
+individual DIMACS completeness obligations, an exact selector-guarded aggregate
+and a source/certificate/digest manifest. It does not verify an external proof;
+the pinned, resource-governed external harness is documented in
+[`EXTERNAL_PREDICATE_PROOF_BASELINE.md`](EXTERNAL_PREDICATE_PROOF_BASELINE.md).
 
 Certificate v1 remains the counterfactual portfolio format. Certificate v2 is
 available for explicit production and checking, but its presence in the version

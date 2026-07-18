@@ -111,7 +111,13 @@ remains the portfolio default while process-isolation, checker-diversity and
 broader performance gates are still open. Its documented
 [reliability boundary](docs/PREDICATE_CERTIFICATE_V2_RELIABILITY.md) covers
 corrupted artifacts, structural proof preflight and fail-closed dependency
-errors; cross-checker diversity remains open.
+errors. The [external proof baseline](docs/EXTERNAL_PREDICATE_PROOF_BASELINE.md)
+exports every completeness claim as canonical DIMACS and checks both the 40
+individual obligations and four exact selector-guarded aggregates with pinned
+CaDiCaL 3.0.0 and DRAT-trim. All verified, providing implementation-diverse
+evidence without improving performance: aggregate external checking takes
+33.702--57.671 ms versus 0.311--0.882 ms for native end-to-end v2 checking.
+Whole-certificate checker diversity remains open.
 
 Firmware automation can discover the frozen
 [predicate CLI contract v1](docs/PREDICATE_CLI_V1.md) with

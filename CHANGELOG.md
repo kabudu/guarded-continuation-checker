@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add deterministic predicate-v2 obligation bundle v1 export: source- and
+  certificate-bound canonical DIMACS for every relation/terminal completeness
+  claim plus a selector-guarded aggregate that is UNSAT exactly when every
+  constituent obligation is UNSAT.
+- Add a pinned, resource-governed CaDiCaL 3.0.0/DRAT-trim external baseline.
+  Preserve all 40 individual and four aggregate Ubuntu checks, record the
+  binary-proof interoperability finding, and retain the negative performance
+  result rather than claiming external checking is faster.
+
 - Add authoritative production-readiness and novelty gap registers, with
   measurable closure gates and a scoped proof-carrying predicate-composition
   candidate contribution grounded against closest certifying-model-checking

@@ -47,8 +47,10 @@ Primary starting points:
    producer's BDD and cache code.
 3. **Closed for candidate v1:** demonstrate rejection of structural, semantic,
    ordering, truncation and source-binding tampering.
-4. Compare certificate generation/checking cost and trust base with the closest
-   maintained certifying tools.
+4. **Partially closed:** compare certificate generation/checking cost and trust
+   base with the closest maintained certifying tools. The obligation-equivalent
+   CaDiCaL/DRAT-trim comparison is complete; whole-certificate comparison with
+   Certifaiger and a formally verified checker remain open.
 5. Search papers, tools, patents and current implementations for the complete
    proposed combination, recording both confirming and disconfirming evidence.
 6. Obtain external expert review of the scoped claim.
@@ -79,5 +81,15 @@ this proof technique alone.
 The candidate primitives are now integrated into a bounded canonical
 [certificate v2](PREDICATE_CERTIFICATE_V2.md) with deterministic powered-phase
 composition and terminal trace semantics. This strengthens the candidate
-combination but does not close prior-art search, equivalent external-tool
+combination but does not close prior-art search, whole-certificate external-tool
 comparison or expert-review gates.
+
+The [external predicate-proof baseline](EXTERNAL_PREDICATE_PROOF_BASELINE.md)
+exports every v2 completeness claim to canonical DIMACS, checks 40 individual
+obligations and four selector-guarded aggregates with pinned CaDiCaL 3.0.0 and
+DRAT-trim, and records a negative performance result: external checking takes
+33.702--57.671 ms per aggregate versus 0.311--0.882 ms for native end-to-end v2
+checking. The aggregate construction is a standard guarded disjunction and is
+not claimed as novel. It adds implementation-diverse evidence and closes the
+obligation-equivalent SAT-proof portion of gate 4, not the whole-certificate
+Certifaiger or expert-review portions.
