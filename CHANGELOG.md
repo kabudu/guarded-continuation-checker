@@ -44,6 +44,13 @@
   safe witnesses plus one checked UNSAT completeness proof, omitted-safe-state
   detection, and six preserved unconstrained/constrained cohorts. Retain the
   negative easy-terminal rows and the 26.20x constrained 16-input speedup.
+- Add the bounded canonical predicate certificate v2 producer and independent
+  verifier. Bind ordered edge witnesses, per-source native UNSAT proofs,
+  deterministic powered phases, terminal witnesses/proof and the final trace;
+  enforce individual/aggregate proof and artifact limits; cover deterministic
+  output, both answer classes, all product widths, changing phases and semantic,
+  proof, source, ordering and canonical-text tampering. Keep v1 as the portfolio
+  format pending v2 hardening and cost gates.
 
 ## 0.28.0 - 2026-07-18
 

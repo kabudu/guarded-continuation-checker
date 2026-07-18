@@ -73,3 +73,9 @@ removes the measured exponential verifier bottleneck, but SAT proof carrying is
 established prior art. Any candidate novelty remains in the complete bounded
 predicate-composition contract and embedded counterfactual workflow, not in
 this proof technique alone.
+
+The candidate primitives are now integrated into a bounded canonical
+[certificate v2](PREDICATE_CERTIFICATE_V2.md) with deterministic powered-phase
+composition and terminal trace semantics. This strengthens the candidate
+combination but does not close prior-art search, equivalent external-tool
+comparison or expert-review gates.

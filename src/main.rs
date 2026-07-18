@@ -8671,6 +8671,10 @@ const PREDICATE_QUOTIENT_MIN_EXPECTED_QUERIES: usize = 100;
 const PREDICATE_CERTIFICATE_MAX_EVALUATIONS: usize = 80_000_000;
 const PREDICATE_CERTIFICATE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_VERSION: usize = 1;
+const PREDICATE_CERTIFICATE_V2_VERSION: usize = 2;
+const PREDICATE_CERTIFICATE_V2_MAX_BYTES: u64 = 16 * 1024 * 1024;
+const PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES: usize = 1024 * 1024;
+const PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES: usize = 8 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_COST_SCHEMA_VERSION: usize = 1;
 const PREDICATE_PROOF_RELATION_SCHEMA_VERSION: usize = 1;
 const PREDICATE_PROOF_TERMINAL_SCHEMA_VERSION: usize = 1;
@@ -9755,6 +9759,79 @@ struct PredicateCertificate {
     inputs: Vec<u64>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PredicateCertificateV2Edge {
+    source: usize,
+    target: usize,
+    input: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PredicateCertificateV2Phase {
+    start: usize,
+    length: usize,
+    constraints: Vec<Option<bool>>,
+    base_rows: Vec<u16>,
+    powered_rows: Vec<u16>,
+    edges: Vec<PredicateCertificateV2Edge>,
+    proofs: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PredicateCertificateV2 {
+    input_sha256: String,
+    declared_inputs: usize,
+    relevant_inputs: Vec<usize>,
+    latches: usize,
+    horizon: usize,
+    bad_output: usize,
+    initial_state: usize,
+    avoidable: bool,
+    phases: Vec<PredicateCertificateV2Phase>,
+    terminal_constraint: Vec<Option<bool>>,
+    terminal_safe_states: u16,
+    terminal_witnesses: Vec<(usize, u64)>,
+    terminal_proof: Vec<u8>,
+    states: Vec<usize>,
+    inputs: Vec<u64>,
+}
+
+fn predicate_bytes_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut text = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        text.push(HEX[(byte >> 4) as usize] as char);
+        text.push(HEX[(byte & 15) as usize] as char);
+    }
+    text
+}
+
+fn parse_predicate_bytes_hex(text: &str, name: &str) -> Result<Vec<u8>, String> {
+    if text.is_empty()
+        || text.len() & 1 == 1
+        || text.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES * 2
+        || text
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+    {
+        return Err(format!(
+            "predicate certificate v2 `{name}` is not bounded canonical byte hex"
+        ));
+    }
+    let mut bytes = Vec::with_capacity(text.len() / 2);
+    for pair in text.as_bytes().chunks_exact(2) {
+        let digit = |value: u8| -> u8 {
+            if value <= b'9' {
+                value - b'0'
+            } else {
+                value - b'a' + 10
+            }
+        };
+        bytes.push((digit(pair[0]) << 4) | digit(pair[1]));
+    }
+    Ok(bytes)
+}
+
 fn predicate_constraint_text(constraints: &[Option<bool>]) -> String {
     constraints
         .iter()
@@ -9858,6 +9935,111 @@ fn predicate_certificate_body(certificate: &PredicateCertificate) -> String {
     lines.push(format!(
         "terminal_safe_states={:x}",
         certificate.terminal_safe_states
+    ));
+    lines.push(format!("state_count={}", certificate.states.len()));
+    lines.push(format!(
+        "states={}",
+        if certificate.states.is_empty() {
+            "-".to_string()
+        } else {
+            certificate
+                .states
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        }
+    ));
+    lines.push(format!("input_count={}", certificate.inputs.len()));
+    lines.push(format!(
+        "inputs={}",
+        if certificate.inputs.is_empty() {
+            "-".to_string()
+        } else {
+            certificate
+                .inputs
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        }
+    ));
+    lines.join("\n") + "\n"
+}
+
+fn predicate_certificate_v2_body(certificate: &PredicateCertificateV2) -> String {
+    let mut lines = vec![
+        format!("predicate_certificate_version={PREDICATE_CERTIFICATE_V2_VERSION}"),
+        "semantics=bounded-terminal-bad-avoidance".to_string(),
+        "proof_format=varisat-native-0.2.2".to_string(),
+        format!("input_sha256={}", certificate.input_sha256),
+        format!("declared_inputs={}", certificate.declared_inputs),
+        format!("relevant_inputs={}", certificate.relevant_inputs.len()),
+        format!("latches={}", certificate.latches),
+        format!("horizon={}", certificate.horizon),
+        format!("bad_output={}", certificate.bad_output),
+        format!("initial_state={}", certificate.initial_state),
+        format!(
+            "result={}",
+            if certificate.avoidable {
+                "avoidable"
+            } else {
+                "unavoidable"
+            }
+        ),
+        format!("phase_count={}", certificate.phases.len()),
+    ];
+    for (index, input) in certificate.relevant_inputs.iter().enumerate() {
+        lines.push(format!("relevant_{index}={input}"));
+    }
+    for (index, phase) in certificate.phases.iter().enumerate() {
+        lines.push(format!(
+            "phase_{index}={},{},{}",
+            phase.start,
+            phase.length,
+            predicate_constraint_text(&phase.constraints)
+        ));
+        lines.push(format!(
+            "phase_{index}_base_rows={}",
+            predicate_rows_text(&phase.base_rows)
+        ));
+        lines.push(format!(
+            "phase_{index}_powered_rows={}",
+            predicate_rows_text(&phase.powered_rows)
+        ));
+        lines.push(format!("phase_{index}_edge_count={}", phase.edges.len()));
+        for (edge_index, edge) in phase.edges.iter().enumerate() {
+            lines.push(format!(
+                "phase_{index}_edge_{edge_index}={},{},{}",
+                edge.source, edge.target, edge.input
+            ));
+        }
+        lines.push(format!("phase_{index}_proof_count={}", phase.proofs.len()));
+        for (source, proof) in phase.proofs.iter().enumerate() {
+            lines.push(format!(
+                "phase_{index}_proof_{source}={}",
+                predicate_bytes_hex(proof)
+            ));
+        }
+    }
+    lines.push(format!(
+        "terminal_constraint={}",
+        predicate_constraint_text(&certificate.terminal_constraint)
+    ));
+    lines.push(format!(
+        "terminal_safe_states={:x}",
+        certificate.terminal_safe_states
+    ));
+    lines.push(format!(
+        "terminal_witness_count={}",
+        certificate.terminal_witnesses.len()
+    ));
+    for (index, (state, input)) in certificate.terminal_witnesses.iter().enumerate() {
+        lines.push(format!("terminal_witness_{index}={state},{input}"));
+    }
+    lines.push(format!(
+        "terminal_proof={}",
+        predicate_bytes_hex(&certificate.terminal_proof)
     ));
     lines.push(format!("state_count={}", certificate.states.len()));
     lines.push(format!(
@@ -10062,6 +10244,246 @@ fn parse_predicate_certificate(path: &Path) -> Result<PredicateCertificate, Stri
         phases,
         terminal_constraint,
         terminal_safe_states,
+        states: state_values,
+        inputs,
+    })
+}
+
+struct PredicateCertificateV2Reader<'a> {
+    lines: Vec<&'a str>,
+    index: usize,
+}
+
+impl<'a> PredicateCertificateV2Reader<'a> {
+    fn take(&mut self, key: &str) -> Result<&'a str, String> {
+        let line = self
+            .lines
+            .get(self.index)
+            .ok_or_else(|| format!("predicate certificate v2 is missing ordered field `{key}`"))?;
+        self.index += 1;
+        let (actual, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid predicate certificate v2 line {}", self.index))?;
+        if actual != key || value.is_empty() || value.contains('=') {
+            return Err(format!(
+                "predicate certificate v2 expected `{key}` at line {}",
+                self.index
+            ));
+        }
+        Ok(value)
+    }
+
+    fn finish(self) -> Result<(), String> {
+        if self.index != self.lines.len() {
+            return Err(format!(
+                "predicate certificate v2 has unexpected field at line {}",
+                self.index + 1
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn parse_predicate_certificate_v2(path: &Path) -> Result<PredicateCertificateV2, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "inspect predicate certificate v2 {}: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.len() > PREDICATE_CERTIFICATE_V2_MAX_BYTES {
+        return Err(format!(
+            "predicate certificate v2 must be a regular file no larger than {PREDICATE_CERTIFICATE_V2_MAX_BYTES} bytes"
+        ));
+    }
+    let body = fs::read_to_string(path)
+        .map_err(|error| format!("read predicate certificate v2 {}: {error}", path.display()))?;
+    if !body.ends_with('\n') || body.contains('\r') {
+        return Err(
+            "predicate certificate v2 must use canonical newline-terminated LF text".to_string(),
+        );
+    }
+    let mut reader = PredicateCertificateV2Reader {
+        lines: body.lines().collect(),
+        index: 0,
+    };
+    if parse_predicate_number::<usize>(
+        reader.take("predicate_certificate_version")?,
+        "predicate_certificate_version",
+    )? != PREDICATE_CERTIFICATE_V2_VERSION
+        || reader.take("semantics")? != "bounded-terminal-bad-avoidance"
+        || reader.take("proof_format")? != "varisat-native-0.2.2"
+    {
+        return Err("unsupported predicate certificate v2 contract".to_string());
+    }
+    let input_sha256 = reader.take("input_sha256")?.to_string();
+    if input_sha256.len() != 64
+        || input_sha256
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+    {
+        return Err("predicate certificate v2 input digest is invalid".to_string());
+    }
+    let declared_inputs =
+        parse_predicate_number(reader.take("declared_inputs")?, "declared_inputs")?;
+    let relevant_count =
+        parse_predicate_number::<usize>(reader.take("relevant_inputs")?, "relevant_inputs")?;
+    if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS).contains(&relevant_count)
+    {
+        return Err("predicate certificate v2 relevant input count is out of bounds".to_string());
+    }
+    let latches = parse_predicate_number::<usize>(reader.take("latches")?, "latches")?;
+    if !(1..=PREDICATE_INTERFACE_MAX_LATCHES).contains(&latches) {
+        return Err("predicate certificate v2 latch count is out of bounds".to_string());
+    }
+    let states = 1usize << latches;
+    let horizon = parse_predicate_number::<usize>(reader.take("horizon")?, "horizon")?;
+    if horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err("predicate certificate v2 horizon is out of bounds".to_string());
+    }
+    let bad_output = parse_predicate_number(reader.take("bad_output")?, "bad_output")?;
+    let initial_state = parse_predicate_number(reader.take("initial_state")?, "initial_state")?;
+    let avoidable = match reader.take("result")? {
+        "avoidable" => true,
+        "unavoidable" => false,
+        _ => return Err("predicate certificate v2 result is invalid".to_string()),
+    };
+    let phase_count = parse_predicate_number::<usize>(reader.take("phase_count")?, "phase_count")?;
+    if phase_count > horizon.min(INTERFACE_QUOTIENT_MAX_HORIZON) {
+        return Err("predicate certificate v2 phase count is out of bounds".to_string());
+    }
+    let mut relevant_inputs = Vec::with_capacity(relevant_count);
+    for index in 0..relevant_count {
+        relevant_inputs.push(parse_predicate_number(
+            reader.take(&format!("relevant_{index}"))?,
+            "relevant input",
+        )?);
+    }
+    let mut total_proof_bytes = 0usize;
+    let mut phases = Vec::with_capacity(phase_count);
+    for index in 0..phase_count {
+        let phase = reader.take(&format!("phase_{index}"))?;
+        let parts = phase.split(',').collect::<Vec<_>>();
+        if parts.len() != 3 {
+            return Err(format!("predicate certificate v2 phase {index} is invalid"));
+        }
+        let start = parse_predicate_number(parts[0], "phase start")?;
+        let length = parse_predicate_number(parts[1], "phase length")?;
+        let constraints = parse_predicate_constraints(parts[2], relevant_count)?;
+        let base_rows =
+            parse_predicate_rows(reader.take(&format!("phase_{index}_base_rows"))?, states)?;
+        let powered_rows =
+            parse_predicate_rows(reader.take(&format!("phase_{index}_powered_rows"))?, states)?;
+        let edge_count = parse_predicate_number::<usize>(
+            reader.take(&format!("phase_{index}_edge_count"))?,
+            "edge count",
+        )?;
+        if edge_count > states * states {
+            return Err("predicate certificate v2 edge count is out of bounds".to_string());
+        }
+        let mut edges = Vec::with_capacity(edge_count);
+        for edge_index in 0..edge_count {
+            let edge = reader.take(&format!("phase_{index}_edge_{edge_index}"))?;
+            let parts = edge.split(',').collect::<Vec<_>>();
+            if parts.len() != 3 {
+                return Err("predicate certificate v2 edge is invalid".to_string());
+            }
+            edges.push(PredicateCertificateV2Edge {
+                source: parse_predicate_number(parts[0], "edge source")?,
+                target: parse_predicate_number(parts[1], "edge target")?,
+                input: parse_predicate_number(parts[2], "edge input")?,
+            });
+        }
+        let proof_count = parse_predicate_number::<usize>(
+            reader.take(&format!("phase_{index}_proof_count"))?,
+            "proof count",
+        )?;
+        if proof_count != states {
+            return Err("predicate certificate v2 phase proof count mismatch".to_string());
+        }
+        let mut proofs = Vec::with_capacity(proof_count);
+        for source in 0..proof_count {
+            let proof = parse_predicate_bytes_hex(
+                reader.take(&format!("phase_{index}_proof_{source}"))?,
+                "phase proof",
+            )?;
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof.len())
+                .ok_or_else(|| "predicate certificate v2 proof size overflow".to_string())?;
+            if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+                return Err("predicate certificate v2 aggregate proofs exceed limit".to_string());
+            }
+            proofs.push(proof);
+        }
+        phases.push(PredicateCertificateV2Phase {
+            start,
+            length,
+            constraints,
+            base_rows,
+            powered_rows,
+            edges,
+            proofs,
+        });
+    }
+    let terminal_constraint =
+        parse_predicate_constraints(reader.take("terminal_constraint")?, relevant_count)?;
+    let terminal_safe_states = parse_predicate_hex(
+        reader.take("terminal_safe_states")?,
+        states,
+        "terminal_safe_states",
+    )?;
+    let terminal_witness_count = parse_predicate_number::<usize>(
+        reader.take("terminal_witness_count")?,
+        "terminal witness count",
+    )?;
+    if terminal_witness_count > states {
+        return Err("predicate certificate v2 terminal witness count is out of bounds".to_string());
+    }
+    let mut terminal_witnesses = Vec::with_capacity(terminal_witness_count);
+    for index in 0..terminal_witness_count {
+        let witness = reader.take(&format!("terminal_witness_{index}"))?;
+        let parts = witness.split(',').collect::<Vec<_>>();
+        if parts.len() != 2 {
+            return Err("predicate certificate v2 terminal witness is invalid".to_string());
+        }
+        terminal_witnesses.push((
+            parse_predicate_number(parts[0], "terminal witness state")?,
+            parse_predicate_number(parts[1], "terminal witness input")?,
+        ));
+    }
+    let terminal_proof =
+        parse_predicate_bytes_hex(reader.take("terminal_proof")?, "terminal proof")?;
+    total_proof_bytes = total_proof_bytes
+        .checked_add(terminal_proof.len())
+        .ok_or_else(|| "predicate certificate v2 proof size overflow".to_string())?;
+    if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+        return Err("predicate certificate v2 aggregate proofs exceed limit".to_string());
+    }
+    let state_count = parse_predicate_number::<usize>(reader.take("state_count")?, "state_count")?;
+    if state_count > horizon + 1 {
+        return Err("predicate certificate v2 state count is out of bounds".to_string());
+    }
+    let state_values = parse_predicate_number_list(reader.take("states")?, state_count, "states")?;
+    let input_count = parse_predicate_number::<usize>(reader.take("input_count")?, "input_count")?;
+    if input_count > horizon + 1 {
+        return Err("predicate certificate v2 input count is out of bounds".to_string());
+    }
+    let inputs = parse_predicate_number_list(reader.take("inputs")?, input_count, "inputs")?;
+    reader.finish()?;
+    Ok(PredicateCertificateV2 {
+        input_sha256,
+        declared_inputs,
+        relevant_inputs,
+        latches,
+        horizon,
+        bad_output,
+        initial_state,
+        avoidable,
+        phases,
+        terminal_constraint,
+        terminal_safe_states,
+        terminal_witnesses,
+        terminal_proof,
         states: state_values,
         inputs,
     })
@@ -10300,6 +10722,392 @@ fn verify_aiger_predicate_certificate(input: &Path, certificate_path: &Path) -> 
         } else {
             "unavoidable"
         },
+        checker.evaluations
+    );
+    Ok(())
+}
+
+fn certify_aiger_predicate_v2(
+    input: &Path,
+    bad_output: usize,
+    transcript: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    if fs::symlink_metadata(certificate_path).is_ok() {
+        return Err("predicate certificate v2 refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err("predicate certificate v2 requires declared initial latch values".to_string());
+    }
+    if bad_output >= model.outputs.len() {
+        return Err("predicate certificate v2 bad output is out of range".to_string());
+    }
+    let mut quotient = PredicateQuotient::new(&model)?;
+    let relevant_inputs = quotient.interface.projected_inputs.clone();
+    let constraints = parse_predicate_transcript(transcript, relevant_inputs.len())?;
+    let horizon = constraints.len() - 1;
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let witness = quotient.query(initial_state, bad_output, &constraints)?;
+    let states_count = 1usize << model.latches.len();
+    let mut total_proof_bytes = 0usize;
+    let mut phases = Vec::new();
+    let mut start = 0usize;
+    while start < horizon {
+        let mut end = start + 1;
+        while end < horizon && constraints[end] == constraints[start] {
+            end += 1;
+        }
+        let base = quotient.relation(&constraints[start])?;
+        let base_rows = base
+            .rows
+            .iter()
+            .map(|row| row[0] as u16)
+            .collect::<Vec<_>>();
+        let powered = quotient.relation_power(&constraints[start], end - start)?;
+        let powered_rows = powered
+            .rows
+            .iter()
+            .map(|row| row[0] as u16)
+            .collect::<Vec<_>>();
+        let mut edges = Vec::new();
+        let mut proofs = Vec::with_capacity(states_count);
+        for (source, &targets) in base_rows.iter().enumerate() {
+            if targets == 0 {
+                return Err("predicate certificate v2 relation has no target".to_string());
+            }
+            for target in 0..states_count {
+                if targets & (1u16 << target) != 0 {
+                    let input = quotient
+                        .interface
+                        .witness_input(source, Some(target), None, &constraints[start])?
+                        .ok_or_else(|| {
+                            "predicate certificate v2 relation edge lacks witness".to_string()
+                        })?;
+                    edges.push(PredicateCertificateV2Edge {
+                        source,
+                        target,
+                        input,
+                    });
+                }
+            }
+            let clauses = predicate_relation_completeness_clauses(
+                &model,
+                &relevant_inputs,
+                source,
+                &constraints[start],
+                targets,
+            )?;
+            let proof = generate_varisat_unsat_proof(&clauses)?;
+            if proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+                return Err("predicate certificate v2 individual proof exceeds limit".to_string());
+            }
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof.len())
+                .ok_or_else(|| "predicate certificate v2 proof size overflow".to_string())?;
+            if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+                return Err("predicate certificate v2 aggregate proofs exceed limit".to_string());
+            }
+            proofs.push(proof);
+        }
+        phases.push(PredicateCertificateV2Phase {
+            start,
+            length: end - start,
+            constraints: constraints[start].clone(),
+            base_rows,
+            powered_rows,
+            edges,
+            proofs,
+        });
+        start = end;
+    }
+    let mut terminal_safe_states = 0u16;
+    let mut terminal_witnesses = Vec::new();
+    for state in 0..states_count {
+        if let Some(input) = quotient.interface.witness_input(
+            state,
+            None,
+            Some(bad_output),
+            &constraints[horizon],
+        )? {
+            terminal_safe_states |= 1u16 << state;
+            terminal_witnesses.push((state, input));
+        }
+    }
+    let terminal_clauses = predicate_terminal_completeness_clauses(
+        &model,
+        &relevant_inputs,
+        &constraints[horizon],
+        bad_output,
+        terminal_safe_states,
+    )?;
+    let terminal_proof = generate_varisat_unsat_proof(&terminal_clauses)?;
+    if terminal_proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+        return Err("predicate certificate v2 terminal proof exceeds limit".to_string());
+    }
+    total_proof_bytes = total_proof_bytes
+        .checked_add(terminal_proof.len())
+        .ok_or_else(|| "predicate certificate v2 proof size overflow".to_string())?;
+    if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+        return Err("predicate certificate v2 aggregate proofs exceed limit".to_string());
+    }
+    let (states, inputs) = witness
+        .map(|witness| (witness.states, witness.declared_inputs))
+        .unwrap_or_default();
+    let certificate = PredicateCertificateV2 {
+        input_sha256: sha256_file(input)?,
+        declared_inputs: model.inputs.len(),
+        relevant_inputs,
+        latches: model.latches.len(),
+        horizon,
+        bad_output,
+        initial_state,
+        avoidable: !states.is_empty(),
+        phases,
+        terminal_constraint: constraints[horizon].clone(),
+        terminal_safe_states,
+        terminal_witnesses,
+        terminal_proof,
+        states,
+        inputs,
+    };
+    let body = predicate_certificate_v2_body(&certificate);
+    if body.len() as u64 > PREDICATE_CERTIFICATE_V2_MAX_BYTES {
+        return Err("predicate certificate v2 serialized artifact exceeds limit".to_string());
+    }
+    publish_causal_comparison(certificate_path, body.as_bytes())?;
+    println!(
+        "predicate-certificate-v2 status=CREATED result={} proofs={} proof_bytes={} output={}",
+        if certificate.avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        certificate
+            .phases
+            .iter()
+            .map(|phase| phase.proofs.len())
+            .sum::<usize>()
+            + 1,
+        total_proof_bytes,
+        certificate_path.display()
+    );
+    Ok(())
+}
+
+fn predicate_v2_witness_respects_constraints(
+    checker: &IndependentPredicateChecker<'_>,
+    constraints: &[Option<bool>],
+    input: u64,
+) -> bool {
+    (checker.model.inputs.len() == u64::BITS as usize || input >> checker.model.inputs.len() == 0)
+        && checker
+            .relevant_inputs
+            .iter()
+            .enumerate()
+            .all(|(bit, declared)| {
+                constraints[bit].is_none_or(|value| (input >> declared & 1 == 1) == value)
+            })
+}
+
+fn verify_aiger_predicate_certificate_v2(
+    input: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    let model = parse_aag(input)?;
+    let certificate = parse_predicate_certificate_v2(certificate_path)?;
+    if sha256_file(input)? != certificate.input_sha256 {
+        return Err("predicate certificate v2 input digest mismatch".to_string());
+    }
+    let mut checker = IndependentPredicateChecker::new(&model)?;
+    if certificate.declared_inputs != model.inputs.len()
+        || certificate.relevant_inputs != checker.relevant_inputs
+        || certificate.latches != model.latches.len()
+        || certificate.bad_output >= model.outputs.len()
+    {
+        return Err("predicate certificate v2 source dimensions mismatch".to_string());
+    }
+    let expected_initial =
+        model
+            .latches
+            .iter()
+            .enumerate()
+            .try_fold(0usize, |state, (bit, latch)| {
+                latch
+                    .initial
+                    .map(|value| state | (usize::from(value) << bit))
+                    .ok_or_else(|| {
+                        "predicate certificate v2 source has undeclared initial latch".to_string()
+                    })
+            })?;
+    if certificate.initial_state != expected_initial {
+        return Err("predicate certificate v2 initial state mismatch".to_string());
+    }
+    let mut composed = (0..checker.states)
+        .map(|state| 1u16 << state)
+        .collect::<Vec<_>>();
+    let mut frame_constraints = Vec::with_capacity(certificate.horizon + 1);
+    let mut expected_start = 0usize;
+    let mut checked_proofs = 0usize;
+    for (phase_index, phase) in certificate.phases.iter().enumerate() {
+        if phase.start != expected_start || phase.length == 0 {
+            return Err("predicate certificate v2 phases are not contiguous".to_string());
+        }
+        expected_start = expected_start
+            .checked_add(phase.length)
+            .ok_or_else(|| "predicate certificate v2 phase length overflow".to_string())?;
+        if expected_start > certificate.horizon
+            || phase.base_rows.len() != checker.states
+            || phase.powered_rows.len() != checker.states
+            || phase.proofs.len() != checker.states
+        {
+            return Err("predicate certificate v2 phase dimensions mismatch".to_string());
+        }
+        let mut expected_edges = Vec::new();
+        for (source, &targets) in phase.base_rows.iter().enumerate() {
+            if targets == 0 {
+                return Err("predicate certificate v2 relation has no target".to_string());
+            }
+            for target in 0..checker.states {
+                if targets & (1u16 << target) != 0 {
+                    expected_edges.push((source, target));
+                }
+            }
+            let clauses = predicate_relation_completeness_clauses(
+                &model,
+                &checker.relevant_inputs,
+                source,
+                &phase.constraints,
+                targets,
+            )?;
+            verify_varisat_unsat_proof(&clauses, &phase.proofs[source]).map_err(|error| {
+                format!("predicate certificate v2 phase {phase_index} source {source}: {error}")
+            })?;
+            checked_proofs += 1;
+        }
+        if phase.edges.len() != expected_edges.len() {
+            return Err("predicate certificate v2 edge count mismatch".to_string());
+        }
+        for (edge, &(source, target)) in phase.edges.iter().zip(&expected_edges) {
+            if (edge.source, edge.target) != (source, target)
+                || !predicate_v2_witness_respects_constraints(
+                    &checker,
+                    &phase.constraints,
+                    edge.input,
+                )
+            {
+                return Err("predicate certificate v2 edge order or input is invalid".to_string());
+            }
+            let (actual, _) = checker.evaluate(source, edge.input)?;
+            if actual != target {
+                return Err("predicate certificate v2 edge witness mismatch".to_string());
+            }
+        }
+        let expected_power = IndependentPredicateChecker::power(&phase.base_rows, phase.length)?;
+        if expected_power != phase.powered_rows {
+            return Err("predicate certificate v2 powered relation mismatch".to_string());
+        }
+        composed = IndependentPredicateChecker::compose(&composed, &phase.powered_rows)?;
+        frame_constraints.extend(std::iter::repeat_n(phase.constraints.clone(), phase.length));
+    }
+    if expected_start != certificate.horizon {
+        return Err("predicate certificate v2 phases do not cover horizon".to_string());
+    }
+    frame_constraints.push(certificate.terminal_constraint.clone());
+    let expected_terminal_states = (0..checker.states)
+        .filter(|state| certificate.terminal_safe_states & (1u16 << state) != 0)
+        .collect::<Vec<_>>();
+    if certificate.terminal_witnesses.len() != expected_terminal_states.len() {
+        return Err("predicate certificate v2 terminal witness count mismatch".to_string());
+    }
+    for (&expected_state, &(state, terminal_input)) in expected_terminal_states
+        .iter()
+        .zip(&certificate.terminal_witnesses)
+    {
+        if state != expected_state
+            || !predicate_v2_witness_respects_constraints(
+                &checker,
+                &certificate.terminal_constraint,
+                terminal_input,
+            )
+        {
+            return Err("predicate certificate v2 terminal witness order is invalid".to_string());
+        }
+        let (_, bad) = checker.evaluate(state, terminal_input)?;
+        if bad & (1u128 << certificate.bad_output) != 0 {
+            return Err("predicate certificate v2 terminal witness is bad".to_string());
+        }
+    }
+    let terminal_clauses = predicate_terminal_completeness_clauses(
+        &model,
+        &checker.relevant_inputs,
+        &certificate.terminal_constraint,
+        certificate.bad_output,
+        certificate.terminal_safe_states,
+    )?;
+    verify_varisat_unsat_proof(&terminal_clauses, &certificate.terminal_proof)
+        .map_err(|error| format!("predicate certificate v2 terminal: {error}"))?;
+    checked_proofs += 1;
+    if certificate.avoidable {
+        if certificate.states.len() != certificate.horizon + 1
+            || certificate.inputs.len() != certificate.horizon + 1
+            || certificate.states[0] != certificate.initial_state
+        {
+            return Err("predicate certificate v2 avoiding trace dimensions mismatch".to_string());
+        }
+        for frame in 0..=certificate.horizon {
+            let state = certificate.states[frame];
+            let witness_input = certificate.inputs[frame];
+            if state >= checker.states
+                || !predicate_v2_witness_respects_constraints(
+                    &checker,
+                    &frame_constraints[frame],
+                    witness_input,
+                )
+            {
+                return Err(format!(
+                    "predicate certificate v2 trace is invalid at frame {frame}"
+                ));
+            }
+            let (next, bad) = checker.evaluate(state, witness_input)?;
+            if frame < certificate.horizon {
+                if next != certificate.states[frame + 1] {
+                    return Err(format!(
+                        "predicate certificate v2 transition mismatch at frame {frame}"
+                    ));
+                }
+            } else if bad & (1u128 << certificate.bad_output) != 0 {
+                return Err("predicate certificate v2 terminal trace is bad".to_string());
+            }
+        }
+        let terminal = *certificate.states.last().unwrap();
+        if composed[certificate.initial_state] & (1u16 << terminal) == 0
+            || certificate.terminal_safe_states & (1u16 << terminal) == 0
+        {
+            return Err("predicate certificate v2 trace is absent from evidence".to_string());
+        }
+    } else {
+        if !certificate.states.is_empty() || !certificate.inputs.is_empty() {
+            return Err("predicate certificate v2 unavoidable result contains trace".to_string());
+        }
+        if composed[certificate.initial_state] & certificate.terminal_safe_states != 0 {
+            return Err("predicate certificate v2 unavoidable claim has safe terminal".to_string());
+        }
+    }
+    println!(
+        "predicate-certificate-v2 status=VERIFIED result={} proofs={} direct_evaluations={}",
+        if certificate.avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        checked_proofs,
         checker.evaluations
     );
     Ok(())
@@ -21200,6 +22008,28 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             verify_aiger_predicate_certificate(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
+        "certify-aiger-predicate-v2" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat certify-aiger-predicate-v2 INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert2".to_string());
+            }
+            let output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate certificate v2 output index".to_string())?;
+            certify_aiger_predicate_v2(
+                Path::new(&args[1]),
+                output,
+                Path::new(&args[3]),
+                Path::new(&args[4]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-predicate-certificate-v2" => {
+            if args.len() != 3 {
+                return Err("usage: continuation-quotient-sat verify-aiger-predicate-certificate-v2 INPUT.aag|INPUT.aig CERTIFICATE.cert2".to_string());
+            }
+            verify_aiger_predicate_certificate_v2(Path::new(&args[1]), Path::new(&args[2]))?;
+            Ok(true)
+        }
         "verify-aiger-counterfactual" => {
             if args.len() != 7 {
                 return Err("usage: continuation-quotient-sat verify-aiger-counterfactual INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt EXPECTED_QUERIES REPORT.txt CERTIFICATE.cert".to_string());
@@ -30516,6 +31346,192 @@ mod tests {
         certify_aiger_predicate(&input, 0, &transcript, &certificate).unwrap();
         assert!(!parse_predicate_certificate(&certificate).unwrap().avoidable);
         verify_aiger_predicate_certificate(&input, &certificate).unwrap();
+        fs::remove_file(transcript).unwrap();
+        fs::remove_file(certificate).unwrap();
+    }
+
+    #[test]
+    fn predicate_certificate_v2_is_deterministic_exact_and_tamper_evident() {
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let transcript = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/predicate-certificate-cost/interrupt-h8-avoidable.transcript");
+        let stem = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-certificate-v2-{}",
+            std::process::id()
+        ));
+        let certificate_path = stem.with_extension("cert2");
+        let duplicate_path = stem.with_extension("duplicate.cert2");
+        certify_aiger_predicate_v2(&input, 0, &transcript, &certificate_path).unwrap();
+        verify_aiger_predicate_certificate_v2(&input, &certificate_path).unwrap();
+        certify_aiger_predicate_v2(&input, 0, &transcript, &duplicate_path).unwrap();
+        assert_eq!(
+            fs::read(&certificate_path).unwrap(),
+            fs::read(&duplicate_path).unwrap()
+        );
+        assert!(
+            certify_aiger_predicate_v2(&input, 0, &transcript, &certificate_path)
+                .unwrap_err()
+                .contains("overwrite")
+        );
+        let certificate = parse_predicate_certificate_v2(&certificate_path).unwrap();
+        assert!(certificate.avoidable);
+        assert_eq!(certificate.phases.len(), 1);
+        assert_eq!(certificate.phases[0].proofs.len(), 4);
+
+        let write_tamper = |suffix: &str, certificate: &PredicateCertificateV2| {
+            let path = stem.with_extension(format!("{suffix}.cert2"));
+            fs::write(&path, predicate_certificate_v2_body(certificate)).unwrap();
+            assert!(
+                verify_aiger_predicate_certificate_v2(&input, &path).is_err(),
+                "v2 tamper unexpectedly verified: {suffix}"
+            );
+            fs::remove_file(path).unwrap();
+        };
+        let mut tampered = certificate.clone();
+        let replacement = if tampered.input_sha256.starts_with('0') {
+            "1"
+        } else {
+            "0"
+        };
+        tampered.input_sha256.replace_range(0..1, replacement);
+        write_tamper("digest", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.phases[0].base_rows[0] ^= 1;
+        write_tamper("base", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.phases[0].powered_rows[0] ^= 1;
+        write_tamper("power", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.phases[0].edges[0].input |= 1u64 << tampered.declared_inputs;
+        write_tamper("edge", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.phases[0].proofs[0].pop();
+        write_tamper("proof", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.terminal_safe_states ^= 1;
+        write_tamper("terminal", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.terminal_proof.pop();
+        write_tamper("terminal-proof", &tampered);
+
+        let mut tampered = certificate.clone();
+        tampered.inputs[0] |= 1u64 << tampered.declared_inputs;
+        write_tamper("trace", &tampered);
+
+        let canonical = predicate_certificate_v2_body(&certificate);
+        for (suffix, body) in [
+            ("unknown", canonical.clone() + "unknown=1\n"),
+            ("truncated", canonical.trim_end_matches('\n').to_string()),
+            ("crlf", canonical.replace('\n', "\r\n")),
+            ("number", canonical.replace("horizon=8", "horizon=08")),
+            (
+                "reordered",
+                canonical.replacen(
+                    "semantics=bounded-terminal-bad-avoidance\nproof_format=varisat-native-0.2.2",
+                    "proof_format=varisat-native-0.2.2\nsemantics=bounded-terminal-bad-avoidance",
+                    1,
+                ),
+            ),
+        ] {
+            let path = stem.with_extension(format!("{suffix}.cert2"));
+            fs::write(&path, body).unwrap();
+            assert!(parse_predicate_certificate_v2(&path).is_err());
+            fs::remove_file(path).unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let symlink_path = stem.with_extension("symlink.cert2");
+            symlink(&certificate_path, &symlink_path).unwrap();
+            assert!(parse_predicate_certificate_v2(&symlink_path).is_err());
+            fs::remove_file(symlink_path).unwrap();
+        }
+
+        let unsafe_input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/actuator-controller/firmware/dense-actuator-interlock.aag");
+        let unsafe_transcript = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/predicate-certificate-cost/actuator-h1-unavoidable.transcript");
+        let unsafe_certificate = stem.with_extension("unsafe.cert2");
+        certify_aiger_predicate_v2(&unsafe_input, 0, &unsafe_transcript, &unsafe_certificate)
+            .unwrap();
+        assert!(
+            !parse_predicate_certificate_v2(&unsafe_certificate)
+                .unwrap()
+                .avoidable
+        );
+        verify_aiger_predicate_certificate_v2(&unsafe_input, &unsafe_certificate).unwrap();
+
+        fs::remove_file(certificate_path).unwrap();
+        fs::remove_file(duplicate_path).unwrap();
+        fs::remove_file(unsafe_certificate).unwrap();
+    }
+
+    #[test]
+    fn predicate_certificate_v2_covers_product_and_multiphase_contracts() {
+        let fixtures = [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/predicate-certificate-cost/interrupt-h8-avoidable.transcript",
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/predicate-certificate-cost/actuator-h16-avoidable.transcript",
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                "examples/predicate-certificate-cost/sensor-h32-avoidable.transcript",
+            ),
+        ];
+        for (index, (model, transcript)) in fixtures.into_iter().enumerate() {
+            let input = Path::new(env!("CARGO_MANIFEST_DIR")).join(model);
+            let transcript = Path::new(env!("CARGO_MANIFEST_DIR")).join(transcript);
+            let certificate = std::env::temp_dir().join(format!(
+                "cq-sat-predicate-certificate-v2-cohort-{}-{index}.cert2",
+                std::process::id()
+            ));
+            certify_aiger_predicate_v2(&input, 0, &transcript, &certificate).unwrap();
+            verify_aiger_predicate_certificate_v2(&input, &certificate).unwrap();
+            fs::remove_file(certificate).unwrap();
+        }
+
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let stem = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-certificate-v2-multiphase-{}",
+            std::process::id()
+        ));
+        let transcript = stem.with_extension("transcript");
+        let certificate = stem.with_extension("cert2");
+        let frames = [
+            "xxxxxxxxx",
+            "xxxxxxxxx",
+            "111111111",
+            "111111111",
+            "xxxxxxxxx",
+            "xxxxxxxxx",
+            "xxxxxxxxx",
+        ];
+        fs::write(&transcript, frames.join("\n") + "\n").unwrap();
+        certify_aiger_predicate_v2(&input, 0, &transcript, &certificate).unwrap();
+        let parsed = parse_predicate_certificate_v2(&certificate).unwrap();
+        assert_eq!(parsed.phases.len(), 3);
+        assert_eq!(
+            parsed
+                .phases
+                .iter()
+                .map(|phase| phase.length)
+                .sum::<usize>(),
+            6
+        );
+        verify_aiger_predicate_certificate_v2(&input, &certificate).unwrap();
         fs::remove_file(transcript).unwrap();
         fs::remove_file(certificate).unwrap();
     }

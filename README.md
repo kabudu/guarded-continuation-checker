@@ -101,6 +101,13 @@ candidate primitive. Terminal safe-set proofs also preserve exactness, ranging
 from negative easy-case overhead to a 26.20x constrained 16-input speedup. v1
 remains the portfolio format.
 
+The experimental [proof-carrying predicate certificate v2](docs/PREDICATE_CERTIFICATE_V2.md)
+now packages both proof primitives, deterministic phase powers, terminal
+evidence and the final trace into a bounded canonical artifact. Its independent
+verifier avoids the BDD producer and exhaustive input enumeration. V1 remains
+the portfolio default while v2 cost, hostile-input and checker-diversity gates
+are still open.
+
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,
 persistent CDCL, and admitted CQ. It records the negative result that CQ does
