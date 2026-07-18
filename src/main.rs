@@ -34358,10 +34358,11 @@ mod tests {
     #[test]
     fn event_contract_unavoidable_answer_agrees_with_exact_cdcl() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let model = parse_aag(
-            &root.join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag"),
-        )
-        .unwrap();
+        let model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
         let relevant = IndependentPredicateChecker::support(&model).unwrap();
         let contract = EventContract {
             horizon: 1,
@@ -34375,7 +34376,12 @@ mod tests {
             },
         };
         let mut quotient = PredicateQuotient::new(&model).unwrap();
-        assert!(quotient.query_event_contract(0, 0, &contract).unwrap().is_none());
+        assert!(
+            quotient
+                .query_event_contract(0, 0, &contract)
+                .unwrap()
+                .is_none()
+        );
         assert!(!solve_event_contract_cdcl(&model, &relevant, 0, &contract).unwrap());
     }
 
