@@ -8856,6 +8856,10 @@ impl AagPredicateInterface {
     }
 
     fn compile(model: &AagModel) -> Result<Self, String> {
+        Self::compile_with_node_limit(model, PREDICATE_INTERFACE_MAX_BDD_NODES)
+    }
+
+    fn compile_with_node_limit(model: &AagModel, node_limit: usize) -> Result<Self, String> {
         let projected_inputs = AagInterfaceTable::projected_input_support(model)?;
         if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS)
             .contains(&projected_inputs.len())
@@ -8881,7 +8885,7 @@ impl AagPredicateInterface {
             ..projected_inputs.len() + model.latches.len() * 2)
             .collect::<Vec<_>>();
         let mut manager = BddManager {
-            node_limit: Some(PREDICATE_INTERFACE_MAX_BDD_NODES),
+            node_limit: Some(node_limit),
             ..BddManager::default()
         };
         let mut roots = vec![0usize; model.max_variable + 1];
@@ -8910,7 +8914,7 @@ impl AagPredicateInterface {
             .collect::<Vec<_>>();
         if manager.budget_exceeded {
             return Err(format!(
-                "predicate interface BDD exceeds {PREDICATE_INTERFACE_MAX_BDD_NODES} nodes"
+                "predicate interface BDD exceeds {node_limit} nodes"
             ));
         }
         Ok(Self {
@@ -9040,8 +9044,12 @@ struct PredicateQuotient {
 
 impl PredicateQuotient {
     fn new(model: &AagModel) -> Result<Self, String> {
+        Self::new_with_node_limit(model, PREDICATE_INTERFACE_MAX_BDD_NODES)
+    }
+
+    fn new_with_node_limit(model: &AagModel, node_limit: usize) -> Result<Self, String> {
         Ok(Self {
-            interface: AagPredicateInterface::compile(model)?,
+            interface: AagPredicateInterface::compile_with_node_limit(model, node_limit)?,
             relation_cache: HashMap::new(),
             power_cache: HashMap::new(),
         })
@@ -9980,6 +9988,34 @@ fn verify_aiger_counterfactual_portfolio(
     report: &Path,
     certificate_path: &Path,
 ) -> Result<(), String> {
+    verify_aiger_counterfactual_portfolio_with_node_limit(
+        input,
+        bad_output,
+        transcript,
+        expected_queries,
+        report,
+        certificate_path,
+        PREDICATE_INTERFACE_MAX_BDD_NODES,
+    )
+}
+
+fn predicate_resource_error(error: &str) -> bool {
+    (error.starts_with("predicate interface BDD exceeds ") && error.ends_with(" nodes"))
+        || error == "predicate interface witness cache exceeds 4096 entries"
+        || error == "predicate quotient relation cache exceeds 4096 entries"
+        || error.starts_with("predicate quotient power cache exceeds ")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_aiger_counterfactual_portfolio_with_node_limit(
+    input: &Path,
+    bad_output: usize,
+    transcript: &Path,
+    expected_queries: usize,
+    report: &Path,
+    certificate_path: &Path,
+    predicate_node_limit: usize,
+) -> Result<(), String> {
     if report.exists() || certificate_path.exists() {
         return Err("counterfactual portfolio refuses to overwrite output artifacts".to_string());
     }
@@ -10009,7 +10045,7 @@ fn verify_aiger_counterfactual_portfolio(
             .fold(0usize, |state, (bit, latch)| {
                 state | (usize::from(latch.initial == Some(true)) << bit)
             });
-        match PredicateQuotient::new(&model)
+        match PredicateQuotient::new_with_node_limit(&model, predicate_node_limit)
             .and_then(|mut quotient| quotient.query(initial_state, bad_output, &constraints))
         {
             Ok(expected) => {
@@ -10040,7 +10076,7 @@ fn verify_aiger_counterfactual_portfolio(
                     "static-admission",
                 )
             }
-            Err(_) => {
+            Err(error) if predicate_resource_error(&error) => {
                 let avoidable = solve_counterfactual_persistent(
                     &model,
                     bad_output,
@@ -10049,6 +10085,7 @@ fn verify_aiger_counterfactual_portfolio(
                 )?;
                 (avoidable, "persistent-cdcl", "predicate-resource-fallback")
             }
+            Err(error) => return Err(error),
         }
     } else {
         let avoidable =
@@ -10121,6 +10158,237 @@ fn solve_counterfactual_persistent(
     let mut solver = Solver::new();
     add_to_varisat(&mut solver, &encoding.clauses);
     solve_causal_persistent(&mut solver, &assumptions)
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct CounterfactualPortfolioReport {
+    input_sha256: String,
+    bad_output: usize,
+    horizon: usize,
+    relevant_inputs: usize,
+    latches: usize,
+    expected_queries: usize,
+    admitted: bool,
+    backend: String,
+    reason: String,
+    avoidable: bool,
+    certificate_present: bool,
+    certificate_verified: bool,
+    gate_ns: u128,
+    backend_ns: u128,
+    verifier_ns: u128,
+}
+
+fn parse_counterfactual_bool(value: &str, name: &str) -> Result<bool, String> {
+    match value {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        _ => Err(format!(
+            "counterfactual portfolio `{name}` must be canonical 0 or 1"
+        )),
+    }
+}
+
+fn parse_counterfactual_number<T: std::str::FromStr>(value: &str, name: &str) -> Result<T, String> {
+    if value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+        || (value.len() > 1 && value.starts_with('0'))
+    {
+        return Err(format!(
+            "counterfactual portfolio `{name}` is not canonical decimal"
+        ));
+    }
+    value
+        .parse()
+        .map_err(|_| format!("invalid counterfactual portfolio `{name}`"))
+}
+
+fn parse_counterfactual_report(path: &Path) -> Result<CounterfactualPortfolioReport, String> {
+    const KEYS: [&str; 16] = [
+        "counterfactual_portfolio_version",
+        "input_sha256",
+        "bad_output",
+        "horizon",
+        "relevant_inputs",
+        "latches",
+        "expected_queries",
+        "admitted",
+        "backend",
+        "reason",
+        "result",
+        "certificate",
+        "certificate_verified",
+        "gate_ns",
+        "backend_ns",
+        "verifier_ns",
+    ];
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "inspect counterfactual portfolio report {}: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.len() > 16 * 1024 {
+        return Err(
+            "counterfactual portfolio report must be a regular file no larger than 16384 bytes"
+                .to_string(),
+        );
+    }
+    let body = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "read counterfactual portfolio report {}: {error}",
+            path.display()
+        )
+    })?;
+    if !body.ends_with('\n') || body.contains('\r') {
+        return Err(
+            "counterfactual portfolio report must use canonical newline-terminated LF text"
+                .to_string(),
+        );
+    }
+    let lines = body.lines().collect::<Vec<_>>();
+    if lines.len() != KEYS.len() + 1 || lines.last() != Some(&"status=ok") {
+        return Err(
+            "counterfactual portfolio report has invalid field count or status".to_string(),
+        );
+    }
+    let mut values = Vec::with_capacity(KEYS.len());
+    for (index, key) in KEYS.iter().enumerate() {
+        let prefix = format!("{key}=");
+        let value = lines[index].strip_prefix(&prefix).ok_or_else(|| {
+            format!(
+                "counterfactual portfolio report expected `{key}` at line {}",
+                index + 1
+            )
+        })?;
+        if value.is_empty() {
+            return Err(format!("counterfactual portfolio report `{key}` is empty"));
+        }
+        values.push(value);
+    }
+    if values[0] != "1" {
+        return Err("unsupported counterfactual portfolio report version".to_string());
+    }
+    let input_sha256 = values[1].to_string();
+    if input_sha256.len() != 64
+        || input_sha256
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+    {
+        return Err("counterfactual portfolio input digest is invalid".to_string());
+    }
+    let backend = values[8].to_string();
+    let reason = values[9].to_string();
+    let avoidable = match values[10] {
+        "avoidable" => true,
+        "unavoidable" => false,
+        _ => return Err("counterfactual portfolio result is invalid".to_string()),
+    };
+    let certificate_present = match values[11] {
+        "present" => true,
+        "-" => false,
+        _ => return Err("counterfactual portfolio certificate field is invalid".to_string()),
+    };
+    Ok(CounterfactualPortfolioReport {
+        input_sha256,
+        bad_output: parse_counterfactual_number(values[2], "bad_output")?,
+        horizon: parse_counterfactual_number(values[3], "horizon")?,
+        relevant_inputs: parse_counterfactual_number(values[4], "relevant_inputs")?,
+        latches: parse_counterfactual_number(values[5], "latches")?,
+        expected_queries: parse_counterfactual_number(values[6], "expected_queries")?,
+        admitted: parse_counterfactual_bool(values[7], "admitted")?,
+        backend,
+        reason,
+        avoidable,
+        certificate_present,
+        certificate_verified: parse_counterfactual_bool(values[12], "certificate_verified")?,
+        gate_ns: parse_counterfactual_number(values[13], "gate_ns")?,
+        backend_ns: parse_counterfactual_number(values[14], "backend_ns")?,
+        verifier_ns: parse_counterfactual_number(values[15], "verifier_ns")?,
+    })
+}
+
+fn verify_aiger_counterfactual_report(
+    input: &Path,
+    transcript: &Path,
+    report_path: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    let report = parse_counterfactual_report(report_path)?;
+    let model = parse_aag(input)?;
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let constraints = parse_predicate_transcript(transcript, relevant_inputs.len())?;
+    let admitted = predicate_quotient_admitted(
+        relevant_inputs.len(),
+        model.latches.len(),
+        constraints.len() - 1,
+        report.expected_queries,
+    ) && model.latches.iter().all(|latch| latch.initial.is_some());
+    if report.input_sha256 != sha256_file(input)?
+        || report.bad_output >= model.outputs.len()
+        || report.horizon != constraints.len() - 1
+        || report.relevant_inputs != relevant_inputs.len()
+        || report.latches != model.latches.len()
+        || report.admitted != admitted
+    {
+        return Err("counterfactual portfolio report identity or dimensions mismatch".to_string());
+    }
+    match (report.backend.as_str(), report.reason.as_str()) {
+        ("predicate-certificate", "static-admission") => {
+            if !admitted || !report.certificate_present || !report.certificate_verified {
+                return Err("counterfactual predicate report has inconsistent status".to_string());
+            }
+            verify_aiger_predicate_certificate(input, certificate_path)?;
+            let certificate = parse_predicate_certificate(certificate_path)?;
+            let mut certified_constraints = Vec::with_capacity(certificate.horizon + 1);
+            for phase in &certificate.phases {
+                certified_constraints
+                    .extend(std::iter::repeat_n(phase.constraints.clone(), phase.length));
+            }
+            certified_constraints.push(certificate.terminal_constraint.clone());
+            if certificate.input_sha256 != report.input_sha256
+                || certificate.bad_output != report.bad_output
+                || certificate.horizon != report.horizon
+                || certificate.relevant_inputs != relevant_inputs
+                || certificate.avoidable != report.avoidable
+                || certified_constraints != constraints
+            {
+                return Err("counterfactual report and certificate disagree".to_string());
+            }
+        }
+        ("persistent-cdcl", "static-rejection")
+        | ("persistent-cdcl", "predicate-resource-fallback") => {
+            if report.certificate_present
+                || report.certificate_verified
+                || fs::symlink_metadata(certificate_path).is_ok()
+                || (report.reason == "static-rejection" && admitted)
+                || (report.reason == "predicate-resource-fallback" && !admitted)
+            {
+                return Err("counterfactual CDCL report has inconsistent status".to_string());
+            }
+            let avoidable = solve_counterfactual_persistent(
+                &model,
+                report.bad_output,
+                &relevant_inputs,
+                &constraints,
+            )?;
+            if avoidable != report.avoidable {
+                return Err("counterfactual CDCL report answer mismatch".to_string());
+            }
+        }
+        _ => return Err("counterfactual portfolio backend or reason is invalid".to_string()),
+    }
+    println!(
+        "counterfactual-portfolio-report status=VERIFIED result={} backend={} report={}",
+        if report.avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        report.backend,
+        report_path.display()
+    );
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -20417,6 +20685,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
+        "verify-aiger-counterfactual-report" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat verify-aiger-counterfactual-report INPUT.aag|INPUT.aig TRANSCRIPT.txt REPORT.txt CERTIFICATE.cert".to_string());
+            }
+            verify_aiger_counterfactual_report(
+                Path::new(&args[1]),
+                Path::new(&args[2]),
+                Path::new(&args[3]),
+                Path::new(&args[4]),
+            )?;
+            Ok(true)
+        }
         "benchmark-aiger-predicate-symbolic" => {
             if args.len() != 5 {
                 return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-symbolic INPUT.aag|INPUT.aig HORIZON REPEATS OUTPUT.csv".to_string());
@@ -29546,6 +29826,13 @@ mod tests {
         assert!(report.contains("result=avoidable\n"));
         assert!(report.contains("certificate_verified=1\n"));
         verify_aiger_predicate_certificate(&input, &admitted_certificate).unwrap();
+        verify_aiger_counterfactual_report(
+            &input,
+            &admitted_transcript,
+            &admitted_report,
+            &admitted_certificate,
+        )
+        .unwrap();
         assert!(
             verify_aiger_counterfactual_portfolio(
                 &input,
@@ -29581,6 +29868,80 @@ mod tests {
         assert!(report.contains("result=avoidable\n"));
         assert!(report.contains("certificate_verified=0\n"));
         assert!(!fallback_certificate.exists());
+        verify_aiger_counterfactual_report(
+            &input,
+            &fallback_transcript,
+            &fallback_report,
+            &fallback_certificate,
+        )
+        .unwrap();
+
+        let forced_report = stem.with_extension("forced.report");
+        let forced_certificate = stem.with_extension("forced.cert");
+        verify_aiger_counterfactual_portfolio_with_node_limit(
+            &input,
+            0,
+            &admitted_transcript,
+            100,
+            &forced_report,
+            &forced_certificate,
+            1,
+        )
+        .unwrap();
+        let report = fs::read_to_string(&forced_report).unwrap();
+        assert!(report.contains("admitted=1\n"));
+        assert!(report.contains("backend=persistent-cdcl\n"));
+        assert!(report.contains("reason=predicate-resource-fallback\n"));
+        assert!(report.contains("result=avoidable\n"));
+        assert!(!forced_certificate.exists());
+        verify_aiger_counterfactual_report(
+            &input,
+            &admitted_transcript,
+            &forced_report,
+            &forced_certificate,
+        )
+        .unwrap();
+
+        let tampered_report = stem.with_extension("tampered.report");
+        fs::write(
+            &tampered_report,
+            fs::read_to_string(&admitted_report)
+                .unwrap()
+                .replace("result=avoidable", "result=unavoidable"),
+        )
+        .unwrap();
+        assert!(
+            verify_aiger_counterfactual_report(
+                &input,
+                &admitted_transcript,
+                &tampered_report,
+                &admitted_certificate,
+            )
+            .is_err()
+        );
+        for (suffix, body) in [
+            (
+                "unknown",
+                fs::read_to_string(&admitted_report).unwrap() + "unknown=1\n",
+            ),
+            (
+                "crlf",
+                fs::read_to_string(&admitted_report)
+                    .unwrap()
+                    .replace('\n', "\r\n"),
+            ),
+            (
+                "number",
+                fs::read_to_string(&admitted_report)
+                    .unwrap()
+                    .replace("horizon=32", "horizon=032"),
+            ),
+        ] {
+            let malformed = stem.with_extension(format!("{suffix}.report"));
+            fs::write(&malformed, body).unwrap();
+            assert!(parse_counterfactual_report(&malformed).is_err());
+            fs::remove_file(malformed).unwrap();
+        }
 
         for path in [
             admitted_transcript,
@@ -29588,6 +29949,8 @@ mod tests {
             admitted_certificate,
             fallback_transcript,
             fallback_report,
+            forced_report,
+            tampered_report,
         ] {
             fs::remove_file(path).unwrap();
         }
@@ -29638,8 +30001,69 @@ mod tests {
         assert!(report.contains("backend=persistent-cdcl\n"));
         assert!(report.contains("result=unavoidable\n"));
         assert!(!unsafe_certificate.exists());
+        verify_aiger_counterfactual_report(
+            &unsafe_input,
+            &unsafe_transcript,
+            &unsafe_report,
+            &unsafe_certificate,
+        )
+        .unwrap();
         fs::remove_file(unsafe_transcript).unwrap();
         fs::remove_file(unsafe_report).unwrap();
+    }
+
+    #[test]
+    fn counterfactual_portfolio_certificate_contract_covers_product_cohort() {
+        let fixtures = [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                9,
+                8,
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                12,
+                16,
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                16,
+                32,
+            ),
+        ];
+        for (index, (relative, width, horizon)) in fixtures.into_iter().enumerate() {
+            let input = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+            let stem = std::env::temp_dir().join(format!(
+                "cq-sat-counterfactual-compatibility-{}-{index}",
+                std::process::id()
+            ));
+            let transcript = stem.with_extension("transcript");
+            let report = stem.with_extension("report");
+            let certificate = stem.with_extension("cert");
+            fs::write(
+                &transcript,
+                vec!["x".repeat(width); horizon + 1].join("\n") + "\n",
+            )
+            .unwrap();
+            verify_aiger_counterfactual_portfolio(
+                &input,
+                0,
+                &transcript,
+                100,
+                &report,
+                &certificate,
+            )
+            .unwrap();
+            assert!(
+                fs::read_to_string(&report)
+                    .unwrap()
+                    .contains("backend=predicate-certificate\n")
+            );
+            verify_aiger_counterfactual_report(&input, &transcript, &report, &certificate).unwrap();
+            fs::remove_file(transcript).unwrap();
+            fs::remove_file(report).unwrap();
+            fs::remove_file(certificate).unwrap();
+        }
     }
 
     #[test]

@@ -24,6 +24,12 @@
   through the calibration-free static gate, preserves exact persistent-CDCL
   fallback on rejection or bounded predicate failure, and regression-tests
   both avoidable and unavoidable fallback answers.
+- Add the strict `verify-aiger-counterfactual-report` consumer, which recomputes
+  admission and dimensions, binds the complete transcript to independently
+  checked predicate evidence, and re-solves CDCL reports. Restrict fallback to
+  explicit resource errors, add deterministic resource-exhaustion coverage,
+  canonical-report rejection tests, and exercise the admitted certificate
+  contract across all three product-shaped controllers.
 
 ## 0.28.0 - 2026-07-18
 

@@ -81,10 +81,31 @@ If checking or preflight agreement fails, the certificate is removed and no
 report is published. If report publication fails after a certificate was
 verified, the certificate is removed. CDCL paths never create a certificate.
 
+## Independent report verification
+
+```sh
+continuation-quotient-sat verify-aiger-counterfactual-report \
+  INPUT.aag|INPUT.aig TRANSCRIPT.txt REPORT.txt CERTIFICATE.cert
+```
+
+The verifier is a strict consumer of the frozen field order, canonical decimal
+and Boolean encodings, LF termination, 16 KiB size limit and regular-file rule.
+It rejects unknown, missing, reordered, duplicate, non-canonical and malformed
+fields. It recomputes the source digest, support, dimensions and static
+admission decision.
+
+For an admitted predicate result it independently verifies certificate v1 and
+requires its output, result and fully expanded transcript to match the report.
+For either CDCL reason it requires the certificate path not to exist and
+re-solves the identical query with persistent CDCL. A resource-fallback report
+is valid only for a statically admitted query; a static-rejection report is
+valid only for a rejected query. Timing fields are parsed but never trusted as
+evidence.
+
 ## Compatibility
 
 The command and report are frozen as version 1 for research evaluation.
 Incompatible field, ordering, semantic, or admission changes require a new
-version. The current implementation does not yet provide a separate strict
-report parser, stable library API, deprecation window, or signed distribution;
-those remain production-readiness gates.
+version. The implementation does not yet provide a stable library API,
+deprecation window or signed distribution; those remain production-readiness
+gates.

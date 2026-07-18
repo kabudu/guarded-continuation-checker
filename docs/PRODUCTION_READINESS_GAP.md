@@ -8,7 +8,7 @@ sufficient.
 | Gate | Current evidence | Closure requirement | Status |
 |---|---|---|---|
 | Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; positive traces replay and negative claims prove empty safe intersection | Preserve this coverage across the public compatibility corpus and future API changes | Closed for bounded v1 |
-| Portfolio integration | Counterfactual portfolio v1 uses the versioned static rule, independently verifies admitted certificates, and tests exact CDCL fallback in both answer directions | Add a forced resource-exhaustion regression, strict report consumer and compatibility corpus | In progress |
+| Portfolio integration | Counterfactual portfolio v1 uses the versioned static rule; its strict consumer rechecks certificates or CDCL answers; forced resource exhaustion and both answer directions are covered across the three-product compatibility cohort | Preserve the contract and coverage across future API changes | Closed for bounded v1 |
 | Resource governance | Static input, latch, horizon, node and cache bounds | Wall-clock, memory, output-size and child-process limits with stable machine-readable failure classes | Open |
 | Hostile inputs | Strict certificate/transcript sizes, canonical syntax, unknown/duplicate/truncation rejection and symlink refusal | Add parser fuzz corpus, denial-of-service tests and a documented certificate threat model | In progress |
 | Stable interface | Research CLI commands and CSV schemas | Versioned API/CLI contract, compatibility tests, migration policy and deprecation window | Open |
