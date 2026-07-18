@@ -615,6 +615,17 @@ potentially distinctive is the exact waveform-segment intervention model,
 CQ/CDCL cross-check, and replay-verified evidence pipeline as a combination;
 scholarly novelty is still unproven.
 
+A subsequent bounded prior-art audit found substantially closer predecessors:
+Ravi and Somenzi (TACAS 2004) minimize signal/time assignments in BMC traces;
+Beer et al. (CAV 2009) define causes on model-checking counterexamples; Huang et
+al. (2021) compute explanations by conditioning knowledge-compiled Boolean
+representations; and Ogawa et al. (2021) derive compact interval explanations
+with BMC, BDDs, and AllSAT. Consequently, none of minimal temporal assignments,
+causal trace explanation, or compiled explanation is a CQ-SAT/GCC novelty. Only
+the complete segment-vocabulary, identical-transcript cross-backend replay, and
+digest-bound evidence integration remains potentially distinctive, and that
+status is explicitly unproven.
+
 ## Retraction and correction
 
 Early independent-update tests suggested fast suffix-only clause deletion.
