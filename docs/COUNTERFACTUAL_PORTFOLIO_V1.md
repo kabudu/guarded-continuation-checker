@@ -13,7 +13,7 @@ unbounded safety proof.
 ## Command
 
 ```sh
-continuation-quotient-sat verify-aiger-counterfactual \
+guarded-continuation-checker verify-aiger-counterfactual \
   INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt EXPECTED_QUERIES \
   REPORT.txt CERTIFICATE.cert
 ```
@@ -84,7 +84,7 @@ verified, the certificate is removed. CDCL paths never create a certificate.
 ## Independent report verification
 
 ```sh
-continuation-quotient-sat verify-aiger-counterfactual-report \
+guarded-continuation-checker verify-aiger-counterfactual-report \
   INPUT.aag|INPUT.aig TRANSCRIPT.txt REPORT.txt CERTIFICATE.cert
 ```
 

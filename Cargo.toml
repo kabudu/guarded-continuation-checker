@@ -1,11 +1,13 @@
 [package]
-name = "continuation-quotient-sat"
+name = "guarded-continuation-checker"
 version = "0.28.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT"
+readme = "CRATE_README.md"
 license = "Apache-2.0"
 repository = "https://github.com/kabudu/guarded-continuation-checker"
+documentation = "https://docs.rs/guarded-continuation-checker"
 keywords = ["verification", "embedded", "sat", "aiger", "firmware"]
 categories = ["development-tools", "science", "algorithms"]
 

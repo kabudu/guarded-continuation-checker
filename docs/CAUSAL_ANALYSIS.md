@@ -35,12 +35,12 @@ candidate segmentation, sufficiency, or per-event minimality check disagrees.
 ```sh
 cargo build --release --locked
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   explain-aiger-counterexample \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   8 16 target/causal/door-interlock
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   verify-aiger-causal-bundle \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   target/causal/door-interlock

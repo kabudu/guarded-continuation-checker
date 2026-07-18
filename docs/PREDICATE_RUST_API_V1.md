@@ -1,18 +1,18 @@
 # Predicate Rust API v1
 
-The `continuation-quotient-sat` crate exposes a versioned, typed client for
+The `guarded-continuation-checker` crate exposes a versioned, typed client for
 firmware build systems that need to produce and verify dense predicate
 certificates without constructing shell commands.
 
 ```rust,no_run
-use continuation_quotient_sat::{
+use guarded_continuation_checker::{
     CertificateVersion, ExecutionPolicy, PredicateResult, PredicateTool,
 };
 use std::path::Path;
 use std::time::Duration;
 
 let policy = ExecutionPolicy::new(Duration::from_secs(30), 64 * 1024)?;
-let tool = PredicateTool::discover_with_policy("continuation-quotient-sat", policy)?;
+let tool = PredicateTool::discover_with_policy("guarded-continuation-checker", policy)?;
 let result = tool.verify(
     CertificateVersion::V2,
     Path::new("controller.aig"),
@@ -106,7 +106,7 @@ requires a new metrics schema version; enum string values are stable within v1.
 API v1 is deliberately an out-of-process client. This keeps the verifier's
 executable boundary, exit contract and future process-level resource controls
 intact. It is not yet an in-process verifier library, and applications must ship
-or provision a compatible `continuation-quotient-sat` executable.
+or provision a compatible `guarded-continuation-checker` executable.
 
 The caller owns executable selection. Production evaluation should use an
 absolute path or a deployment-controlled lookup; discovery does not download or

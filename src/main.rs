@@ -20846,7 +20846,7 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
     match args.first().map(String::as_str) {
         Some("firmware-cli-version") => {
             if args.len() != 1 {
-                return Err("usage: continuation-quotient-sat firmware-cli-version".to_string());
+                return Err("usage: guarded-continuation-checker firmware-cli-version".to_string());
             }
             println!(
                 "firmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION} artifact_schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"
@@ -20856,7 +20856,7 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
         Some("firmware-artifact-validate") => {
             if args.len() != 2 {
                 return Err(
-                    "usage: continuation-quotient-sat firmware-artifact-validate ARTIFACT_DIR"
+                    "usage: guarded-continuation-checker firmware-artifact-validate ARTIFACT_DIR"
                         .to_string(),
                 );
             }
@@ -20865,13 +20865,13 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
         }
         Some("firmware-rtl-config-safety-gate") => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat firmware-rtl-config-safety-gate PROJECT.conf ARTIFACT_DIR".to_string());
+                return Err("usage: guarded-continuation-checker firmware-rtl-config-safety-gate PROJECT.conf ARTIFACT_DIR".to_string());
             }
             firmware_rtl_config_safety_gate(Path::new(&args[1]), Path::new(&args[2])).map(Some)
         }
         Some("firmware-safety-gate") => {
             if args.len() != 4 {
-                return Err("usage: continuation-quotient-sat firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR".to_string());
+                return Err("usage: guarded-continuation-checker firmware-safety-gate INPUT.aag HORIZON ARTIFACT_DIR".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -20881,7 +20881,7 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
         }
         Some("firmware-rtl-safety-gate") => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat firmware-rtl-safety-gate INPUT.sv TOP HORIZON ARTIFACT_DIR".to_string());
+                return Err("usage: guarded-continuation-checker firmware-rtl-safety-gate INPUT.sv TOP HORIZON ARTIFACT_DIR".to_string());
             }
             let horizon = args[3]
                 .parse::<usize>()
@@ -20892,7 +20892,7 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
         }
         Some("firmware-rtl-project-safety-gate") => {
             if args.len() < 5 {
-                return Err("usage: continuation-quotient-sat firmware-rtl-project-safety-gate TOP HORIZON ARTIFACT_DIR SOURCE.sv SOURCE2.sv [...]".to_string());
+                return Err("usage: guarded-continuation-checker firmware-rtl-project-safety-gate TOP HORIZON ARTIFACT_DIR SOURCE.sv SOURCE2.sv [...]".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -20904,7 +20904,7 @@ fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
         }
         Some("firmware-rtl-constrained-project-safety-gate") => {
             if args.len() < 6 {
-                return Err("usage: continuation-quotient-sat firmware-rtl-constrained-project-safety-gate TOP HORIZON ARTIFACT_DIR ASSUMPTIONS.txt SOURCE.sv SOURCE2.sv [...]".to_string());
+                return Err("usage: guarded-continuation-checker firmware-rtl-constrained-project-safety-gate TOP HORIZON ARTIFACT_DIR ASSUMPTIONS.txt SOURCE.sv SOURCE2.sv [...]".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22240,14 +22240,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     match command {
         "predicate-cli-version" => {
             if args.len() != 1 {
-                return Err("usage: continuation-quotient-sat predicate-cli-version".to_string());
+                return Err("usage: guarded-continuation-checker predicate-cli-version".to_string());
             }
             println!("{}", predicate_cli_contract_line());
             Ok(true)
         }
         "explain-aiger-counterexample" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat explain-aiger-counterexample INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT_DIR".to_string());
+                return Err("usage: guarded-continuation-checker explain-aiger-counterexample INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT_DIR".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22271,21 +22271,21 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-causal-bundle" => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat verify-aiger-causal-bundle INPUT.aag OUTPUT_DIR".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-causal-bundle INPUT.aag OUTPUT_DIR".to_string());
             }
             verify_causal_bundle(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "verify-aiger-causal-certificate" => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat verify-aiger-causal-certificate INPUT.aag CERTIFICATE.cert".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-causal-certificate INPUT.aag CERTIFICATE.cert".to_string());
             }
             verify_causal_certificate(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "benchmark-aiger-causal-strategies" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-causal-strategies INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-causal-strategies INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT.csv".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22311,7 +22311,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-causal-batch" => {
             if args.len() != 7 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-causal-batch INPUT.aag|INPUT.aig HORIZON MAX_BOUND_BITS MAX_CAUSES REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-causal-batch INPUT.aag|INPUT.aig HORIZON MAX_BOUND_BITS MAX_CAUSES REPEATS OUTPUT.csv".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22343,14 +22343,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-causal-batch" => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat verify-aiger-causal-batch INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-causal-batch INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
             }
             verify_aiger_causal_batch(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "benchmark-aiger-interface-quotient" => {
             if args.len() != 6 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-interface-quotient INPUT.aag|INPUT.aig HORIZON MAX_CAUSES REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-interface-quotient INPUT.aag|INPUT.aig HORIZON MAX_CAUSES REPEATS OUTPUT.csv".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22372,14 +22372,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-interface-quotient" => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat verify-aiger-interface-quotient INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-interface-quotient INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
             }
             verify_aiger_interface_quotient(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "benchmark-aiger-predicate-interface" => {
             if args.len() != 4 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-interface INPUT.aag|INPUT.aig REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-predicate-interface INPUT.aag|INPUT.aig REPEATS OUTPUT.csv".to_string());
             }
             let repeats = args[2]
                 .parse::<usize>()
@@ -22389,7 +22389,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "query-aiger-predicate-quotient" => {
             if args.len() != 4 {
-                return Err("usage: continuation-quotient-sat query-aiger-predicate-quotient INPUT.aag|INPUT.aig HORIZON OUTPUT_INDEX".to_string());
+                return Err("usage: guarded-continuation-checker query-aiger-predicate-quotient INPUT.aag|INPUT.aig HORIZON OUTPUT_INDEX".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22402,7 +22402,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "certify-aiger-predicate" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat certify-aiger-predicate INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert".to_string());
+                return Err("usage: guarded-continuation-checker certify-aiger-predicate INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert".to_string());
             }
             let output = args[2]
                 .parse::<usize>()
@@ -22417,14 +22417,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-predicate-certificate" => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat verify-aiger-predicate-certificate INPUT.aag|INPUT.aig CERTIFICATE.cert".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-predicate-certificate INPUT.aag|INPUT.aig CERTIFICATE.cert".to_string());
             }
             verify_aiger_predicate_certificate(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "certify-aiger-predicate-v2" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat certify-aiger-predicate-v2 INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert2".to_string());
+                return Err("usage: guarded-continuation-checker certify-aiger-predicate-v2 INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert2".to_string());
             }
             let output = args[2]
                 .parse::<usize>()
@@ -22439,14 +22439,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-predicate-certificate-v2" => {
             if args.len() != 3 {
-                return Err("usage: continuation-quotient-sat verify-aiger-predicate-certificate-v2 INPUT.aag|INPUT.aig CERTIFICATE.cert2".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-predicate-certificate-v2 INPUT.aag|INPUT.aig CERTIFICATE.cert2".to_string());
             }
             verify_aiger_predicate_certificate_v2(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
         "export-aiger-predicate-v2-obligations" => {
             if args.len() != 4 {
-                return Err("usage: continuation-quotient-sat export-aiger-predicate-v2-obligations INPUT.aag|INPUT.aig CERTIFICATE.cert2 OUTPUT_DIR".to_string());
+                return Err("usage: guarded-continuation-checker export-aiger-predicate-v2-obligations INPUT.aag|INPUT.aig CERTIFICATE.cert2 OUTPUT_DIR".to_string());
             }
             export_aiger_predicate_v2_obligations(
                 Path::new(&args[1]),
@@ -22457,7 +22457,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-counterfactual" => {
             if args.len() != 7 {
-                return Err("usage: continuation-quotient-sat verify-aiger-counterfactual INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt EXPECTED_QUERIES REPORT.txt CERTIFICATE.cert".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-counterfactual INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt EXPECTED_QUERIES REPORT.txt CERTIFICATE.cert".to_string());
             }
             let output = args[2]
                 .parse::<usize>()
@@ -22477,7 +22477,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-aiger-counterfactual-report" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat verify-aiger-counterfactual-report INPUT.aag|INPUT.aig TRANSCRIPT.txt REPORT.txt CERTIFICATE.cert".to_string());
+                return Err("usage: guarded-continuation-checker verify-aiger-counterfactual-report INPUT.aag|INPUT.aig TRANSCRIPT.txt REPORT.txt CERTIFICATE.cert".to_string());
             }
             verify_aiger_counterfactual_report(
                 Path::new(&args[1]),
@@ -22489,7 +22489,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-predicate-certificate-cost" => {
             if args.len() != 6 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-certificate-cost INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-predicate-certificate-cost INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
             }
             let bad_output = args[2]
                 .parse::<usize>()
@@ -22508,7 +22508,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-predicate-certificate-v2-cost" => {
             if args.len() != 6 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-certificate-v2-cost INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-predicate-certificate-v2-cost INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
             }
             let bad_output = args[2]
                 .parse::<usize>()
@@ -22527,7 +22527,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-predicate-proof-relation" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-proof-relation INPUT.aag|INPUT.aig TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-predicate-proof-relation INPUT.aag|INPUT.aig TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
             }
             let repeats = args[3]
                 .parse::<usize>()
@@ -22542,7 +22542,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-predicate-proof-terminal" => {
             if args.len() != 6 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-proof-terminal INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-predicate-proof-terminal INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
             }
             let bad_output = args[2]
                 .parse::<usize>()
@@ -22561,7 +22561,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-predicate-symbolic" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-symbolic INPUT.aag|INPUT.aig HORIZON REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-predicate-symbolic INPUT.aag|INPUT.aig HORIZON REPEATS OUTPUT.csv".to_string());
             }
             let horizon = args[2]
                 .parse::<usize>()
@@ -22714,7 +22714,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-continuation-temporal-phase" => {
             if args.len() != 7 {
-                return Err("usage: continuation-quotient-sat benchmark-continuation-temporal-phase WIDTHS HORIZONS QUERIES MAX_BOUND_BITS SEED OUTPUT.csv (WIDTHS/HORIZONS are comma-separated)".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-continuation-temporal-phase WIDTHS HORIZONS QUERIES MAX_BOUND_BITS SEED OUTPUT.csv (WIDTHS/HORIZONS are comma-separated)".to_string());
             }
             let widths = parse_size_grid(&args[1], "width")?;
             let horizons = parse_size_grid(&args[2], "horizon")?;
@@ -22740,7 +22740,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-temporal-vocabulary" => {
             if args.len() != 8 {
-                return Err("usage: continuation-quotient-sat benchmark-temporal-vocabulary KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-temporal-vocabulary KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
             }
             let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
             if kinds.is_empty() {
@@ -22773,7 +22773,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         | "benchmark-local-temporal-compositions"
         | "benchmark-symbolic-temporal-compositions" => {
             if args.len() != 8 {
-                return Err("usage: continuation-quotient-sat benchmark-{local-}temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-{local-}temporal-compositions KINDS WIDTHS HORIZONS QUERIES MAX_WIDTH SEED OUTPUT.csv (grids are comma-separated)".to_string());
             }
             let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
             if kinds.is_empty() {
@@ -22817,7 +22817,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-symbolic-preimages" => {
             if args.len() != 9 {
-                return Err("usage: continuation-quotient-sat benchmark-symbolic-preimages KINDS WIDTHS HORIZONS QUERIES NODE_LIMIT ORDER SEED OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-symbolic-preimages KINDS WIDTHS HORIZONS QUERIES NODE_LIMIT ORDER SEED OUTPUT.csv".to_string());
             }
             let kinds: Vec<_> = args[1].split(',').filter(|kind| !kind.is_empty()).collect();
             let widths = parse_size_grid(&args[2], "width")?;
@@ -22846,7 +22846,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-checkpoint-cdcl" | "benchmark-checkpoint-aig" | "benchmark-checkpoint-lazy" => {
             if args.len() != 9 {
-                return Err("usage: continuation-quotient-sat benchmark-checkpoint-cdcl KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-checkpoint-cdcl KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
             }
             let widths = parse_size_grid(&args[2], "width")?;
             let horizons = parse_size_grid(&args[3], "horizon")?;
@@ -22882,7 +22882,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-native-bdd-theory" => {
             if args.len() != 9 {
-                return Err("usage: continuation-quotient-sat benchmark-native-bdd-theory KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-native-bdd-theory KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
             }
             benchmark_native_bdd_theory(
                 &args[1],
@@ -22907,7 +22907,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-cq-portfolio" => {
             if args.len() != 9 {
-                return Err("usage: continuation-quotient-sat benchmark-cq-portfolio KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-cq-portfolio KIND WIDTHS HORIZONS QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
             }
             benchmark_cq_portfolio(
                 &args[1],
@@ -22932,7 +22932,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-cq-aiger" => {
             if args.len() != 8 {
-                return Err("usage: continuation-quotient-sat benchmark-cq-aiger INPUT.aag HORIZON QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-cq-aiger INPUT.aag HORIZON QUERIES CHECKPOINT NODE_LIMIT SEED OUTPUT.csv".to_string());
             }
             benchmark_cq_aiger(
                 Path::new(&args[1]),
@@ -22959,7 +22959,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "benchmark-aiger-query-reuse" => {
             if args.len() != 5 {
-                return Err("usage: continuation-quotient-sat benchmark-aiger-query-reuse INPUT.aag HORIZONS REPEATS OUTPUT.csv".to_string());
+                return Err("usage: guarded-continuation-checker benchmark-aiger-query-reuse INPUT.aag HORIZONS REPEATS OUTPUT.csv".to_string());
             }
             benchmark_aiger_query_reuse(
                 Path::new(&args[1]),
@@ -22973,7 +22973,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-cq-aiger" => {
             if args.len() != 7 {
-                return Err("usage: continuation-quotient-sat verify-cq-aiger INPUT.aag HORIZON CHECKPOINT NODE_LIMIT OUTPUT.csv SAFETY_RESULT.txt".to_string());
+                return Err("usage: guarded-continuation-checker verify-cq-aiger INPUT.aag HORIZON CHECKPOINT NODE_LIMIT OUTPUT.csv SAFETY_RESULT.txt".to_string());
             }
             verify_cq_aiger(
                 Path::new(&args[1]),

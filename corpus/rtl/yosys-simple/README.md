@@ -19,7 +19,7 @@ Run the corpus with:
 
 ```sh
 scripts/run-rtl-corpus.sh \
-  target/release/continuation-quotient-sat \
+  target/release/guarded-continuation-checker \
   corpus/rtl/yosys-simple target/rtl-corpus /path/to/sby.py
 ```
 

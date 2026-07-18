@@ -7,7 +7,7 @@ readings at different frames and ask whether a complete legal trace exists.
 Run the executable example:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-cq-portfolio sensor-vote3 8,12 257,2049 50 10 200000 5151515 \
   results/local-sensor-vote-portfolio.csv
 ```

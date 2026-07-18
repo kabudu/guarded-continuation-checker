@@ -116,7 +116,7 @@ fixed-width little-endian `u64` values followed by its one-byte Boolean value.
 ```sh
 cargo build --release --locked
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   benchmark-aiger-causal-strategies \
   examples/aiger/causal-sparse-16.aag \
   1 16 target/causal-sparse-strategies.csv

@@ -132,10 +132,10 @@ is an error; it is never converted into a verification answer.
 ## Commands
 
 ```sh
-continuation-quotient-sat certify-aiger-predicate-v2 \
+guarded-continuation-checker certify-aiger-predicate-v2 \
   INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt CERTIFICATE.cert2
 
-continuation-quotient-sat verify-aiger-predicate-certificate-v2 \
+guarded-continuation-checker verify-aiger-predicate-certificate-v2 \
   INPUT.aag|INPUT.aig CERTIFICATE.cert2
 ```
 

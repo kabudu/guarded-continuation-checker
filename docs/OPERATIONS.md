@@ -32,7 +32,7 @@ Run the evaluation with no runtime image pull or network access:
 
 ```sh
 scripts/isolated-rtl-evaluation.sh \
-  target/x86_64-unknown-linux-musl/release/continuation-quotient-sat \
+  target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
   cq-project.conf evidence/run-001
 ```
 
@@ -59,7 +59,7 @@ process. Then run the fail-closed qualification check in a new directory:
 
 ```sh
 scripts/production-evaluation-check.sh \
-  target/release/continuation-quotient-sat \
+  target/release/guarded-continuation-checker \
   /tmp/cq-production-evaluation-check
 ```
 
@@ -77,12 +77,12 @@ input failure and must never be treated as SAFE.
 
 ```sh
 set +e
-continuation-quotient-sat firmware-rtl-config-safety-gate \
+guarded-continuation-checker firmware-rtl-config-safety-gate \
   cq-project.conf evidence/run-001
 status=$?
 set -e
 case "$status" in 0|1) ;; *) exit "$status" ;; esac
-continuation-quotient-sat firmware-artifact-validate evidence/run-001
+guarded-continuation-checker firmware-artifact-validate evidence/run-001
 ```
 
 Retain stdout, stderr, the exact command, exit status, CQ commit/tag, host image,

@@ -10,8 +10,10 @@ proof-carrying bounded verification platform for embedded firmware and RTL.
 Guarded Continuation Checker (GCC) is the umbrella product and workflow. CQ-SAT
 is its exact continuation-quotient engine: a calibration-free specialised
 backend with persistent-CDCL fallback outside its validated structural regime.
-The existing `continuation-quotient-sat` crate and executable names remain for
-compatibility. See the [brand and naming system](docs/BRAND.md).
+The Rust package, library and executable use the product name:
+`guarded-continuation-checker` on the command line and
+`guarded_continuation_checker` in Rust source. See the
+[brand and naming system](docs/BRAND.md).
 
 The method processes variables in a fixed order, canonicalizes the residual CNF
 after each Boolean choice, and merges prefixes only when their residual formulas
@@ -207,7 +209,7 @@ evidence, not a substitute for confidential design-partner validation.
 ## GCC verification portfolio
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-cq-portfolio watchdog4 9 137,1333,7777 50 10 200000 4141414 \
   results/local-watchdog-portfolio.csv
 ```
@@ -235,7 +237,7 @@ passes; a realistic door-interlock regression rejects the build and produces the
 shortest named input/state trace needed to reproduce the failure.
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-safety-gate \
   examples/products/infusion-pump/rtl/safe-controller.sv \
   infusion_pump_controller 100 target/firmware-safety
@@ -252,7 +254,7 @@ Projects split across source files use the bounded project interface. Source
 paths are copied to fixed staging names and never interpolated into Yosys code:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-project-safety-gate infusion_pump_system 100 \
   target/firmware-safety/project \
   examples/products/infusion-pump/rtl/project/pump-components.sv \
@@ -267,7 +269,7 @@ Representative projects use the strict config interface for includes,
 parameters, clock/reset policy, and inferred memories:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-config-safety-gate \
   examples/products/infusion-pump/rtl/config-project/cq-project.conf \
   target/firmware-safety/config-project
@@ -285,7 +287,7 @@ Constant environment contracts use a bounded assumptions file containing one
 at every frame and an unknown or duplicate name fails the run:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-constrained-project-safety-gate \
   infusion_pump_controller 8 target/firmware-safety/door-closed \
   examples/products/infusion-pump/rtl/door-closed.assumptions \
@@ -310,7 +312,7 @@ Completed evidence bundles use the strict, SHA-256-bound
 retention or downstream processing:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-artifact-validate target/firmware-safety/project
 ```
 
@@ -332,7 +334,7 @@ BMC experiment:
 cd examples/products/infusion-pump/rtl
 yosys -Q -q -s synthesize-multimodule.ys
 cd ../../../..
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-aiger-query-reuse \
   examples/products/infusion-pump/rtl/multimodule-controller.aag \
   8,16,32,64 10 results/local-rtl-query-reuse.csv
@@ -351,7 +353,7 @@ the bounded deterministic regime remain eligible for CQ-SAT; primary-input
 or wider models are sent directly to an exact Tseitin-unrolled CDCL backend.
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger examples/aiger/counter-overflow-4.aag \
   137 10 200000 results/local-aiger-counter.csv \
   results/local-aiger-counter-safety.txt
@@ -387,12 +389,12 @@ cargo test
 cargo build --release
 ```
 
-The executable is `target/release/continuation-quotient-sat`.
+The executable is `target/release/guarded-continuation-checker`.
 
 ## Real DIMACS evaluation
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-dimacs \
   examples/modular-demo.cnf 10000 10 results/local-modular.csv
 ```
@@ -404,7 +406,7 @@ witness validity.
 ## Repeated-query experiment
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-reuse \
   banded-planted 100 4 98302 20000 results/local-reuse.csv
 ```
@@ -412,7 +414,7 @@ witness validity.
 ## Temporal phase experiment
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-temporal-phase \
   2,4,6 10,100,1000,10000 100 12 424242 results/local-temporal.csv
 ```
@@ -424,7 +426,7 @@ an exact repeated-transition kernel against persistent Varisat.
 ## Recognized transition vocabulary
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-temporal-vocabulary \
   copy,negate,permute,xor,circuit \
   4,6,8 10,100,1000 100 8 777 results/local-vocabulary.csv
@@ -438,7 +440,7 @@ query.
 ## Exact composed transitions
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   4,6,8 10,100,1000 100 8 12345 results/local-compositions.csv
@@ -452,7 +454,7 @@ an explicit hard gate.
 For separable output cones, use the cheaper recognizer:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-local-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   4,8,12 10,100,1000 100 12 24680 results/local-cones.csv
@@ -465,7 +467,7 @@ this removes one exponential factor but does not make unbounded-width SAT easy.
 To avoid that explicit state table for deterministic trajectory queries:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   16,32 10,100,500 50 32 4242001 results/symbolic-replay.csv
@@ -479,7 +481,7 @@ For partially specified initial states and future observations, the exact
 preimage experiment composes BDDs over the initial frame:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   4,6,8 2,4,8,16 100 200000 natural 707070 results/symbolic-preimages.csv

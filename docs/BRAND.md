@@ -8,9 +8,10 @@ The preferred signature is:
 > Guarded Continuation Checker, powered by CQ-SAT
 
 **CQ-SAT** is the exact continuation-quotient engine and specialised backend.
-The Rust crate and existing executable remain `continuation-quotient-sat` for
-compatibility until a versioned migration supplies a non-conflicting product
-command. Do not rename the executable to `gcc`.
+The Rust package and executable are `guarded-continuation-checker`; Rust imports
+use `guarded_continuation_checker`. The former pre-release research name has no
+compatibility guarantee and must not appear in current commands, packages or
+integration guidance. Do not shorten the executable to `gcc`.
 
 The initials **GCC** may be used only after the full product name appears in the
 same document or page. Bare “GCC” is already overwhelmingly associated with the

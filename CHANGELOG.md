@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- Position the project as Guarded Continuation Checker, powered by CQ-SAT,
-  while retaining the crate and executable names for compatibility. Add a
-  collision-aware brand architecture, original guard-aperture SVG identity,
-  partner-facing naming transition and canonical future repository URL.
+- Position the project as Guarded Continuation Checker, powered by CQ-SAT. Add
+  a collision-aware brand architecture, original guard-aperture SVG identity,
+  partner-facing naming transition and canonical repository URL. Before the
+  first published crate, rename the Rust package, library and executable from
+  the pre-release research name to `guarded-continuation-checker`.
 
 - Add deterministic predicate-v2 obligation bundle v1 export: source- and
   certificate-bound canonical DIMACS for every relation/terminal completeness

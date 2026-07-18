@@ -9,7 +9,7 @@ can coexist in one valid trace—and need the complete trace when the answer is 
 Run the executable example:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-cq-portfolio watchdog4 9 137,1333,7777 50 10 200000 4141414 \
   results/local-watchdog-portfolio.csv
 ```

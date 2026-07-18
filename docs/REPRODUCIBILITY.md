@@ -27,11 +27,11 @@ scripts/run-causal-analysis.sh \
 Verify the two checked-in research results without regenerating their timings:
 
 ```sh
-target/release/continuation-quotient-sat verify-aiger-causal-bundle \
+target/release/guarded-continuation-checker verify-aiger-causal-bundle \
   examples/aiger/spi-bus-receive-e-08-bits.aag \
   results/causal-analysis-v1/spi
 
-target/release/continuation-quotient-sat verify-aiger-causal-bundle \
+target/release/guarded-continuation-checker verify-aiger-causal-bundle \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   results/causal-analysis-v1/infusion-pump
 ```
@@ -43,7 +43,7 @@ See [causal evidence bundle v1](CAUSAL_BUNDLE_V1.md) for the exact contract.
 Compare deletion and QuickXplain on the identical intervention workload:
 
 ```sh
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   benchmark-aiger-causal-strategies \
   examples/aiger/causal-sparse-16.aag \
   1 16 target/causal-sparse-strategies.csv
@@ -56,7 +56,7 @@ and the SPI fixture at horizon 16 to reproduce the cohort described in
 ## Modular DIMACS result
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-dimacs \
   examples/modular-demo.cnf 10000 10 results/reproduced-modular.csv
 ```
@@ -70,7 +70,7 @@ The curated aggregate result is `results/continuation-dimacs-summary-v1.csv`.
 ## Scaling
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-quotients \
   banded-planted 100 4 98302 1 results/reproduced-scaling.csv
 ```
@@ -78,7 +78,7 @@ The curated aggregate result is `results/continuation-dimacs-summary-v1.csv`.
 ## Repeated queries
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-reuse \
   banded-planted 100 4 98302 20000 results/reproduced-reuse.csv
 ```
@@ -86,7 +86,7 @@ The curated aggregate result is `results/continuation-dimacs-summary-v1.csv`.
 ## Wide assumptions
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-reuse-stress \
   banded-planted 100 4 98302 20000 40 results/reproduced-stress.csv
 ```
@@ -94,7 +94,7 @@ The curated aggregate result is `results/continuation-dimacs-summary-v1.csv`.
 ## Update repairs
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-repairs \
   banded-planted 100 4 98302 20 200 results/reproduced-repairs.csv
 ```
@@ -106,17 +106,17 @@ speed result; `continuation-repairs-summary-v2.csv` is authoritative.
 ## Temporal bounded-width phase
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-temporal-phase \
   2,4,6 10,100,1000,10000 100 12 424242 \
   results/reproduced-temporal-long.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-temporal-phase \
   8 10,100,1000 100 12 424242 \
   results/reproduced-temporal-width8.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-continuation-temporal-phase \
   10 10,100 100 12 424242 \
   results/reproduced-temporal-width10.csv
@@ -130,13 +130,13 @@ against persistent Varisat.
 ## CNF-recognized transition vocabulary
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-temporal-vocabulary \
   copy,negate,permute,xor,circuit \
   4,6,8 10,100,1000 100 8 777 \
   results/reproduced-temporal-vocabulary-phase.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-temporal-vocabulary \
   copy,negate,permute,xor,circuit \
   5,7 37,333,2000 100 8 99991 \
@@ -150,13 +150,13 @@ true for every admitted row.
 ## Exact composed transitions
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   4,6,8 10,100,1000 100 8 12345 \
   results/reproduced-temporal-compositions-phase.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   5,7 37,333,2000 100 8 987654 \
@@ -171,13 +171,13 @@ construction. All admitted rows must report `agreement=true`,
 ## Local output-cone recovery
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-local-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   4,8,12 10,100,1000 100 12 24680 \
   results/reproduced-local-temporal-compositions-phase.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-local-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   5,9,13 37,333,2000 100 13 1357911 \
@@ -190,13 +190,13 @@ report `agreement=true`, `witnesses_valid=true`, and `status=ok`.
 ## Symbolic local-function replay
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   16,32 10,100,500 50 32 4242001 \
   results/reproduced-symbolic-temporal-compositions-phase.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-temporal-compositions \
   majority3,mux3,mixed3,cascade4 \
   24,48,64 37,333,1000 50 64 9001009 \
@@ -209,13 +209,13 @@ Every admitted row must report agreement and witness validity.
 ## Exact symbolic preimages
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   4,6,8 2,4,8,16 100 200000 natural 707070 \
   results/reproduced-symbolic-preimages-phase.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   5,7,9 3,7,15,31 100 200000 natural 808181 \
@@ -232,7 +232,7 @@ Run the phase grid once for each order in `natural`, `reverse`, `evenodd`, and
 `dependency`:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   7,9 7,15,31 50 200000 dependency 919191 \
@@ -242,7 +242,7 @@ Run the phase grid once for each order in `natural`, `reverse`, `evenodd`, and
 Then reproduce the preselected dependency-order holdout:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   6,8,10 5,13,29 50 200000 dependency 20260716 \
@@ -255,7 +255,7 @@ Run the four phase orders by replacing `ORDER` with `natural`, `reverse`,
 `evenodd`, and `dependency`:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   hub3,tree3,irregular3 \
   7,9 7,15,31 50 200000 ORDER 313131 \
@@ -265,7 +265,7 @@ Run the four phase orders by replacing `ORDER` with `natural`, `reverse`,
 Then run the frozen dependency rule and natural control:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   hub3,tree3,irregular3 \
   6,8,10 5,13,29 50 200000 dependency 414141 \
@@ -275,13 +275,13 @@ Then run the frozen dependency rule and natural control:
 ## Exact frame-cycle checkpoints
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   6,8 100,1000,10000 50 200000 dependency 515151 \
   results/reproduced-preimage-cycles-phase.csv
 
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-symbolic-preimages \
   majority3,mux3,mixed3,cascade4 \
   5,7,9 137,1333,7777 50 200000 dependency 616161 \
@@ -313,7 +313,7 @@ for checkpoints 10, 20, and 40, writing separate CSV files. Then reproduce the
 preselected holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-checkpoint-cdcl cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-checkpoint-cdcl-10-holdout.csv
 ```
@@ -325,10 +325,10 @@ Every row must agree with the full-CDCL baseline and return valid witnesses.
 Run the phase and preselected holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-checkpoint-aig cascade4 9 137,1333 50 10 200000 717171 \
   results/reproduced-checkpoint-aig-10-phase.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-checkpoint-aig cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-checkpoint-aig-10-holdout.csv
 ```
@@ -340,10 +340,10 @@ Every row must report `encoding=aig`, exact agreement, and valid witnesses.
 Run the final direct-root-assumption phase and holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-checkpoint-lazy cascade4 9 137,1333 50 10 200000 717171 \
   results/reproduced-checkpoint-lazy-root-assumptions-phase.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-checkpoint-lazy cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-checkpoint-lazy-root-assumptions-holdout.csv
 ```
@@ -356,10 +356,10 @@ Timing is explicitly exploratory; node and clause counts are deterministic.
 Run the pairwise-propagating phase and holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
   results/reproduced-native-bdd-theory-pairwise-10-phase.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-native-bdd-theory-pairwise-10-holdout.csv
 ```
@@ -371,10 +371,10 @@ Every row must agree with full CDCL and validate every returned witness.
 Run the generalized-conflict phase and holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
   results/reproduced-bdd-conflict-generalization-10-phase.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-bdd-conflict-generalization-10-holdout.csv
 ```
@@ -387,10 +387,10 @@ greater than the checkpoint width.
 Run the cached-explanation phase and holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
   results/reproduced-cached-bdd-conflict-explanations-10-phase.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-cached-bdd-conflict-explanations-10-holdout.csv
 ```
@@ -403,10 +403,10 @@ width and conflict counts recorded by the greedy predecessor.
 Run the global-clause phase and preselected holdout with:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 137,1333 50 10 200000 717171 \
   results/reproduced-global-checkpoint-clauses-10-phase.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory cascade4 9 7777 50 10 200000 818181 \
   results/reproduced-global-checkpoint-clauses-10-holdout.csv
 ```
@@ -420,7 +420,7 @@ For each `KIND`/`SEED` pair `hub3/919191`, `tree3/929292`, and
 `irregular3/939393`, run:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-native-bdd-theory KIND 7,9,11 137,1333 50 10 200000 SEED \
   results/reproduced-global-clauses-KIND-generalization.csv
 ```
@@ -434,10 +434,10 @@ counts are deterministic.
 Run the accelerated and safe-fallback examples:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-cq-portfolio watchdog4 9 137,1333,7777 50 10 200000 4141414 \
   results/reproduced-watchdog-portfolio.csv
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   benchmark-cq-portfolio sensor-vote3 8,12 257,2049 50 10 200000 5151515 \
   results/reproduced-sensor-vote-portfolio.csv
 ```
@@ -455,7 +455,7 @@ counterexample that motivated the conservative release rule.
 ## External AIGER counter-overflow model
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger examples/aiger/counter-overflow-4.aag \
   137 10 200000 results/reproduced-aiger-counter.csv \
   results/reproduced-aiger-counter-safety.txt
@@ -472,12 +472,12 @@ The model's upstream revision and third-party MIT license are recorded under
 ## Input-driven AIGER protocol and hardware models
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger \
   examples/aiger/petersons-algorithm-2-threads-1-core.aag \
   100 10 200000 results/reproduced-aiger-peterson.csv \
   results/reproduced-aiger-peterson-safety.txt
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   verify-cq-aiger examples/aiger/spi-bus-receive-e-08-bits.aag \
   50 10 200000 results/reproduced-aiger-spi.csv \
   results/reproduced-aiger-spi-safety.txt
@@ -498,11 +498,11 @@ agreement/witness fields. Its result must be `UNSAFE` with `bad_frame=16` and a
 Install Yosys and build the release binary, then run both product paths:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-safety-gate \
   examples/products/infusion-pump/rtl/safe-controller.sv \
   infusion_pump_controller 8 results/rtl-safe
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-safety-gate \
   examples/products/infusion-pump/rtl/door-interlock-regression.sv \
   infusion_pump_controller 8 results/rtl-regression
@@ -525,7 +525,7 @@ return PASS for the protected controller and FAIL for the regression.
 For the split-source form of the multi-module controller:
 
 ```sh
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   firmware-rtl-project-safety-gate infusion_pump_system 8 \
   results/rtl-project-safe \
   examples/products/infusion-pump/rtl/project/pump-components.sv \
@@ -543,11 +543,11 @@ Run the versioned project contract with includes, a top parameter, declared
 clock/reset policy, and an inferred memory:
 
 ```sh
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   firmware-rtl-config-safety-gate \
   examples/products/infusion-pump/rtl/config-project/cq-project.conf \
   results/rtl-config-project
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   firmware-artifact-validate results/rtl-config-project
 ```
 
@@ -563,7 +563,7 @@ To verify explicit environment assumptions, run the known-unsafe door-interlock
 model with the door-closed contract:
 
 ```sh
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   firmware-rtl-constrained-project-safety-gate \
   infusion_pump_controller 8 results/rtl-door-closed \
   examples/products/infusion-pump/rtl/door-closed.assumptions \
@@ -597,7 +597,7 @@ platform cannot provide reliably.
 Validate either completed bundle with:
 
 ```sh
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   firmware-artifact-validate results/rtl-project-safe
 ```
 
@@ -615,7 +615,7 @@ the fix is merged.
 Confirm the machine-readable compatibility versions with:
 
 ```sh
-target/release/continuation-quotient-sat firmware-cli-version
+target/release/guarded-continuation-checker firmware-cli-version
 ```
 
 The exact output is `firmware_cli_version=2 artifact_schema_version=4`. See
@@ -632,7 +632,7 @@ cd examples/products/infusion-pump/rtl
 yosys -Q -q -s synthesize-multimodule.ys
 cd ../../../..
 cargo build --release
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   benchmark-aiger-query-reuse \
   examples/products/infusion-pump/rtl/multimodule-controller.aag \
   8,16,32,64 10 results/reproduced-rtl-query-reuse.csv
@@ -655,7 +655,7 @@ documented by CI, then run:
 
 ```sh
 scripts/run-rtl-corpus.sh \
-  target/release/continuation-quotient-sat \
+  target/release/guarded-continuation-checker \
   corpus/rtl/yosys-simple \
   results/reproduced-rtl-public-corpus \
   /path/to/sby/sbysrc/sby.py

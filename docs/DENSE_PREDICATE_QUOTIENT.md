@@ -34,7 +34,7 @@ The temporal prototype also powers a 32-frame dense relation and reconstructs
 an exact avoiding trace. It is available as:
 
 ```sh
-continuation-quotient-sat query-aiger-predicate-quotient \
+guarded-continuation-checker query-aiger-predicate-quotient \
   INPUT.aag 32 0
 ```
 

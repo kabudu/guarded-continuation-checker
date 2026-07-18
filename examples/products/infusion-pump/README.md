@@ -18,7 +18,7 @@ Install Yosys, build the verifier, then check the protected controller:
 
 ```sh
 cargo build --release
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-safety-gate \
   examples/products/infusion-pump/rtl/safe-controller.sv \
   infusion_pump_controller 100 target/firmware-safety/safe
@@ -32,7 +32,7 @@ staged source snapshot and emits a five-field ASCII `aag` model whose top-level
 Now reproduce a firmware regression that removed the door interlock:
 
 ```sh
-./target/release/continuation-quotient-sat \
+./target/release/guarded-continuation-checker \
   firmware-rtl-safety-gate \
   examples/products/infusion-pump/rtl/door-interlock-regression.sv \
   infusion_pump_controller 100 target/firmware-safety/regression
@@ -82,7 +82,7 @@ model and benchmark repeated property checks:
 cd examples/products/infusion-pump/rtl
 yosys -Q -q -s synthesize-multimodule.ys
 cd ../../../..
-target/release/continuation-quotient-sat benchmark-aiger-query-reuse \
+target/release/guarded-continuation-checker benchmark-aiger-query-reuse \
   examples/products/infusion-pump/rtl/multimodule-controller.aag \
   8,16,32,64 10 results/local-rtl-query-reuse.csv
 ```
@@ -97,7 +97,7 @@ The same design is split into two files under [`rtl/project`](rtl/project) to
 exercise the project interface:
 
 ```sh
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   firmware-rtl-project-safety-gate infusion_pump_system 100 \
   target/firmware-safety/project \
   examples/products/infusion-pump/rtl/project/pump-components.sv \

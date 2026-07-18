@@ -40,12 +40,12 @@ a future relational-observation schema.
 ```sh
 cargo build --release --locked
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   benchmark-aiger-causal-batch \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   8 16 8 100 target/causal-batch.csv
 
-target/release/continuation-quotient-sat \
+target/release/guarded-continuation-checker \
   verify-aiger-causal-batch \
   examples/products/infusion-pump/firmware/door-interlock-regression.aag \
   target/causal-batch.csv

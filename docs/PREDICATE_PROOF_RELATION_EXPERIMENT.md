@@ -51,7 +51,7 @@ The regression suite:
 ## Benchmark
 
 ```sh
-continuation-quotient-sat benchmark-aiger-predicate-proof-relation \
+guarded-continuation-checker benchmark-aiger-predicate-proof-relation \
   INPUT.aag|INPUT.aig REPEATED_PHASE_TRANSCRIPT.txt REPEATS OUTPUT.csv
 ```
 
@@ -64,7 +64,7 @@ The transcript must contain one repeated constraint phase. The command accepts
 Terminal obligations have a separate answer-preserving schema:
 
 ```sh
-continuation-quotient-sat benchmark-aiger-predicate-proof-terminal \
+guarded-continuation-checker benchmark-aiger-predicate-proof-terminal \
   INPUT.aag|INPUT.aig OUTPUT_INDEX REPEATED_PHASE_TRANSCRIPT.txt REPEATS OUTPUT.csv
 ```
 
