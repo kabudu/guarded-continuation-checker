@@ -19,6 +19,11 @@
   certificate v1 results, with deterministic source/phase/terminal evidence,
   direct-AIG replay, atomic publication and structural, semantic, canonical-text
   and symlink tamper rejection.
+- Add counterfactual portfolio v1: a no-overwrite self-service command and
+  versioned report that selects independently verified predicate certificates
+  through the calibration-free static gate, preserves exact persistent-CDCL
+  fallback on rejection or bounded predicate failure, and regression-tests
+  both avoidable and unavoidable fallback answers.
 
 ## 0.28.0 - 2026-07-18
 

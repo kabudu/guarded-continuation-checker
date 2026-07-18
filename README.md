@@ -80,6 +80,13 @@ and persistent CDCL. Results are published as an atomic, SHA-256-bound
 bounded experiment, not a claim that counterexample minimisation or causal
 explanation is new.
 
+The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
+single exact evaluation command over partial AIGER input transcripts. Its
+timing-free structural gate selects the independently checked dense predicate
+certificate backend only inside the measured regime and otherwise preserves the
+query through persistent-CDCL fallback. It is a bounded research contract, not
+a production interface.
+
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,
 persistent CDCL, and admitted CQ. It records the negative result that CQ does
