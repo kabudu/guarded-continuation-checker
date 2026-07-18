@@ -8666,6 +8666,28 @@ const PREDICATE_INTERFACE_MAX_INPUTS: usize = 16;
 const PREDICATE_INTERFACE_MAX_LATCHES: usize = 4;
 const PREDICATE_INTERFACE_MAX_BDD_NODES: usize = 100_000;
 const PREDICATE_INTERFACE_MAX_QUERY_CACHE: usize = 4_096;
+const PREDICATE_QUOTIENT_MIN_EXPECTED_QUERIES: usize = 100;
+
+fn predicate_quotient_admitted(
+    relevant_inputs: usize,
+    latches: usize,
+    horizon: usize,
+    expected_queries: usize,
+) -> bool {
+    if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS).contains(&relevant_inputs)
+        || !(1..=PREDICATE_INTERFACE_MAX_LATCHES).contains(&latches)
+        || expected_queries < PREDICATE_QUOTIENT_MIN_EXPECTED_QUERIES
+    {
+        return false;
+    }
+    let minimum_horizon = match relevant_inputs {
+        9..=10 => 8,
+        11..=13 => 16,
+        14..=16 => 32,
+        _ => unreachable!(),
+    };
+    horizon >= minimum_horizon
+}
 
 #[derive(Debug)]
 struct AagInterfaceTable {
@@ -14922,7 +14944,7 @@ fn benchmark_aiger_predicate_symbolic(
         .saturating_add(persistent_setup_ns)
         .saturating_add(persistent_query_ns);
     let body = format!(
-        "predicate_symbolic_schema_version,input_sha256,horizon,repeats,relevant_inputs,bdd_nodes,predicate_compile_ns,predicate_query_ns,predicate_total_ns,persistent_encoding_ns,persistent_setup_ns,persistent_query_ns,persistent_total_ns,persistent_over_predicate_speedup,yosys_version,yosys_repeats,yosys_total_ns,yosys_over_predicate_speedup,agreement,witness_valid,status\n3,{},{horizon},{repeats},{},{},{predicate_compile_ns},{predicate_query_ns},{predicate_total_ns},{persistent_encoding_ns},{persistent_setup_ns},{persistent_query_ns},{persistent_total_ns},{:.6},{},1,{yosys_ns},{:.6},true,true,ok\n",
+        "predicate_symbolic_schema_version,input_sha256,horizon,repeats,relevant_inputs,bdd_nodes,predicate_compile_ns,predicate_query_ns,predicate_total_ns,persistent_encoding_ns,persistent_setup_ns,persistent_query_ns,persistent_total_ns,persistent_over_predicate_speedup,yosys_version,yosys_repeats,yosys_total_ns,yosys_over_predicate_speedup,agreement,witness_valid,static_admission,status\n4,{},{horizon},{repeats},{},{},{predicate_compile_ns},{predicate_query_ns},{predicate_total_ns},{persistent_encoding_ns},{persistent_setup_ns},{persistent_query_ns},{persistent_total_ns},{:.6},{},1,{yosys_ns},{:.6},true,true,{},ok\n",
         sha256_file(&canonical)?,
         quotient.interface.projected_inputs.len(),
         quotient.interface.manager.nodes.len(),
@@ -14938,7 +14960,13 @@ fn benchmark_aiger_predicate_symbolic(
             .trim()
             .replace(',', ";")
         ),
-        yosys_ns as f64 / predicate_total_ns.max(1) as f64
+        yosys_ns as f64 / predicate_total_ns.max(1) as f64,
+        predicate_quotient_admitted(
+            quotient.interface.projected_inputs.len(),
+            model.latches.len(),
+            horizon,
+            repeats
+        )
     );
     publish_causal_comparison(output, body.as_bytes())?;
     println!(
@@ -28134,8 +28162,8 @@ mod tests {
         let report = fs::read_to_string(&output).unwrap();
         fs::remove_file(output).unwrap();
         assert_eq!(report.lines().count(), 2);
-        assert!(report.contains(",true,true,ok\n"));
-        assert!(report.lines().all(|line| line.split(',').count() == 21));
+        assert!(report.contains(",true,true,false,ok\n"));
+        assert!(report.lines().all(|line| line.split(',').count() == 22));
     }
 
     #[test]
@@ -28240,6 +28268,18 @@ mod tests {
             .unwrap_err()
             .contains("horizon exceeds")
         );
+    }
+
+    #[test]
+    fn predicate_quotient_static_gate_excludes_observed_loss_regimes() {
+        assert!(!predicate_quotient_admitted(9, 2, 8, 99));
+        assert!(predicate_quotient_admitted(9, 2, 8, 100));
+        assert!(!predicate_quotient_admitted(12, 3, 8, 100));
+        assert!(predicate_quotient_admitted(12, 3, 16, 100));
+        assert!(!predicate_quotient_admitted(16, 4, 16, 100));
+        assert!(predicate_quotient_admitted(16, 4, 32, 100));
+        assert!(!predicate_quotient_admitted(8, 2, 64, 1000));
+        assert!(!predicate_quotient_admitted(16, 5, 64, 1000));
     }
 
     #[test]

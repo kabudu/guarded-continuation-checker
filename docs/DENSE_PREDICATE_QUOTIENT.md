@@ -76,3 +76,17 @@ backend's compilation/setup. The actuator H8 and sensor-fusion H8/H16 rows do
 not establish a robust win. The exact raw summary is
 [`dense-predicate-product-matrix-v1.csv`](../results/dense-predicate-product-matrix-v1.csv)
 and can be regenerated with `scripts/run-dense-predicate-product-matrix.sh`.
+
+## Static admission boundary
+
+The prototype does not time both backends and choose the winner. Its
+predeclared conservative gate requires at least 100 expected queries, 1–4
+latches, and:
+
+- 9–10 relevant inputs: horizon at least 8;
+- 11–13 relevant inputs: horizon at least 16;
+- 14–16 relevant inputs: horizon at least 32.
+
+This excludes every robustly negative matrix row. It is intentionally based on
+the controlled evidence rather than claimed as a universal performance model;
+unsupported or rejected workloads retain persistent CDCL.

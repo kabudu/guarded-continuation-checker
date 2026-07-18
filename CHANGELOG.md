@@ -12,6 +12,10 @@
   inputs, reproducible RTL-to-AIGER synthesis, and a 120-row constrained
   temporal matrix against persistent CDCL and Yosys. Preserve the negative
   short-horizon actuator/sensor-fusion results as an admission boundary.
+- Add a timing-free conservative predicate admission rule over support width,
+  latch count, horizon, and expected query reuse; it excludes every observed
+  robust loss regime and records backend eligibility without timing
+  calibration. Portfolio integration remains separately gated.
 
 ## 0.27.0 - 2026-07-18
 
