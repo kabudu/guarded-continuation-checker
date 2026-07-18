@@ -8667,6 +8667,7 @@ const PREDICATE_INTERFACE_MAX_LATCHES: usize = 4;
 const PREDICATE_INTERFACE_MAX_BDD_NODES: usize = 100_000;
 const PREDICATE_INTERFACE_MAX_QUERY_CACHE: usize = 4_096;
 const PREDICATE_QUOTIENT_MIN_EXPECTED_QUERIES: usize = 100;
+const PREDICATE_CERTIFICATE_MAX_EVALUATIONS: usize = 80_000_000;
 
 fn predicate_quotient_admitted(
     relevant_inputs: usize,
@@ -9192,6 +9193,204 @@ impl PredicateQuotient {
             inputs,
             declared_inputs,
         }))
+    }
+}
+
+struct IndependentPredicateChecker<'a> {
+    model: &'a AagModel,
+    relevant_inputs: Vec<usize>,
+    states: usize,
+    evaluations: usize,
+}
+
+impl<'a> IndependentPredicateChecker<'a> {
+    fn support(model: &AagModel) -> Result<Vec<usize>, String> {
+        if model.inputs.is_empty() || model.inputs.len() > u64::BITS as usize {
+            return Err("predicate certificate requires 1..=64 declared inputs".to_string());
+        }
+        let mut dependencies = vec![0u64; model.max_variable + 1];
+        for (input, literal) in model.inputs.iter().enumerate() {
+            dependencies[literal / 2] = 1u64 << input;
+        }
+        for gate in &model.ands {
+            dependencies[gate.output / 2] =
+                dependencies[gate.left / 2] | dependencies[gate.right / 2];
+        }
+        let combined = model
+            .latches
+            .iter()
+            .map(|latch| dependencies[latch.next / 2])
+            .chain(
+                model
+                    .outputs
+                    .iter()
+                    .map(|literal| dependencies[literal / 2]),
+            )
+            .fold(0u64, |mask, item| mask | item);
+        Ok((0..model.inputs.len())
+            .filter(|input| combined & (1u64 << input) != 0)
+            .collect())
+    }
+
+    fn new(model: &'a AagModel) -> Result<Self, String> {
+        let relevant_inputs = Self::support(model)?;
+        if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS)
+            .contains(&relevant_inputs.len())
+        {
+            return Err(format!(
+                "predicate certificate requires 9..=16 relevant inputs; found {}",
+                relevant_inputs.len()
+            ));
+        }
+        if !(1..=PREDICATE_INTERFACE_MAX_LATCHES).contains(&model.latches.len()) {
+            return Err(format!(
+                "predicate certificate requires 1..=4 latches; found {}",
+                model.latches.len()
+            ));
+        }
+        Ok(Self {
+            model,
+            relevant_inputs,
+            states: 1usize << model.latches.len(),
+            evaluations: 0,
+        })
+    }
+
+    fn evaluate(&mut self, state: usize, declared_input: u64) -> Result<(usize, u128), String> {
+        self.evaluations = self
+            .evaluations
+            .checked_add(1)
+            .ok_or_else(|| "predicate certificate evaluation count overflow".to_string())?;
+        if self.evaluations > PREDICATE_CERTIFICATE_MAX_EVALUATIONS {
+            return Err(format!(
+                "predicate certificate exceeds {PREDICATE_CERTIFICATE_MAX_EVALUATIONS} exhaustive evaluations"
+            ));
+        }
+        let mut values = vec![false; self.model.max_variable + 1];
+        for (bit, latch) in self.model.latches.iter().enumerate() {
+            values[latch.current / 2] = state >> bit & 1 == 1;
+        }
+        for (input, literal) in self.model.inputs.iter().enumerate() {
+            values[literal / 2] = declared_input >> input & 1 == 1;
+        }
+        for gate in &self.model.ands {
+            values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                && evaluate_aag_literal(gate.right, &values);
+        }
+        let next = self
+            .model
+            .latches
+            .iter()
+            .enumerate()
+            .fold(0usize, |next, (bit, latch)| {
+                next | (usize::from(evaluate_aag_literal(latch.next, &values)) << bit)
+            });
+        let bad = self
+            .model
+            .outputs
+            .iter()
+            .enumerate()
+            .fold(0u128, |bad, (output, literal)| {
+                bad | (u128::from(evaluate_aag_literal(*literal, &values)) << output)
+            });
+        Ok((next, bad))
+    }
+
+    fn declared_input(&self, projected: usize) -> u64 {
+        self.relevant_inputs
+            .iter()
+            .enumerate()
+            .fold(0u64, |declared, (bit, input)| {
+                declared | (((projected >> bit) & 1) as u64) << input
+            })
+    }
+
+    fn allowed(projected: usize, constraints: &[Option<bool>]) -> bool {
+        constraints.iter().enumerate().all(|(bit, required)| {
+            required.is_none_or(|value| (projected >> bit & 1 == 1) == value)
+        })
+    }
+
+    fn one_step_relation(&mut self, constraints: &[Option<bool>]) -> Result<Vec<u16>, String> {
+        if constraints.len() != self.relevant_inputs.len() {
+            return Err("predicate certificate constraint dimensions mismatch".to_string());
+        }
+        let mut rows = vec![0u16; self.states];
+        for source in 0..self.states {
+            for projected in 0..(1usize << self.relevant_inputs.len()) {
+                if !Self::allowed(projected, constraints) {
+                    continue;
+                }
+                let declared = self.declared_input(projected);
+                let (target, _) = self.evaluate(source, declared)?;
+                rows[source] |= 1u16 << target;
+            }
+        }
+        Ok(rows)
+    }
+
+    fn compose(left: &[u16], right: &[u16]) -> Result<Vec<u16>, String> {
+        if left.len() != right.len() || left.len() > u16::BITS as usize {
+            return Err("predicate certificate relation dimensions mismatch".to_string());
+        }
+        let mut result = vec![0u16; left.len()];
+        for (source, targets) in left.iter().enumerate() {
+            let mut remaining = *targets;
+            while remaining != 0 {
+                let middle = remaining.trailing_zeros() as usize;
+                if middle >= right.len() {
+                    return Err("predicate certificate relation target is out of range".to_string());
+                }
+                result[source] |= right[middle];
+                remaining &= remaining - 1;
+            }
+        }
+        Ok(result)
+    }
+
+    fn power(base: &[u16], mut exponent: usize) -> Result<Vec<u16>, String> {
+        let mut result = (0..base.len())
+            .map(|state| 1u16 << state)
+            .collect::<Vec<_>>();
+        let mut factor = base.to_vec();
+        while exponent != 0 {
+            if exponent & 1 == 1 {
+                result = Self::compose(&result, &factor)?;
+            }
+            exponent >>= 1;
+            if exponent != 0 {
+                factor = Self::compose(&factor, &factor)?;
+            }
+        }
+        Ok(result)
+    }
+
+    fn terminal_safe_states(
+        &mut self,
+        output: usize,
+        constraints: &[Option<bool>],
+    ) -> Result<u16, String> {
+        if output >= self.model.outputs.len() {
+            return Err("predicate certificate bad output is out of range".to_string());
+        }
+        if constraints.len() != self.relevant_inputs.len() {
+            return Err("predicate certificate constraint dimensions mismatch".to_string());
+        }
+        let mut safe = 0u16;
+        for state in 0..self.states {
+            for projected in 0..(1usize << self.relevant_inputs.len()) {
+                if !Self::allowed(projected, constraints) {
+                    continue;
+                }
+                let declared = self.declared_input(projected);
+                let (_, bad) = self.evaluate(state, declared)?;
+                if bad & (1u128 << output) == 0 {
+                    safe |= 1u16 << state;
+                    break;
+                }
+            }
+        }
+        Ok(safe)
     }
 }
 
@@ -28373,6 +28572,60 @@ mod tests {
         assert!(predicate_quotient_admitted(16, 4, 32, 100));
         assert!(!predicate_quotient_admitted(8, 2, 64, 1000));
         assert!(!predicate_quotient_admitted(16, 5, 64, 1000));
+    }
+
+    #[test]
+    fn independent_predicate_checker_matches_producer_relations_and_terminal_sets() {
+        let fixtures = [
+            "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+            "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+        ];
+        for relative in fixtures {
+            let model = parse_aag(&Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)).unwrap();
+            let mut producer = PredicateQuotient::new(&model).unwrap();
+            let mut checker = IndependentPredicateChecker::new(&model).unwrap();
+            assert_eq!(checker.relevant_inputs, producer.interface.projected_inputs);
+
+            let width = checker.relevant_inputs.len();
+            let mut released = vec![Some(true); width];
+            released[width - 1] = Some(false);
+            for constraints in [vec![None; width], vec![Some(true); width], released] {
+                let expected = producer.relation(&constraints).unwrap();
+                let actual = checker.one_step_relation(&constraints).unwrap();
+                assert_eq!(
+                    actual,
+                    expected
+                        .rows
+                        .iter()
+                        .map(|row| row[0] as u16)
+                        .collect::<Vec<_>>()
+                );
+                for length in [1, 2, 7] {
+                    let expected = producer.relation_power(&constraints, length).unwrap();
+                    let actual = IndependentPredicateChecker::power(&actual, length).unwrap();
+                    assert_eq!(
+                        actual,
+                        expected
+                            .rows
+                            .iter()
+                            .map(|row| row[0] as u16)
+                            .collect::<Vec<_>>()
+                    );
+                }
+                let safe = checker.terminal_safe_states(0, &constraints).unwrap();
+                for state in 0..checker.states {
+                    assert_eq!(
+                        safe >> state & 1 == 1,
+                        producer
+                            .interface
+                            .witness_input(state, None, Some(0), &constraints)
+                            .unwrap()
+                            .is_some()
+                    );
+                }
+            }
+        }
     }
 
     #[test]

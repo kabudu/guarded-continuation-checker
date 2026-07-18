@@ -10,6 +10,10 @@
   deterministic phase relations, source binding, positive trace evidence,
   negative terminal-set evidence, an independent exhaustive checking algorithm
   and explicit fail-closed limits.
+- Add the certificate verifier's independent trusted core: separate AIG support
+  analysis, exhaustive transition/property evaluation, one-step relations,
+  deterministic powers, composition and terminal safe-state reconstruction,
+  cross-checked against the BDD producer on all three product controllers.
 
 ## 0.28.0 - 2026-07-18
 
