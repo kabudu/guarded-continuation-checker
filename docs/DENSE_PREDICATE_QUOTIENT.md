@@ -90,3 +90,9 @@ latches, and:
 This excludes every robustly negative matrix row. It is intentionally based on
 the controlled evidence rather than claimed as a universal performance model;
 unsupported or rejected workloads retain persistent CDCL.
+
+Exactness tests cover both directions. Avoidable transcripts must produce an
+original-AIG-valid concrete trace. Separately, each product fixture is solved
+for an unsafe trace, its complete projected input transcript is fixed, and
+CQ-SAT/GCC, persistent CDCL, and Yosys must all report that avoiding the bad
+terminal state is impossible.

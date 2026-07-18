@@ -16,6 +16,10 @@
   latch count, horizon, and expected query reuse; it excludes every observed
   robust loss regime and records backend eligibility without timing
   calibration. Portfolio integration remains separately gated.
+- Add dual-direction cross-backend exactness coverage: reconstructed avoidable
+  traces replay against the original AIG, while fixed unsafe transcripts must
+  be reported unavoidable by the predicate quotient, persistent CDCL, and
+  maintained Yosys.
 
 ## 0.27.0 - 2026-07-18
 

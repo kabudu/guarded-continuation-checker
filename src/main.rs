@@ -28227,6 +28227,99 @@ mod tests {
     }
 
     #[test]
+    fn dense_product_fixed_bad_traces_are_unavoidable_across_backends() {
+        let fixtures = [
+            "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+            "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+        ];
+        let horizon = 4;
+        let yosys_available = Command::new("yosys").arg("-V").output().is_ok();
+        for relative in fixtures {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+            let model = parse_aag(&path).unwrap();
+            let encoding = aag_bmc_encoding(&model, horizon).unwrap();
+            let query = encoding
+                .queries
+                .iter()
+                .find(|query| query.frame == horizon && query.output == 0)
+                .unwrap();
+            let mut unsafe_solver = Solver::new();
+            add_to_varisat(&mut unsafe_solver, &encoding.clauses);
+            let unsafe_trace =
+                causal_query_witness(&mut unsafe_solver, encoding.variables, query.assumption)
+                    .unwrap()
+                    .unwrap();
+
+            let mut quotient = PredicateQuotient::new(&model).unwrap();
+            let mut constraints =
+                vec![vec![None; quotient.interface.projected_inputs.len()]; horizon + 1];
+            let mut assumptions = vec![None; encoding.variables];
+            for frame in 0..=horizon {
+                for (projected, input) in quotient.interface.projected_inputs.iter().enumerate() {
+                    let variable = frame * model.max_variable + model.inputs[*input] / 2 - 1;
+                    let value = unsafe_trace[variable];
+                    constraints[frame][projected] = Some(value);
+                    assumptions[variable] = Some(value);
+                }
+            }
+            let initial_state = model
+                .latches
+                .iter()
+                .enumerate()
+                .fold(0usize, |state, (bit, latch)| {
+                    state | (usize::from(latch.initial == Some(true)) << bit)
+                });
+            assert!(
+                quotient
+                    .query(initial_state, 0, &constraints)
+                    .unwrap()
+                    .is_none()
+            );
+
+            assert!(
+                !add_causal_counterfactual_assumption(&mut assumptions, query.assumption).unwrap()
+            );
+            let mut avoiding_solver = Solver::new();
+            add_to_varisat(&mut avoiding_solver, &encoding.clauses);
+            assert!(!solve_causal_persistent(&mut avoiding_solver, &assumptions).unwrap());
+
+            if yosys_available {
+                let mut script = format!(
+                    "read_aiger {}; hierarchy -auto-top; sat -seq {}",
+                    path.display(),
+                    horizon + 1
+                );
+                for (frame, frame_constraints) in constraints.iter().enumerate() {
+                    for (projected, required) in frame_constraints.iter().enumerate() {
+                        let input = quotient.interface.projected_inputs[projected];
+                        script.push_str(&format!(
+                            " -set-at {} {} {}",
+                            frame + 1,
+                            model.input_names[input],
+                            usize::from(required.unwrap())
+                        ));
+                    }
+                }
+                script.push_str(&format!(
+                    " -set-at {} {} 0;",
+                    horizon + 1,
+                    model.output_names[0]
+                ));
+                let external = Command::new("yosys")
+                    .args(["-Q", "-p", &script])
+                    .output()
+                    .unwrap();
+                assert!(external.status.success());
+                assert!(
+                    String::from_utf8_lossy(&external.stdout)
+                        .contains("SAT solving finished - no model found.")
+                );
+            }
+        }
+    }
+
+    #[test]
     fn predicate_quotient_fails_closed_outside_static_resource_bounds() {
         let too_narrow = parse_aiger_bytes(&dense_support_aiger_fixture(8)).unwrap();
         assert!(
