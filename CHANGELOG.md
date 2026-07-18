@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.0 - 2026-07-18
+
 - Add bounded, certificate-producing causal analysis for input-driven AIGER
   counterexamples, with exact 1-minimal sufficient-cause semantics and an
   evidence-replaying certificate verifier and atomic, no-overwrite v1 bundle.
