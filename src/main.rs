@@ -4,9 +4,11 @@ use std::env;
 #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
 use std::ffi::CString;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -8681,6 +8683,41 @@ const PREDICATE_CERTIFICATE_COST_SCHEMA_VERSION: usize = 1;
 const PREDICATE_CERTIFICATE_V2_COST_SCHEMA_VERSION: usize = 1;
 const PREDICATE_PROOF_RELATION_SCHEMA_VERSION: usize = 1;
 const PREDICATE_PROOF_TERMINAL_SCHEMA_VERSION: usize = 1;
+const EVENT_CONTRACT_VERSION: usize = 1;
+const EVENT_CONTRACT_BENCHMARK_SCHEMA_VERSION: usize = 1;
+const EVENT_CONTRACT_MAX_BYTES: u64 = 1024 * 1024;
+const EVENT_CONTRACT_MAX_PHASES: usize = INTERFACE_QUOTIENT_MAX_HORIZON;
+const EVENT_CONTRACT_MAX_CLAUSES: usize = 64;
+const EVENT_CONTRACT_MAX_LITERALS: usize = 16;
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct InputPredicate {
+    clauses: Vec<Vec<(usize, bool)>>,
+}
+
+impl InputPredicate {
+    fn allows(&self, input: usize) -> bool {
+        self.clauses.iter().all(|clause| {
+            clause
+                .iter()
+                .any(|(bit, positive)| ((input >> bit & 1) == 1) == *positive)
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EventContractPhase {
+    start: usize,
+    length: usize,
+    predicate: InputPredicate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EventContract {
+    horizon: usize,
+    phases: Vec<EventContractPhase>,
+    terminal: InputPredicate,
+}
 
 fn predicate_quotient_admitted(
     relevant_inputs: usize,
@@ -8990,6 +9027,111 @@ impl AagPredicateInterface {
         Ok(relation)
     }
 
+    fn input_predicate_root(&mut self, predicate: &InputPredicate) -> Result<usize, String> {
+        let mut root = 1usize;
+        for clause in &predicate.clauses {
+            let mut clause_root = 0usize;
+            for &(input, positive) in clause {
+                let level = *self
+                    .input_levels
+                    .get(input)
+                    .ok_or_else(|| "event predicate input is out of range".to_string())?;
+                let literal = self.manager.literal(level, positive);
+                clause_root = self.manager.or(clause_root, literal);
+            }
+            root = self.manager.and(root, clause_root);
+        }
+        if self.manager.budget_exceeded {
+            return Err("event predicate BDD exceeds the static node bound".to_string());
+        }
+        Ok(root)
+    }
+
+    fn relation_predicate(
+        &mut self,
+        predicate: &InputPredicate,
+    ) -> Result<InterfaceRelation, String> {
+        let predicate_root = self.input_predicate_root(predicate)?;
+        let constrained = self.manager.and(self.transition, predicate_root);
+        let states = 1usize << self.current_levels.len();
+        let variables =
+            self.input_levels.len() + self.current_levels.len() + self.next_levels.len();
+        let mut relation = InterfaceRelation::empty(states);
+        for source in 0..states {
+            let mut root = constrained;
+            for (bit, level) in self.current_levels.iter().enumerate() {
+                root = self.manager.restrict(
+                    root,
+                    *level,
+                    source >> bit & 1 == 1,
+                    &mut HashMap::new(),
+                );
+            }
+            for level in &self.input_levels {
+                root = self.manager.exists(root, *level, &mut HashMap::new());
+            }
+            let mut assignment = vec![false; variables];
+            for target in 0..states {
+                for (bit, level) in self.next_levels.iter().enumerate() {
+                    assignment[*level] = target >> bit & 1 == 1;
+                }
+                if self.manager.evaluate(root, &assignment) {
+                    relation.insert(source, target);
+                }
+            }
+        }
+        if self.manager.budget_exceeded {
+            return Err("event predicate relation exceeded the static node bound".to_string());
+        }
+        Ok(relation)
+    }
+
+    fn witness_input_predicate(
+        &mut self,
+        source: usize,
+        target: Option<usize>,
+        output: Option<usize>,
+        predicate: &InputPredicate,
+    ) -> Result<Option<u64>, String> {
+        let predicate_root = self.input_predicate_root(predicate)?;
+        let mut root = if target.is_some() {
+            self.transition
+        } else {
+            let bad = *self
+                .bad_outputs
+                .get(output.ok_or_else(|| "event predicate output is missing".to_string())?)
+                .ok_or_else(|| "event predicate output is out of range".to_string())?;
+            self.manager.negate(bad, &mut HashMap::new())
+        };
+        root = self.manager.and(root, predicate_root);
+        for (bit, level) in self.current_levels.iter().enumerate() {
+            root = self
+                .manager
+                .restrict(root, *level, source >> bit & 1 == 1, &mut HashMap::new());
+        }
+        if let Some(target) = target {
+            for (bit, level) in self.next_levels.iter().enumerate() {
+                root = self.manager.restrict(
+                    root,
+                    *level,
+                    target >> bit & 1 == 1,
+                    &mut HashMap::new(),
+                );
+            }
+        }
+        let variables =
+            self.input_levels.len() + self.current_levels.len() + self.next_levels.len();
+        let Some(assignment) = self.manager.satisfying_assignment(root, variables) else {
+            return Ok(None);
+        };
+        Ok(Some(self.projected_inputs.iter().enumerate().fold(
+            0u64,
+            |pattern, (bit, input)| {
+                pattern | (u64::from(assignment[self.input_levels[bit]]) << input)
+            },
+        )))
+    }
+
     fn witness_input(
         &mut self,
         source: usize,
@@ -9194,6 +9336,96 @@ impl PredicateQuotient {
                     .ok_or_else(|| {
                         "predicate quotient transition witness is missing".to_string()
                     })?,
+            );
+        }
+        declared_inputs.push(terminal_input);
+        let inputs = declared_inputs
+            .iter()
+            .map(|declared| {
+                self.interface
+                    .projected_inputs
+                    .iter()
+                    .enumerate()
+                    .fold(0usize, |pattern, (bit, input)| {
+                        pattern | (((declared >> input) & 1) as usize) << bit
+                    })
+            })
+            .collect();
+        Ok(Some(InterfaceQueryResult {
+            states,
+            inputs,
+            declared_inputs,
+        }))
+    }
+
+    fn query_event_contract(
+        &mut self,
+        initial_state: usize,
+        output: usize,
+        contract: &EventContract,
+    ) -> Result<Option<InterfaceQueryResult>, String> {
+        let states_count = 1usize << self.interface.current_levels.len();
+        let mut composed = InterfaceRelation::identity(states_count);
+        let mut frame_predicates = Vec::with_capacity(contract.horizon + 1);
+        for phase in &contract.phases {
+            let base = self.interface.relation_predicate(&phase.predicate)?;
+            let powered = InterfaceRelation::power(&base, phase.length)?;
+            composed = InterfaceRelation::compose(&composed, &powered)?;
+            frame_predicates.extend(std::iter::repeat_n(phase.predicate.clone(), phase.length));
+        }
+        frame_predicates.push(contract.terminal.clone());
+        let terminal = composed
+            .targets(initial_state)
+            .find_map(|state| {
+                self.interface
+                    .witness_input_predicate(state, None, Some(output), &contract.terminal)
+                    .transpose()
+                    .map(|input| input.map(|input| (state, input)))
+            })
+            .transpose()?;
+        let Some((terminal_state, terminal_input)) = terminal else {
+            return Ok(None);
+        };
+
+        let mut reachable = vec![vec![false; states_count]; contract.horizon + 1];
+        let mut predecessor = vec![vec![None; states_count]; contract.horizon + 1];
+        reachable[0][initial_state] = true;
+        for frame in 0..contract.horizon {
+            let step = self
+                .interface
+                .relation_predicate(&frame_predicates[frame])?;
+            for source in 0..states_count {
+                if !reachable[frame][source] {
+                    continue;
+                }
+                for target in step.targets(source) {
+                    if !reachable[frame + 1][target] {
+                        reachable[frame + 1][target] = true;
+                        predecessor[frame + 1][target] = Some(source);
+                    }
+                }
+            }
+        }
+        if !reachable[contract.horizon][terminal_state] {
+            return Err("event contract compressed relation disagrees with replay".to_string());
+        }
+        let mut states = vec![0usize; contract.horizon + 1];
+        states[contract.horizon] = terminal_state;
+        for frame in (1..=contract.horizon).rev() {
+            states[frame - 1] = predecessor[frame][states[frame]]
+                .ok_or_else(|| "event contract witness predecessor is missing".to_string())?;
+        }
+        let mut declared_inputs = Vec::with_capacity(contract.horizon + 1);
+        for frame in 0..contract.horizon {
+            declared_inputs.push(
+                self.interface
+                    .witness_input_predicate(
+                        states[frame],
+                        Some(states[frame + 1]),
+                        None,
+                        &frame_predicates[frame],
+                    )?
+                    .ok_or_else(|| "event contract transition witness is missing".to_string())?,
             );
         }
         declared_inputs.push(terminal_input);
@@ -10634,6 +10866,392 @@ fn parse_predicate_transcript(path: &Path, width: usize) -> Result<Vec<Vec<Optio
         return Err("predicate transcript frame count must be in 1..=65".to_string());
     }
     Ok(frames)
+}
+
+fn parse_event_predicate(
+    fields: &mut BTreeMap<String, String>,
+    prefix: &str,
+    names: &BTreeMap<String, usize>,
+) -> Result<InputPredicate, String> {
+    let count_key = format!("{prefix}_clause_count");
+    let clause_count = parse_predicate_number::<usize>(
+        fields
+            .remove(&count_key)
+            .ok_or_else(|| format!("event contract is missing `{count_key}`"))?
+            .as_str(),
+        &count_key,
+    )?;
+    if clause_count > EVENT_CONTRACT_MAX_CLAUSES {
+        return Err(format!(
+            "event contract `{prefix}` exceeds {EVENT_CONTRACT_MAX_CLAUSES} clauses"
+        ));
+    }
+    let mut clauses = Vec::with_capacity(clause_count);
+    for clause_index in 0..clause_count {
+        let key = format!("{prefix}_clause_{clause_index}");
+        let text = fields
+            .remove(&key)
+            .ok_or_else(|| format!("event contract is missing `{key}`"))?;
+        let parts = text.split('|').collect::<Vec<_>>();
+        if parts.is_empty()
+            || parts.len() > EVENT_CONTRACT_MAX_LITERALS
+            || parts.iter().any(|part| part.is_empty())
+        {
+            return Err(format!(
+                "event contract `{key}` requires 1..={EVENT_CONTRACT_MAX_LITERALS} literals"
+            ));
+        }
+        let mut clause = Vec::with_capacity(parts.len());
+        for part in parts {
+            let (positive, name) = part
+                .strip_prefix('!')
+                .map_or((true, part), |name| (false, name));
+            if name.is_empty()
+                || !name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'[' | b']')
+                })
+            {
+                return Err(format!("event contract `{key}` has an invalid input name"));
+            }
+            let input = *names.get(name).ok_or_else(|| {
+                format!("event contract `{key}` names unsupported input `{name}`")
+            })?;
+            if clause
+                .iter()
+                .any(|(existing, sign)| *existing == input && *sign != positive)
+            {
+                return Err(format!("event contract `{key}` is tautological"));
+            }
+            if clause.contains(&(input, positive)) {
+                return Err(format!("event contract `{key}` duplicates input `{name}`"));
+            }
+            clause.push((input, positive));
+        }
+        clause.sort_unstable();
+        if clauses.contains(&clause) {
+            return Err(format!("event contract `{key}` duplicates a clause"));
+        }
+        clauses.push(clause);
+    }
+    clauses.sort();
+    Ok(InputPredicate { clauses })
+}
+
+fn parse_event_contract(
+    path: &Path,
+    model: &AagModel,
+    relevant_inputs: &[usize],
+) -> Result<EventContract, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect event contract {}: {error}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.len() > EVENT_CONTRACT_MAX_BYTES {
+        return Err(format!(
+            "event contract must be a regular file no larger than {EVENT_CONTRACT_MAX_BYTES} bytes"
+        ));
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    options.custom_flags(libc::O_NOFOLLOW);
+    let file = options
+        .open(path)
+        .map_err(|error| format!("open event contract {}: {error}", path.display()))?;
+    let opened_metadata = file
+        .metadata()
+        .map_err(|error| format!("inspect open event contract {}: {error}", path.display()))?;
+    if !opened_metadata.is_file() || opened_metadata.len() > EVENT_CONTRACT_MAX_BYTES {
+        return Err(format!(
+            "event contract must be a regular file no larger than {EVENT_CONTRACT_MAX_BYTES} bytes"
+        ));
+    }
+    let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
+    file.take(EVENT_CONTRACT_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("read event contract {}: {error}", path.display()))?;
+    if bytes.len() as u64 > EVENT_CONTRACT_MAX_BYTES {
+        return Err(format!(
+            "event contract must be a regular file no larger than {EVENT_CONTRACT_MAX_BYTES} bytes"
+        ));
+    }
+    let body = String::from_utf8(bytes)
+        .map_err(|_| "event contract must contain valid UTF-8".to_string())?;
+    if !body.ends_with('\n') || body.contains('\r') {
+        return Err("event contract must use canonical newline-terminated LF text".to_string());
+    }
+    let mut fields = BTreeMap::new();
+    for (index, line) in body.lines().enumerate() {
+        let (key, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid event contract line {}", index + 1))?;
+        if key.is_empty()
+            || value.is_empty()
+            || value.contains('=')
+            || fields.insert(key.to_string(), value.to_string()).is_some()
+        {
+            return Err(format!(
+                "invalid or duplicate event contract line {}",
+                index + 1
+            ));
+        }
+    }
+    let (version, horizon, phase_count) = {
+        let mut take_number = |key: &str| -> Result<usize, String> {
+            parse_predicate_number(
+                fields
+                    .remove(key)
+                    .ok_or_else(|| format!("event contract is missing `{key}`"))?
+                    .as_str(),
+                key,
+            )
+        };
+        (
+            take_number("event_contract_version")?,
+            take_number("horizon")?,
+            take_number("phase_count")?,
+        )
+    };
+    if version != EVENT_CONTRACT_VERSION {
+        return Err("unsupported event contract version".to_string());
+    }
+    if horizon == 0 || horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err(format!(
+            "event contract horizon must be in 1..={INTERFACE_QUOTIENT_MAX_HORIZON}"
+        ));
+    }
+    if phase_count == 0 || phase_count > EVENT_CONTRACT_MAX_PHASES {
+        return Err(format!(
+            "event contract phase count must be in 1..={EVENT_CONTRACT_MAX_PHASES}"
+        ));
+    }
+    let mut names = BTreeMap::new();
+    for (projected, declared) in relevant_inputs.iter().enumerate() {
+        let name = model
+            .input_names
+            .get(*declared)
+            .ok_or_else(|| "event contract input symbol is missing".to_string())?;
+        if names.insert(name.clone(), projected).is_some() {
+            return Err(format!("event contract input name `{name}` is ambiguous"));
+        }
+    }
+    let mut phases = Vec::with_capacity(phase_count);
+    let mut expected_start = 0usize;
+    for phase_index in 0..phase_count {
+        let phase_key = format!("phase_{phase_index}");
+        let value = fields
+            .remove(&phase_key)
+            .ok_or_else(|| format!("event contract is missing `{phase_key}`"))?;
+        let parts = value.split(',').collect::<Vec<_>>();
+        if parts.len() != 2 {
+            return Err(format!("event contract `{phase_key}` is invalid"));
+        }
+        let start = parse_predicate_number::<usize>(parts[0], "event phase start")?;
+        let length = parse_predicate_number::<usize>(parts[1], "event phase length")?;
+        let end = start
+            .checked_add(length)
+            .ok_or_else(|| format!("event contract `{phase_key}` exceeds the bounded horizon"))?;
+        if start != expected_start || length == 0 || end > horizon {
+            return Err(format!(
+                "event contract `{phase_key}` does not form a contiguous bounded partition"
+            ));
+        }
+        let predicate = parse_event_predicate(&mut fields, &phase_key, &names)?;
+        phases.push(EventContractPhase {
+            start,
+            length,
+            predicate,
+        });
+        expected_start = end;
+    }
+    if expected_start != horizon {
+        return Err("event contract phases do not cover the horizon".to_string());
+    }
+    let terminal = parse_event_predicate(&mut fields, "terminal", &names)?;
+    if let Some(key) = fields.keys().next() {
+        return Err(format!("unknown event contract field `{key}`"));
+    }
+    Ok(EventContract {
+        horizon,
+        phases,
+        terminal,
+    })
+}
+
+fn event_contract_frames(contract: &EventContract) -> Vec<&InputPredicate> {
+    let mut frames = Vec::with_capacity(contract.horizon + 1);
+    for phase in &contract.phases {
+        frames.extend(std::iter::repeat_n(&phase.predicate, phase.length));
+    }
+    frames.push(&contract.terminal);
+    frames
+}
+
+fn solve_event_contract_cdcl(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    bad_output: usize,
+    contract: &EventContract,
+) -> Result<bool, String> {
+    let mut encoding = aag_bmc_encoding(model, contract.horizon)?;
+    for (frame, predicate) in event_contract_frames(contract).into_iter().enumerate() {
+        for clause in &predicate.clauses {
+            encoding.clauses.push(Clause(
+                clause
+                    .iter()
+                    .map(|(projected, positive)| {
+                        let declared = relevant_inputs[*projected];
+                        (
+                            frame * model.max_variable + model.inputs[declared] / 2 - 1,
+                            *positive,
+                        )
+                    })
+                    .collect(),
+            ));
+        }
+    }
+    let mut assumptions = vec![None; encoding.variables];
+    let target = aag_cnf_literal(model, contract.horizon, model.outputs[bad_output]);
+    match target {
+        AagCnfLiteral::Constant(false) => {}
+        AagCnfLiteral::Constant(true) => return Ok(false),
+        AagCnfLiteral::Variable(_) => {
+            if add_causal_counterfactual_assumption(&mut assumptions, target)? {
+                return Ok(false);
+            }
+        }
+    }
+    let mut solver = Solver::new();
+    add_to_varisat(&mut solver, &encoding.clauses);
+    solve_causal_persistent(&mut solver, &assumptions)
+}
+
+fn replay_event_contract_witness(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    bad_output: usize,
+    contract: &EventContract,
+    witness: &InterfaceQueryResult,
+) -> Result<(), String> {
+    if witness.states.len() != contract.horizon + 1
+        || witness.declared_inputs.len() != contract.horizon + 1
+    {
+        return Err("event contract witness dimensions are invalid".to_string());
+    }
+    let expected_initial = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    if witness.states[0] != expected_initial {
+        return Err("event contract witness initial state is invalid".to_string());
+    }
+    let frames = event_contract_frames(contract);
+    let mut checker = IndependentPredicateChecker::new(model)?;
+    for (frame, predicate) in frames.iter().enumerate().take(contract.horizon + 1) {
+        let declared = witness.declared_inputs[frame];
+        let projected =
+            relevant_inputs
+                .iter()
+                .enumerate()
+                .fold(0usize, |input, (bit, declared_index)| {
+                    input | (((declared >> declared_index) & 1) as usize) << bit
+                });
+        if !predicate.allows(projected) {
+            return Err(format!(
+                "event contract witness violates its predicate at frame {frame}"
+            ));
+        }
+        let (next, bad) = checker.evaluate(witness.states[frame], declared)?;
+        if frame < contract.horizon && next != witness.states[frame + 1] {
+            return Err(format!(
+                "event contract witness transition is invalid at frame {frame}"
+            ));
+        }
+        if frame == contract.horizon && bad & (1u128 << bad_output) != 0 {
+            return Err("event contract terminal witness reaches the bad output".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn benchmark_aiger_event_contract(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=100).contains(&repeats) {
+        return Err("event contract benchmark repeats must be in 1..=100".to_string());
+    }
+    if output.exists() {
+        return Err("event contract benchmark refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err("event contract requires declared initial latch values".to_string());
+    }
+    if bad_output >= model.outputs.len() {
+        return Err("event contract bad output is out of range".to_string());
+    }
+    let compile_start = Instant::now();
+    let mut quotient = PredicateQuotient::new(&model)?;
+    let relevant_inputs = quotient.interface.projected_inputs.clone();
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let compile_ns = compile_start.elapsed().as_nanos();
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let input_sha256 = sha256_file(input)?;
+    let contract_sha256 = sha256_file(contract_path)?;
+    let clause_count = contract
+        .phases
+        .iter()
+        .map(|phase| phase.predicate.clauses.len())
+        .sum::<usize>()
+        + contract.terminal.clauses.len();
+    let mut lines = vec!["schema_version,input_sha256,contract_sha256,bad_output,horizon,relevant_inputs,latches,phases,clauses,trial,compile_ns,predicate_query_ns,cdcl_query_ns,result,answers_agree,witness_valid,status".to_string()];
+    for trial in 0..repeats {
+        let predicate_start = Instant::now();
+        let witness = quotient.query_event_contract(initial_state, bad_output, &contract)?;
+        let predicate_query_ns = predicate_start.elapsed().as_nanos();
+        let cdcl_start = Instant::now();
+        let cdcl_avoidable =
+            solve_event_contract_cdcl(&model, &relevant_inputs, bad_output, &contract)?;
+        let cdcl_query_ns = cdcl_start.elapsed().as_nanos();
+        let avoidable = witness.is_some();
+        if avoidable != cdcl_avoidable {
+            return Err("event contract predicate and CDCL answers disagree".to_string());
+        }
+        if let Some(witness) = &witness {
+            replay_event_contract_witness(
+                &model,
+                &relevant_inputs,
+                bad_output,
+                &contract,
+                witness,
+            )?;
+        }
+        lines.push(format!(
+            "{EVENT_CONTRACT_BENCHMARK_SCHEMA_VERSION},{input_sha256},{contract_sha256},{bad_output},{},{},{},{},{clause_count},{trial},{compile_ns},{predicate_query_ns},{cdcl_query_ns},{},true,true,ok",
+            contract.horizon,
+            relevant_inputs.len(),
+            model.latches.len(),
+            contract.phases.len(),
+            if avoidable { "avoidable" } else { "unavoidable" },
+        ));
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "event-contract-benchmark status=VALID trials={repeats} output={}",
+        output.display()
+    );
+    Ok(())
 }
 
 fn certify_aiger_predicate(
@@ -12198,6 +12816,21 @@ impl InterfaceRelation {
                 for word in 0..result.words {
                     result.rows[source][word] |= right.rows[middle][word];
                 }
+            }
+        }
+        Ok(result)
+    }
+
+    fn power(base: &Self, mut exponent: usize) -> Result<Self, String> {
+        let mut result = Self::identity(base.states);
+        let mut factor = base.clone();
+        while exponent != 0 {
+            if exponent & 1 == 1 {
+                result = Self::compose(&result, &factor)?;
+            }
+            exponent >>= 1;
+            if exponent != 0 {
+                factor = Self::compose(&factor, &factor)?;
             }
         }
         Ok(result)
@@ -22385,6 +23018,25 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .parse::<usize>()
                 .map_err(|_| "invalid predicate interface repeat count".to_string())?;
             benchmark_aiger_predicate_interface(Path::new(&args[1]), repeats, Path::new(&args[3]))?;
+            Ok(true)
+        }
+        "benchmark-aiger-event-contract" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker benchmark-aiger-event-contract INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt REPEATS OUTPUT.csv".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract output index".to_string())?;
+            let repeats = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract repeat count".to_string())?;
+            benchmark_aiger_event_contract(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                repeats,
+                Path::new(&args[5]),
+            )?;
             Ok(true)
         }
         "query-aiger-predicate-quotient" => {
@@ -33657,6 +34309,207 @@ mod tests {
                 .unwrap_err()
                 .contains("usage:")
         );
+    }
+
+    #[test]
+    fn event_contract_predicates_express_non_cube_scheduler_rules() {
+        let at_most_one = InputPredicate {
+            clauses: vec![vec![(0, false), (1, false)]],
+        };
+        let allowed = (0..4)
+            .filter(|input| at_most_one.allows(*input))
+            .collect::<Vec<_>>();
+        assert_eq!(allowed, vec![0, 1, 2]);
+        assert!(!allowed.len().is_power_of_two());
+    }
+
+    #[test]
+    fn event_contract_constant_false_property_still_requires_an_admissible_trace() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        model.outputs[0] = 0;
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        assert_eq!(relevant.len(), 9);
+        let contract = EventContract {
+            horizon: 1,
+            phases: vec![EventContractPhase {
+                start: 0,
+                length: 1,
+                predicate: InputPredicate {
+                    clauses: vec![vec![(0, true)], vec![(0, false)]],
+                },
+            }],
+            terminal: InputPredicate { clauses: vec![] },
+        };
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        assert!(
+            quotient
+                .query_event_contract(0, 0, &contract)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!solve_event_contract_cdcl(&model, &relevant, 0, &contract).unwrap());
+    }
+
+    #[test]
+    fn event_contract_unavoidable_answer_agrees_with_exact_cdcl() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let contract = EventContract {
+            horizon: 1,
+            phases: vec![EventContractPhase {
+                start: 0,
+                length: 1,
+                predicate: InputPredicate { clauses: vec![] },
+            }],
+            terminal: InputPredicate {
+                clauses: vec![vec![(0, true)], vec![(0, false)]],
+            },
+        };
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        assert!(
+            quotient
+                .query_event_contract(0, 0, &contract)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!solve_event_contract_cdcl(&model, &relevant, 0, &contract).unwrap());
+    }
+
+    #[test]
+    fn event_contract_cnf_agrees_with_cdcl_across_product_cohort() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fixtures = [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/event-contracts/interrupt-priority-v1.contract",
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-interlock-v1.contract",
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                "examples/event-contracts/robot-recovery-v1.contract",
+            ),
+        ];
+        for (index, (model, contract)) in fixtures.into_iter().enumerate() {
+            let output = std::env::temp_dir().join(format!(
+                "guarded-continuation-event-contract-{}-{index}.csv",
+                std::process::id()
+            ));
+            let _ = fs::remove_file(&output);
+            benchmark_aiger_event_contract(&root.join(model), 0, &root.join(contract), 1, &output)
+                .unwrap();
+            let body = fs::read_to_string(&output).unwrap();
+            assert!(body.lines().nth(1).unwrap().ends_with(",true,true,ok"));
+            fs::remove_file(output).unwrap();
+        }
+    }
+
+    #[test]
+    fn event_contract_parser_rejects_ambiguous_and_hostile_rules() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "guarded-continuation-hostile-event-{}.contract",
+            std::process::id()
+        ));
+        for (body, expected) in [
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=1,7\nphase_0_clause_count=0\nterminal_clause_count=0\n",
+                "contiguous bounded partition",
+            ),
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=0,8\nphase_0_clause_count=1\nphase_0_clause_0=irq[0]|!irq[0]\nterminal_clause_count=0\n",
+                "tautological",
+            ),
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=0,8\nphase_0_clause_count=1\nphase_0_clause_0=unknown_irq\nterminal_clause_count=0\n",
+                "unsupported input",
+            ),
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=0,8\nphase_0_clause_count=1\nphase_0_clause_0=irq[0]|irq[0]\nterminal_clause_count=0\n",
+                "duplicates input",
+            ),
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=0,8\nphase_0_clause_count=0\nterminal_clause_count=0\nunknown=value\n",
+                "unknown event contract field",
+            ),
+            (
+                "event_contract_version=1\r\nhorizon=8\r\nphase_count=1\r\nphase_0=0,8\r\nphase_0_clause_count=0\r\nterminal_clause_count=0\r\n",
+                "canonical newline",
+            ),
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=0,8\nphase_0_clause_count=0\nterminal_clause_count=0",
+                "canonical newline",
+            ),
+            (
+                "event_contract_version=1\nhorizon=8\nphase_count=1\nphase_0=18446744073709551615,2\nphase_0_clause_count=0\nterminal_clause_count=0\n",
+                "exceeds the bounded horizon",
+            ),
+        ] {
+            fs::write(&path, body).unwrap();
+            assert!(
+                parse_event_contract(&path, &model, &relevant)
+                    .unwrap_err()
+                    .contains(expected)
+            );
+        }
+        fs::File::create(&path)
+            .unwrap()
+            .set_len(EVENT_CONTRACT_MAX_BYTES + 1)
+            .unwrap();
+        assert!(
+            parse_event_contract(&path, &model, &relevant)
+                .unwrap_err()
+                .contains("no larger")
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn event_contract_parser_rejects_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-symlink-{}.contract",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        symlink(
+            root.join("examples/event-contracts/interrupt-priority-v1.contract"),
+            &path,
+        )
+        .unwrap();
+        assert!(
+            parse_event_contract(&path, &model, &relevant)
+                .unwrap_err()
+                .contains("regular file")
+        );
+        fs::remove_file(path).unwrap();
     }
 
     #[cfg(unix)]

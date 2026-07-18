@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add experimental bounded event-contract v1 semantics: strict named CNF over
+  relevant AIGER inputs, exact BDD phase composition, concrete witness recovery,
+  direct-AIG replay, and a separately encoded exact CDCL control. Preserve
+  30 release-mode product trials and the negative 1.09x to 36.20x query overhead
+  instead of admitting the backend universally. Add canonical parser bounds,
+  hostile-input rejection, three firmware/robotics contracts, and a
+  no-overwrite reproduction script.
+
 - Position the project as Guarded Continuation Checker, powered by CQ-SAT. Add
   a collision-aware brand architecture, original guard-aperture SVG identity,
   partner-facing naming transition and canonical repository URL. Before the

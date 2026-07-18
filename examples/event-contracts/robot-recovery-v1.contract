@@ -1,0 +1,16 @@
+event_contract_version=1
+horizon=32
+phase_count=2
+phase_0=0,16
+phase_0_clause_count=3
+phase_0_clause_0=obstacle[0]|obstacle[1]|obstacle[2]|obstacle[3]|obstacle[4]|obstacle[5]|obstacle[6]|obstacle[7]
+phase_0_clause_1=!recovery_mode|!motion_enable[0]
+phase_0_clause_2=!recovery_mode|!motion_enable[1]
+phase_1=16,16
+phase_1_clause_count=3
+phase_1_clause_0=quality[0]|quality[1]|quality[2]|quality[3]
+phase_1_clause_1=!recovery_mode|!motion_enable[1]
+phase_1_clause_2=!recovery_mode|!motion_enable[2]
+terminal_clause_count=2
+terminal_clause_0=!recovery_mode|!motion_enable[0]
+terminal_clause_1=quality[0]|quality[1]|quality[2]|quality[3]

@@ -93,3 +93,11 @@ checking. The aggregate construction is a standard guarded disjunction and is
 not claimed as novel. It adds implementation-diverse evidence and closes the
 obligation-equivalent SAT-proof portion of gate 4, not the whole-certificate
 Certifaiger or expert-review portions.
+
+The [bounded event-contract experiment](EVENT_CONTRACT_EXPERIMENT.md) adds
+strict named CNF assumptions to powered predicate composition and exact witness
+recovery. CNF assumptions, contracts, BDD composition, bounded model checking,
+and witness replay all have established prior art. The experiment emits no new
+certificate and has no portfolio integration, so it does not establish novelty.
+Its candidate value is only as one component of the narrower combined artifact
+described above. The retained three-product timing result is entirely negative.
