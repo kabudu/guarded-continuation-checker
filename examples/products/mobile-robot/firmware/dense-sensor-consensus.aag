@@ -1,0 +1,54 @@
+aag 32 16 1 1 15
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+22
+24
+26
+28
+30
+32
+34 2 0
+64
+36 2 4
+38 36 6
+40 38 8
+42 40 10
+44 42 12
+46 44 14
+48 46 16
+50 48 18
+52 50 20
+54 52 22
+56 54 24
+58 56 26
+60 58 28
+62 60 30
+64 62 32
+i0 sector_00_blocked
+i1 sector_01_blocked
+i2 sector_02_blocked
+i3 sector_03_blocked
+i4 sector_04_blocked
+i5 sector_05_blocked
+i6 sector_06_blocked
+i7 sector_07_blocked
+i8 sector_08_blocked
+i9 sector_09_blocked
+i10 sector_10_blocked
+i11 sector_11_blocked
+i12 sector_12_blocked
+i13 sector_13_blocked
+i14 sector_14_blocked
+i15 sector_15_blocked
+l0 previous_sector_00
+o0 all_safety_sectors_blocked
+c
+Dense-support predicate fixture: every declared sensor affects the bad output.

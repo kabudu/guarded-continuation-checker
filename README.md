@@ -104,7 +104,24 @@ analysis proves that at most eight affect the combined transition/property
 interface. On a 16-input mobile-robot obstacle-stop regression projected to two
 inputs, median end-to-end speedup scales from 2.46x at horizon 8 to 10.74x at
 horizon 64, with complete-input witness lifting and fresh-CDCL replay. Dense
-wide-support predicates remain an open boundary.
+wide-support predicates remain an open boundary for the released portfolio.
+
+The next [dense predicate quotient experiment](docs/DENSE_PREDICATE_QUOTIENT.md)
+replaces explicit enumeration for 9–16 relevant inputs with a bounded exact BDD
+predicate and composes its latch relations across repeated phases. The
+16-input fixture compiles to 159 BDD nodes and reconstructs an exact 32-frame
+trace. Predicate-query amortisation is negative at 1–10 reuses, positive at 100,
+and reaches a 4.36x median workload speedup at 1,000 reuses. This is promising
+prototype evidence, not yet a portfolio or novelty claim.
+An external maintained-Yosys bounded-query check also agrees across ten trials;
+its process-level timing is reported separately and is not treated as an
+in-process solver comparison.
+
+A broader state-dependent matrix now covers 9-input interrupt arbitration,
+12-input actuator interlocks, and 16-input sensor fusion. Across horizons 8–64,
+median end-to-end ratios against persistent CDCL range from 0.81x to 2.35x,
+with exact Yosys agreement and original-AIG witness replay. The retained
+negative low-horizon rows define the current admission boundary.
 
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five

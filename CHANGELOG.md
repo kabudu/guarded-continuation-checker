@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Add an experimental bounded exact BDD predicate interface for 9–16 relevant
+  AIGER inputs, powered temporal relation composition, original-AIG trace
+  replay, a dense 16-sensor fixture, and a reproducible reuse sweep. Low-reuse
+  results remain negative; 100 and 1,000 reuses show positive amortisation. Add
+  a maintained-Yosys existential bounded-query agreement baseline with
+  separately labelled process-level timing.
+- Add three state-dependent product fixtures spanning 9, 12, and 16 relevant
+  inputs, reproducible RTL-to-AIGER synthesis, and a 120-row constrained
+  temporal matrix against persistent CDCL and Yosys. Preserve the negative
+  short-horizon actuator/sensor-fusion results as an admission boundary.
+- Add a timing-free conservative predicate admission rule over support width,
+  latch count, horizon, and expected query reuse; it excludes every observed
+  robust loss regime and records backend eligibility without timing
+  calibration. Portfolio integration remains separately gated.
+- Add dual-direction cross-backend exactness coverage: reconstructed avoidable
+  traces replay against the original AIG, while fixed unsafe transcripts must
+  be reported unavoidable by the predicate quotient, persistent CDCL, and
+  maintained Yosys.
+
 ## 0.27.0 - 2026-07-18
 
 - Add exact AIG cone-support projection for CIQ, admitting up to 64 declared

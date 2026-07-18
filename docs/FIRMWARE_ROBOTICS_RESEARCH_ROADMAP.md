@@ -25,7 +25,11 @@ predeclared baselines, repeated trials, and claim-bounded documentation.
    implemented experimentally.** Wide declared buses are projected onto the
    exact transition/property support. A 16-input mobile-robot controller with a
    two-input cone shows a robust 2.46x–10.74x median scaling curve. Dense-support
-   predicate projection remains open.
+   predicate projection remains open in the released portfolio. A bounded
+   exact BDD prototype now handles 9–16 relevant inputs, powers relations,
+   recovers traces, and agrees with persistent CDCL and external Yosys across
+   three state-dependent controllers. Negative short-horizon rows define a
+   static admission boundary; broader public and partner designs remain open.
 
 3. **Proof-carrying interface composition.** Emit independently checkable
    certificates for leaf projection, relational composition, semantic no-op

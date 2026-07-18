@@ -277,6 +277,33 @@ impl BddManager {
         result
     }
 
+    fn restrict(
+        &mut self,
+        root: usize,
+        variable: usize,
+        value: bool,
+        memo: &mut HashMap<usize, usize>,
+    ) -> usize {
+        if root < 2 {
+            return root;
+        }
+        if let Some(&result) = memo.get(&root) {
+            return result;
+        }
+        let node = self.node(root);
+        let result = if node.variable > variable {
+            root
+        } else if node.variable == variable {
+            if value { node.high } else { node.low }
+        } else {
+            let low = self.restrict(node.low, variable, value, memo);
+            let high = self.restrict(node.high, variable, value, memo);
+            self.make(node.variable, low, high)
+        };
+        memo.insert(root, result);
+        result
+    }
+
     fn satisfying_assignment(&self, mut root: usize, variables: usize) -> Option<Vec<bool>> {
         if root == 0 {
             return None;
@@ -8634,6 +8661,33 @@ const INTERFACE_QUOTIENT_MAX_PROJECTED_INPUTS: usize = 8;
 const INTERFACE_QUOTIENT_MAX_HORIZON: usize = 64;
 const INTERFACE_QUOTIENT_MAX_TABLE_CELLS: usize = 1_048_576;
 const INTERFACE_QUOTIENT_MAX_SUMMARIES: usize = 16_384;
+const PREDICATE_INTERFACE_MIN_INPUTS: usize = 9;
+const PREDICATE_INTERFACE_MAX_INPUTS: usize = 16;
+const PREDICATE_INTERFACE_MAX_LATCHES: usize = 4;
+const PREDICATE_INTERFACE_MAX_BDD_NODES: usize = 100_000;
+const PREDICATE_INTERFACE_MAX_QUERY_CACHE: usize = 4_096;
+const PREDICATE_QUOTIENT_MIN_EXPECTED_QUERIES: usize = 100;
+
+fn predicate_quotient_admitted(
+    relevant_inputs: usize,
+    latches: usize,
+    horizon: usize,
+    expected_queries: usize,
+) -> bool {
+    if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS).contains(&relevant_inputs)
+        || !(1..=PREDICATE_INTERFACE_MAX_LATCHES).contains(&latches)
+        || expected_queries < PREDICATE_QUOTIENT_MIN_EXPECTED_QUERIES
+    {
+        return false;
+    }
+    let minimum_horizon = match relevant_inputs {
+        9..=10 => 8,
+        11..=13 => 16,
+        14..=16 => 32,
+        _ => unreachable!(),
+    };
+    horizon >= minimum_horizon
+}
 
 #[derive(Debug)]
 struct AagInterfaceTable {
@@ -8763,6 +8817,381 @@ impl AagInterfaceTable {
             .fold(0u64, |pattern, (bit, input)| {
                 pattern | (((projected_pattern >> bit) & 1) as u64) << input
             })
+    }
+}
+
+struct AagPredicateInterface {
+    manager: BddManager,
+    transition: usize,
+    bad_outputs: Vec<usize>,
+    projected_inputs: Vec<usize>,
+    input_levels: Vec<usize>,
+    current_levels: Vec<usize>,
+    next_levels: Vec<usize>,
+    witness_cache: HashMap<(usize, Option<usize>, Option<usize>, Vec<Option<bool>>), Option<u64>>,
+}
+
+impl AagPredicateInterface {
+    fn literal_root(manager: &mut BddManager, roots: &[usize], literal: usize) -> usize {
+        if literal < 2 {
+            return usize::from(literal == 1);
+        }
+        let root = roots[literal / 2];
+        if literal & 1 == 0 {
+            root
+        } else {
+            manager.negate(root, &mut HashMap::new())
+        }
+    }
+
+    fn equivalent(manager: &mut BddManager, left: usize, right: usize) -> usize {
+        let both = manager.and(left, right);
+        let not_left = manager.negate(left, &mut HashMap::new());
+        let not_right = manager.negate(right, &mut HashMap::new());
+        let neither = manager.and(not_left, not_right);
+        manager.or(both, neither)
+    }
+
+    fn compile(model: &AagModel) -> Result<Self, String> {
+        let projected_inputs = AagInterfaceTable::projected_input_support(model)?;
+        if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS)
+            .contains(&projected_inputs.len())
+        {
+            return Err(format!(
+                "predicate interface requires {PREDICATE_INTERFACE_MIN_INPUTS}..={PREDICATE_INTERFACE_MAX_INPUTS} relevant inputs; found {}",
+                projected_inputs.len()
+            ));
+        }
+        if model.latches.is_empty() || model.latches.len() > PREDICATE_INTERFACE_MAX_LATCHES {
+            return Err(format!(
+                "predicate interface requires 1..={PREDICATE_INTERFACE_MAX_LATCHES} latches; found {}",
+                model.latches.len()
+            ));
+        }
+        if model.outputs.len() > u128::BITS as usize {
+            return Err("predicate interface supports at most 128 bad outputs".to_string());
+        }
+        let input_levels = (0..projected_inputs.len()).collect::<Vec<_>>();
+        let current_levels = (projected_inputs.len()..projected_inputs.len() + model.latches.len())
+            .collect::<Vec<_>>();
+        let next_levels = (projected_inputs.len() + model.latches.len()
+            ..projected_inputs.len() + model.latches.len() * 2)
+            .collect::<Vec<_>>();
+        let mut manager = BddManager {
+            node_limit: Some(PREDICATE_INTERFACE_MAX_BDD_NODES),
+            ..BddManager::default()
+        };
+        let mut roots = vec![0usize; model.max_variable + 1];
+        for (level, input) in projected_inputs.iter().enumerate() {
+            roots[model.inputs[*input] / 2] = manager.literal(level, true);
+        }
+        for (latch, level) in model.latches.iter().zip(&current_levels) {
+            roots[latch.current / 2] = manager.literal(*level, true);
+        }
+        for gate in &model.ands {
+            let left = Self::literal_root(&mut manager, &roots, gate.left);
+            let right = Self::literal_root(&mut manager, &roots, gate.right);
+            roots[gate.output / 2] = manager.and(left, right);
+        }
+        let mut transition = 1usize;
+        for (latch, level) in model.latches.iter().zip(&next_levels) {
+            let function = Self::literal_root(&mut manager, &roots, latch.next);
+            let next = manager.literal(*level, true);
+            let equality = Self::equivalent(&mut manager, function, next);
+            transition = manager.and(transition, equality);
+        }
+        let bad_outputs = model
+            .outputs
+            .iter()
+            .map(|literal| Self::literal_root(&mut manager, &roots, *literal))
+            .collect::<Vec<_>>();
+        if manager.budget_exceeded {
+            return Err(format!(
+                "predicate interface BDD exceeds {PREDICATE_INTERFACE_MAX_BDD_NODES} nodes"
+            ));
+        }
+        Ok(Self {
+            manager,
+            transition,
+            bad_outputs,
+            projected_inputs,
+            input_levels,
+            current_levels,
+            next_levels,
+            witness_cache: HashMap::new(),
+        })
+    }
+
+    fn restrict_constraints(
+        &mut self,
+        mut root: usize,
+        state: usize,
+        constraints: &[Option<bool>],
+    ) -> Result<usize, String> {
+        if constraints.len() != self.input_levels.len() {
+            return Err("predicate interface constraint dimensions mismatch".to_string());
+        }
+        for (bit, level) in self.current_levels.iter().enumerate() {
+            root = self
+                .manager
+                .restrict(root, *level, state >> bit & 1 == 1, &mut HashMap::new());
+        }
+        for (level, required) in self.input_levels.iter().zip(constraints) {
+            if let Some(value) = required {
+                root = self
+                    .manager
+                    .restrict(root, *level, *value, &mut HashMap::new());
+            }
+        }
+        Ok(root)
+    }
+
+    fn relation(&mut self, constraints: &[Option<bool>]) -> Result<InterfaceRelation, String> {
+        let states = 1usize << self.current_levels.len();
+        let variables =
+            self.input_levels.len() + self.current_levels.len() + self.next_levels.len();
+        let mut relation = InterfaceRelation::empty(states);
+        for source in 0..states {
+            let mut root = self.restrict_constraints(self.transition, source, constraints)?;
+            for level in &self.input_levels {
+                root = self.manager.exists(root, *level, &mut HashMap::new());
+            }
+            let mut assignment = vec![false; variables];
+            for target in 0..states {
+                for (bit, level) in self.next_levels.iter().enumerate() {
+                    assignment[*level] = target >> bit & 1 == 1;
+                }
+                if self.manager.evaluate(root, &assignment) {
+                    relation.insert(source, target);
+                }
+            }
+        }
+        if self.manager.budget_exceeded {
+            return Err("predicate interface BDD query exceeded its node bound".to_string());
+        }
+        Ok(relation)
+    }
+
+    fn witness_input(
+        &mut self,
+        source: usize,
+        target: Option<usize>,
+        output: Option<usize>,
+        constraints: &[Option<bool>],
+    ) -> Result<Option<u64>, String> {
+        let key = (source, target, output, constraints.to_vec());
+        if let Some(cached) = self.witness_cache.get(&key) {
+            return Ok(*cached);
+        }
+        let mut root = if target.is_some() {
+            self.transition
+        } else {
+            let bad = *self
+                .bad_outputs
+                .get(output.ok_or_else(|| "predicate output is missing".to_string())?)
+                .ok_or_else(|| "predicate output is out of range".to_string())?;
+            self.manager.negate(bad, &mut HashMap::new())
+        };
+        root = self.restrict_constraints(root, source, constraints)?;
+        if let Some(target) = target {
+            for (bit, level) in self.next_levels.iter().enumerate() {
+                root = self.manager.restrict(
+                    root,
+                    *level,
+                    target >> bit & 1 == 1,
+                    &mut HashMap::new(),
+                );
+            }
+        }
+        let Some(assignment) = self.manager.satisfying_assignment(
+            root,
+            self.input_levels.len() + self.current_levels.len() + self.next_levels.len(),
+        ) else {
+            if self.witness_cache.len() >= PREDICATE_INTERFACE_MAX_QUERY_CACHE {
+                return Err("predicate interface witness cache exceeds 4096 entries".to_string());
+            }
+            self.witness_cache.insert(key, None);
+            return Ok(None);
+        };
+        let declared =
+            self.projected_inputs
+                .iter()
+                .enumerate()
+                .fold(0u64, |pattern, (bit, input)| {
+                    let value = constraints[bit].unwrap_or(assignment[self.input_levels[bit]]);
+                    pattern | (u64::from(value) << input)
+                });
+        if self.witness_cache.len() >= PREDICATE_INTERFACE_MAX_QUERY_CACHE {
+            return Err("predicate interface witness cache exceeds 4096 entries".to_string());
+        }
+        self.witness_cache.insert(key, Some(declared));
+        Ok(Some(declared))
+    }
+}
+
+struct PredicateQuotient {
+    interface: AagPredicateInterface,
+    relation_cache: HashMap<Vec<Option<bool>>, InterfaceRelation>,
+    power_cache: HashMap<(Vec<Option<bool>>, usize), InterfaceRelation>,
+}
+
+impl PredicateQuotient {
+    fn new(model: &AagModel) -> Result<Self, String> {
+        Ok(Self {
+            interface: AagPredicateInterface::compile(model)?,
+            relation_cache: HashMap::new(),
+            power_cache: HashMap::new(),
+        })
+    }
+
+    fn relation(&mut self, constraints: &[Option<bool>]) -> Result<InterfaceRelation, String> {
+        if let Some(relation) = self.relation_cache.get(constraints) {
+            return Ok(relation.clone());
+        }
+        let relation = self.interface.relation(constraints)?;
+        if self.relation_cache.len() >= PREDICATE_INTERFACE_MAX_QUERY_CACHE {
+            return Err("predicate quotient relation cache exceeds 4096 entries".to_string());
+        }
+        self.relation_cache
+            .insert(constraints.to_vec(), relation.clone());
+        Ok(relation)
+    }
+
+    fn relation_power(
+        &mut self,
+        constraints: &[Option<bool>],
+        length: usize,
+    ) -> Result<InterfaceRelation, String> {
+        let key = (constraints.to_vec(), length);
+        if let Some(relation) = self.power_cache.get(&key) {
+            return Ok(relation.clone());
+        }
+        let states = 1usize << self.interface.current_levels.len();
+        let relation = if length == 0 {
+            InterfaceRelation::identity(states)
+        } else if length == 1 {
+            self.relation(constraints)?
+        } else {
+            let left_length = length / 2;
+            let left = self.relation_power(constraints, left_length)?;
+            let right = self.relation_power(constraints, length - left_length)?;
+            InterfaceRelation::compose(&left, &right)?
+        };
+        if self.power_cache.len() >= INTERFACE_QUOTIENT_MAX_SUMMARIES {
+            return Err(format!(
+                "predicate quotient power cache exceeds {INTERFACE_QUOTIENT_MAX_SUMMARIES} entries"
+            ));
+        }
+        self.power_cache.insert(key, relation.clone());
+        Ok(relation)
+    }
+
+    fn compressed_relation(
+        &mut self,
+        constraints: &[Vec<Option<bool>>],
+    ) -> Result<InterfaceRelation, String> {
+        let states = 1usize << self.interface.current_levels.len();
+        let mut result = InterfaceRelation::identity(states);
+        let mut start = 0usize;
+        while start < constraints.len() {
+            let mut end = start + 1;
+            while end < constraints.len() && constraints[end] == constraints[start] {
+                end += 1;
+            }
+            let block = self.relation_power(&constraints[start], end - start)?;
+            result = InterfaceRelation::compose(&result, &block)?;
+            start = end;
+        }
+        Ok(result)
+    }
+
+    fn query(
+        &mut self,
+        initial_state: usize,
+        output: usize,
+        constraints: &[Vec<Option<bool>>],
+    ) -> Result<Option<InterfaceQueryResult>, String> {
+        if constraints.is_empty()
+            || constraints
+                .iter()
+                .any(|frame| frame.len() != self.interface.input_levels.len())
+        {
+            return Err("predicate quotient constraint dimensions mismatch".to_string());
+        }
+        let horizon = constraints.len() - 1;
+        let relation = self.compressed_relation(&constraints[..horizon])?;
+        let terminal = relation
+            .targets(initial_state)
+            .find_map(|state| {
+                self.interface
+                    .witness_input(state, None, Some(output), &constraints[horizon])
+                    .transpose()
+                    .map(|witness| witness.map(|input| (state, input)))
+            })
+            .transpose()?;
+        let Some((terminal_state, terminal_input)) = terminal else {
+            return Ok(None);
+        };
+
+        let mut reachable = vec![vec![false; relation.states]; horizon + 1];
+        let mut predecessor = vec![vec![None; relation.states]; horizon + 1];
+        reachable[0][initial_state] = true;
+        for frame in 0..horizon {
+            let step = self.relation(&constraints[frame])?;
+            for source in 0..step.states {
+                if !reachable[frame][source] {
+                    continue;
+                }
+                for target in step.targets(source) {
+                    if !reachable[frame + 1][target] {
+                        reachable[frame + 1][target] = true;
+                        predecessor[frame + 1][target] = Some(source);
+                    }
+                }
+            }
+        }
+        if !reachable[horizon][terminal_state] {
+            return Err("predicate quotient compressed relation disagrees with replay".to_string());
+        }
+        let mut states = vec![0usize; horizon + 1];
+        states[horizon] = terminal_state;
+        for frame in (1..=horizon).rev() {
+            states[frame - 1] = predecessor[frame][states[frame]]
+                .ok_or_else(|| "predicate quotient witness predecessor is missing".to_string())?;
+        }
+        let mut declared_inputs = Vec::with_capacity(horizon + 1);
+        for frame in 0..horizon {
+            declared_inputs.push(
+                self.interface
+                    .witness_input(
+                        states[frame],
+                        Some(states[frame + 1]),
+                        None,
+                        &constraints[frame],
+                    )?
+                    .ok_or_else(|| {
+                        "predicate quotient transition witness is missing".to_string()
+                    })?,
+            );
+        }
+        declared_inputs.push(terminal_input);
+        let inputs = declared_inputs
+            .iter()
+            .map(|declared| {
+                self.interface
+                    .projected_inputs
+                    .iter()
+                    .enumerate()
+                    .fold(0usize, |pattern, (bit, input)| {
+                        pattern | (((declared >> input) & 1) as usize) << bit
+                    })
+            })
+            .collect();
+        Ok(Some(InterfaceQueryResult {
+            states,
+            inputs,
+            declared_inputs,
+        }))
     }
 }
 
@@ -12859,6 +13288,60 @@ fn validate_interface_witness(
         == 0
 }
 
+fn validate_predicate_witness(
+    model: &AagModel,
+    projected_inputs: &[usize],
+    output: usize,
+    constraints: &[Vec<Option<bool>>],
+    witness: &InterfaceQueryResult,
+) -> bool {
+    if witness.states.len() != constraints.len()
+        || witness.declared_inputs.len() != constraints.len()
+        || model.inputs.len() > u64::BITS as usize
+    {
+        return false;
+    }
+    for frame in 0..constraints.len() {
+        let declared = witness.declared_inputs[frame];
+        if constraints[frame]
+            .iter()
+            .enumerate()
+            .any(|(bit, required)| {
+                required
+                    .is_some_and(|value| declared >> projected_inputs[bit] & 1 != u64::from(value))
+            })
+        {
+            return false;
+        }
+        let mut values = vec![false; model.max_variable + 1];
+        for (bit, latch) in model.latches.iter().enumerate() {
+            values[latch.current / 2] = witness.states[frame] >> bit & 1 == 1;
+        }
+        for (input, literal) in model.inputs.iter().enumerate() {
+            values[literal / 2] = declared >> input & 1 == 1;
+        }
+        for gate in &model.ands {
+            values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                && evaluate_aag_literal(gate.right, &values);
+        }
+        if frame + 1 < constraints.len() {
+            let successor = model
+                .latches
+                .iter()
+                .enumerate()
+                .fold(0usize, |state, (bit, latch)| {
+                    state | (usize::from(evaluate_aag_literal(latch.next, &values)) << bit)
+                });
+            if successor != witness.states[frame + 1] {
+                return false;
+            }
+        } else if evaluate_aag_literal(model.outputs[output], &values) {
+            return false;
+        }
+    }
+    true
+}
+
 fn causal_events_from_witness(
     model: &AagModel,
     witness: &[bool],
@@ -14123,6 +14606,374 @@ fn publish_causal_comparison(path: &Path, body: &[u8]) -> Result<(), String> {
         let _ = fs::remove_file(staging);
     }
     publish
+}
+
+fn benchmark_aiger_predicate_interface(
+    input: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=CAUSAL_BATCH_MAX_REPEATS).contains(&repeats) {
+        return Err(format!(
+            "predicate interface repeats must be in 1..={CAUSAL_BATCH_MAX_REPEATS}"
+        ));
+    }
+    let model = parse_aag(input)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err("predicate interface requires declared initial latch values".to_string());
+    }
+    let compile_start = Instant::now();
+    let mut predicate = AagPredicateInterface::compile(&model)?;
+    let compile_ns = compile_start.elapsed().as_nanos();
+    let encoding = aag_bmc_encoding(&model, 0)?;
+    let query = encoding
+        .queries
+        .iter()
+        .find(|query| query.frame == 0 && query.output == 0)
+        .ok_or_else(|| "predicate interface requires bad output zero at frame zero".to_string())?;
+    let setup_start = Instant::now();
+    let mut persistent = Solver::new();
+    add_to_varisat(&mut persistent, &encoding.clauses);
+    let persistent_setup_ns = setup_start.elapsed().as_nanos();
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let mut lines = vec!["predicate_interface_schema_version,input_sha256,declared_inputs,relevant_inputs,bdd_nodes,scenario,repeats,predicate_compile_ns,persistent_setup_ns,predicate_query_ns,persistent_query_ns,predicate_query_speedup,workload_speedup,agreement,witness_valid,status".to_string()];
+    let digest = sha256_file(input)?;
+    for released in 0..=predicate.projected_inputs.len() {
+        let mut constraints = vec![Some(true); predicate.projected_inputs.len()];
+        let scenario = if released == predicate.projected_inputs.len() {
+            "all-true".to_string()
+        } else {
+            constraints[released] = Some(false);
+            format!("release-{released}")
+        };
+        let mut predicate_ns = 0u128;
+        let mut persistent_ns = 0u128;
+        let mut agreement = true;
+        let mut witness_valid = true;
+        for _ in 0..repeats {
+            let start = Instant::now();
+            let predicate_witness =
+                predicate.witness_input(initial_state, None, Some(0), &constraints)?;
+            predicate_ns = predicate_ns.saturating_add(start.elapsed().as_nanos());
+
+            let mut assumptions = vec![None; encoding.variables];
+            for (projected, required) in constraints.iter().enumerate() {
+                let input = predicate.projected_inputs[projected];
+                assumptions[model.inputs[input] / 2 - 1] = *required;
+            }
+            let unconditional =
+                add_causal_counterfactual_assumption(&mut assumptions, query.assumption)?;
+            let start = Instant::now();
+            let persistent_avoidable =
+                !unconditional && solve_causal_persistent(&mut persistent, &assumptions)?;
+            persistent_ns = persistent_ns.saturating_add(start.elapsed().as_nanos());
+            agreement &= predicate_witness.is_some() == persistent_avoidable;
+            if let Some(declared) = predicate_witness {
+                let mut values = vec![false; model.max_variable + 1];
+                for (bit, latch) in model.latches.iter().enumerate() {
+                    values[latch.current / 2] = initial_state >> bit & 1 == 1;
+                }
+                for (input, literal) in model.inputs.iter().enumerate() {
+                    values[literal / 2] = declared >> input & 1 == 1;
+                }
+                for gate in &model.ands {
+                    values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                        && evaluate_aag_literal(gate.right, &values);
+                }
+                witness_valid &= !evaluate_aag_literal(model.outputs[0], &values)
+                    && constraints.iter().enumerate().all(|(projected, required)| {
+                        required.is_none_or(|value| {
+                            (declared >> predicate.projected_inputs[projected] & 1 == 1) == value
+                        })
+                    });
+            }
+        }
+        if !agreement || !witness_valid {
+            return Err(format!(
+                "predicate interface scenario {scenario} disagrees with persistent CDCL (agreement={agreement}, witness_valid={witness_valid})"
+            ));
+        }
+        let query_speedup = persistent_ns as f64 / predicate_ns.max(1) as f64;
+        let workload_speedup = persistent_setup_ns.saturating_add(persistent_ns) as f64
+            / compile_ns.saturating_add(predicate_ns).max(1) as f64;
+        lines.push(format!(
+            "1,{digest},{},{},{},{scenario},{repeats},{compile_ns},{persistent_setup_ns},{predicate_ns},{persistent_ns},{query_speedup:.6},{workload_speedup:.6},true,true,ok",
+            model.inputs.len(),
+            predicate.projected_inputs.len(),
+            predicate.manager.nodes.len()
+        ));
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "predicate-interface status=VALID relevant_inputs={} bdd_nodes={} output={}",
+        predicate.projected_inputs.len(),
+        predicate.manager.nodes.len(),
+        output.display()
+    );
+    Ok(())
+}
+
+fn query_aiger_predicate_quotient(
+    input: &Path,
+    horizon: usize,
+    output: usize,
+) -> Result<(), String> {
+    if horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err(format!(
+            "predicate quotient horizon exceeds {INTERFACE_QUOTIENT_MAX_HORIZON}"
+        ));
+    }
+    let model = parse_aag(input)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err("predicate quotient requires declared initial latch values".to_string());
+    }
+    if output >= model.outputs.len() {
+        return Err(format!(
+            "predicate quotient output {output} is out of range for {} outputs",
+            model.outputs.len()
+        ));
+    }
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let mut quotient = PredicateQuotient::new(&model)?;
+    let constraints = vec![vec![None; quotient.interface.projected_inputs.len()]; horizon + 1];
+    match quotient.query(initial_state, output, &constraints)? {
+        Some(witness) => {
+            if !validate_predicate_witness(
+                &model,
+                &quotient.interface.projected_inputs,
+                output,
+                &constraints,
+                &witness,
+            ) {
+                return Err("predicate quotient witness failed original-AIG replay".to_string());
+            }
+            println!("status=AVOIDABLE witness_valid=true");
+            println!("frame,state,input_pattern_binary");
+            for (frame, (state, input)) in witness
+                .states
+                .iter()
+                .zip(&witness.declared_inputs)
+                .enumerate()
+            {
+                println!(
+                    "{frame},{state},{:0width$b}",
+                    input,
+                    width = model.inputs.len()
+                );
+            }
+        }
+        None => println!("status=UNAVOIDABLE"),
+    }
+    Ok(())
+}
+
+fn benchmark_aiger_predicate_symbolic(
+    input: &Path,
+    horizon: usize,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err(format!(
+            "predicate symbolic horizon exceeds {INTERFACE_QUOTIENT_MAX_HORIZON}"
+        ));
+    }
+    if !(1..=100).contains(&repeats) {
+        return Err("predicate symbolic repeats must be in 1..=100".to_string());
+    }
+    let canonical = input
+        .canonicalize()
+        .map_err(|error| format!("canonicalize predicate symbolic input: {error}"))?;
+    let path = canonical.to_string_lossy();
+    if !path
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || "/._-".contains(character))
+    {
+        return Err("predicate symbolic input path contains unsupported characters".to_string());
+    }
+    let model = parse_aag(&canonical)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err(
+            "predicate symbolic benchmark requires declared initial latch values".to_string(),
+        );
+    }
+    let output_name = model
+        .output_names
+        .first()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "predicate symbolic benchmark requires a named output zero".to_string())?;
+    if !output_name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || "_.$".contains(character))
+    {
+        return Err("predicate symbolic output name contains unsupported characters".to_string());
+    }
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let compile_start = Instant::now();
+    let mut quotient = PredicateQuotient::new(&model)?;
+    let predicate_compile_ns = compile_start.elapsed().as_nanos();
+    let mut constraints =
+        vec![vec![Some(true); quotient.interface.projected_inputs.len()]; horizon + 1];
+    let released = quotient.interface.projected_inputs.len() - 1;
+    constraints[horizon][released] = Some(false);
+    let query_start = Instant::now();
+    for _ in 0..repeats {
+        let witness = quotient
+            .query(initial_state, 0, &constraints)?
+            .ok_or_else(|| {
+                "predicate quotient unexpectedly found the output unavoidable".to_string()
+            })?;
+        if !validate_predicate_witness(
+            &model,
+            &quotient.interface.projected_inputs,
+            0,
+            &constraints,
+            &witness,
+        ) {
+            return Err("predicate quotient witness failed original-AIG replay".to_string());
+        }
+    }
+    let predicate_query_ns = query_start.elapsed().as_nanos();
+
+    let persistent_encoding_start = Instant::now();
+    let encoding = aag_bmc_encoding(&model, horizon)?;
+    let persistent_encoding_ns = persistent_encoding_start.elapsed().as_nanos();
+    let query = encoding
+        .queries
+        .iter()
+        .find(|query| query.frame == horizon && query.output == 0)
+        .ok_or_else(|| "predicate symbolic benchmark is missing its terminal query".to_string())?;
+    let persistent_setup_start = Instant::now();
+    let mut persistent = Solver::new();
+    add_to_varisat(&mut persistent, &encoding.clauses);
+    let persistent_setup_ns = persistent_setup_start.elapsed().as_nanos();
+    let mut assumptions = vec![None; encoding.variables];
+    for (frame, frame_constraints) in constraints.iter().enumerate() {
+        for (projected, required) in frame_constraints.iter().enumerate() {
+            let input = quotient.interface.projected_inputs[projected];
+            assumptions[frame * model.max_variable + model.inputs[input] / 2 - 1] = *required;
+        }
+    }
+    let unconditional = add_causal_counterfactual_assumption(&mut assumptions, query.assumption)?;
+    if unconditional {
+        return Err("predicate symbolic benchmark requires a non-constant output".to_string());
+    }
+    let persistent_query_start = Instant::now();
+    for _ in 0..repeats {
+        if !solve_causal_persistent(&mut persistent, &assumptions)? {
+            return Err(
+                "persistent CDCL disagrees with the avoiding predicate witness".to_string(),
+            );
+        }
+    }
+    let persistent_query_ns = persistent_query_start.elapsed().as_nanos();
+
+    let projected_names = quotient
+        .interface
+        .projected_inputs
+        .iter()
+        .map(|input| {
+            model
+                .input_names
+                .get(*input)
+                .filter(|name| {
+                    !name.is_empty()
+                        && name.chars().all(|character| {
+                            character.is_ascii_alphanumeric() || "_.$[]".contains(character)
+                        })
+                })
+                .ok_or_else(|| {
+                    "predicate symbolic benchmark requires safe named relevant inputs".to_string()
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut script = format!("read_aiger {path}; hierarchy -auto-top;");
+    script.push_str(&format!(" sat -seq {}", horizon + 1));
+    for (frame, frame_constraints) in constraints.iter().enumerate() {
+        for (projected, required) in frame_constraints.iter().enumerate() {
+            script.push_str(&format!(
+                " -set-at {} {} {}",
+                frame + 1,
+                projected_names[projected],
+                usize::from(required.unwrap())
+            ));
+        }
+    }
+    script.push_str(&format!(" -set-at {} {} 0;", horizon + 1, output_name));
+    let yosys_start = Instant::now();
+    let yosys = Command::new("yosys")
+        .args(["-Q", "-p", &script])
+        .output()
+        .map_err(|error| format!("run maintained Yosys symbolic baseline: {error}"))?;
+    let yosys_ns = yosys_start.elapsed().as_nanos();
+    if !yosys.status.success() {
+        return Err(format!(
+            "maintained Yosys symbolic baseline failed: {}",
+            String::from_utf8_lossy(&yosys.stderr)
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&yosys.stdout);
+    let models = stdout
+        .matches("SAT solving finished - model found:")
+        .count();
+    if models != 1 {
+        return Err(format!(
+            "maintained Yosys symbolic baseline returned {models} SAT results; expected 1"
+        ));
+    }
+    let predicate_total_ns = predicate_compile_ns.saturating_add(predicate_query_ns);
+    let persistent_total_ns = persistent_encoding_ns
+        .saturating_add(persistent_setup_ns)
+        .saturating_add(persistent_query_ns);
+    let body = format!(
+        "predicate_symbolic_schema_version,input_sha256,horizon,repeats,relevant_inputs,bdd_nodes,predicate_compile_ns,predicate_query_ns,predicate_total_ns,persistent_encoding_ns,persistent_setup_ns,persistent_query_ns,persistent_total_ns,persistent_over_predicate_speedup,yosys_version,yosys_repeats,yosys_total_ns,yosys_over_predicate_speedup,agreement,witness_valid,static_admission,status\n4,{},{horizon},{repeats},{},{},{predicate_compile_ns},{predicate_query_ns},{predicate_total_ns},{persistent_encoding_ns},{persistent_setup_ns},{persistent_query_ns},{persistent_total_ns},{:.6},{},1,{yosys_ns},{:.6},true,true,{},ok\n",
+        sha256_file(&canonical)?,
+        quotient.interface.projected_inputs.len(),
+        quotient.interface.manager.nodes.len(),
+        persistent_total_ns as f64 / predicate_total_ns.max(1) as f64,
+        report_csv_field(
+            &String::from_utf8_lossy(
+                &Command::new("yosys")
+                    .arg("-V")
+                    .output()
+                    .map_err(|error| format!("read Yosys version: {error}"))?
+                    .stdout
+            )
+            .trim()
+            .replace(',', ";")
+        ),
+        yosys_ns as f64 / predicate_total_ns.max(1) as f64,
+        predicate_quotient_admitted(
+            quotient.interface.projected_inputs.len(),
+            model.latches.len(),
+            horizon,
+            repeats
+        )
+    );
+    publish_causal_comparison(output, body.as_bytes())?;
+    println!(
+        "predicate-symbolic status=VALID agreement=true witness_valid=true output={}",
+        output.display()
+    );
+    Ok(())
 }
 
 fn benchmark_aiger_interface_quotient(
@@ -18571,6 +19422,47 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: continuation-quotient-sat verify-aiger-interface-quotient INPUT.aag|INPUT.aig OUTPUT.csv".to_string());
             }
             verify_aiger_interface_quotient(Path::new(&args[1]), Path::new(&args[2]))?;
+            Ok(true)
+        }
+        "benchmark-aiger-predicate-interface" => {
+            if args.len() != 4 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-interface INPUT.aag|INPUT.aig REPEATS OUTPUT.csv".to_string());
+            }
+            let repeats = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate interface repeat count".to_string())?;
+            benchmark_aiger_predicate_interface(Path::new(&args[1]), repeats, Path::new(&args[3]))?;
+            Ok(true)
+        }
+        "query-aiger-predicate-quotient" => {
+            if args.len() != 4 {
+                return Err("usage: continuation-quotient-sat query-aiger-predicate-quotient INPUT.aag|INPUT.aig HORIZON OUTPUT_INDEX".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate quotient horizon".to_string())?;
+            let output = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate quotient output index".to_string())?;
+            query_aiger_predicate_quotient(Path::new(&args[1]), horizon, output)?;
+            Ok(true)
+        }
+        "benchmark-aiger-predicate-symbolic" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-symbolic INPUT.aag|INPUT.aig HORIZON REPEATS OUTPUT.csv".to_string());
+            }
+            let horizon = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate symbolic horizon".to_string())?;
+            let repeats = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate symbolic repeat count".to_string())?;
+            benchmark_aiger_predicate_symbolic(
+                Path::new(&args[1]),
+                horizon,
+                repeats,
+                Path::new(&args[4]),
+            )?;
             Ok(true)
         }
         "benchmark-continuation-quotients" => {
@@ -27022,13 +27914,20 @@ mod tests {
     }
 
     fn wide_dense_aiger_fixture() -> Vec<u8> {
-        let mut source = String::from("aag 25 16 1 1 8\n");
+        dense_support_aiger_fixture(9)
+    }
+
+    fn dense_support_aiger_fixture(relevant: usize) -> Vec<u8> {
+        assert!((2..=16).contains(&relevant));
+        let gates = relevant - 1;
+        let maximum = 17 + gates;
+        let mut source = format!("aag {maximum} 16 1 1 {gates}\n");
         for variable in 1..=16 {
             source.push_str(&format!("{}\n", variable * 2));
         }
-        source.push_str("34 2 0\n50\n");
+        source.push_str(&format!("34 2 0\n{}\n", maximum * 2));
         let mut accumulated = 2usize;
-        for (gate, input) in (1..=8).enumerate() {
+        for (gate, input) in (1..relevant).enumerate() {
             let output = (18 + gate) * 2;
             source.push_str(&format!("{output} {accumulated} {}\n", (input + 1) * 2));
             accumulated = output;
@@ -27148,6 +28047,332 @@ mod tests {
         let error = AagInterfaceTable::compile(&model).unwrap_err();
         assert!(error.contains("projected support"));
         assert!(error.contains("found 9"));
+    }
+
+    #[test]
+    fn predicate_interface_handles_nine_relevant_inputs_without_enumeration() {
+        let model = parse_aiger_bytes(&wide_dense_aiger_fixture()).unwrap();
+        let mut predicate = AagPredicateInterface::compile(&model).unwrap();
+        assert_eq!(predicate.projected_inputs, (0..9).collect::<Vec<_>>());
+        assert!(predicate.manager.nodes.len() < 200);
+
+        let unconstrained = vec![None; 9];
+        let relation = predicate.relation(&unconstrained).unwrap();
+        for source in 0..2 {
+            assert!(relation.contains(source, 0));
+            assert!(relation.contains(source, 1));
+        }
+
+        let mut input_zero_true = vec![None; 9];
+        input_zero_true[0] = Some(true);
+        let relation = predicate.relation(&input_zero_true).unwrap();
+        for source in 0..2 {
+            assert!(!relation.contains(source, 0));
+            assert!(relation.contains(source, 1));
+        }
+
+        let all_true = vec![Some(true); 9];
+        assert!(
+            predicate
+                .witness_input(0, None, Some(0), &all_true)
+                .unwrap()
+                .is_none()
+        );
+        let mut avoidable = all_true;
+        avoidable[8] = Some(false);
+        let witness = predicate
+            .witness_input(0, None, Some(0), &avoidable)
+            .unwrap()
+            .unwrap();
+        assert_eq!(witness >> 8 & 1, 0);
+    }
+
+    #[test]
+    fn predicate_interface_scales_compactly_through_sixteen_relevant_inputs() {
+        for relevant in 9..=16 {
+            let model = parse_aiger_bytes(&dense_support_aiger_fixture(relevant)).unwrap();
+            let mut predicate = AagPredicateInterface::compile(&model).unwrap();
+            assert_eq!(predicate.projected_inputs.len(), relevant);
+            assert!(predicate.manager.nodes.len() < relevant * 20);
+
+            let all_true = vec![Some(true); relevant];
+            assert!(
+                predicate
+                    .witness_input(0, None, Some(0), &all_true)
+                    .unwrap()
+                    .is_none()
+            );
+            for released in 0..relevant {
+                let mut avoiding = all_true.clone();
+                avoiding[released] = Some(false);
+                let witness = predicate
+                    .witness_input(0, None, Some(0), &avoiding)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(witness >> released & 1, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn predicate_quotient_powers_dense_relations_and_recovers_exact_trace() {
+        let model = parse_aiger_bytes(&dense_support_aiger_fixture(16)).unwrap();
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        let horizon = 32;
+        let transition_constraints = vec![Some(true); 16];
+        let mut constraints = vec![transition_constraints; horizon + 1];
+        constraints[horizon][15] = Some(false);
+
+        let witness = quotient.query(0, 0, &constraints).unwrap().unwrap();
+        assert_eq!(witness.states.len(), horizon + 1);
+        assert_eq!(witness.declared_inputs.len(), horizon + 1);
+        assert_eq!(witness.states[0], 0);
+        assert!(witness.states.iter().skip(1).all(|state| *state == 1));
+        assert_eq!(witness.declared_inputs[horizon] >> 15 & 1, 0);
+        assert!(validate_predicate_witness(
+            &model,
+            &quotient.interface.projected_inputs,
+            0,
+            &constraints,
+            &witness
+        ));
+        assert!(
+            quotient
+                .power_cache
+                .contains_key(&(vec![Some(true); 16], horizon))
+        );
+
+        constraints[horizon][15] = Some(true);
+        assert!(quotient.query(0, 0, &constraints).unwrap().is_none());
+    }
+
+    #[test]
+    fn predicate_symbolic_baseline_agrees_when_yosys_is_available() {
+        if Command::new("yosys").arg("-V").output().is_err() {
+            eprintln!("skipping predicate symbolic baseline because Yosys is unavailable");
+            return;
+        }
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/mobile-robot/firmware/dense-sensor-consensus.aag");
+        let output = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-symbolic-{}.csv",
+            std::process::id()
+        ));
+        benchmark_aiger_predicate_symbolic(&input, 2, 1, &output).unwrap();
+        let report = fs::read_to_string(&output).unwrap();
+        fs::remove_file(output).unwrap();
+        assert_eq!(report.lines().count(), 2);
+        assert!(report.contains(",true,true,false,ok\n"));
+        assert!(report.lines().all(|line| line.split(',').count() == 22));
+    }
+
+    #[test]
+    fn dense_product_fixtures_have_exact_width_and_state_dependent_properties() {
+        let cases = [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                10,
+                9,
+                2,
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                13,
+                12,
+                3,
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                17,
+                16,
+                4,
+            ),
+        ];
+        for (relative, declared, relevant, latches) in cases {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+            let model = parse_aag(&path).unwrap();
+            let predicate = AagPredicateInterface::compile(&model).unwrap();
+            assert_eq!(model.inputs.len(), declared);
+            assert_eq!(predicate.projected_inputs.len(), relevant);
+            assert_eq!(model.latches.len(), latches);
+            assert!(predicate.manager.nodes.len() < 500);
+
+            let state_mask = (1usize << latches) - 1;
+            let mut state_observable = false;
+            for declared_input in 0..(1u64 << declared) {
+                let evaluate = |state: usize| {
+                    let mut values = vec![false; model.max_variable + 1];
+                    for (bit, latch) in model.latches.iter().enumerate() {
+                        values[latch.current / 2] = state >> bit & 1 == 1;
+                    }
+                    for (input, literal) in model.inputs.iter().enumerate() {
+                        values[literal / 2] = declared_input >> input & 1 == 1;
+                    }
+                    for gate in &model.ands {
+                        values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                            && evaluate_aag_literal(gate.right, &values);
+                    }
+                    evaluate_aag_literal(model.outputs[0], &values)
+                };
+                if evaluate(0) != evaluate(state_mask) {
+                    state_observable = true;
+                    break;
+                }
+            }
+            assert!(
+                state_observable,
+                "property is not state dependent: {relative}"
+            );
+        }
+    }
+
+    #[test]
+    fn dense_product_fixed_bad_traces_are_unavoidable_across_backends() {
+        let fixtures = [
+            "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+            "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+        ];
+        let horizon = 4;
+        let yosys_available = Command::new("yosys").arg("-V").output().is_ok();
+        for relative in fixtures {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+            let model = parse_aag(&path).unwrap();
+            let encoding = aag_bmc_encoding(&model, horizon).unwrap();
+            let query = encoding
+                .queries
+                .iter()
+                .find(|query| query.frame == horizon && query.output == 0)
+                .unwrap();
+            let mut unsafe_solver = Solver::new();
+            add_to_varisat(&mut unsafe_solver, &encoding.clauses);
+            let unsafe_trace =
+                causal_query_witness(&mut unsafe_solver, encoding.variables, query.assumption)
+                    .unwrap()
+                    .unwrap();
+
+            let mut quotient = PredicateQuotient::new(&model).unwrap();
+            let mut constraints =
+                vec![vec![None; quotient.interface.projected_inputs.len()]; horizon + 1];
+            let mut assumptions = vec![None; encoding.variables];
+            for frame in 0..=horizon {
+                for (projected, input) in quotient.interface.projected_inputs.iter().enumerate() {
+                    let variable = frame * model.max_variable + model.inputs[*input] / 2 - 1;
+                    let value = unsafe_trace[variable];
+                    constraints[frame][projected] = Some(value);
+                    assumptions[variable] = Some(value);
+                }
+            }
+            let initial_state = model
+                .latches
+                .iter()
+                .enumerate()
+                .fold(0usize, |state, (bit, latch)| {
+                    state | (usize::from(latch.initial == Some(true)) << bit)
+                });
+            assert!(
+                quotient
+                    .query(initial_state, 0, &constraints)
+                    .unwrap()
+                    .is_none()
+            );
+
+            assert!(
+                !add_causal_counterfactual_assumption(&mut assumptions, query.assumption).unwrap()
+            );
+            let mut avoiding_solver = Solver::new();
+            add_to_varisat(&mut avoiding_solver, &encoding.clauses);
+            assert!(!solve_causal_persistent(&mut avoiding_solver, &assumptions).unwrap());
+
+            if yosys_available {
+                let mut script = format!(
+                    "read_aiger {}; hierarchy -auto-top; sat -seq {}",
+                    path.display(),
+                    horizon + 1
+                );
+                for (frame, frame_constraints) in constraints.iter().enumerate() {
+                    for (projected, required) in frame_constraints.iter().enumerate() {
+                        let input = quotient.interface.projected_inputs[projected];
+                        script.push_str(&format!(
+                            " -set-at {} {} {}",
+                            frame + 1,
+                            model.input_names[input],
+                            usize::from(required.unwrap())
+                        ));
+                    }
+                }
+                script.push_str(&format!(
+                    " -set-at {} {} 0;",
+                    horizon + 1,
+                    model.output_names[0]
+                ));
+                let external = Command::new("yosys")
+                    .args(["-Q", "-p", &script])
+                    .output()
+                    .unwrap();
+                assert!(external.status.success());
+                assert!(
+                    String::from_utf8_lossy(&external.stdout)
+                        .contains("SAT solving finished - no model found.")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn predicate_quotient_fails_closed_outside_static_resource_bounds() {
+        let too_narrow = parse_aiger_bytes(&dense_support_aiger_fixture(8)).unwrap();
+        assert!(
+            AagPredicateInterface::compile(&too_narrow)
+                .err()
+                .unwrap()
+                .contains("requires 9..=16 relevant inputs")
+        );
+
+        let mut five_latches = String::from("aag 22 9 5 1 8\n");
+        for variable in 1..=9 {
+            five_latches.push_str(&format!("{}\n", variable * 2));
+        }
+        for variable in 10..=14 {
+            five_latches.push_str(&format!("{} 2 0\n", variable * 2));
+        }
+        five_latches.push_str("44\n");
+        let mut accumulated = 2;
+        for (gate, input) in (2..=9).enumerate() {
+            let output = (15 + gate) * 2;
+            five_latches.push_str(&format!("{output} {accumulated} {}\n", input * 2));
+            accumulated = output;
+        }
+        let too_stateful = parse_aiger_bytes(five_latches.as_bytes()).unwrap();
+        assert!(
+            AagPredicateInterface::compile(&too_stateful)
+                .err()
+                .unwrap()
+                .contains("requires 1..=4 latches")
+        );
+
+        assert!(
+            benchmark_aiger_predicate_symbolic(
+                Path::new("unused"),
+                INTERFACE_QUOTIENT_MAX_HORIZON + 1,
+                1,
+                Path::new("unused")
+            )
+            .unwrap_err()
+            .contains("horizon exceeds")
+        );
+    }
+
+    #[test]
+    fn predicate_quotient_static_gate_excludes_observed_loss_regimes() {
+        assert!(!predicate_quotient_admitted(9, 2, 8, 99));
+        assert!(predicate_quotient_admitted(9, 2, 8, 100));
+        assert!(!predicate_quotient_admitted(12, 3, 8, 100));
+        assert!(predicate_quotient_admitted(12, 3, 16, 100));
+        assert!(!predicate_quotient_admitted(16, 4, 16, 100));
+        assert!(predicate_quotient_admitted(16, 4, 32, 100));
+        assert!(!predicate_quotient_admitted(8, 2, 64, 1000));
+        assert!(!predicate_quotient_admitted(16, 5, 64, 1000));
     }
 
     #[test]
