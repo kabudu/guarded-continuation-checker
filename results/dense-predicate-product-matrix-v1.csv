@@ -1,0 +1,13 @@
+dense_predicate_product_schema_version,family,relevant_inputs,horizon,trials,repeats,min_persistent_speedup,median_persistent_speedup,max_persistent_speedup,yosys_agreement,witness_valid,status
+1,interrupt,9,8,10,100,1.493968,1.544440,1.672729,true,true,ok
+1,interrupt,9,16,10,100,1.713718,1.916500,2.003654,true,true,ok
+1,interrupt,9,32,10,100,1.881795,2.147429,2.442211,true,true,ok
+1,interrupt,9,64,10,100,2.190631,2.350200,2.527932,true,true,ok
+1,actuator,12,8,10,100,0.960036,0.972256,0.999775,true,true,ok
+1,actuator,12,16,10,100,1.212985,1.277242,1.521735,true,true,ok
+1,actuator,12,32,10,100,1.454510,1.480625,2.027336,true,true,ok
+1,actuator,12,64,10,100,1.446493,1.598453,1.675672,true,true,ok
+1,fusion,16,8,10,100,0.734267,0.808957,0.826094,true,true,ok
+1,fusion,16,16,10,100,0.954610,1.047224,1.068617,true,true,ok
+1,fusion,16,32,10,100,1.103571,1.207046,1.372441,true,true,ok
+1,fusion,16,64,10,100,1.349012,1.400309,1.451995,true,true,ok

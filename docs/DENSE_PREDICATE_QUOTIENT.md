@@ -51,3 +51,28 @@ end-to-end Yosys/predicate time ratio ranged from 262.30x to 407.55x, with a
 394.73x median. Most of this gap is process and generic-model setup overhead.
 Broad controller generality and scholarly novelty remain release gates for
 promoting this backend into the default CQ-SAT/GCC portfolio.
+
+## State-dependent product matrix
+
+Three separately authored RTL controllers exercise interrupt arbitration (9
+relevant inputs, 2 latches), actuator interlocks (12 inputs, 3 latches), and
+mobile-robot sensor fusion (16 inputs, 4 latches). Synthesis retains one clock
+input outside the exact support. Regression tests prove the declared/relevant
+widths and show that each safety predicate is observably latch-state dependent.
+
+The benchmark fixes every relevant input at every frame and releases one input
+only at the terminal frame. CQ-SAT/GCC and persistent CDCL therefore solve the
+same constrained temporal transcript; maintained Yosys independently confirms
+each existential result. Ten trials, 100 in-process queries per trial:
+
+| Controller | Inputs | H8 | H16 | H32 | H64 |
+|---|---:|---:|---:|---:|---:|
+| Interrupt arbiter | 9 | 1.54x | 1.92x | 2.15x | 2.35x |
+| Actuator interlock | 12 | 0.97x | 1.28x | 1.48x | 1.60x |
+| Sensor fusion | 16 | 0.81x | 1.05x | 1.21x | 1.40x |
+
+These are median end-to-end ratios versus persistent CDCL, including each
+backend's compilation/setup. The actuator H8 and sensor-fusion H8/H16 rows do
+not establish a robust win. The exact raw summary is
+[`dense-predicate-product-matrix-v1.csv`](../results/dense-predicate-product-matrix-v1.csv)
+and can be regenerated with `scripts/run-dense-predicate-product-matrix.sh`.

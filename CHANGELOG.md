@@ -8,6 +8,10 @@
   results remain negative; 100 and 1,000 reuses show positive amortisation. Add
   a maintained-Yosys existential bounded-query agreement baseline with
   separately labelled process-level timing.
+- Add three state-dependent product fixtures spanning 9, 12, and 16 relevant
+  inputs, reproducible RTL-to-AIGER synthesis, and a 120-row constrained
+  temporal matrix against persistent CDCL and Yosys. Preserve the negative
+  short-horizon actuator/sensor-fusion results as an admission boundary.
 
 ## 0.27.0 - 2026-07-18
 

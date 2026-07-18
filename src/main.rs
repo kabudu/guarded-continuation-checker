@@ -14808,7 +14808,10 @@ fn benchmark_aiger_predicate_symbolic(
     let compile_start = Instant::now();
     let mut quotient = PredicateQuotient::new(&model)?;
     let predicate_compile_ns = compile_start.elapsed().as_nanos();
-    let constraints = vec![vec![None; quotient.interface.projected_inputs.len()]; horizon + 1];
+    let mut constraints =
+        vec![vec![Some(true); quotient.interface.projected_inputs.len()]; horizon + 1];
+    let released = quotient.interface.projected_inputs.len() - 1;
+    constraints[horizon][released] = Some(false);
     let query_start = Instant::now();
     for _ in 0..repeats {
         let witness = quotient
@@ -14828,15 +14831,71 @@ fn benchmark_aiger_predicate_symbolic(
     }
     let predicate_query_ns = query_start.elapsed().as_nanos();
 
-    let mut script = format!("read_aiger {path}; hierarchy -auto-top;");
-    for _ in 0..repeats {
-        script.push_str(&format!(
-            " sat -seq {} -set-at {} {} 0;",
-            horizon + 1,
-            horizon + 1,
-            output_name
-        ));
+    let persistent_encoding_start = Instant::now();
+    let encoding = aag_bmc_encoding(&model, horizon)?;
+    let persistent_encoding_ns = persistent_encoding_start.elapsed().as_nanos();
+    let query = encoding
+        .queries
+        .iter()
+        .find(|query| query.frame == horizon && query.output == 0)
+        .ok_or_else(|| "predicate symbolic benchmark is missing its terminal query".to_string())?;
+    let persistent_setup_start = Instant::now();
+    let mut persistent = Solver::new();
+    add_to_varisat(&mut persistent, &encoding.clauses);
+    let persistent_setup_ns = persistent_setup_start.elapsed().as_nanos();
+    let mut assumptions = vec![None; encoding.variables];
+    for (frame, frame_constraints) in constraints.iter().enumerate() {
+        for (projected, required) in frame_constraints.iter().enumerate() {
+            let input = quotient.interface.projected_inputs[projected];
+            assumptions[frame * model.max_variable + model.inputs[input] / 2 - 1] = *required;
+        }
     }
+    let unconditional = add_causal_counterfactual_assumption(&mut assumptions, query.assumption)?;
+    if unconditional {
+        return Err("predicate symbolic benchmark requires a non-constant output".to_string());
+    }
+    let persistent_query_start = Instant::now();
+    for _ in 0..repeats {
+        if !solve_causal_persistent(&mut persistent, &assumptions)? {
+            return Err(
+                "persistent CDCL disagrees with the avoiding predicate witness".to_string(),
+            );
+        }
+    }
+    let persistent_query_ns = persistent_query_start.elapsed().as_nanos();
+
+    let projected_names = quotient
+        .interface
+        .projected_inputs
+        .iter()
+        .map(|input| {
+            model
+                .input_names
+                .get(*input)
+                .filter(|name| {
+                    !name.is_empty()
+                        && name.chars().all(|character| {
+                            character.is_ascii_alphanumeric() || "_.$[]".contains(character)
+                        })
+                })
+                .ok_or_else(|| {
+                    "predicate symbolic benchmark requires safe named relevant inputs".to_string()
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut script = format!("read_aiger {path}; hierarchy -auto-top;");
+    script.push_str(&format!(" sat -seq {}", horizon + 1));
+    for (frame, frame_constraints) in constraints.iter().enumerate() {
+        for (projected, required) in frame_constraints.iter().enumerate() {
+            script.push_str(&format!(
+                " -set-at {} {} {}",
+                frame + 1,
+                projected_names[projected],
+                usize::from(required.unwrap())
+            ));
+        }
+    }
+    script.push_str(&format!(" -set-at {} {} 0;", horizon + 1, output_name));
     let yosys_start = Instant::now();
     let yosys = Command::new("yosys")
         .args(["-Q", "-p", &script])
@@ -14853,17 +14912,21 @@ fn benchmark_aiger_predicate_symbolic(
     let models = stdout
         .matches("SAT solving finished - model found:")
         .count();
-    if models != repeats {
+    if models != 1 {
         return Err(format!(
-            "maintained Yosys symbolic baseline returned {models} SAT results; expected {repeats}"
+            "maintained Yosys symbolic baseline returned {models} SAT results; expected 1"
         ));
     }
     let predicate_total_ns = predicate_compile_ns.saturating_add(predicate_query_ns);
+    let persistent_total_ns = persistent_encoding_ns
+        .saturating_add(persistent_setup_ns)
+        .saturating_add(persistent_query_ns);
     let body = format!(
-        "predicate_symbolic_schema_version,input_sha256,horizon,repeats,relevant_inputs,bdd_nodes,predicate_compile_ns,predicate_query_ns,predicate_total_ns,yosys_version,yosys_total_ns,yosys_over_predicate_speedup,agreement,witness_valid,status\n1,{},{horizon},{repeats},{},{},{predicate_compile_ns},{predicate_query_ns},{predicate_total_ns},{},{yosys_ns},{:.6},true,true,ok\n",
+        "predicate_symbolic_schema_version,input_sha256,horizon,repeats,relevant_inputs,bdd_nodes,predicate_compile_ns,predicate_query_ns,predicate_total_ns,persistent_encoding_ns,persistent_setup_ns,persistent_query_ns,persistent_total_ns,persistent_over_predicate_speedup,yosys_version,yosys_repeats,yosys_total_ns,yosys_over_predicate_speedup,agreement,witness_valid,status\n3,{},{horizon},{repeats},{},{},{predicate_compile_ns},{predicate_query_ns},{predicate_total_ns},{persistent_encoding_ns},{persistent_setup_ns},{persistent_query_ns},{persistent_total_ns},{:.6},{},1,{yosys_ns},{:.6},true,true,ok\n",
         sha256_file(&canonical)?,
         quotient.interface.projected_inputs.len(),
         quotient.interface.manager.nodes.len(),
+        persistent_total_ns as f64 / predicate_total_ns.max(1) as f64,
         report_csv_field(
             &String::from_utf8_lossy(
                 &Command::new("yosys")
@@ -28072,7 +28135,111 @@ mod tests {
         fs::remove_file(output).unwrap();
         assert_eq!(report.lines().count(), 2);
         assert!(report.contains(",true,true,ok\n"));
-        assert!(report.lines().all(|line| line.split(',').count() == 15));
+        assert!(report.lines().all(|line| line.split(',').count() == 21));
+    }
+
+    #[test]
+    fn dense_product_fixtures_have_exact_width_and_state_dependent_properties() {
+        let cases = [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                10,
+                9,
+                2,
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                13,
+                12,
+                3,
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                17,
+                16,
+                4,
+            ),
+        ];
+        for (relative, declared, relevant, latches) in cases {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+            let model = parse_aag(&path).unwrap();
+            let predicate = AagPredicateInterface::compile(&model).unwrap();
+            assert_eq!(model.inputs.len(), declared);
+            assert_eq!(predicate.projected_inputs.len(), relevant);
+            assert_eq!(model.latches.len(), latches);
+            assert!(predicate.manager.nodes.len() < 500);
+
+            let state_mask = (1usize << latches) - 1;
+            let mut state_observable = false;
+            for declared_input in 0..(1u64 << declared) {
+                let evaluate = |state: usize| {
+                    let mut values = vec![false; model.max_variable + 1];
+                    for (bit, latch) in model.latches.iter().enumerate() {
+                        values[latch.current / 2] = state >> bit & 1 == 1;
+                    }
+                    for (input, literal) in model.inputs.iter().enumerate() {
+                        values[literal / 2] = declared_input >> input & 1 == 1;
+                    }
+                    for gate in &model.ands {
+                        values[gate.output / 2] = evaluate_aag_literal(gate.left, &values)
+                            && evaluate_aag_literal(gate.right, &values);
+                    }
+                    evaluate_aag_literal(model.outputs[0], &values)
+                };
+                if evaluate(0) != evaluate(state_mask) {
+                    state_observable = true;
+                    break;
+                }
+            }
+            assert!(
+                state_observable,
+                "property is not state dependent: {relative}"
+            );
+        }
+    }
+
+    #[test]
+    fn predicate_quotient_fails_closed_outside_static_resource_bounds() {
+        let too_narrow = parse_aiger_bytes(&dense_support_aiger_fixture(8)).unwrap();
+        assert!(
+            AagPredicateInterface::compile(&too_narrow)
+                .err()
+                .unwrap()
+                .contains("requires 9..=16 relevant inputs")
+        );
+
+        let mut five_latches = String::from("aag 22 9 5 1 8\n");
+        for variable in 1..=9 {
+            five_latches.push_str(&format!("{}\n", variable * 2));
+        }
+        for variable in 10..=14 {
+            five_latches.push_str(&format!("{} 2 0\n", variable * 2));
+        }
+        five_latches.push_str("44\n");
+        let mut accumulated = 2;
+        for (gate, input) in (2..=9).enumerate() {
+            let output = (15 + gate) * 2;
+            five_latches.push_str(&format!("{output} {accumulated} {}\n", input * 2));
+            accumulated = output;
+        }
+        let too_stateful = parse_aiger_bytes(five_latches.as_bytes()).unwrap();
+        assert!(
+            AagPredicateInterface::compile(&too_stateful)
+                .err()
+                .unwrap()
+                .contains("requires 1..=4 latches")
+        );
+
+        assert!(
+            benchmark_aiger_predicate_symbolic(
+                Path::new("unused"),
+                INTERFACE_QUOTIENT_MAX_HORIZON + 1,
+                1,
+                Path::new("unused")
+            )
+            .unwrap_err()
+            .contains("horizon exceeds")
+        );
     }
 
     #[test]

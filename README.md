@@ -117,6 +117,12 @@ An external maintained-Yosys bounded-query check also agrees across ten trials;
 its process-level timing is reported separately and is not treated as an
 in-process solver comparison.
 
+A broader state-dependent matrix now covers 9-input interrupt arbitration,
+12-input actuator interlocks, and 16-input sensor fusion. Across horizons 8–64,
+median end-to-end ratios against persistent CDCL range from 0.81x to 2.35x,
+with exact Yosys agreement and original-AIG witness replay. The retained
+negative low-horizon rows define the current admission boundary.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored
