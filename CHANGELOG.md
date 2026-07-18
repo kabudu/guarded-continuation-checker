@@ -61,6 +61,11 @@
   proof transformations. Structurally preflight proof integers, dimensions,
   lists and termination before the third-party checker and convert unexpected
   dependency failures into fail-closed verification errors.
+- Freeze predicate CLI contract v1 with a strict machine-readable version query
+  declaring certificate/proof formats and bounded dimensions. Stabilise command
+  arguments and exit meanings, distinguish the portfolio's v1 format from
+  explicit v2 operation, and define migration plus a multi-release deprecation
+  window.
 
 ## 0.28.0 - 2026-07-18
 

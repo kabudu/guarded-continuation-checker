@@ -8672,6 +8672,8 @@ const PREDICATE_CERTIFICATE_MAX_EVALUATIONS: usize = 80_000_000;
 const PREDICATE_CERTIFICATE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_VERSION: usize = 1;
 const PREDICATE_CERTIFICATE_V2_VERSION: usize = 2;
+const PREDICATE_CLI_CONTRACT_VERSION: usize = 1;
+const PREDICATE_CERTIFICATE_V2_PROOF_FORMAT: &str = "varisat-native-0.2.2";
 const PREDICATE_CERTIFICATE_V2_MAX_BYTES: u64 = 16 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES: usize = 1024 * 1024;
 const PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES: usize = 8 * 1024 * 1024;
@@ -10091,7 +10093,7 @@ fn predicate_certificate_v2_body(certificate: &PredicateCertificateV2) -> String
     let mut lines = vec![
         format!("predicate_certificate_version={PREDICATE_CERTIFICATE_V2_VERSION}"),
         "semantics=bounded-terminal-bad-avoidance".to_string(),
-        "proof_format=varisat-native-0.2.2".to_string(),
+        format!("proof_format={PREDICATE_CERTIFICATE_V2_PROOF_FORMAT}"),
         format!("input_sha256={}", certificate.input_sha256),
         format!("declared_inputs={}", certificate.declared_inputs),
         format!("relevant_inputs={}", certificate.relevant_inputs.len()),
@@ -10432,7 +10434,7 @@ fn parse_predicate_certificate_v2(path: &Path) -> Result<PredicateCertificateV2,
         "predicate_certificate_version",
     )? != PREDICATE_CERTIFICATE_V2_VERSION
         || reader.take("semantics")? != "bounded-terminal-bad-avoidance"
-        || reader.take("proof_format")? != "varisat-native-0.2.2"
+        || reader.take("proof_format")? != PREDICATE_CERTIFICATE_V2_PROOF_FORMAT
     {
         return Err("unsupported predicate certificate v2 contract".to_string());
     }
@@ -22046,11 +22048,24 @@ fn benchmark_corpus_isolated(
     Ok(())
 }
 
+fn predicate_cli_contract_line() -> String {
+    format!(
+        "predicate_cli_version={PREDICATE_CLI_CONTRACT_VERSION} certificate_versions={PREDICATE_CERTIFICATE_VERSION},{PREDICATE_CERTIFICATE_V2_VERSION} portfolio_certificate_version={PREDICATE_CERTIFICATE_VERSION} proof_format={PREDICATE_CERTIFICATE_V2_PROOF_FORMAT} min_relevant_inputs={PREDICATE_INTERFACE_MIN_INPUTS} max_relevant_inputs={PREDICATE_INTERFACE_MAX_INPUTS} max_latches={PREDICATE_INTERFACE_MAX_LATCHES} max_horizon={INTERFACE_QUOTIENT_MAX_HORIZON} max_certificate_v2_bytes={PREDICATE_CERTIFICATE_V2_MAX_BYTES} max_proof_bytes={PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES} max_total_proof_bytes={PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES}"
+    )
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
     };
     match command {
+        "predicate-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: continuation-quotient-sat predicate-cli-version".to_string());
+            }
+            println!("{}", predicate_cli_contract_line());
+            Ok(true)
+        }
         "explain-aiger-counterexample" => {
             if args.len() != 5 {
                 return Err("usage: continuation-quotient-sat explain-aiger-counterexample INPUT.aag HORIZON MAX_BOUND_BITS OUTPUT_DIR".to_string());
@@ -31711,6 +31726,23 @@ mod tests {
         fs::remove_file(certificate_path).unwrap();
         fs::remove_file(duplicate_path).unwrap();
         fs::remove_file(unsafe_certificate).unwrap();
+    }
+
+    #[test]
+    fn predicate_cli_v1_contract_is_machine_readable_and_strict() {
+        assert_eq!(
+            predicate_cli_contract_line(),
+            "predicate_cli_version=1 certificate_versions=1,2 portfolio_certificate_version=1 proof_format=varisat-native-0.2.2 min_relevant_inputs=9 max_relevant_inputs=16 max_latches=4 max_horizon=64 max_certificate_v2_bytes=16777216 max_proof_bytes=1048576 max_total_proof_bytes=8388608"
+        );
+        assert!(run_artifact_cli(&["predicate-cli-version".to_string()]).unwrap());
+        assert!(
+            run_artifact_cli(&[
+                "predicate-cli-version".to_string(),
+                "unexpected".to_string(),
+            ])
+            .unwrap_err()
+            .contains("usage:")
+        );
     }
 
     #[test]

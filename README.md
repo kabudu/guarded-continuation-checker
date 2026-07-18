@@ -113,6 +113,13 @@ broader performance gates are still open. Its documented
 corrupted artifacts, structural proof preflight and fail-closed dependency
 errors; process-level resource limits and checker diversity remain open.
 
+Firmware automation can discover the frozen
+[predicate CLI contract v1](docs/PREDICATE_CLI_V1.md) with
+`predicate-cli-version`. Its single machine-readable line declares supported
+certificate formats, the portfolio format, proof format and all primary v2
+dimension and evidence limits. The contract also fixes argument order, exit
+meanings, migration rules and a multi-release deprecation window.
+
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,
 persistent CDCL, and admitted CQ. It records the negative result that CQ does
