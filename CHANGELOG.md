@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add strict original-format binary AIGER (`aig`) ingestion to every AIGER
+  command, with bounded delta decoding and semantic parity tests against ASCII.
+- Add a compile-once causal batch experiment over every reachable bounded
+  failure target, three observation vocabularies, bounded enumeration of
+  distinct 1-minimal causes, identical persistent-CDCL/CQ transcript replay,
+  break-even reporting, atomic publication, and an independent cause verifier.
 - Tighten the causal-analysis novelty boundary against prior work on minimal
   BMC assignments, causal counterexample explanation, compiled Boolean
   explanation, and interval-based counterexample analysis.

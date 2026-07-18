@@ -18,7 +18,7 @@ Run the exact portfolio benchmark:
   results/local-aiger-counter-safety.txt
 ```
 
-The importer validates the ASCII AIGER structure, converts the repeated latch
+The importer validates the AIGER structure, converts the repeated latch
 transition into exact layered CNF, fixes the declared initial latch state, and
 turns the model's bad-state output into exhaustive reachability queries through
 frame 137. It reports `UNSAFE` at frame 15 and writes a complete latch trace;
@@ -67,7 +67,7 @@ Both input-driven files come from the same upstream repository and pinned
 revision as the counter model. Copyright © 2023 Tobias Nießen; the bundled
 [`LICENSE`](LICENSE) applies.
 
-The current external boundary is original five-field ASCII `aag`, at least one
-latch, declared outputs interpreted as bad-state detectors, and hard variable and
-clause limits. Extended AIGER 1.9 sections and binary `.aig` are rejected rather
-than interpreted incompletely.
+The current external boundary is original five-field ASCII `aag` or binary
+`aig`, at least one latch, declared outputs interpreted as bad-state detectors,
+and hard variable and clause limits. Extended AIGER 1.9 sections are rejected
+rather than interpreted incompletely.

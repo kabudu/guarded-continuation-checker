@@ -80,6 +80,13 @@ deletion and QuickXplain intervention transcripts through fresh CDCL,
 persistent CDCL, and admitted CQ. It records the negative result that CQ does
 not amortise its preparation cost on the current cohort.
 
+The follow-on [compile-once causal batch](docs/CAUSAL_BATCH.md) shares one
+maximum-horizon CNF and, when structurally admitted, one continuation quotient
+across every reachable `(frame, bad-output)` target. It enumerates a bounded set
+of distinct 1-minimal causes over segment, point, and dyadic observation
+vocabularies and measures actual and projected break-even against persistent
+CDCL. A separate command replays every published cause from the source model.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored
@@ -199,7 +206,7 @@ retention or downstream processing:
 Schema v4 additionally rejects modified or symlinked indexed evidence. SHA-256
 detects changes relative to a trusted manifest; it is not a signature. See the
 [security policy and threat model](SECURITY.md) before evaluating untrusted RTL.
-Direct ASCII AIGER inputs are capped at 256 MiB. CI also runs 25,000 deterministic
+Direct AIGER inputs are capped at 256 MiB. CI also runs 25,000 deterministic
 mutations over persistent AIGER, assumptions, project-config, and CLI corpora.
 
 The product-facing commands follow
@@ -227,7 +234,8 @@ BMC. It reports both strategies even when reuse loses.
 
 ### Standard AIGER safety verification
 
-The portfolio ingests ASCII AIGER safety models directly. Closed models inside
+The portfolio ingests original five-field ASCII (`aag`) and binary (`aig`)
+AIGER safety models directly. Closed models inside
 the bounded deterministic regime remain eligible for CQ-SAT/GCC; primary-input
 or wider models are sent directly to an exact Tseitin-unrolled CDCL backend.
 
@@ -254,10 +262,12 @@ through frame 100 for every scheduler and signal sequence, and an
 shortest 17-frame input/latch trace. These independently sourced models exercise
 the scalable fallback on real protocol and hardware semantics.
 
-The current importer supports the original five-field ASCII `aag` format,
-arbitrary primary inputs, declared latch initial values, multiple bad outputs,
-and a bounded resource envelope. Extended AIGER 1.9 property sections and binary
-`.aig` input are not yet supported.
+The importer supports the original five-field ASCII `aag` and binary `aig`
+formats, arbitrary primary inputs, declared latch initial values, multiple bad
+outputs, symbols/comments, and a bounded resource envelope. Binary inputs use
+implicit input/latch/AND literals and checked little-endian base-128 delta
+decoding before passing through the same topology and semantic validator as
+ASCII. Extended AIGER 1.9 property sections are not yet supported.
 
 ## Build and test
 
