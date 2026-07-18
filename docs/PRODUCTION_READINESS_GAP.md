@@ -18,6 +18,17 @@ sufficient.
 | Operational guidance | Evaluation and isolation documentation | Installation, sizing, failure handling, upgrade/rollback and incident-response runbooks | Open |
 | Release governance | Claim-bounded tagged releases | Production release checklist requires every row above closed or explicitly excludes the capability from production support | Open |
 
+## Event-contract experimental boundary
+
+Event-contract v1 is not a production-supported interface. It has exact
+agreement and replay evidence across three product-shaped fixtures, strict
+parser bounds, and explicit negative performance data. It does not yet have a
+stable public API, certificate format, independent whole-contract verifier,
+portfolio fallback integration, parser mutation corpus, hard per-invocation
+resource governance, compatibility commitment, public-design evidence, or
+external acceptance evidence. These gates must close before event contracts can
+change any production-readiness row above.
+
 ## Rules
 
 - No timing-based per-formula calibration.

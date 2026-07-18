@@ -1,0 +1,16 @@
+event_contract_version=1
+horizon=8
+phase_count=2
+phase_0=0,4
+phase_0_clause_count=3
+phase_0_clause_0=irq[0]|irq[1]|irq[2]|irq[3]|irq[4]|irq[5]|irq[6]|irq[7]
+phase_0_clause_1=!irq[0]|!irq[1]
+phase_0_clause_2=!mask_override|irq[7]
+phase_1=4,4
+phase_1_clause_count=3
+phase_1_clause_0=irq[0]|irq[1]|irq[2]|irq[3]|irq[4]|irq[5]|irq[6]|irq[7]
+phase_1_clause_1=!irq[6]|!irq[7]
+phase_1_clause_2=mask_override|!irq[7]
+terminal_clause_count=2
+terminal_clause_0=!irq[0]|!irq[7]
+terminal_clause_1=!mask_override|irq[7]

@@ -200,6 +200,14 @@ median end-to-end ratios against persistent CDCL range from 0.81x to 2.35x,
 with exact Yosys agreement and original-AIG witness replay. The retained
 negative low-horizon rows define the current admission boundary.
 
+The bounded [event-contract experiment](docs/EVENT_CONTRACT_EXPERIMENT.md)
+extends phase predicates from input cubes to strict named CNF. It exactly
+preserves mutual-exclusion, priority, interlock, and recovery rules through
+phase composition and concrete witness replay. All 30 release-mode rows agree
+with independently encoded persistent CDCL, but CQ-SAT is 1.09x to 36.20x
+slower on the current three-product cohort. This is a semantic capability with
+a retained negative performance result, not a portfolio or novelty claim.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored
@@ -544,8 +552,7 @@ users may supply independently obtained DIMACS files to reproduce corpus scans.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE). The patent grant is appropriate for
-an algorithmic research implementation intended for possible later reuse.
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Citation
 

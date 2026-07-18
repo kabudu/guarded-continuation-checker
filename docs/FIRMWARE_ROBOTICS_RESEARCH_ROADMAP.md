@@ -40,9 +40,13 @@ close either register by itself.
    certificates for leaf projection, relational composition, semantic no-op
    updates, and recovered traces.
 
-4. **Firmware task and interrupt semantics.** Add bounded scheduling interfaces
-   for interrupts, watchdogs, DMA, shared peripherals, priority inversion, and
-   race-triggered safety properties.
+4. **Firmware task and interrupt semantics (first exact event-contract slice
+   implemented experimentally).** Strict named CNF now preserves non-cube
+   interrupt, interlock, and recovery rules through bounded phase composition,
+   CDCL agreement, and direct-AIG witness replay. The three-product performance
+   result is negative at 1.09x to 36.20x slower than CDCL. Certificate v3,
+   timing-free portfolio admission, watchdog/DMA/shared-peripheral semantics,
+   and public design evidence remain open.
 
 5. **Word-level BTOR2 interfaces.** Preserve bit-vector arithmetic, counters,
    timers, memory indices, and saturating control laws before bit blasting.
