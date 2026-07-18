@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.25.0 - 2026-07-18
+
 - Add strict original-format binary AIGER (`aig`) ingestion to every AIGER
   command, with bounded delta decoding and semantic parity tests against ASCII.
 - Add a compile-once causal batch experiment over every reachable bounded
