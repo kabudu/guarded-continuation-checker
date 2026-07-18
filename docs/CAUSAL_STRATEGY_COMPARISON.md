@@ -18,15 +18,51 @@ inventions:
 - [Fault Localization on Verification Witnesses](https://www.sosy-lab.org/research/pub/2024-SPIN.Fault_Localization_on_Verification_Witnesses.pdf)
   applies MaxSat, MinUnsat, and arbitrary-UNSAT techniques to reduce software
   verification witnesses and evaluates them at substantial scale.
+- Ravi and Somenzi's
+  [Minimal Assignments for Bounded Model Checking](https://doi.org/10.1007/978-3-540-24730-2_3)
+  (TACAS 2004) already formulates succinct BMC counterexamples as minimal
+  assignments over signal values at times. Minimal temporal trace assignments
+  are therefore not new here.
+- Beer, Ben-David, Chockler, Orni, and Trefler's
+  [Explaining Counterexamples Using Causality](https://doi.org/10.1007/978-3-642-02658-4_11)
+  (CAV 2009) already defines causes on counterexample traces and reports an IBM
+  formal-verification implementation. Causal counterexample highlighting is
+  therefore not new here.
+- Huang et al.'s
+  [Efficient Explanations for Knowledge Compilation Languages](https://arxiv.org/abs/2107.01654)
+  (2021) already computes subset-minimal explanations by conditioning compiled
+  Boolean representations. Compiled repeated-query explanation is therefore
+  not new here.
+- [Interval-based Counterexample Analysis for Error Explanation](https://doi.org/10.2197/ipsjjip.29.630)
+  (2021) combines BMC, BDDs, and AllSAT to derive compact interval explanations.
+  Compact interval vocabularies and BDD-backed explanation are established
+  directions, although its intervals describe integer values rather than the
+  maximal constant waveform segments used here.
 - Incremental SAT, assumption queries, bounded model checking, minimal UNSAT
   reasoning, and replayable verification witnesses are all established areas.
 
-The narrower research hypothesis tested here is whether a continuation quotient
-is a useful reusable decision representation for the exact intervention queries
-generated while minimising **temporal primary-input waveform segments**, and
-whether that comparison can be bound to a machine-verifiable causal artifact.
-The repository does not yet establish that this complete combination is a novel
-scholarly contribution.
+The narrower research hypothesis tested here is whether maximal constant
+primary-input waveform segments provide a useful intervention vocabulary,
+whether a continuation quotient is a useful reusable decision representation
+for the resulting exact queries, and whether one recorded query transcript can
+be cross-checked through independent backends and bound to a deterministic
+machine-verifiable artifact. The repository does not establish that this
+integration is a novel scholarly contribution.
+
+| CQ-SAT/GCC element | Closest established work | Defensible status |
+| --- | --- | --- |
+| Minimal signal/time observations | Ravi and Somenzi (2004) | established |
+| Causes on model-checking traces | Beer et al. (2009) | established |
+| Divide-and-conquer minimal conflict | QuickXplain (2004) | established |
+| Explanations by conditioning compiled logic | Huang et al. (2021) | established |
+| Compact interval explanation | Ogawa et al. (2021) | adjacent established work |
+| Maximal constant waveform-segment vocabulary | no exact match identified in this bounded search | potentially distinctive, unproven |
+| Identical transcript replay across fresh CDCL, persistent CDCL, and CQ | no exact match identified in this bounded search | potentially distinctive, unproven |
+| Atomic digest-bound comparison artifact with independent minimality phase | no exact match identified in this bounded search | potentially distinctive, unproven |
+
+“No exact match identified” is a search result, not proof of novelty. Patent
+search, citation chaining, broader database coverage, and independent expert
+review remain necessary before any novelty claim.
 
 The SPIN work operates on software-witness statements and has its own
 reproduction artifact. CQ-SAT/GCC operates on AIGER input waveform segments.

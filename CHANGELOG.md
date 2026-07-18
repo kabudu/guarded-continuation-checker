@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Tighten the causal-analysis novelty boundary against prior work on minimal
+  BMC assignments, causal counterexample explanation, compiled Boolean
+  explanation, and interval-based counterexample analysis.
+
 ## 0.24.0 - 2026-07-18
 
 - Add a bounded closest-method causal benchmark comparing ordered deletion and
