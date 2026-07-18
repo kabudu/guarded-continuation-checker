@@ -35,6 +35,11 @@
   evidence that proof publication costs 10–13 ms and exhaustive checking reaches
   136 ms at 16 inputs despite sub-1-KiB certificates, establishing a concrete
   non-enumerative-checker target without claiming an external-tool comparison.
+- Add a certificate-v2 feasibility experiment that proves every one-step
+  relation through concrete edge witnesses and native Varisat UNSAT completeness
+  proofs checked by `varisat-checker`. Preserve ten trials across the 9/12/16
+  input cohort, including a 280.32x checker speedup at 16 inputs, proof-size and
+  generation tradeoffs, truncation rejection and omitted-edge detection.
 
 ## 0.28.0 - 2026-07-18
 

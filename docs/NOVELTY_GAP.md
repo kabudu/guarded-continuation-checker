@@ -66,3 +66,10 @@ preserves ten trials for both answer classes and records a strong negative
 result for proof overhead, especially at 16 inputs. It informs gate 4 but does
 not close it because an obligation-equivalent maintained external certifying
 tool comparison has not yet been run.
+
+The [proof-carrying one-step relation experiment](PREDICATE_PROOF_RELATION_EXPERIMENT.md)
+uses concrete edge witnesses plus checked UNSAT completeness obligations. It
+removes the measured exponential verifier bottleneck, but SAT proof carrying is
+established prior art. Any candidate novelty remains in the complete bounded
+predicate-composition contract and embedded counterfactual workflow, not in
+this proof technique alone.

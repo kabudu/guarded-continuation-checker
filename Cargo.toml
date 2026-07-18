@@ -16,3 +16,4 @@ debug = true
 libc = "0.2.186"
 sha2 = "0.11.0"
 varisat = "0.2.2"
+varisat-checker = "0.2.2"

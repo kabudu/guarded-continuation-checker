@@ -13,7 +13,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::Instant;
-use varisat::{ExtendFormula, Lit, Solver, Var};
+use varisat::{ExtendFormula, Lit, ProofFormat, Solver, Var};
+use varisat_checker::Checker as VarisatProofChecker;
 
 const RTL_ARTIFACT_SCHEMA_VERSION: usize = 4;
 const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
@@ -8671,6 +8672,7 @@ const PREDICATE_CERTIFICATE_MAX_EVALUATIONS: usize = 80_000_000;
 const PREDICATE_CERTIFICATE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const PREDICATE_CERTIFICATE_VERSION: usize = 1;
 const PREDICATE_CERTIFICATE_COST_SCHEMA_VERSION: usize = 1;
+const PREDICATE_PROOF_RELATION_SCHEMA_VERSION: usize = 1;
 
 fn predicate_quotient_admitted(
     relevant_inputs: usize,
@@ -9403,6 +9405,194 @@ impl<'a> IndependentPredicateChecker<'a> {
         }
         Ok(safe)
     }
+}
+
+fn predicate_relation_completeness_clauses(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    source: usize,
+    constraints: &[Option<bool>],
+    claimed_targets: u16,
+) -> Result<Vec<Clause>, String> {
+    if constraints.len() != relevant_inputs.len()
+        || model.latches.len() > u16::BITS as usize
+        || source >= 1usize << model.latches.len()
+    {
+        return Err("predicate proof obligation dimensions mismatch".to_string());
+    }
+    let mut clauses = Vec::with_capacity(
+        model.ands.len() * 3
+            + model.latches.len()
+            + constraints.len()
+            + claimed_targets.count_ones() as usize,
+    );
+    for (bit, latch) in model.latches.iter().enumerate() {
+        push_simplified_clause(
+            &mut clauses,
+            &[AagCnfLiteral::Variable((
+                latch.current / 2 - 1,
+                source >> bit & 1 == 1,
+            ))],
+        );
+    }
+    for (projected, required) in constraints.iter().enumerate() {
+        if let Some(value) = required {
+            let input = relevant_inputs[projected];
+            push_simplified_clause(
+                &mut clauses,
+                &[AagCnfLiteral::Variable((
+                    model.inputs[input] / 2 - 1,
+                    *value,
+                ))],
+            );
+        }
+    }
+    for gate in &model.ands {
+        let output = aag_cnf_literal(model, 0, gate.output);
+        let left = aag_cnf_literal(model, 0, gate.left);
+        let right = aag_cnf_literal(model, 0, gate.right);
+        push_simplified_clause(&mut clauses, &[output.negate(), left]);
+        push_simplified_clause(&mut clauses, &[output.negate(), right]);
+        push_simplified_clause(&mut clauses, &[output, left.negate(), right.negate()]);
+    }
+    for target in 0..(1usize << model.latches.len()) {
+        if claimed_targets & (1u16 << target) == 0 {
+            continue;
+        }
+        let differs = model
+            .latches
+            .iter()
+            .enumerate()
+            .map(|(bit, latch)| {
+                let next = aag_cnf_literal(model, 0, latch.next);
+                if target >> bit & 1 == 1 {
+                    next.negate()
+                } else {
+                    next
+                }
+            })
+            .collect::<Vec<_>>();
+        push_simplified_clause(&mut clauses, &differs);
+    }
+    Ok(clauses)
+}
+
+fn generate_varisat_unsat_proof(clauses: &[Clause]) -> Result<Vec<u8>, String> {
+    let mut proof = Vec::new();
+    {
+        let mut solver = Solver::new();
+        solver.write_proof(&mut proof, ProofFormat::Varisat);
+        add_to_varisat(&mut solver, clauses);
+        if solver
+            .solve()
+            .map_err(|error| format!("solve predicate proof obligation: {error}"))?
+        {
+            return Err("predicate completeness obligation is satisfiable".to_string());
+        }
+        solver
+            .close_proof()
+            .map_err(|error| format!("close predicate proof obligation: {error}"))?;
+    }
+    Ok(proof)
+}
+
+fn verify_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
+    let mut checker = VarisatProofChecker::new();
+    for clause in clauses {
+        let literals = clause
+            .0
+            .iter()
+            .map(|&(variable, positive)| Lit::from_var(Var::from_index(variable), positive))
+            .collect::<Vec<_>>();
+        checker
+            .add_clause(&literals)
+            .map_err(|error| format!("load predicate proof obligation: {error}"))?;
+    }
+    checker
+        .check_proof(proof)
+        .map_err(|error| format!("check predicate proof obligation: {error}"))
+}
+
+#[derive(Debug)]
+struct PredicateProofRelationMetrics {
+    relation: Vec<u16>,
+    witness_count: usize,
+    proof_bytes: usize,
+    producer_ns: u128,
+    generation_ns: u128,
+    verification_ns: u128,
+}
+
+fn predicate_proof_relation_experiment(
+    model: &AagModel,
+    constraints: &[Option<bool>],
+) -> Result<PredicateProofRelationMetrics, String> {
+    let producer_start = Instant::now();
+    let mut quotient = PredicateQuotient::new(model)?;
+    let relation = quotient.relation(constraints)?;
+    let rows = relation
+        .rows
+        .iter()
+        .map(|row| row[0] as u16)
+        .collect::<Vec<_>>();
+    let producer_ns = producer_start.elapsed().as_nanos();
+    let mut proofs = Vec::with_capacity(rows.len());
+    let mut witness_inputs = Vec::new();
+    let generation_start = Instant::now();
+    for (source, &targets) in rows.iter().enumerate() {
+        if targets == 0 {
+            return Err("predicate proof relation unexpectedly has no target".to_string());
+        }
+        for target in 0..rows.len() {
+            if targets & (1u16 << target) != 0 {
+                let witness = quotient
+                    .interface
+                    .witness_input(source, Some(target), None, constraints)?
+                    .ok_or_else(|| "predicate proof relation edge lacks witness".to_string())?;
+                witness_inputs.push((source, target, witness));
+            }
+        }
+        let clauses = predicate_relation_completeness_clauses(
+            model,
+            &quotient.interface.projected_inputs,
+            source,
+            constraints,
+            targets,
+        )?;
+        let proof = generate_varisat_unsat_proof(&clauses)?;
+        proofs.push((clauses, proof));
+    }
+    let generation_ns = generation_start.elapsed().as_nanos();
+    let proof_bytes = proofs.iter().map(|(_, proof)| proof.len()).sum();
+
+    let verification_start = Instant::now();
+    let mut checker = IndependentPredicateChecker::new(model)?;
+    for &(source, target, input) in &witness_inputs {
+        let (actual_target, _) = checker.evaluate(source, input)?;
+        if actual_target != target
+            || checker
+                .relevant_inputs
+                .iter()
+                .enumerate()
+                .any(|(bit, declared)| {
+                    constraints[bit].is_some_and(|value| (input >> declared & 1 == 1) != value)
+                })
+        {
+            return Err("predicate proof relation witness is invalid".to_string());
+        }
+    }
+    for (clauses, proof) in &proofs {
+        verify_varisat_unsat_proof(clauses, proof)?;
+    }
+    let verification_ns = verification_start.elapsed().as_nanos();
+    Ok(PredicateProofRelationMetrics {
+        relation: rows,
+        witness_count: witness_inputs.len(),
+        proof_bytes,
+        producer_ns,
+        generation_ns,
+        verification_ns,
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -10485,6 +10675,59 @@ fn benchmark_aiger_predicate_certificate_cost(
     publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
     println!(
         "predicate-certificate-cost status=VALID trials={repeats} output={}",
+        output.display()
+    );
+    Ok(())
+}
+
+fn benchmark_aiger_predicate_proof_relation(
+    input: &Path,
+    transcript: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=100).contains(&repeats) {
+        return Err("predicate proof relation repeats must be in 1..=100".to_string());
+    }
+    if output.exists() {
+        return Err("predicate proof relation refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let frames = parse_predicate_transcript(transcript, relevant_inputs.len())?;
+    if frames.iter().any(|frame| frame != &frames[0]) {
+        return Err(
+            "predicate proof relation benchmark requires one repeated constraint phase".to_string(),
+        );
+    }
+    let constraints = &frames[0];
+    let input_sha256 = sha256_file(input)?;
+    let transcript_sha256 = sha256_file(transcript)?;
+    let mut lines = vec!["schema_version,input_sha256,transcript_sha256,relevant_inputs,latches,trial,producer_relation_ns,proof_generate_ns,proof_verify_ns,exhaustive_verify_ns,exhaustive_evaluations,witnesses,proof_bytes,relation_agrees,status".to_string()];
+    for trial in 0..repeats {
+        let proof = predicate_proof_relation_experiment(&model, constraints)?;
+        let exhaustive_start = Instant::now();
+        let mut exhaustive = IndependentPredicateChecker::new(&model)?;
+        let exhaustive_relation = exhaustive.one_step_relation(constraints)?;
+        let exhaustive_verify_ns = exhaustive_start.elapsed().as_nanos();
+        if proof.relation != exhaustive_relation {
+            return Err("predicate proof and exhaustive relations disagree".to_string());
+        }
+        lines.push(format!(
+            "{PREDICATE_PROOF_RELATION_SCHEMA_VERSION},{input_sha256},{transcript_sha256},{},{},{trial},{},{},{},{exhaustive_verify_ns},{},{},{},true,ok",
+            relevant_inputs.len(),
+            model.latches.len(),
+            proof.producer_ns,
+            proof.generation_ns,
+            proof.verification_ns,
+            exhaustive.evaluations,
+            proof.witness_count,
+            proof.proof_bytes,
+        ));
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "predicate-proof-relation status=VALID trials={repeats} output={}",
         output.display()
     );
     Ok(())
@@ -20815,6 +21058,21 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
+        "benchmark-aiger-predicate-proof-relation" => {
+            if args.len() != 5 {
+                return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-proof-relation INPUT.aag|INPUT.aig TRANSCRIPT.txt REPEATS OUTPUT.csv".to_string());
+            }
+            let repeats = args[3]
+                .parse::<usize>()
+                .map_err(|_| "invalid predicate proof relation repeats".to_string())?;
+            benchmark_aiger_predicate_proof_relation(
+                Path::new(&args[1]),
+                Path::new(&args[2]),
+                repeats,
+                Path::new(&args[4]),
+            )?;
+            Ok(true)
+        }
         "benchmark-aiger-predicate-symbolic" => {
             if args.len() != 5 {
                 return Err("usage: continuation-quotient-sat benchmark-aiger-predicate-symbolic INPUT.aag|INPUT.aig HORIZON REPEATS OUTPUT.csv".to_string());
@@ -29795,6 +30053,78 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn predicate_relation_proofs_replace_input_enumeration_exactly() {
+        let fixtures = [
+            "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+            "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+        ];
+        for relative in fixtures {
+            let model = parse_aag(&Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)).unwrap();
+            let relevant = IndependentPredicateChecker::support(&model).unwrap();
+            let constraints = vec![None; relevant.len()];
+            let proof = predicate_proof_relation_experiment(&model, &constraints).unwrap();
+            let mut exhaustive = IndependentPredicateChecker::new(&model).unwrap();
+            assert_eq!(
+                proof.relation,
+                exhaustive.one_step_relation(&constraints).unwrap()
+            );
+            assert!(proof.witness_count >= proof.relation.len());
+            assert!(proof.proof_bytes > 0);
+            assert!(proof.generation_ns > 0);
+            assert!(proof.verification_ns > 0);
+        }
+
+        let model =
+            parse_aag(&Path::new(env!("CARGO_MANIFEST_DIR")).join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let constraints = vec![None; relevant.len()];
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        let row = quotient.relation(&constraints).unwrap().rows[0][0] as u16;
+        let clauses =
+            predicate_relation_completeness_clauses(&model, &relevant, 0, &constraints, row)
+                .unwrap();
+        let proof = generate_varisat_unsat_proof(&clauses).unwrap();
+        verify_varisat_unsat_proof(&clauses, &proof).unwrap();
+        assert!(verify_varisat_unsat_proof(&clauses, &proof[..proof.len() - 1]).is_err());
+        let omitted_target = row & (row - 1);
+        let incomplete = predicate_relation_completeness_clauses(
+            &model,
+            &relevant,
+            0,
+            &constraints,
+            omitted_target,
+        )
+        .unwrap();
+        assert!(generate_varisat_unsat_proof(&incomplete).is_err());
+
+        let stem = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-proof-relation-{}",
+            std::process::id()
+        ));
+        let transcript = stem.with_extension("transcript");
+        let output = stem.with_extension("csv");
+        fs::write(&transcript, "xxxxxxxxx\n").unwrap();
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        benchmark_aiger_predicate_proof_relation(&input, &transcript, 1, &output).unwrap();
+        let body = fs::read_to_string(&output).unwrap();
+        assert_eq!(body.lines().count(), 2);
+        assert_eq!(body.lines().nth(1).unwrap().split(',').count(), 15);
+        assert!(body.lines().nth(1).unwrap().ends_with(",true,ok"));
+        assert!(
+            benchmark_aiger_predicate_proof_relation(&input, &transcript, 1, &output)
+                .unwrap_err()
+                .contains("overwrite")
+        );
+        fs::remove_file(transcript).unwrap();
+        fs::remove_file(output).unwrap();
     }
 
     #[test]

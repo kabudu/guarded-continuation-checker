@@ -83,6 +83,10 @@ query. Its present value is independently checkable evidence. The next technical
 target is a checker obligation that avoids enumerating every projected input
 while retaining a smaller trusted base than the BDD producer.
 
+The follow-up [proof-carrying relation experiment](PREDICATE_PROOF_RELATION_EXPERIMENT.md)
+achieves that target for one-step relation reconstruction, including a 280.32x
+checker speedup at 16 inputs. It is not yet integrated into certificate v2.
+
 ## Closest-tool boundary
 
 These results compare only CQ-SAT/GCC with its Varisat control. They do not close
