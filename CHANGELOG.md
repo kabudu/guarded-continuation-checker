@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.26.0 - 2026-07-18
+
 - Add an exact Counterfactual Interface Quotient experiment for small
   input-driven firmware controllers, with interval-preserving powered relation
   summaries, semantic no-op suppression, on-demand trace reconstruction, and
