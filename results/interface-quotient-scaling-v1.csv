@@ -1,0 +1,5 @@
+interface_quotient_scaling_schema_version,horizon,trials,repeats,reachable_targets,min_workload_speedup,median_workload_speedup,max_workload_speedup,agreement,witness_valid,status
+1,8,10,100,8,1.390153,1.424122,1.470048,true,true,ok
+1,16,10,100,16,2.295427,2.381275,2.410623,true,true,ok
+1,32,10,100,32,4.074969,4.152789,4.681972,true,true,ok
+1,64,10,100,64,6.947492,7.002773,7.170735,true,true,ok

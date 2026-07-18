@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add an exact Counterfactual Interface Quotient experiment for small
+  input-driven firmware controllers, with interval-preserving powered relation
+  summaries, semantic no-op suppression, on-demand trace reconstruction, and
+  identical persistent-CDCL causal transcript replay.
+- Add an independent strict report verifier, source/coverage/tamper checks,
+  explicit resource bounds, adversarial tests, and a no-overwrite scaling
+  regeneration harness.
+- Add a ten-trial horizon-scaling result showing a 1.42x to 7.00x median
+  end-to-end speedup on the bounded infusion-pump regression, document the
+  falsified leaf-expansion and explicit-wide-input variants, and define the
+  firmware/robotics research roadmap and novelty boundary.
+
 ## 0.25.0 - 2026-07-18
 
 - Add strict original-format binary AIGER (`aig`) ingestion to every AIGER
