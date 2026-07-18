@@ -14,6 +14,32 @@ cargo build --release
 Timing results vary by CPU and operating system. Correctness criteria are exact
 agreement and witness validity; speed claims should be rerun locally.
 
+## Certified causal counterexamples
+
+Generate and separately replay-verify an atomic evidence bundle:
+
+```sh
+scripts/run-causal-analysis.sh \
+  examples/products/infusion-pump/firmware/door-interlock-regression.aag \
+  target/causal/infusion-pump 8 16
+```
+
+Verify the two checked-in research results without regenerating their timings:
+
+```sh
+target/release/continuation-quotient-sat verify-aiger-causal-bundle \
+  examples/aiger/spi-bus-receive-e-08-bits.aag \
+  results/causal-analysis-v1/spi
+
+target/release/continuation-quotient-sat verify-aiger-causal-bundle \
+  examples/products/infusion-pump/firmware/door-interlock-regression.aag \
+  results/causal-analysis-v1/infusion-pump
+```
+
+The verifier re-solves sufficiency and every 1-minimality obligation. Timing
+fields are observations from the originating host and are not expected to match.
+See [causal evidence bundle v1](CAUSAL_BUNDLE_V1.md) for the exact contract.
+
 ## Modular DIMACS result
 
 ```sh

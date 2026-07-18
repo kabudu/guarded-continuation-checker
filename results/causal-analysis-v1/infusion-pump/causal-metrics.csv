@@ -1,0 +1,2 @@
+input_sha256,requested_horizon,bad_frame,bad_output,candidates,causes,queries,cq_admitted,cq_bound_bits,cq_peak_classes,cq_compile_ns,cq_query_ns,persistent_cdcl_ns,fresh_cdcl_ns,cq_query_speedup,cq_amortized_speedup,agreement,certificate_valid,status
+72c750852ff39133f0c2730aca9c2f2860ca6c936696faf79c22682490575ca1,8,1,0,4,2,7,true,4,5,84042,2082,2709,24334,1.301153,0.031455,true,true,ok

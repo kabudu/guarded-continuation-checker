@@ -1,0 +1,13 @@
+causal_certificate_version=1
+input=examples/products/infusion-pump/firmware/door-interlock-regression.aag
+input_sha256=72c750852ff39133f0c2730aca9c2f2860ca6c936696faf79c22682490575ca1
+requested_horizon=8
+bad_frame=1
+bad_output=0
+bad_output_name=bad_0
+semantics=minimal-sufficient-input-segments
+minimality=1-minimal
+candidate_count=4
+cause_count=2
+cause_0=0,0,0,1
+cause_1=1,1,1,1

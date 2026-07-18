@@ -66,6 +66,15 @@ Partners operate the evaluation independently using repository resources and
 return only the final non-confidential
 [outcome and suitability report](docs/OUTCOME_REPORT_TEMPLATE.md).
 
+An isolated research extension explores
+[certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
+a replay-checked, 1-minimal sufficient set of input segments for an earliest
+AIGER failure and compares continuation-quotient intervention reuse with fresh
+and persistent CDCL. Results are published as an atomic, SHA-256-bound
+[causal evidence bundle v1](docs/CAUSAL_BUNDLE_V1.md). This is a precisely
+bounded experiment, not a claim that counterexample minimisation or causal
+explanation is new.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

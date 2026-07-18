@@ -32,6 +32,26 @@ jobs:
           cargo build --release --locked
           scripts/production-evaluation-check.sh \
             target/release/continuation-quotient-sat /tmp/cq-operations-check
+      - name: Certified causal-analysis smoke test
+        run: |
+          target/release/continuation-quotient-sat \
+            explain-aiger-counterexample \
+            examples/products/infusion-pump/firmware/door-interlock-regression.aag \
+            8 16 /tmp/cq-causal
+          target/release/continuation-quotient-sat \
+            verify-aiger-causal-bundle \
+            examples/products/infusion-pump/firmware/door-interlock-regression.aag \
+            /tmp/cq-causal
+          grep -q '^minimality=1-minimal$' /tmp/cq-causal/causal-certificate.txt
+          grep -q ',true,true,ok$' /tmp/cq-causal/causal-metrics.csv
+          target/release/continuation-quotient-sat \
+            verify-aiger-causal-bundle \
+            examples/aiger/spi-bus-receive-e-08-bits.aag \
+            results/causal-analysis-v1/spi
+          target/release/continuation-quotient-sat \
+            verify-aiger-causal-bundle \
+            examples/products/infusion-pump/firmware/door-interlock-regression.aag \
+            results/causal-analysis-v1/infusion-pump
       - name: Cross-check RTL examples with SymbiYosys
         working-directory: examples/products/infusion-pump/rtl
         run: |
