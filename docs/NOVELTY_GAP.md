@@ -53,3 +53,8 @@ Primary starting points:
 
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
+
+Gate 1 is now represented by the frozen candidate
+[`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md). It remains open
+until producer and independent verifier implementations demonstrate that the
+contract is sufficient without revision.

@@ -6,6 +6,10 @@
   measurable closure gates and a scoped proof-carrying predicate-composition
   candidate contribution grounded against closest certifying-model-checking
   methods.
+- Freeze the candidate dense predicate certificate v1 contract, including
+  deterministic phase relations, source binding, positive trace evidence,
+  negative terminal-set evidence, an independent exhaustive checking algorithm
+  and explicit fail-closed limits.
 
 ## 0.28.0 - 2026-07-18
 
