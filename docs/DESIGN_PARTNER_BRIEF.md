@@ -1,24 +1,24 @@
-# CQ-SAT/GCC design-partner brief
+# Guarded Continuation Checker design-partner brief
 
 ## Sendable introduction
 
 **Subject:** Design-partner evaluation of bounded RTL configuration safety
 
-> I am inviting embedded-product teams to evaluate
-> CQ-SAT/GCC, an open-source bounded verification tool for configuration and
-> control-safety properties expressed against RTL.
+> I am inviting embedded-product teams to evaluate Guarded Continuation
+> Checker, powered by CQ-SAT: an open-source bounded verification platform for
+> configuration and control-safety properties expressed against RTL.
 >
 > Repository and releases:
-> https://github.com/kabudu/continuation-quotient-sat
+> https://github.com/kabudu/guarded-continuation-checker
 >
-> CQ-SAT/GCC records the exact source/configuration snapshot, assumptions,
-> property boundary, horizon, result, and replay evidence. A SAFE result means
-> only that no declared bad output was found through that reviewed bounded
-> horizon; an UNSAFE result includes a replayable named counterexample.
+> Guarded Continuation Checker records the exact source/configuration snapshot,
+> assumptions, property boundary, horizon, result, and replay evidence. A SAFE
+> result means only that no declared bad output was found through that reviewed
+> bounded horizon; an UNSAFE result includes a replayable named counterexample.
 >
-> CQ-SAT/GCC is an evaluation-ready research prototype with a stable CLI and
-> evidence schema, independent public oracle comparisons, bounded Linux
-> execution, a hostile-input isolation profile, and a machine-enforced
+> Guarded Continuation Checker is an evaluation-ready research prototype with a
+> stable CLI and evidence schema, independent public oracle comparisons,
+> bounded Linux execution, a hostile-input isolation profile, and a machine-enforced
 > external-evidence protocol. I am seeking teams willing to independently choose
 > representative designs and RTL requirements, run the evaluation using the
 > repository guidance, and compare results with an independently owned oracle or
@@ -29,10 +29,10 @@
 > enter the public repository. Only agreed aggregate counts and limitations need
 > be publishable.
 >
-> CQ-SAT/GCC is not certified, production-qualified, or a replacement for your
-> safety lifecycle. This pilot exists to determine whether the evidence is
-> correct, reproducible, operationally usable, and suitable as one bounded input
-> to an independently reviewed assurance case.
+> Guarded Continuation Checker is not certified, production-qualified, or a
+> replacement for your safety lifecycle. This pilot exists to determine whether
+> the evidence is correct, reproducible, operationally usable, and suitable as
+> one bounded input to an independently reviewed assurance case.
 >
 > If this is relevant, your team can use the repository resources directly: it
 > chooses the designs, requirements, worker, oracle, and independent assessor,
@@ -96,7 +96,8 @@ reviewed configurations, subject to the partner's actual projects and approval.
    handling, report-redaction rights, commercial terms, and any confidentiality
    agreement with its chosen assessor. This document is not legal advice or an
    NDA, and the maintainer is not a recipient of partner source data.
-3. Select one immutable CQ release and record its annotated tag and commit.
+3. Select one immutable Guarded Continuation Checker release and record its
+   annotated tag and commit.
 4. Qualify the partner-owned ephemeral Linux worker from the published runbook.
 5. Map each requirement to reviewed sources, top, parameters, assumptions, bad
    outputs, reset/startup policy, and bounded horizon.
@@ -128,7 +129,7 @@ reviewed configurations, subject to the partner's actual projects and approval.
   exercises;
 - attributable private approval or rejection of each evidence row; and
 - permission for an agreed, redacted aggregate report—or an explicit decision
-  that the pilot cannot count toward the public production cohort.
+  that the pilot cannot count toward the public production cohort; and
 - delivery to the maintainer of only the final non-confidential outcome and
   suitability report required by `OUTCOME_REPORT_TEMPLATE.md`.
 
@@ -138,12 +139,12 @@ Before any confidential transfer, confirm:
 
 - the use case is bounded RTL verification rather than a request for whole-device
   certification or an unbounded proof;
-- all parties accept CQ-SAT/GCC's evaluation-ready research-prototype status and
-  claim boundary;
+- all parties accept Guarded Continuation Checker's evaluation-ready
+  research-prototype status and claim boundary;
 - the partner's data-handling and incident contacts are authorised;
 - an independent expected result is feasible;
-- unresolved disagreements and failures will be retained; and
-- the partner can complete an attributable private review record.
+- unresolved disagreements and failures will be retained;
+- the partner can complete an attributable private review record; and
 - the partner accepts that the maintainer will not operate, supervise, or access
   the private evaluation.
 

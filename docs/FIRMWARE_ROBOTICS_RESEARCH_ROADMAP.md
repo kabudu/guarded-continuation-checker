@@ -1,6 +1,6 @@
 # Firmware and robotics research roadmap
 
-This roadmap turns CQ-SAT/GCC into a sequence of falsifiable research cycles.
+This roadmap advances Guarded Continuation Checker and CQ-SAT through a sequence of falsifiable research cycles.
 Items move forward only with exact agreement, reconstructed witnesses,
 predeclared baselines, repeated trials, and claim-bounded documentation.
 

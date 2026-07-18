@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
+  <title id="title">Guarded Continuation Checker monochrome mark</title>
+  <desc id="desc">Three paths merge at a checked aperture and continue through an open guard.</desc>
+  <g fill="none" stroke="#081F3D" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M82 88H25C17.8 88 12 82.2 12 75V25C12 17.8 17.8 12 25 12H82V31" stroke-width="8"/>
+    <path d="M22 31H39L55 47M22 50H55M22 69H39L55 53" stroke-width="7"/>
+    <circle cx="61" cy="50" r="11" fill="#FFFFFF" stroke-width="7"/>
+    <path d="M72 50H91M84 42L92 50L84 58" stroke-width="7"/>
+  </g>
+</svg>

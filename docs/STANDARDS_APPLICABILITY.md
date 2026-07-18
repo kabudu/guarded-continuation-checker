@@ -1,7 +1,7 @@
 # Standards applicability and assurance claims
 
-CQ-SAT/GCC is a verification-support tool, not a certified product, accredited
-laboratory, safety lifecycle, or substitute for engineering judgement. This
+Guarded Continuation Checker is a verification-support tool, not a certified
+product, accredited laboratory, safety lifecycle, or substitute for engineering judgement. This
 document bounds the evidence that an adopter may place in a product assurance
 case. It does not declare conformity with any standard.
 
@@ -12,7 +12,8 @@ assessment must use licensed normative texts and competent safety personnel.
 
 ## Exact claim boundary
 
-For an admitted project configuration, CQ-SAT/GCC can claim only that:
+For an admitted project configuration, Guarded Continuation Checker can claim
+only that:
 
 - the recorded RTL snapshot was synthesized with the recorded configuration;
 - under the recorded constant environment assumptions, no declared bad output
@@ -27,15 +28,15 @@ state is unreachable beyond the analysed horizon. `UNSAFE` is evidence of a
 modelled counterexample, which still requires engineering triage against the
 source requirement and implementation context.
 
-CQ-SAT/GCC does not analyse analogue behaviour, mechanical failure, random
-hardware failure rates, real-time schedulability, compiler correctness, human
+Guarded Continuation Checker does not analyse analogue behaviour, mechanical
+failure, random hardware failure rates, real-time schedulability, compiler correctness, human
 factors, manufacturing variation, cybersecurity of the target product, or the
 completeness of hazards and safety requirements. It does not establish
 equivalence between RTL and a fabricated device or deployed firmware image.
 
 ## Applicability matrix
 
-| Framework | Where CQ evidence may assist | What CQ evidence does not establish |
+| Framework | Where tool evidence may assist | What tool evidence does not establish |
 | --- | --- | --- |
 | ISO 26262:2018, road-vehicle functional safety | Bounded verification evidence for a precisely modelled E/E hardware or software safety requirement; reproducible support for review, configuration control, and change-impact workflows. | ASIL determination, hazard analysis and risk assessment, safety-plan completeness, independence, hardware metrics, production controls, tool qualification, or ISO 26262 conformity. |
 | IEC 61508:2010, generic E/E/PE functional safety | Bounded formal evidence for a declared safety property in an electrical/electronic/programmable electronic subsystem, retained within the adopter's safety lifecycle. | SIL allocation or achievement, systematic capability, random-failure integrity, lifecycle compliance, functional-safety assessment, tool qualification, or certification. |
@@ -44,13 +45,14 @@ equivalence between RTL and a fabricated device or deployed firmware image.
 | IEC 81001-5-1:2021, health-software security lifecycle | The isolated evaluation profile and evidence-integrity controls may support the adopter's secure development tooling records. | Cybersecurity of the target health software, secure-lifecycle conformity, threat coverage, penetration testing, vulnerability management, or regulatory acceptance. |
 
 These mappings are intentionally at framework level. Clause-level credit must be
-decided by the adopter from the applicable normative edition; CQ-SAT/GCC must
-not ship a universal clause-compliance table because project use, safety class,
+decided by the adopter from the applicable normative edition; Guarded
+Continuation Checker must not ship a universal clause-compliance table because project use, safety class,
 jurisdiction, and tool role change the required evidence.
 
 ## Evidence-package responsibilities
 
-Before using a CQ bundle in an assurance case, the adopter must retain a review
+Before using a Guarded Continuation Checker bundle in an assurance case, the
+adopter must retain a review
 record containing:
 
 1. the uniquely identified safety or verification requirement and its owner;
@@ -72,18 +74,18 @@ the bounded property, horizon, independent checks, and escalation path.
 
 Acceptable:
 
-- “CQ-SAT/GCC produced validated bounded verification evidence for requirement
-  `REQ-ID` over the reviewed model and horizon.”
-- “CQ-SAT/GCC found this replayable bounded counterexample.”
-- “CQ-SAT/GCC is under controlled design-partner evaluation.”
+- “Guarded Continuation Checker produced validated bounded verification
+  evidence for requirement `REQ-ID` over the reviewed model and horizon.”
+- “Guarded Continuation Checker found this replayable bounded counterexample.”
+- “Guarded Continuation Checker is under controlled design-partner evaluation.”
 
 Not acceptable:
 
-- “CQ-SAT/GCC is ISO 26262/IEC 61508/IEC 62304 certified.”
-- “CQ-SAT/GCC makes the firmware, RTL, device, or vehicle safe.”
+- “Guarded Continuation Checker is ISO 26262/IEC 61508/IEC 62304 certified.”
+- “Guarded Continuation Checker makes the firmware, RTL, device, or vehicle safe.”
 - “A SAFE result proves the system can never fail.”
-- “CQ-SAT/GCC is a qualified tool” without a project-specific, independently
-  accepted qualification basis.
+- “Guarded Continuation Checker is a qualified tool” without a project-specific,
+  independently accepted qualification basis.
 
 ## Source snapshot
 

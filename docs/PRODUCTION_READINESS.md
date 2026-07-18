@@ -1,6 +1,6 @@
 # Production-readiness gates
 
-CQ-SAT/GCC remains a research preview until every required gate below has direct,
+Guarded Continuation Checker remains a research preview until every required gate below has direct,
 repeatable evidence. A release tag or a green example does not by itself make the
 tool production-grade.
 

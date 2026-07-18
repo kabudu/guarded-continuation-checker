@@ -1,7 +1,7 @@
 # Production-evaluation operations runbook
 
-This runbook operates CQ-SAT/GCC as a design-partner evaluation service. It does
-not turn the research preview into a certified product. The production claim
+This runbook operates Guarded Continuation Checker as a design-partner
+evaluation service. It does not turn the research preview into a certified product. The production claim
 remains governed by `PRODUCTION_READINESS.md`.
 
 ## Supported environment
@@ -47,8 +47,8 @@ a validated bundle by itself is not an assurance case or release approval.
 Build from a reviewed release tag; replace `VERSION` with the intended version:
 
 ```sh
-git clone https://github.com/kabudu/continuation-quotient-sat.git
-cd continuation-quotient-sat
+git clone https://github.com/kabudu/guarded-continuation-checker.git
+cd guarded-continuation-checker
 git checkout VERSION
 rustup toolchain install 1.97
 cargo +1.97 build --release --locked
@@ -133,7 +133,7 @@ as confidential design data. Store each completed bundle read-only with access
 logging and a separately trusted copy of the manifest digest or signed CI
 attestation. Validate after transfer and before use.
 
-The RTL owner—not CQ-SAT/GCC—sets the retention period. Document the purpose,
+The RTL owner—not Guarded Continuation Checker—sets the retention period. Document the purpose,
 owner, access group, expiry, legal hold, backup location, and deletion method
 before the first run. On expiry, delete primary and backup copies according to
 that policy and retain only non-sensitive operational metadata when authorized.

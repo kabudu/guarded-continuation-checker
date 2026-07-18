@@ -1,17 +1,16 @@
 cff-version: 1.2.0
 message: "If you use this research software, please cite this repository."
-title: "Continuation Quotient SAT"
+title: "Guarded Continuation Checker, powered by CQ-SAT"
 type: software
 authors:
   - family-names: "Kabudu"
-repository-code: "https://github.com/kabudu/continuation-quotient-sat"
+repository-code: "https://github.com/kabudu/guarded-continuation-checker"
 license: Apache-2.0
-version: 0.13.0
-date-released: 2026-07-17
+version: 0.28.0
+date-released: 2026-07-18
 abstract: >-
-  A Rust research implementation of calibration-free CQ-SAT/GCC portfolio
-  solving for repeated temporal SAT and bounded multi-file RTL safety queries,
-  with portable Yosys synthesis to ASCII AIGER, exact CDCL fallback, bounded
-  repeated-property reuse, explicit named environment assumptions, contained
-  RTL synthesis, versioned evidence contracts, parser fuzzing, complete witness
-  recovery, and a firmware CI safety gate.
+  An evaluation-ready, proof-carrying bounded verification platform for
+  embedded firmware and RTL, powered by the calibration-free CQ-SAT specialised
+  backend with exact CDCL fallback, deterministic certificates, independently
+  checked evidence, contained RTL synthesis, and versioned integration
+  contracts.

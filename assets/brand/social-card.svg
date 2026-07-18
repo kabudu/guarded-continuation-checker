@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Guarded Continuation Checker</title>
+  <desc id="desc">Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT.</desc>
+  <rect width="1280" height="640" rx="36" fill="#081F3D"/>
+  <circle cx="1135" cy="90" r="260" fill="#0A9A92" opacity="0.13"/>
+  <circle cx="1170" cy="600" r="330" fill="#6956D9" opacity="0.10"/>
+  <g transform="translate(82 112) scale(2.75)">
+    <path d="M82 88H25C17.8 88 12 82.2 12 75V25C12 17.8 17.8 12 25 12H82V31" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M22 31H39L55 47" fill="none" stroke="#45D2C8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M22 50H55" fill="none" stroke="#25B9F4" stroke-width="7" stroke-linecap="round"/>
+    <path d="M22 69H39L55 53" fill="none" stroke="#9A8BF1" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="61" cy="50" r="11" fill="#081F3D" stroke="#45D2C8" stroke-width="7"/>
+    <path d="M72 50H91M84 42L92 50L84 58" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="410" y="222" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="64" font-weight="760" letter-spacing="-1.8">Guarded Continuation</text>
+  <text x="412" y="292" fill="#BFD0DC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="46" font-weight="560" letter-spacing="5">CHECKER</text>
+  <text x="412" y="390" fill="#E7F0F5" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="30" font-weight="440">Proof-carrying bounded verification</text>
+  <text x="412" y="435" fill="#E7F0F5" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="30" font-weight="440">for embedded firmware and RTL</text>
+  <rect x="412" y="492" width="330" height="58" rx="29" fill="#0A9A92"/>
+  <text x="449" y="531" fill="#FFFFFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="23" font-weight="700">powered by CQ-SAT</text>
+</svg>

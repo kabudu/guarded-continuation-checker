@@ -1,6 +1,6 @@
 # Certified causal counterexample analysis
 
-CQ-SAT/GCC includes an experimental causal-analysis command for input-driven
+Guarded Continuation Checker includes an experimental causal-analysis command for input-driven
 ASCII AIGER safety models. It does not claim to invent counterexample
 minimisation. Delta debugging and causality-based explanations are established
 research areas. This experiment tests the narrower question of whether an exact

@@ -1,11 +1,17 @@
-# Continuation Quotient SAT
+<p align="center">
+  <img src="assets/brand/logo-horizontal.svg" width="680" alt="Guarded Continuation Checker, powered by CQ-SAT">
+</p>
 
-Research implementation of exact continuation-quotient compilation for Boolean
-satisfiability problems with small residual state spaces.
+# Guarded Continuation Checker
 
-The current product-facing backend is **CQ-SAT/GCC**: Continuation-Quotient SAT
-with Global Checkpoint Clauses, wrapped in a calibration-free portfolio gate that
-uses persistent CDCL outside its validated structural regime.
+**Guarded Continuation Checker, powered by CQ-SAT**, is an evaluation-ready,
+proof-carrying bounded verification platform for embedded firmware and RTL.
+
+Guarded Continuation Checker (GCC) is the umbrella product and workflow. CQ-SAT
+is its exact continuation-quotient engine: a calibration-free specialised
+backend with persistent-CDCL fallback outside its validated structural regime.
+The existing `continuation-quotient-sat` crate and executable names remain for
+compatibility. See the [brand and naming system](docs/BRAND.md).
 
 The method processes variables in a fixed order, canonicalizes the residual CNF
 after each Boolean choice, and merges prefixes only when their residual formulas
@@ -14,8 +20,9 @@ states reconstruct complete assignments.
 
 ## Status
 
-This is a research release, not a general-purpose replacement for CDCL SAT
-solvers and not evidence that P = NP.
+This is an evaluation-ready research prototype, not a production-qualified or
+certified product, not a general-purpose replacement for CDCL SAT solvers, and
+not evidence that P = NP.
 
 The project does not currently claim production readiness or scholarly novelty.
 Those higher bars are tracked explicitly in the
@@ -197,7 +204,7 @@ unmodified upstream Yosys sources and exercises twelve separately authored
 SAFE/UNSAFE properties across two Yosys versions. This is reproducible public
 evidence, not a substitute for confidential design-partner validation.
 
-## CQ-SAT/GCC portfolio
+## GCC verification portfolio
 
 ```sh
 ./target/release/continuation-quotient-sat \
@@ -208,7 +215,7 @@ evidence, not a substitute for confidential design-partner validation.
 The static gate uses only transition density, dependency fan-out, width, declared
 query-batch size, and assumption density. It never trial-solves candidate
 backends. Dense models up to width nine with at least eight queries and narrow hub
-models up to width seven with at least 128 queries use CQ-SAT/GCC when the batch
+models up to width seven with at least 128 queries use CQ-SAT when the batch
 averages no more than one state-width of assumptions; everything else uses the exact
 persistent-CDCL path. The CSV records
 the backend, reason, recognition cost, structural metrics, speedups, agreement,
@@ -340,7 +347,7 @@ BMC. It reports both strategies even when reuse loses.
 
 The portfolio ingests original five-field ASCII (`aag`) and binary (`aig`)
 AIGER safety models directly. Closed models inside
-the bounded deterministic regime remain eligible for CQ-SAT/GCC; primary-input
+the bounded deterministic regime remain eligible for CQ-SAT; primary-input
 or wider models are sent directly to an exact Tseitin-unrolled CDCL backend.
 
 ```sh
@@ -357,7 +364,7 @@ The command reports `SAFE` or `UNSAFE` and writes a complete counterexample trac
 for an unsafe model. Static query-shape analysis rejects the specialized backend
 for this workload and uses CDCL: this is
 a real external validation of the portfolio's no-regression path, not a claimed
-CQ-SAT/GCC speedup.
+CQ-SAT speedup.
 
 The bundled examples also include an input-driven
 [Peterson mutual-exclusion protocol](examples/aiger/README.md), proved SAFE

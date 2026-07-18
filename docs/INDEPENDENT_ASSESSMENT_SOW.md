@@ -10,7 +10,8 @@ or declare conformity with a safety standard.
 
 **Subject:** Independent security and formal-verification assessment request
 
-> I am seeking an independent assessment of CQ-SAT/GCC, an open-source bounded
+> I am seeking an independent assessment of Guarded Continuation Checker,
+> powered by CQ-SAT, an open-source bounded
 > RTL configuration-safety verification tool. The target will be one immutable,
 > annotated release tag. The engagement covers both its documented Linux threat
 > model/isolation boundary and the correctness of its RTL-to-bounded-result and
