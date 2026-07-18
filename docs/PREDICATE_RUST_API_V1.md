@@ -64,6 +64,31 @@ Deadline and output-bound failures have stable typed variants:
 `stderr` and records the configured byte limit. Command exit failures,
 compatibility drift and response errors remain separately distinguishable.
 
+## Invocation metrics schema v1
+
+`discover_observed`, `certify_observed` and `verify_observed` return an
+`Observed<T>`. A failed observed operation returns `PredicateOperationError`;
+both paths contain `InvocationMetrics` with:
+
+- schema and operation kind;
+- elapsed duration;
+- stdout and stderr byte counts;
+- configured deadline and output limit;
+- process exit code when available; and
+- success or a stable `FailureClass` (`policy`, `io`, `timeout`,
+  `output_limit`, `exit_status`, `compatibility`, or `response`).
+
+`InvocationMetrics::csv_header()` and `to_csv_row()` expose canonical schema v1
+for build records and fleet aggregation:
+
+```text
+schema_version,operation,duration_ns,stdout_bytes,stderr_bytes,timeout_ms,output_limit_bytes,exit_code,status,failure_class
+```
+
+The schema contains no model paths or certificate contents. Callers can join it
+to their own job identifier without disclosing source locations. Adding columns
+requires a new metrics schema version; enum string values are stable within v1.
+
 ## Deployment boundary
 
 API v1 is deliberately an out-of-process client. This keeps the verifier's
@@ -88,5 +113,7 @@ artifacts from the interrupt-controller product fixture, independently verifies
 both and checks their typed logical results.
 
 Library unit tests separately prove invalid-policy rejection, deadline handling
-and output-limit classification. These are API-level bounds; operating-system
-memory accounting and process-tree containment remain deployment controls.
+output-limit classification and the exact metrics CSV schema. The downstream
+test checks successful v1/v2 verification metrics from the real executable.
+These are API-level bounds; operating-system memory accounting and process-tree
+containment remain deployment controls.

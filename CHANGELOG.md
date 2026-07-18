@@ -76,6 +76,10 @@
   caps, concurrent bounded output collection, and stable typed timeout and
   output-limit failures. Preserve operating-system memory/process-tree controls
   as an explicit remaining deployment gate.
+- Add predicate invocation metrics schema v1. Observed discovery,
+  certification and verification return duration, stream sizes, configured
+  limits, exit status and a stable failure class on both success and error
+  paths, with canonical privacy-preserving CSV rows for build/fleet aggregation.
 
 ## 0.28.0 - 2026-07-18
 

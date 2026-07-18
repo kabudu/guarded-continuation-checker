@@ -60,6 +60,107 @@ impl Default for ExecutionPolicy {
     }
 }
 
+pub const INVOCATION_METRICS_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OperationKind {
+    Discover,
+    CertifyV1,
+    CertifyV2,
+    VerifyV1,
+    VerifyV2,
+}
+
+impl OperationKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Discover => "discover",
+            Self::CertifyV1 => "certify_v1",
+            Self::CertifyV2 => "certify_v2",
+            Self::VerifyV1 => "verify_v1",
+            Self::VerifyV2 => "verify_v2",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FailureClass {
+    Policy,
+    Io,
+    Timeout,
+    OutputLimit,
+    ExitStatus,
+    Compatibility,
+    Response,
+}
+
+impl FailureClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Policy => "policy",
+            Self::Io => "io",
+            Self::Timeout => "timeout",
+            Self::OutputLimit => "output_limit",
+            Self::ExitStatus => "exit_status",
+            Self::Compatibility => "compatibility",
+            Self::Response => "response",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InvocationStatus {
+    Success,
+    Failed(FailureClass),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvocationMetrics {
+    pub schema_version: u32,
+    pub operation: OperationKind,
+    pub duration: Duration,
+    pub stdout_bytes: usize,
+    pub stderr_bytes: usize,
+    pub timeout: Duration,
+    pub output_limit_bytes: usize,
+    pub exit_code: Option<i32>,
+    pub status: InvocationStatus,
+}
+
+impl InvocationMetrics {
+    pub const fn csv_header() -> &'static str {
+        "schema_version,operation,duration_ns,stdout_bytes,stderr_bytes,timeout_ms,output_limit_bytes,exit_code,status,failure_class"
+    }
+
+    pub fn to_csv_row(&self) -> String {
+        let (status, failure_class) = match self.status {
+            InvocationStatus::Success => ("ok", "-"),
+            InvocationStatus::Failed(class) => ("error", class.as_str()),
+        };
+        format!(
+            "{},{},{},{},{},{},{},{},{},{}",
+            self.schema_version,
+            self.operation.as_str(),
+            self.duration.as_nanos(),
+            self.stdout_bytes,
+            self.stderr_bytes,
+            self.timeout.as_millis(),
+            self.output_limit_bytes,
+            self.exit_code
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            status,
+            failure_class,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Observed<T> {
+    pub value: T,
+    pub metrics: InvocationMetrics,
+}
+
 /// A supported predicate certificate encoding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CertificateVersion {
@@ -79,6 +180,20 @@ impl CertificateVersion {
         match self {
             Self::V1 => "verify-aiger-predicate-certificate",
             Self::V2 => "verify-aiger-predicate-certificate-v2",
+        }
+    }
+
+    fn certify_operation(self) -> OperationKind {
+        match self {
+            Self::V1 => OperationKind::CertifyV1,
+            Self::V2 => OperationKind::CertifyV2,
+        }
+    }
+
+    fn verify_operation(self) -> OperationKind {
+        match self {
+            Self::V1 => OperationKind::VerifyV1,
+            Self::V2 => OperationKind::VerifyV2,
         }
     }
 }
@@ -124,6 +239,38 @@ pub enum PredicateApiError {
     },
     IncompatibleContract(String),
     InvalidResponse(String),
+}
+
+impl PredicateApiError {
+    pub fn failure_class(&self) -> FailureClass {
+        match self {
+            Self::InvalidPolicy(_) => FailureClass::Policy,
+            Self::Io(_) => FailureClass::Io,
+            Self::TimedOut { .. } => FailureClass::Timeout,
+            Self::OutputLimitExceeded { .. } => FailureClass::OutputLimit,
+            Self::CommandFailed { .. } => FailureClass::ExitStatus,
+            Self::IncompatibleContract(_) => FailureClass::Compatibility,
+            Self::InvalidResponse(_) => FailureClass::Response,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PredicateOperationError {
+    pub error: PredicateApiError,
+    pub metrics: InvocationMetrics,
+}
+
+impl fmt::Display for PredicateOperationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.error.fmt(formatter)
+    }
+}
+
+impl std::error::Error for PredicateOperationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
 }
 
 impl fmt::Display for PredicateApiError {
@@ -188,16 +335,34 @@ impl PredicateTool {
         executable: impl Into<PathBuf>,
         policy: ExecutionPolicy,
     ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
         let executable = executable.into();
         let mut command = Command::new(&executable);
         command.arg("predicate-cli-version");
-        let output = run_bounded(command, policy)?;
-        let stdout = successful_stdout(output)?;
-        let capabilities = parse_capabilities(&stdout)?;
-        Ok(Self {
-            executable,
-            capabilities,
-            policy,
+        let output = run_bounded(OperationKind::Discover, command, policy)?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_capabilities(&stdout).map_err(|error| {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            PredicateOperationError {
+                error,
+                metrics: metrics.clone(),
+            }
+        })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
         })
     }
 
@@ -228,7 +393,20 @@ impl PredicateTool {
         transcript: &Path,
         certificate: &Path,
     ) -> Result<PredicateResult, PredicateApiError> {
-        self.require_version(version)?;
+        self.certify_observed(version, model, bad_output, transcript, certificate)
+            .map(|observed| observed.value)
+            .map_err(|failure| failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        version: CertificateVersion,
+        model: &Path,
+        bad_output: usize,
+        transcript: &Path,
+        certificate: &Path,
+    ) -> Result<Observed<PredicateResult>, PredicateOperationError> {
+        self.require_version_observed(version, version.certify_operation())?;
         let mut command = Command::new(&self.executable);
         command
             .arg(version.producer_command())
@@ -236,8 +414,8 @@ impl PredicateTool {
             .arg(bad_output.to_string())
             .arg(transcript)
             .arg(certificate);
-        let output = run_bounded(command, self.policy)?;
-        parse_result(&successful_stdout(output)?)
+        let output = run_bounded(version.certify_operation(), command, self.policy)?;
+        parse_observed_result(output)
     }
 
     /// Verify a certificate against the selected model and return its result.
@@ -247,21 +425,44 @@ impl PredicateTool {
         model: &Path,
         certificate: &Path,
     ) -> Result<PredicateResult, PredicateApiError> {
-        self.require_version(version)?;
+        self.verify_observed(version, model, certificate)
+            .map(|observed| observed.value)
+            .map_err(|failure| failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        version: CertificateVersion,
+        model: &Path,
+        certificate: &Path,
+    ) -> Result<Observed<PredicateResult>, PredicateOperationError> {
+        self.require_version_observed(version, version.verify_operation())?;
         let mut command = Command::new(&self.executable);
         command
             .arg(version.verifier_command())
             .arg(model)
             .arg(certificate);
-        let output = run_bounded(command, self.policy)?;
-        parse_result(&successful_stdout(output)?)
+        let output = run_bounded(version.verify_operation(), command, self.policy)?;
+        parse_observed_result(output)
     }
 
-    fn require_version(&self, version: CertificateVersion) -> Result<(), PredicateApiError> {
+    fn require_version_observed(
+        &self,
+        version: CertificateVersion,
+        operation: OperationKind,
+    ) -> Result<(), PredicateOperationError> {
         if !self.capabilities.certificate_versions.contains(&version) {
-            return Err(PredicateApiError::IncompatibleContract(format!(
+            let error = PredicateApiError::IncompatibleContract(format!(
                 "certificate version {version:?} is not advertised"
-            )));
+            ));
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    operation,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error,
+            });
         }
         Ok(())
     }
@@ -271,6 +472,50 @@ struct ManagedOutput {
     status: ExitStatus,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
+    metrics: InvocationMetrics,
+}
+
+fn empty_metrics(
+    operation: OperationKind,
+    policy: ExecutionPolicy,
+    status: InvocationStatus,
+) -> InvocationMetrics {
+    InvocationMetrics {
+        schema_version: INVOCATION_METRICS_SCHEMA_VERSION,
+        operation,
+        duration: Duration::ZERO,
+        stdout_bytes: 0,
+        stderr_bytes: 0,
+        timeout: policy.timeout,
+        output_limit_bytes: policy.output_limit_bytes,
+        exit_code: None,
+        status,
+    }
+}
+
+fn operation_failure(
+    operation: OperationKind,
+    policy: ExecutionPolicy,
+    started: Instant,
+    stdout_bytes: usize,
+    stderr_bytes: usize,
+    exit_code: Option<i32>,
+    error: PredicateApiError,
+) -> PredicateOperationError {
+    PredicateOperationError {
+        metrics: InvocationMetrics {
+            schema_version: INVOCATION_METRICS_SCHEMA_VERSION,
+            operation,
+            duration: started.elapsed(),
+            stdout_bytes,
+            stderr_bytes,
+            timeout: policy.timeout,
+            output_limit_bytes: policy.output_limit_bytes,
+            exit_code,
+            status: InvocationStatus::Failed(error.failure_class()),
+        },
+        error,
+    }
 }
 
 fn read_limited(
@@ -294,67 +539,167 @@ fn join_output(
 }
 
 fn run_bounded(
+    operation: OperationKind,
     mut command: Command,
     policy: ExecutionPolicy,
-) -> Result<ManagedOutput, PredicateApiError> {
+) -> Result<ManagedOutput, PredicateOperationError> {
+    let started = Instant::now();
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| PredicateApiError::InvalidResponse("stdout pipe is missing".to_string()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| PredicateApiError::InvalidResponse("stderr pipe is missing".to_string()))?;
+    let mut child = command
+        .spawn()
+        .map_err(|error| operation_failure(operation, policy, started, 0, 0, None, error.into()))?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        operation_failure(
+            operation,
+            policy,
+            started,
+            0,
+            0,
+            None,
+            PredicateApiError::InvalidResponse("stdout pipe is missing".to_string()),
+        )
+    })?;
+    let stderr = child.stderr.take().ok_or_else(|| {
+        operation_failure(
+            operation,
+            policy,
+            started,
+            0,
+            0,
+            None,
+            PredicateApiError::InvalidResponse("stderr pipe is missing".to_string()),
+        )
+    })?;
     let stdout_reader = read_limited(stdout, policy.output_limit_bytes);
     let stderr_reader = read_limited(stderr, policy.output_limit_bytes);
     let deadline = Instant::now() + policy.timeout;
     let status = loop {
-        if let Some(status) = child.try_wait()? {
+        if let Some(status) = child.try_wait().map_err(|error| {
+            operation_failure(operation, policy, started, 0, 0, None, error.into())
+        })? {
             break status;
         }
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            let _ = join_output(stdout_reader);
-            let _ = join_output(stderr_reader);
-            return Err(PredicateApiError::TimedOut {
-                timeout: policy.timeout,
-            });
+            let stdout_bytes = join_output(stdout_reader)
+                .map(|bytes| bytes.len())
+                .unwrap_or(0);
+            let stderr_bytes = join_output(stderr_reader)
+                .map(|bytes| bytes.len())
+                .unwrap_or(0);
+            return Err(operation_failure(
+                operation,
+                policy,
+                started,
+                stdout_bytes,
+                stderr_bytes,
+                None,
+                PredicateApiError::TimedOut {
+                    timeout: policy.timeout,
+                },
+            ));
         }
         thread::sleep(Duration::from_millis(5));
     };
-    let stdout = join_output(stdout_reader)?;
-    let stderr = join_output(stderr_reader)?;
+    let stdout = join_output(stdout_reader).map_err(|error| {
+        operation_failure(operation, policy, started, 0, 0, status.code(), error)
+    })?;
+    let stderr = join_output(stderr_reader).map_err(|error| {
+        operation_failure(
+            operation,
+            policy,
+            started,
+            stdout.len(),
+            0,
+            status.code(),
+            error,
+        )
+    })?;
     if stdout.len() > policy.output_limit_bytes {
-        return Err(PredicateApiError::OutputLimitExceeded {
-            stream: "stdout",
-            limit_bytes: policy.output_limit_bytes,
-        });
+        return Err(operation_failure(
+            operation,
+            policy,
+            started,
+            stdout.len(),
+            stderr.len(),
+            status.code(),
+            PredicateApiError::OutputLimitExceeded {
+                stream: "stdout",
+                limit_bytes: policy.output_limit_bytes,
+            },
+        ));
     }
     if stderr.len() > policy.output_limit_bytes {
-        return Err(PredicateApiError::OutputLimitExceeded {
-            stream: "stderr",
-            limit_bytes: policy.output_limit_bytes,
-        });
+        return Err(operation_failure(
+            operation,
+            policy,
+            started,
+            stdout.len(),
+            stderr.len(),
+            status.code(),
+            PredicateApiError::OutputLimitExceeded {
+                stream: "stderr",
+                limit_bytes: policy.output_limit_bytes,
+            },
+        ));
     }
+    let metrics = InvocationMetrics {
+        schema_version: INVOCATION_METRICS_SCHEMA_VERSION,
+        operation,
+        duration: started.elapsed(),
+        stdout_bytes: stdout.len(),
+        stderr_bytes: stderr.len(),
+        timeout: policy.timeout,
+        output_limit_bytes: policy.output_limit_bytes,
+        exit_code: status.code(),
+        status: InvocationStatus::Success,
+    };
     Ok(ManagedOutput {
         status,
         stdout,
         stderr,
+        metrics,
     })
 }
 
-fn successful_stdout(output: ManagedOutput) -> Result<String, PredicateApiError> {
+fn successful_stdout(
+    mut output: ManagedOutput,
+) -> Result<(String, InvocationMetrics), PredicateOperationError> {
     if !output.status.success() {
-        return Err(PredicateApiError::CommandFailed {
+        let error = PredicateApiError::CommandFailed {
             exit_code: output.status.code(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        };
+        output.metrics.status = InvocationStatus::Failed(error.failure_class());
+        return Err(PredicateOperationError {
+            error,
+            metrics: output.metrics,
         });
     }
-    String::from_utf8(output.stdout)
-        .map_err(|_| PredicateApiError::InvalidResponse("stdout is not UTF-8".to_string()))
+    let stdout = String::from_utf8(output.stdout).map_err(|_| {
+        let error = PredicateApiError::InvalidResponse("stdout is not UTF-8".to_string());
+        output.metrics.status = InvocationStatus::Failed(error.failure_class());
+        PredicateOperationError {
+            error,
+            metrics: output.metrics.clone(),
+        }
+    })?;
+    Ok((stdout, output.metrics))
+}
+
+fn parse_observed_result(
+    output: ManagedOutput,
+) -> Result<Observed<PredicateResult>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let value = parse_result(&stdout).map_err(|error| {
+        metrics.status = InvocationStatus::Failed(error.failure_class());
+        PredicateOperationError {
+            error,
+            metrics: metrics.clone(),
+        }
+    })?;
+    Ok(Observed { value, metrics })
 }
 
 fn parse_result(stdout: &str) -> Result<PredicateResult, PredicateApiError> {
@@ -474,6 +819,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn invocation_metrics_csv_schema_is_stable() {
+        let metrics = InvocationMetrics {
+            schema_version: 1,
+            operation: OperationKind::VerifyV2,
+            duration: Duration::from_nanos(123),
+            stdout_bytes: 45,
+            stderr_bytes: 6,
+            timeout: Duration::from_millis(700),
+            output_limit_bytes: 8192,
+            exit_code: Some(2),
+            status: InvocationStatus::Failed(FailureClass::ExitStatus),
+        };
+        assert_eq!(
+            InvocationMetrics::csv_header(),
+            "schema_version,operation,duration_ns,stdout_bytes,stderr_bytes,timeout_ms,output_limit_bytes,exit_code,status,failure_class"
+        );
+        assert_eq!(
+            metrics.to_csv_row(),
+            "1,verify_v2,123,45,6,700,8192,2,error,exit_status"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn bounded_runner_reports_deadline_and_output_classes() {
@@ -481,22 +849,38 @@ mod tests {
         delayed.arg("1");
         assert!(matches!(
             run_bounded(
+                OperationKind::VerifyV2,
                 delayed,
                 ExecutionPolicy::new(Duration::from_millis(10), 1024).unwrap()
             ),
-            Err(PredicateApiError::TimedOut { .. })
+            Err(PredicateOperationError {
+                error: PredicateApiError::TimedOut { .. },
+                metrics: InvocationMetrics {
+                    status: InvocationStatus::Failed(FailureClass::Timeout),
+                    ..
+                },
+            })
         ));
 
         let mut verbose = Command::new("printf");
         verbose.arg("0123456789");
         assert!(matches!(
             run_bounded(
+                OperationKind::CertifyV2,
                 verbose,
                 ExecutionPolicy::new(Duration::from_secs(1), 4).unwrap()
             ),
-            Err(PredicateApiError::OutputLimitExceeded {
-                stream: "stdout",
-                limit_bytes: 4,
+            Err(PredicateOperationError {
+                error: PredicateApiError::OutputLimitExceeded {
+                    stream: "stdout",
+                    limit_bytes: 4,
+                },
+                metrics: InvocationMetrics {
+                    operation: OperationKind::CertifyV2,
+                    stdout_bytes: 5,
+                    status: InvocationStatus::Failed(FailureClass::OutputLimit),
+                    ..
+                },
             })
         ));
     }

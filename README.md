@@ -128,7 +128,9 @@ operational errors. The current API intentionally preserves an out-of-process
 boundary for resource governance; it is not yet an in-process verifier. Every
 call now has a configurable deadline and bounded stdout/stderr with typed timeout
 and output-limit errors; operating-system memory and process-tree enforcement
-remain open deployment controls.
+remain open deployment controls. Observed API calls return metrics schema v1
+with operation, duration, stream sizes, limits, exit status and a stable failure
+class, plus canonical CSV output for build and fleet aggregation.
 
 The [closest-method comparison](docs/CAUSAL_STRATEGY_COMPARISON.md) replays
 deletion and QuickXplain intervention transcripts through fresh CDCL,

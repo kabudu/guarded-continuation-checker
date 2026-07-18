@@ -1,4 +1,7 @@
-use continuation_quotient_sat::{CertificateVersion, PredicateResult, PredicateTool};
+use continuation_quotient_sat::{
+    CertificateVersion, INVOCATION_METRICS_SCHEMA_VERSION, InvocationStatus, OperationKind,
+    PredicateResult, PredicateTool,
+};
 use std::path::Path;
 
 #[test]
@@ -25,9 +28,20 @@ fn downstream_api_discovers_certifies_and_verifies_both_formats() {
                 .unwrap(),
             PredicateResult::Avoidable
         );
+        let observed = tool.verify_observed(version, &model, &certificate).unwrap();
+        assert_eq!(observed.value, PredicateResult::Avoidable);
         assert_eq!(
-            tool.verify(version, &model, &certificate).unwrap(),
-            PredicateResult::Avoidable
+            observed.metrics.schema_version,
+            INVOCATION_METRICS_SCHEMA_VERSION
+        );
+        assert_eq!(observed.metrics.status, InvocationStatus::Success);
+        assert!(observed.metrics.stdout_bytes > 0);
+        assert_eq!(
+            observed.metrics.operation,
+            match version {
+                CertificateVersion::V1 => OperationKind::VerifyV1,
+                CertificateVersion::V2 => OperationKind::VerifyV2,
+            }
         );
         std::fs::remove_file(certificate).unwrap();
     }
