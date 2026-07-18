@@ -11235,6 +11235,185 @@ fn verify_aiger_predicate_certificate_v2(
     Ok(())
 }
 
+fn predicate_obligation_dimacs(variable_count: usize, clauses: &[Clause]) -> Vec<u8> {
+    let mut body = format!("p cnf {variable_count} {}\n", clauses.len());
+    for clause in clauses {
+        for &(variable, positive) in &clause.0 {
+            if !positive {
+                body.push('-');
+            }
+            body.push_str(&(variable + 1).to_string());
+            body.push(' ');
+        }
+        body.push_str("0\n");
+    }
+    body.into_bytes()
+}
+
+fn aggregate_predicate_obligations(
+    variables_per_obligation: usize,
+    obligations: &[Vec<Clause>],
+) -> Result<(usize, Vec<Clause>), String> {
+    if variables_per_obligation == 0 || obligations.is_empty() {
+        return Err("predicate aggregate obligation requires variables and clauses".to_string());
+    }
+    let variable_count = variables_per_obligation
+        .checked_mul(obligations.len())
+        .and_then(|variables| variables.checked_add(obligations.len()))
+        .ok_or_else(|| "predicate aggregate obligation variable overflow".to_string())?;
+    let selector_start = variables_per_obligation * obligations.len();
+    let mut clauses = Vec::new();
+    for (index, obligation) in obligations.iter().enumerate() {
+        let offset = index * variables_per_obligation;
+        let selector = selector_start + index;
+        for clause in obligation {
+            if clause
+                .0
+                .iter()
+                .any(|&(variable, _)| variable >= variables_per_obligation)
+            {
+                return Err("predicate aggregate obligation literal is out of range".to_string());
+            }
+            let mut guarded = clause
+                .0
+                .iter()
+                .map(|&(variable, positive)| (offset + variable, positive))
+                .collect::<Vec<_>>();
+            guarded.push((selector, false));
+            clauses.push(Clause(guarded));
+        }
+    }
+    clauses.push(Clause(
+        (0..obligations.len())
+            .map(|index| (selector_start + index, true))
+            .collect(),
+    ));
+    Ok((variable_count, clauses))
+}
+
+fn export_aiger_predicate_v2_obligations(
+    input: &Path,
+    certificate_path: &Path,
+    output: &Path,
+) -> Result<(), String> {
+    if fs::symlink_metadata(output).is_ok() {
+        return Err("predicate obligation export refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    let certificate = parse_predicate_certificate_v2(certificate_path)?;
+    if sha256_file(input)? != certificate.input_sha256 {
+        return Err("predicate obligation export input digest mismatch".to_string());
+    }
+    let checker = IndependentPredicateChecker::new(&model)?;
+    if certificate.declared_inputs != model.inputs.len()
+        || certificate.relevant_inputs != checker.relevant_inputs
+        || certificate.latches != model.latches.len()
+        || certificate.bad_output >= model.outputs.len()
+    {
+        return Err("predicate obligation export source dimensions mismatch".to_string());
+    }
+
+    let parent = causal_output_parent(output);
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("create predicate obligation parent: {error}"))?;
+    let name = output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            "predicate obligation output requires a valid final component".to_string()
+        })?;
+    let staging = parent.join(format!(".{name}.stage-{}", std::process::id()));
+    fs::create_dir(&staging)
+        .map_err(|error| format!("create predicate obligation staging directory: {error}"))?;
+
+    let publish = (|| {
+        let mut manifest = vec![
+            "predicate_obligation_bundle_version=1".to_string(),
+            format!("input_sha256={}", certificate.input_sha256),
+            format!("certificate_sha256={}", sha256_file(certificate_path)?),
+            format!("cnf_variables={}", model.max_variable),
+        ];
+        let mut obligation_count = 0usize;
+        let mut obligation_clauses = Vec::new();
+        for (phase_index, phase) in certificate.phases.iter().enumerate() {
+            if phase.base_rows.len() != checker.states {
+                return Err("predicate obligation export phase dimensions mismatch".to_string());
+            }
+            for (source, &targets) in phase.base_rows.iter().enumerate() {
+                let clauses = predicate_relation_completeness_clauses(
+                    &model,
+                    &checker.relevant_inputs,
+                    source,
+                    &phase.constraints,
+                    targets,
+                )?;
+                let filename = format!("phase-{phase_index:04}-source-{source:04}.cnf");
+                let path = staging.join(&filename);
+                write_causal_file(
+                    &path,
+                    &predicate_obligation_dimacs(model.max_variable, &clauses),
+                )?;
+                manifest.push(format!(
+                    "obligation_{obligation_count}={filename},relation-completeness,{phase_index},{source},{}",
+                    sha256_file(&path)?
+                ));
+                obligation_clauses.push(clauses);
+                obligation_count += 1;
+            }
+        }
+        let clauses = predicate_terminal_completeness_clauses(
+            &model,
+            &checker.relevant_inputs,
+            &certificate.terminal_constraint,
+            certificate.bad_output,
+            certificate.terminal_safe_states,
+        )?;
+        let filename = "terminal.cnf";
+        let path = staging.join(filename);
+        write_causal_file(
+            &path,
+            &predicate_obligation_dimacs(model.max_variable, &clauses),
+        )?;
+        manifest.push(format!(
+            "obligation_{obligation_count}={filename},terminal-completeness,-,-,{}",
+            sha256_file(&path)?
+        ));
+        obligation_clauses.push(clauses);
+        obligation_count += 1;
+        let (aggregate_variables, aggregate_clauses) =
+            aggregate_predicate_obligations(model.max_variable, &obligation_clauses)?;
+        let aggregate_path = staging.join("aggregate.cnf");
+        write_causal_file(
+            &aggregate_path,
+            &predicate_obligation_dimacs(aggregate_variables, &aggregate_clauses),
+        )?;
+        manifest.insert(4, format!("obligation_count={obligation_count}"));
+        manifest.insert(5, "aggregate_cnf=aggregate.cnf".to_string());
+        manifest.insert(6, format!("aggregate_variables={aggregate_variables}"));
+        manifest.insert(
+            7,
+            format!("aggregate_sha256={}", sha256_file(&aggregate_path)?),
+        );
+        write_causal_file(
+            &staging.join("manifest.txt"),
+            (manifest.join("\n") + "\n").as_bytes(),
+        )?;
+        sync_causal_directory(&staging)?;
+        rename_causal_bundle_noreplace(&staging, output)?;
+        sync_causal_directory(parent)
+    })();
+    if publish.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    publish?;
+    println!(
+        "predicate-obligations status=EXPORTED output={}",
+        output.display()
+    );
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn verify_aiger_counterfactual_portfolio(
     input: &Path,
@@ -22265,6 +22444,17 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             verify_aiger_predicate_certificate_v2(Path::new(&args[1]), Path::new(&args[2]))?;
             Ok(true)
         }
+        "export-aiger-predicate-v2-obligations" => {
+            if args.len() != 4 {
+                return Err("usage: continuation-quotient-sat export-aiger-predicate-v2-obligations INPUT.aag|INPUT.aig CERTIFICATE.cert2 OUTPUT_DIR".to_string());
+            }
+            export_aiger_predicate_v2_obligations(
+                Path::new(&args[1]),
+                Path::new(&args[2]),
+                Path::new(&args[3]),
+            )?;
+            Ok(true)
+        }
         "verify-aiger-counterfactual" => {
             if args.len() != 7 {
                 return Err("usage: continuation-quotient-sat verify-aiger-counterfactual INPUT.aag|INPUT.aig OUTPUT_INDEX TRANSCRIPT.txt EXPECTED_QUERIES REPORT.txt CERTIFICATE.cert".to_string());
@@ -31743,6 +31933,87 @@ mod tests {
             .unwrap_err()
             .contains("usage:")
         );
+    }
+
+    #[test]
+    fn predicate_v2_obligation_export_is_deterministic_complete_and_unsat() {
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let transcript = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/predicate-certificate-cost/interrupt-h8-avoidable.transcript");
+        let scratch = std::env::temp_dir().join(format!(
+            "cq-sat-predicate-obligation-export-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+        let certificate = scratch.join("input.cert2");
+        certify_aiger_predicate_v2(&input, 0, &transcript, &certificate).unwrap();
+        let first = scratch.join("first");
+        let second = scratch.join("second");
+        export_aiger_predicate_v2_obligations(&input, &certificate, &first).unwrap();
+        export_aiger_predicate_v2_obligations(&input, &certificate, &second).unwrap();
+
+        let first_manifest = fs::read(first.join("manifest.txt")).unwrap();
+        assert_eq!(
+            first_manifest,
+            fs::read(second.join("manifest.txt")).unwrap()
+        );
+        let manifest = String::from_utf8(first_manifest).unwrap();
+        let count = manifest
+            .lines()
+            .find_map(|line| line.strip_prefix("obligation_count="))
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
+        let certificate_body = parse_predicate_certificate_v2(&certificate).unwrap();
+        assert_eq!(
+            count,
+            certificate_body
+                .phases
+                .iter()
+                .map(|phase| phase.base_rows.len())
+                .sum::<usize>()
+                + 1
+        );
+        for line in manifest.lines().filter(|line| {
+            line.starts_with("obligation_") && !line.starts_with("obligation_count=")
+        }) {
+            let filename = line.split_once('=').unwrap().1.split(',').next().unwrap();
+            assert_eq!(
+                fs::read(first.join(filename)).unwrap(),
+                fs::read(second.join(filename)).unwrap()
+            );
+            let (variables, clauses) = parse_dimacs(&first.join(filename)).unwrap();
+            assert!(solve_with_varisat(variables, &clauses).is_none());
+        }
+        assert_eq!(
+            fs::read(first.join("aggregate.cnf")).unwrap(),
+            fs::read(second.join("aggregate.cnf")).unwrap()
+        );
+        let (variables, clauses) = parse_dimacs(&first.join("aggregate.cnf")).unwrap();
+        assert!(solve_with_varisat(variables, &clauses).is_none());
+        assert!(
+            export_aiger_predicate_v2_obligations(&input, &certificate, &first)
+                .unwrap_err()
+                .contains("refuses to overwrite")
+        );
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn selector_aggregate_is_unsat_exactly_when_every_obligation_is_unsat() {
+        let contradiction = vec![Clause(vec![(0, true)]), Clause(vec![(0, false)])];
+        let satisfiable = vec![Clause(vec![(0, true)])];
+        let (variables, all_unsat) =
+            aggregate_predicate_obligations(1, &[contradiction.clone(), contradiction.clone()])
+                .unwrap();
+        assert!(solve_with_varisat(variables, &all_unsat).is_none());
+
+        let (variables, one_sat) =
+            aggregate_predicate_obligations(1, &[contradiction, satisfiable]).unwrap();
+        assert!(solve_with_varisat(variables, &one_sat).is_some());
+        assert!(aggregate_predicate_obligations(1, &[]).is_err());
+        assert!(aggregate_predicate_obligations(0, &[Vec::new()]).is_err());
     }
 
     #[test]
