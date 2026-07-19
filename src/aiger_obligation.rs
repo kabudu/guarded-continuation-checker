@@ -41,6 +41,12 @@ pub struct AigerInputPredicate {
     pub clauses: Vec<Vec<(usize, bool)>>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct AigerOutcome {
+    pub target: usize,
+    pub outputs: u128,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AigerObligationError(pub String);
 
@@ -339,6 +345,76 @@ pub fn relation_row_completeness_cnf(
     Ok(clauses)
 }
 
+pub fn transducer_row_completeness_cnf(
+    model: &AigerTransition,
+    relevant_inputs: &[usize],
+    source: usize,
+    predicate: &AigerInputPredicate,
+    observed_outputs: &[usize],
+    claimed_outcomes: &[AigerOutcome],
+) -> Result<Vec<CnfClause>, AigerObligationError> {
+    validate_boundary(model, relevant_inputs, predicate)?;
+    if source >= model.state_count()
+        || observed_outputs.len() > u128::BITS as usize
+        || observed_outputs
+            .iter()
+            .any(|&output| output >= model.outputs.len())
+        || observed_outputs.windows(2).any(|pair| pair[0] >= pair[1])
+        || claimed_outcomes
+            .iter()
+            .any(|outcome| outcome.target >= model.state_count())
+        || claimed_outcomes.windows(2).any(|pair| pair[0] >= pair[1])
+        || (observed_outputs.len() < u128::BITS as usize
+            && claimed_outcomes
+                .iter()
+                .any(|outcome| outcome.outputs >> observed_outputs.len() != 0))
+    {
+        return Err(reject("AIGER transducer-row claim is invalid"));
+    }
+    let mut clauses = Vec::with_capacity(
+        model.ands.len() * 3
+            + model.latches.len()
+            + predicate.clauses.len()
+            + claimed_outcomes.len(),
+    );
+    for (bit, latch) in model.latches.iter().enumerate() {
+        push_simplified(
+            &mut clauses,
+            &[CnfLiteral::Variable((
+                latch.current / 2 - 1,
+                source >> bit & 1 == 1,
+            ))],
+        );
+    }
+    append_predicate(&mut clauses, model, relevant_inputs, predicate);
+    append_ands(&mut clauses, model);
+    for outcome in claimed_outcomes {
+        let mut differs = model
+            .latches
+            .iter()
+            .enumerate()
+            .map(|(bit, latch)| {
+                let next = cnf_literal(latch.next);
+                if outcome.target >> bit & 1 == 1 {
+                    next.negate()
+                } else {
+                    next
+                }
+            })
+            .collect::<Vec<_>>();
+        differs.extend(observed_outputs.iter().enumerate().map(|(bit, &output)| {
+            let value = cnf_literal(model.outputs[output]);
+            if outcome.outputs >> bit & 1 == 1 {
+                value.negate()
+            } else {
+                value
+            }
+        }));
+        push_simplified(&mut clauses, &differs);
+    }
+    Ok(clauses)
+}
+
 pub fn terminal_completeness_cnf(
     model: &AigerTransition,
     relevant_inputs: &[usize],
@@ -423,5 +499,39 @@ mod tests {
         let mut invalid = model;
         invalid.latches[0].next = 8;
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn transducer_obligation_preserves_observed_outputs() {
+        let model = toggler();
+        let predicate = AigerInputPredicate { clauses: vec![] };
+        let complete = transducer_row_completeness_cnf(
+            &model,
+            &[],
+            0,
+            &predicate,
+            &[0],
+            &[AigerOutcome {
+                target: 1,
+                outputs: 0,
+            }],
+        )
+        .unwrap();
+        let proof = generate_unsat_proof(&complete).unwrap();
+        verify_unsat_proof(&complete, &proof).unwrap();
+
+        let wrong_output = transducer_row_completeness_cnf(
+            &model,
+            &[],
+            0,
+            &predicate,
+            &[0],
+            &[AigerOutcome {
+                target: 1,
+                outputs: 1,
+            }],
+        )
+        .unwrap();
+        assert!(generate_unsat_proof(&wrong_output).is_err());
     }
 }

@@ -1,6 +1,6 @@
 use guarded_continuation_checker::aiger_obligation::{
-    AigerInputPredicate, AigerLatch, AigerTransition, relation_row_completeness_cnf,
-    terminal_completeness_cnf,
+    AigerInputPredicate, AigerLatch, AigerOutcome, AigerTransition, relation_row_completeness_cnf,
+    terminal_completeness_cnf, transducer_row_completeness_cnf,
 };
 use guarded_continuation_checker::unsat_proof::{generate_unsat_proof, verify_unsat_proof};
 
@@ -29,6 +29,21 @@ fn downstream_api_proves_relation_and_terminal_completeness() {
     let terminal = terminal_completeness_cnf(&controller, &[], &predicate, 0, &[0]).unwrap();
     let terminal_proof = generate_unsat_proof(&terminal).unwrap();
     verify_unsat_proof(&terminal, &terminal_proof).unwrap();
+
+    let transducer = transducer_row_completeness_cnf(
+        &controller,
+        &[],
+        0,
+        &predicate,
+        &[0],
+        &[AigerOutcome {
+            target: 1,
+            outputs: 0,
+        }],
+    )
+    .unwrap();
+    let transducer_proof = generate_unsat_proof(&transducer).unwrap();
+    verify_unsat_proof(&transducer, &transducer_proof).unwrap();
 
     assert_eq!(controller.evaluate(0, 0).unwrap(), (1, 0));
     assert_eq!(controller.evaluate(1, 0).unwrap(), (0, 1));

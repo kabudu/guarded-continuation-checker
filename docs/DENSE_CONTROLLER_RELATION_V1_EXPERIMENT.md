@@ -9,7 +9,10 @@ membership, target enumeration, composition, and binary exponentiation. A
 second public module generates and independently checks bounded Varisat UNSAT
 proofs, including structural preflight before the checker sees hostile bytes.
 A third public module validates and evaluates a bounded AIGER transition model,
-then constructs exact relation-row and terminal-completeness CNF obligations.
+then constructs exact relation-row, transducer-row, and terminal-completeness CNF
+obligations. Transducer rows bind both next-state and selected controller-output
+patterns, so later plant composition cannot discard actuator behaviour while
+retaining only state reachability.
 The existing predicate engine uses these modules without changing its
 certificate format or answers. This remains an experiment and falsification
 plan, not a novelty or production-readiness claim.
@@ -136,6 +139,8 @@ That claim is currently unproven.
    remain incomplete.
 2. Prove byte-for-byte and answer compatibility for predicate certificate v2.
 3. Add a source-bound controller boundary manifest and canonical obligation.
+   Its core proof vocabulary now covers complete next-state and selected-output
+   outcomes; canonical encoding and source binding remain incomplete.
 4. Add environment-member composition with exact trace reconstruction.
 5. Add a static portfolio with unchanged exact fallback.
 6. Run hostile-input and three-platform gates.
