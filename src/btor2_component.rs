@@ -2915,6 +2915,45 @@ mod tests {
     }
 
     #[test]
+    fn admitted_portfolio_preserves_deterministic_artifact_break_even() {
+        for count in [2usize, 4, 8, 16, 32, 64] {
+            let inputs = (0..count)
+                .map(|index| ComponentBatchInput {
+                    plant_source: PLANT,
+                    contract_source: CONTRACT,
+                    horizon: 192 + index as u32,
+                })
+                .collect::<Vec<_>>();
+            let naive = produce_naive_component_batch(CONTROLLER, &inputs).unwrap();
+            let production = produce_component_batch_portfolio(CONTROLLER, &inputs).unwrap();
+            assert_eq!(
+                production.selection_reason,
+                ComponentBatchSelectionReason::FullyAdmittedReuse
+            );
+            let ComponentBatchPortfolioCertificate::Reusable(reusable) = &production.certificate
+            else {
+                panic!("expected reusable route")
+            };
+            let naive_bytes = encode_controller_obligation(&reusable.controller_obligation)
+                .unwrap()
+                .len()
+                + naive
+                    .members
+                    .iter()
+                    .map(|member| encode(member).unwrap().len())
+                    .sum::<usize>();
+            let portfolio_bytes = encode_component_batch_portfolio(&production.certificate)
+                .unwrap()
+                .len();
+            assert_eq!(
+                portfolio_bytes,
+                encode_reusable_component_batch(reusable).unwrap().len()
+            );
+            assert!(portfolio_bytes < naive_bytes);
+        }
+    }
+
+    #[test]
     fn rejects_source_contract_and_claim_tampering() {
         let certificate = produce(CONTROLLER, PLANT, CONTRACT, 255)
             .unwrap()

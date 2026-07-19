@@ -1,0 +1,9 @@
+component_batch_manifest_version=1
+member_count=2
+plant_path=motion-plant-v1.btor2
+contract_path=braking-motion-contract-v1.txt
+horizon=254
+plant_path=fast-motion-plant-v1.btor2
+contract_path=braking-motion-contract-v1.txt
+horizon=127
+status=complete
