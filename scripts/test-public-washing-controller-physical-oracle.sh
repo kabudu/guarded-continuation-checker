@@ -26,14 +26,30 @@ check_digests() {
 (
   cd "$corpus"
   check_digests
-  yosys -Q -q -s synthesize.ys
-  check_digests
+  case "$(yosys -V)" in
+    "Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159,"*)
+      yosys -Q -q -s synthesize.ys
+      check_digests
+      echo "controller-aiger-regeneration=PASS yosys=0.67+post-b8e7da6f40ae"
+      ;;
+    *)
+      echo "controller-aiger-regeneration=SKIPPED reason=yosys-version-mismatch"
+      ;;
+  esac
 )
 (
   cd "$corpus/plant"
   check_digests
-  yosys -Q -q -s synthesize.ys
-  check_digests
+  case "$(yosys -V)" in
+    "Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159,"*)
+      yosys -Q -q -s synthesize.ys
+      check_digests
+      echo "plant-aiger-regeneration=PASS yosys=0.67+post-b8e7da6f40ae"
+      ;;
+    *)
+      echo "plant-aiger-regeneration=SKIPPED reason=yosys-version-mismatch"
+      ;;
+  esac
 )
 
 set +e

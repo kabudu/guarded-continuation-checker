@@ -7,10 +7,11 @@
   finding that semantic replay, not source/model loading, dominates the public
   admitted batch and keep every timing field outside routing decisions.
 
-- Make the washing-controller oracle portable across Yosys versions. Require
-  byte-identical regeneration only with the recorded Yosys 0.67 build; other
-  hosts still verify pinned source and model digests plus formal properties and
-  explicitly report source-to-model regeneration as skipped.
+- Make both washing-controller formal oracles portable across Yosys versions.
+  Require byte-identical controller and plant regeneration only with the
+  recorded Yosys 0.67 build; other hosts still verify pinned source and model
+  digests plus formal properties and explicitly report source-to-model
+  regeneration as skipped.
 
 - Add a timing-free controller MTBDD plant portfolio through public Rust and
   self-service file interfaces. Select the
