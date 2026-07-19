@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a primary-source closest-system analysis for the public controller MTBDD
+  result. Reject MTBDD and compile-once reuse as novelty, identify the ordinary
+  in-process symbolic model as the missing strong runtime baseline, and define
+  the next representative-plant trust-transfer experiment.
+
 - Add a pinned SymbiYosys, maintained-Yosys, and Z3 oracle for both public
   washing-controller MTBDD composition answers. Match GCC's explicit zero
   initial state, reproduce the SAFE depth-32 result and the UNSAFE step-10

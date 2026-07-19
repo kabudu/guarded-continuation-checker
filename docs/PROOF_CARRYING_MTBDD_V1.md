@@ -142,3 +142,10 @@ reordered source digests.
 Reduced ordered decision diagrams, multi-terminal BDDs, AIGs, and equivalence
 checking are established. No novelty claim is made without a closest-system
 comparison showing a distinct reusable artifact or verification result.
+
+The first [closest-system analysis](CONTROLLER_MTBDD_CLOSEST_SYSTEMS.md) confirms
+that compile-once relation reuse is also established and strengthens the next
+baseline accordingly. Future measurements must compare the shared artifact
+against both repeated complete evidence and one ordinary in-process compiled
+symbolic model. The candidate value is portable, independently checked trust
+transfer, not an assumed solver-speed advantage.

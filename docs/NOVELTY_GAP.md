@@ -256,3 +256,14 @@ answers and the unsafe step-10 boundary through a separate checking path. This
 removes an implementation-trust gap but supplies no novelty evidence. A
 closest-system review and comparisons on representative physical environments
 remain mandatory before narrowing or asserting novelty.
+
+The primary-source
+[controller MTBDD closest-system analysis](CONTROLLER_MTBDD_CLOSEST_SYSTEMS.md)
+finds that MTBDD representation, compile-once symbolic reuse,
+assume-guarantee composition, and proof-carrying hardware are all established.
+It also identifies a weakness in the current comparison: repeated complete
+artifacts are the right evidence-transfer baseline but not the strongest
+runtime baseline. The next experiment must additionally compare one ordinary
+compiled symbolic model reused in-process and must demonstrate a concrete
+producer-consumer trust-transfer advantage. Until then, the current result is
+useful engineering and not a novel algorithm or verification method.
