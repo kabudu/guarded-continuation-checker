@@ -56,12 +56,16 @@ close either register by itself.
    Tagged compatibility, watchdog/DMA/shared-peripheral semantics, and public
    design evidence remain open.
 
-5. **Word-level BTOR2 interfaces (strict semantic core implemented
-   experimentally).** The [v1 core](BTOR2_WORD_CORE_V1.md) preserves bounded
+5. **Word-level BTOR2 interfaces (strict semantic core and first phase
+   certificate implemented experimentally).** The [v1 core](BTOR2_WORD_CORE_V1.md) preserves bounded
    bit-vector arithmetic, counters, timers, deterministic state updates,
    constraints, and bad properties before bit blasting. Arrays, memory indices,
-   signed arithmetic, proof-carrying composition, exact fallback, and external
-   BTOR2Tools plus Bitwuzla agreement remain open.
+   signed arithmetic and generic proof-carrying composition remain open. The
+   [counter-phase candidate](BTOR2_COUNTER_PHASE_CERTIFICATE_V1.md) now binds
+   and verifies a strict reset-or-affine recurrence. Broader composition, exact
+   portfolio fallback, and full sequential solver agreement remain open. A
+   pinned Bitwuzla 0.9.1 gate now agrees on the candidate's endpoint formulas
+   and rejects a tampered endpoint.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant

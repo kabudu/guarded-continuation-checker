@@ -103,6 +103,11 @@ preserves bounded firmware counter and timer expressions before bit blasting,
 with strict resource and unsupported-operation rejection. It is a foundation
 for future proof-carrying word composition, not yet a solver or novelty result.
 
+The [BTOR2 counter-phase certificate v1](docs/BTOR2_COUNTER_PHASE_CERTIFICATE_V1.md)
+is the first source-bound composition candidate. It compresses strict
+reset-or-affine counter traces into separately rechecked phase endpoints. Its
+narrow admission boundary and unresolved novelty comparison are explicit.
+
 The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
 single exact evaluation command over partial AIGER input transcripts. Its
 timing-free structural gate selects the independently checked dense predicate

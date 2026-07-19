@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ]; then
+  echo "usage: $0 BITWUZLA_BINARY" >&2
+  exit 2
+fi
+
+bitwuzla=$1
+test -x "$bitwuzla"
+
+check_result() {
+  expected=$1
+  input=$2
+  actual=$($bitwuzla --lang smt2 -t 10000 -M 512 "$input")
+  if [ "$actual" != "$expected" ]; then
+    echo "Bitwuzla result for $input: expected $expected, got $actual" >&2
+    exit 1
+  fi
+}
+
+check_result sat examples/btor2/watchdog-endpoint-v1.smt2
+check_result unsat examples/btor2/watchdog-endpoint-tampered-v1.smt2
+check_result sat examples/btor2/actuator-endpoint-v1.smt2
+
+version=$($bitwuzla --version)
+printf 'bitwuzla_phase_baseline=PASS version=%s\n' "$version"

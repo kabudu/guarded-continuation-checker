@@ -1,0 +1,15 @@
+1 sort bitvec 1
+2 sort bitvec 8
+3 input 1 reset
+4 zero 2
+5 state 2 timer
+6 init 2 5 4
+7 one 2
+8 add 2 5 7
+9 constd 2 255
+10 ugte 1 5 9
+11 ite 2 10 5 8
+12 ite 2 3 4 11
+13 next 2 5 12
+14 eq 1 5 9
+15 bad 14 saturated

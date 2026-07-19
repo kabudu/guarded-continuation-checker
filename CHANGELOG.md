@@ -7,6 +7,12 @@
   transitions, constraints, bad properties, resource bounds, and a versioned
   inspection command. Unsupported BTOR2 semantics fail closed. This establishes
   a source boundary for future certificates, not a solver or novelty claim.
+- Add experimental BTOR2 counter-phase certificate v1. Bind reset-or-affine
+  counter traces to the exact source, compress repeated control runs into
+  closed-form modular endpoints, and recheck them through a bounded verifier.
+  Include accepted watchdog and actuator examples plus a rejected saturating
+  near-neighbour. This remains a narrow candidate primitive without a novelty
+  or production-readiness claim.
 
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability

@@ -46,6 +46,18 @@ checker-diversity gap, but the external tools are an evaluation harness rather
 than a shipped runtime dependency and do not close the resource, compatibility,
 portfolio, or acceptance gaps above.
 
+## BTOR2 counter-phase experimental boundary
+
+Counter-phase certificate v1 is not a production-supported interface. It
+source-binds and separately verifies a strict one-state reset-or-affine
+recurrence, passes accepted watchdog and actuator examples, rejects a
+saturating near-neighbour, and agrees with pinned BTOR2Tools parsing plus
+Bitwuzla endpoint formulas. It proves only a claimed bad endpoint for a supplied
+phase trace. It does not prove safety, absence of earlier failures,
+unavoidability, generic BTOR2 semantics, or exact fallback for rejected models.
+It cannot change any production-readiness row until those gaps, stable release
+compatibility, full hostile-input coverage, and public product evidence close.
+
 ## Rules
 
 - No timing-based per-formula calibration.

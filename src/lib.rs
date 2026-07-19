@@ -5,6 +5,7 @@
 //! versioned CLI contract before exposing typed certificate operations.
 
 pub mod btor2;
+pub mod btor2_phase;
 
 use std::fmt;
 use std::io::Read;
