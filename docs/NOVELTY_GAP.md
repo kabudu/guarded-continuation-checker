@@ -205,3 +205,11 @@ the artifact gate and has no stable checking win, so universal selection is
 falsified. A public unmodified product family, maintained external-tool
 agreement, cross-platform replication, and external review remain unproven.
 No novelty claim is made.
+
+The next [dense controller relation v1 experiment](DENSE_CONTROLLER_RELATION_V1_EXPERIMENT.md)
+tests a broader candidate boundary: reuse the existing witnessed-edge and UNSAT
+row-completeness proof primitives as one source-bound controller relation across
+several environments. Finite relations, relational composition, reusable
+assumptions, and proof-carrying model checking are prior art. Only a measured
+win on revision-pinned, unmodified embedded RTL with strong ordinary baselines
+could narrow the novelty gap. No such result exists yet.

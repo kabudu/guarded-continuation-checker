@@ -108,10 +108,19 @@ close either register by itself.
    minimal input-contract, guard, or state-machine changes that eliminate it,
    with the repaired design independently reverified.
 
-9. **Real-time and probabilistic extensions.** Explore timed interfaces and
+9. **Proof-carrying dense controller relations.** Generalise the narrow braking
+   obligation into a source-bound finite controller relation with witnessed
+   edges and independently checked row-completeness proofs. Reuse it across
+   multiple plant, bus, scheduler, or fault environments, while preserving exact
+   fallback and trace reconstruction. The
+   [v1 experiment specification](DENSE_CONTROLLER_RELATION_V1_EXPERIMENT.md)
+   predeclares strong parse-once, proof-carrying, public-product, hostile-input,
+   and cross-platform gates before implementation.
+
+10. **Real-time and probabilistic extensions.** Explore timed interfaces and
    bounded uncertainty only after exact Boolean/bit-vector evidence is mature.
 
-10. **External validation and novelty review.** Compare against maintained
+11. **External validation and novelty review.** Compare against maintained
     model checkers and explanation tools on public and confidential partner
     designs; commission independent technical, security, and scholarly review.
 
