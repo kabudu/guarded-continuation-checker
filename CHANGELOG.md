@@ -8,6 +8,10 @@
   static linkage, identity bindings, and corruption rejection. Add a two-clone
   byte-reproducibility gate and a master-only GitHub Sigstore attestation
   workflow without publishing a release or crate.
+- Retain the first signed Linux candidate evidence at master commit `47aeb69`.
+  Both SLSA and SPDX attestations bind archive digest `6bb88302...01d6f` to the
+  exact protected workflow, source commit, and GitHub-hosted runner. Offline
+  replay verifies the archive without executing the candidate binary.
 
 - Add the proof-carrying event-contract feasibility primitive. Rebuild named-CNF
   relation and terminal completeness obligations independently of the BDD,

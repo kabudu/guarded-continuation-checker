@@ -94,6 +94,8 @@ before any execution, with all of:
 
 - repository `kabudu/guarded-continuation-checker`;
 - source ref `refs/heads/master`;
+- exact `--source-digest` and `--signer-digest` values recorded for the
+  candidate;
 - signer workflow
   `kabudu/guarded-continuation-checker/.github/workflows/release-candidate-bundle.yml`;
 - `--deny-self-hosted-runners`; and
@@ -106,8 +108,7 @@ capability commands may be replayed there against `CAPABILITIES.txt`.
 ## Claim boundary
 
 V1 covers one static Linux target. macOS is still development-only, Windows is
-unsupported, and no signed candidate has passed this new workflow until a
-reviewed `master` run is retained. Reproducible packaging reduces supply-chain
-and evaluator setup risk; it does not improve solver novelty, prove a firmware
-model complete, qualify GCC under a safety standard, or close independent
-acceptance.
+unsupported, and the first [reviewed signed candidate](../results/linux-evaluation-candidate-v1.md)
+is not a tagged release. Reproducible packaging reduces supply-chain and
+evaluator setup risk; it does not improve solver novelty, prove a firmware model
+complete, qualify GCC under a safety standard, or close independent acceptance.

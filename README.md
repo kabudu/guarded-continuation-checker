@@ -86,7 +86,8 @@ requires byte-identical archives, SPDX SBOMs, provenance, and checksums. Its
 offline verifier rejects corruption and inconsistent metadata. A master-only
 GitHub workflow can add Sigstore-backed build and SBOM attestations without
 publishing a release. This is release-path hardening, not a production or
-novelty claim.
+novelty claim. The first [signed Linux candidate](results/linux-evaluation-candidate-v1.md)
+passes exact source, workflow, runner, SLSA, SPDX, and offline verification.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
