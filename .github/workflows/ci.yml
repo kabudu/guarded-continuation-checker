@@ -43,6 +43,7 @@ jobs:
             scripts/run-btor2-component-cohort.sh \
             scripts/run-btor2-component-self-service-acceptance.sh \
             scripts/run-btor2-component-cost.sh \
+            scripts/run-btor2-component-batch-acceptance.sh \
             scripts/run-btor2-component-reuse-benchmark.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
@@ -99,6 +100,13 @@ jobs:
             target/debug/guarded-continuation-checker /tmp/btor2-component-acceptance.csv
           diff -u results/btor2-component-self-service-acceptance-v1.csv \
             /tmp/btor2-component-acceptance.csv
+      - name: Reproduce BTOR2 component batch acceptance
+        run: |
+          scripts/run-btor2-component-batch-acceptance.sh \
+            target/debug/guarded-continuation-checker \
+            /tmp/btor2-component-batch-acceptance.csv
+          diff -u results/btor2-component-batch-acceptance-v1.csv \
+            /tmp/btor2-component-batch-acceptance.csv
       - name: Test external production evidence gate
         run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test

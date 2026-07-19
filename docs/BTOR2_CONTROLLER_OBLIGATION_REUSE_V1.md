@@ -130,6 +130,12 @@ guarded-continuation-checker verify-btor2-component-batch \
   braking-controller-v1.btor2 batch.txt batch.component-batch
 ```
 
+The retained simulated self-service acceptance covers the admitted reusable
+route, the mixed ordinary route, query drift, controller drift, and artifact
+mutation. All five cases behave as predeclared in
+[`results/btor2-component-batch-acceptance-v1.csv`](../results/btor2-component-batch-acceptance-v1.csv).
+This is repository-controlled evidence, not independent partner acceptance.
+
 The retained data is in
 [`results/btor2-component-reuse-v1.csv`](../results/btor2-component-reuse-v1.csv).
 Reproduce it with:
