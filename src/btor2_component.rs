@@ -9,6 +9,7 @@ use std::fmt;
 pub const COMPONENT_CONTRACT_VERSION: u32 = 1;
 pub const COMPONENT_CERTIFICATE_VERSION: u32 = 1;
 pub const CONTROLLER_OBLIGATION_VERSION: u32 = 1;
+pub const REUSABLE_COMPONENT_BATCH_VERSION: u32 = 1;
 pub const MAX_COMPONENT_CONTRACT_BYTES: usize = 4096;
 pub const MAX_CONTROLLER_OBLIGATION_BYTES: usize = 2048;
 pub const MAX_COMPONENT_PHASE_HORIZON: u32 = 1_000_000_000;
@@ -18,6 +19,7 @@ pub const MAX_COMPONENT_TOTAL_STATES: usize = 262_144;
 pub const MAX_COMPONENT_NODE_STEPS: u64 = 30_000_000;
 pub const MAX_COMPONENT_CERTIFICATE_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_COMPONENT_BATCH_MEMBERS: usize = 64;
+pub const MAX_REUSABLE_COMPONENT_BATCH_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentContract {
@@ -1879,6 +1881,169 @@ pub fn verify_reusable_component_batch(
     })
 }
 
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_decode(value: &str, label: &str) -> Result<Vec<u8>, ComponentError> {
+    if !value.len().is_multiple_of(2)
+        || value
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+    {
+        return Err(reject(format!("{label} is not canonical lowercase hex")));
+    }
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|text| u8::from_str_radix(text, 16).ok())
+                .ok_or_else(|| reject(format!("invalid {label}")))
+        })
+        .collect()
+}
+
+pub fn encode_reusable_component_batch(
+    certificate: &ReusableComponentBatchCertificate,
+) -> Result<String, ComponentError> {
+    if certificate.members.is_empty() || certificate.members.len() > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let obligation = encode_controller_obligation(&certificate.controller_obligation)?;
+    let mut text = format!(
+        "reusable_component_batch_version={REUSABLE_COMPONENT_BATCH_VERSION}\ncontroller_obligation_hex={}\nmember_count={}\n",
+        hex_encode(obligation.as_bytes()),
+        certificate.members.len(),
+    );
+    for member in &certificate.members {
+        match member {
+            ReusableBatchMember::ReusedPhase(member) => {
+                if !valid_digest(&member.plant_sha256) || !valid_digest(&member.contract_sha256) {
+                    return Err(reject("reused phase digest is not canonical"));
+                }
+                text.push_str(&format!(
+                    "member=reused-phase\nplant_sha256={}\ncontract_sha256={}\nquery_horizon={}\nacceleration={}\ndeceleration={}\nposition_threshold={}\nswitch_frame={}\nstop_frame={}\nmax_velocity={}\nmax_position={}\n",
+                    member.plant_sha256,
+                    member.contract_sha256,
+                    member.query_horizon,
+                    member.acceleration,
+                    member.deceleration,
+                    member.position_threshold,
+                    member.switch_frame,
+                    member.stop_frame,
+                    member.max_velocity,
+                    member.max_position,
+                ));
+            }
+            ReusableBatchMember::ExactFallback(member) => {
+                text.push_str("member=exact-fallback\ncertificate_hex=");
+                text.push_str(&hex_encode(encode(member)?.as_bytes()));
+                text.push('\n');
+            }
+        }
+        if text.len() > MAX_REUSABLE_COMPONENT_BATCH_BYTES {
+            return Err(reject("reusable component batch exceeds byte limit"));
+        }
+    }
+    text.push_str("status=complete\n");
+    if text.len() > MAX_REUSABLE_COMPONENT_BATCH_BYTES {
+        return Err(reject("reusable component batch exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+pub fn decode_reusable_component_batch(
+    bytes: &[u8],
+) -> Result<ReusableComponentBatchCertificate, ComponentError> {
+    let text = canonical_text(
+        bytes,
+        "reusable component batch",
+        MAX_REUSABLE_COMPONENT_BATCH_BYTES,
+    )?;
+    let mut lines = text.lines();
+    fn take<'a>(lines: &mut std::str::Lines<'a>, key: &str) -> Result<&'a str, ComponentError> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| reject(format!("expected {key}")))
+    }
+    let version: u32 = parse_number(
+        take(&mut lines, "reusable_component_batch_version")?,
+        "reusable component batch version",
+    )?;
+    if version != REUSABLE_COMPONENT_BATCH_VERSION {
+        return Err(reject("unsupported reusable component batch version"));
+    }
+    let obligation_bytes = hex_decode(
+        take(&mut lines, "controller_obligation_hex")?,
+        "controller obligation",
+    )?;
+    if obligation_bytes.len() > MAX_CONTROLLER_OBLIGATION_BYTES {
+        return Err(reject("controller obligation exceeds byte limit"));
+    }
+    let controller_obligation = decode_controller_obligation(&obligation_bytes)?;
+    let count: usize = parse_number(take(&mut lines, "member_count")?, "member count")?;
+    if count == 0 || count > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let mut members = Vec::with_capacity(count);
+    for _ in 0..count {
+        let member = match take(&mut lines, "member")? {
+            "reused-phase" => {
+                let member = ReusedPhaseMember {
+                    plant_sha256: take(&mut lines, "plant_sha256")?.to_string(),
+                    contract_sha256: take(&mut lines, "contract_sha256")?.to_string(),
+                    query_horizon: parse_number(
+                        take(&mut lines, "query_horizon")?,
+                        "query horizon",
+                    )?,
+                    acceleration: parse_number(take(&mut lines, "acceleration")?, "acceleration")?,
+                    deceleration: parse_number(take(&mut lines, "deceleration")?, "deceleration")?,
+                    position_threshold: parse_number(
+                        take(&mut lines, "position_threshold")?,
+                        "position threshold",
+                    )?,
+                    switch_frame: parse_number(take(&mut lines, "switch_frame")?, "switch frame")?,
+                    stop_frame: parse_number(take(&mut lines, "stop_frame")?, "stop frame")?,
+                    max_velocity: parse_number(take(&mut lines, "max_velocity")?, "max velocity")?,
+                    max_position: parse_number(take(&mut lines, "max_position")?, "max position")?,
+                };
+                if !valid_digest(&member.plant_sha256) || !valid_digest(&member.contract_sha256) {
+                    return Err(reject("reused phase digest is not canonical"));
+                }
+                ReusableBatchMember::ReusedPhase(member)
+            }
+            "exact-fallback" => {
+                let certificate = hex_decode(
+                    take(&mut lines, "certificate_hex")?,
+                    "component certificate",
+                )?;
+                if certificate.len() > MAX_COMPONENT_CERTIFICATE_BYTES {
+                    return Err(reject("component certificate exceeds byte limit"));
+                }
+                ReusableBatchMember::ExactFallback(decode(&certificate)?)
+            }
+            _ => return Err(reject("unknown reusable component batch member")),
+        };
+        members.push(member);
+    }
+    if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
+        return Err(reject(
+            "reusable component batch is incomplete or has trailing fields",
+        ));
+    }
+    let certificate = ReusableComponentBatchCertificate {
+        controller_obligation,
+        members,
+    };
+    if encode_reusable_component_batch(&certificate)? != text {
+        return Err(reject("reusable component batch is not canonical"));
+    }
+    Ok(certificate)
+}
+
 fn encode_state(state: &ComponentState) -> String {
     fn side(values: &[(NodeId, u64)]) -> String {
         values
@@ -2321,6 +2486,35 @@ mod tests {
         let mut reordered = inputs;
         reordered.swap(0, 1);
         assert!(verify_reusable_component_batch(CONTROLLER, &reordered, &certificate).is_err());
+    }
+
+    #[test]
+    fn reusable_batch_codec_is_canonical_bounded_and_fail_closed() {
+        let inputs = [ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 255,
+        }];
+        let certificate = produce_reusable_component_batch(CONTROLLER, &inputs).unwrap();
+        let encoded = encode_reusable_component_batch(&certificate).unwrap();
+        let decoded = decode_reusable_component_batch(encoded.as_bytes()).unwrap();
+        assert_eq!(decoded, certificate);
+        verify_reusable_component_batch(CONTROLLER, &inputs, &decoded).unwrap();
+
+        for end in 0..encoded.len() {
+            assert!(decode_reusable_component_batch(&encoded.as_bytes()[..end]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.as_bytes().to_vec();
+            mutated[index] = if mutated[index] == b'!' { b'?' } else { b'!' };
+            if let Ok(decoded) = decode_reusable_component_batch(&mutated) {
+                assert!(verify_reusable_component_batch(CONTROLLER, &inputs, &decoded).is_err());
+            }
+        }
+        assert!(
+            decode_reusable_component_batch(&vec![b'x'; MAX_REUSABLE_COMPONENT_BATCH_BYTES + 1])
+                .is_err()
+        );
     }
 
     #[test]
