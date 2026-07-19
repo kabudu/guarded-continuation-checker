@@ -152,3 +152,14 @@ layers and witness replay. It is an exact reference backend and integration
 boundary, not a novelty result. Novelty remains open until a compressed
 word-composition certificate proves the same successor completeness obligation
 without enumerating the measured state layers.
+
+[BTOR2 exact word-region certificate v1](BTOR2_WORD_REGION_CERTIFICATE_V1.md)
+closes that narrow measured compression target: independently recovered
+arithmetic progressions reduce the two large SAFE artifacts by more than 99.9%
+and a static portfolio preserves explicit exact fallback. Arithmetic-progression
+descriptions of one-counter reachability, recurrence acceleration, symbolic
+reachability, and word-level BMC are established prior art. This result is a
+useful proof-carrying integration primitive, not a novel algorithm. The open
+candidate question moves to exact composition of interacting word regions with
+a certificate materially different from straightforward products of known
+counter accelerations.

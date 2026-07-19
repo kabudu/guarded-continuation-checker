@@ -80,8 +80,11 @@ re-recognizes the admitted recurrence during verification. BTOR2Tools checks
 sequential witnesses across the watchdog, actuator, and saturating cohort.
 Bitwuzla checks endpoint formulas plus both watchdog bounded-search answers.
 Exact replay preserves rejected supplied traces, and bounded search provides
-both-answer fallback for the one-input, constraint-free subset.
+both-answer fallback for the one-input, constraint-free subset. The
+[exact word-region certificate v1](BTOR2_WORD_REGION_CERTIFICATE_V1.md) now
+replaces explicit SAFE layers for two recognised counter families while proving
+the same complete reachable set from source. The retained large SAFE artifacts
+shrink by more than 99.9%.
 
-The next gate must address multi-input search and constraints, then measure
-whether compressed word composition can replace explicit reachable layers
-without weakening the complete-successor proof.
+The next gate must extend exact composition across interacting states or
+multiple inputs without turning the proof back into explicit state enumeration.

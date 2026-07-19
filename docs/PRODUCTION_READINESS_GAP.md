@@ -58,10 +58,15 @@ unavoidability, or generic BTOR2 semantics. The counter-trace portfolio now
 preserves rejected supplied one-input traces through exact replay up to 100,000
 transitions. Separately, bounded search v1 provides exact existential bad
 reachability and its SAFE
-complement for the one-input, constraint-free subset through fixed state and
-work limits. Its explicit-layer certificate is a research reference, with no
-compatibility history, broad product corpus, or external acceptance evidence.
-It cannot change any production-readiness row until those gaps, stable release
+  complement for the one-input, constraint-free subset through fixed state and
+  work limits. Its explicit-layer certificate is a research reference, with no
+  compatibility history, broad product corpus, or external acceptance evidence.
+  Exact word-region certificate v1 compresses SAFE evidence for two recognised
+  one-state recurrence families, with static explicit-search fallback and
+  retained both-answer agreement. It remains a narrow source-language result,
+  not evidence for interacting firmware state, memory, interrupts, or a public
+  unmodified product design.
+  It cannot change any production-readiness row until those gaps, stable release
 compatibility, full hostile-input coverage, and public product evidence close.
 
 ## Rules

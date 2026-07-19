@@ -20,8 +20,8 @@ The package provides:
 - deterministic certificate formats with independent source-bound verification;
   and
 - experimental BTOR2 word semantics, counter-phase certificates, exact trace
-  replay, and both-answer bounded reachability certificates with fixed resource
-  limits.
+  replay, proof-carrying exact word regions, and both-answer bounded
+  reachability with a static exact-search fallback and fixed resource limits.
 
 ## Status and claim boundary
 
