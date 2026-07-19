@@ -50,7 +50,7 @@ code.
 ## Static admission limits
 
 - at most 16 selected sensed inputs;
-- at most 4 controller latches;
+- at most 6 controller latches;
 - at most 4 selected controller outputs;
 - at most 256 symbolic cells;
 - at most 4,096 row proofs;

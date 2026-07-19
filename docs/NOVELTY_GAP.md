@@ -227,3 +227,12 @@ established. A synthetic one-bit win closes an implementation and baseline gap,
 not the novelty gap. An unmodified public embedded controller, maintained
 external-tool agreement, closest-system comparison, and expert review remain
 open. No novelty claim is made.
+
+The first revision-pinned public-controller attempt is recorded in
+[public washing-controller experiment v1](PUBLIC_WASHING_CONTROLLER_EXPERIMENT_V1.md).
+The unmodified GPL-2.0 source synthesizes to six latches, but all 64 states are
+reachable and its exact input-response relation needs 1,028 canonical cube
+leaves. It is rejected by the frozen 256-cell gate before proof production.
+This falsifies straightforward state-limit expansion for that candidate and
+points toward non-cube equivalence predicates or a cleaner public controller.
+It supplies no novelty evidence.

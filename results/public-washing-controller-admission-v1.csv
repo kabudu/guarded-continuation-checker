@@ -1,0 +1,2 @@
+schema_version,source_sha256,inputs,latches,outputs,ands,reachable_states,distinct_signatures,canonical_cells,rows,proof_bytes,artifact_bytes,production_nanos,verification_nanos,status
+1,edf0cf5a5b6371b945731fe941f43bf4ffec84b9916fe1a18830f1bcadd398b7,11,6,4,122,64,592,1028,0,0,0,0,0,rejected-cell-limit

@@ -1,0 +1,21 @@
+# Public washing-machine controller provenance
+
+`upstream/Controller.v` and `UPSTREAM_LICENSE` are byte-for-byte copies from
+[`yasnakateb/WMController`](https://github.com/yasnakateb/WMController) at
+revision `a81fadd25b07e3e415a57f997f7106f67e2fb24b`.
+
+Upstream describes the project as a washing-machine control system and licenses
+it under GPL-2.0. The upstream bytes remain separate from GCC's Apache-2.0 code.
+Their inclusion does not change the licence of GCC, and downstream redistribution
+must preserve the applicable upstream licence.
+
+The repository-authored `synthesize.ys` records the exact synthesis
+interpretation. In particular, `setundef -zero` resolves upstream's
+uninitialized `next_State` register. `generated/controller.aag` was produced by
+Yosys 0.67+post with git revision `b8e7da6f40ae8f552c116bf6c359b07c6533e159`.
+The generated model is experimental evidence derived from the GPL-2.0 source
+and is distributed with the same upstream licence notice.
+
+Verify the source and licence bytes with `shasum -a 256 -c SHA256SUMS`. The
+experiment must additionally regenerate the AIGER model and compare it before
+publishing a result.

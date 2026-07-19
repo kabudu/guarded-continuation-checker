@@ -13,6 +13,7 @@ pub const MAX_AIGER_LATCHES: usize = 8;
 pub const MAX_AIGER_OUTPUTS: usize = 128;
 pub const MAX_PREDICATE_CLAUSES: usize = 64;
 pub const MAX_PREDICATE_LITERALS: usize = 1_024;
+pub const MAX_ASCII_AIGER_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AigerLatch {
@@ -195,6 +196,122 @@ impl AigerTransition {
             });
         Ok((next, outputs))
     }
+}
+
+fn parse_usize(token: Option<&str>, field: &str) -> Result<usize, AigerObligationError> {
+    token
+        .ok_or_else(|| reject(format!("missing ASCII AIGER {field}")))?
+        .parse()
+        .map_err(|_| reject(format!("invalid ASCII AIGER {field}")))
+}
+
+/// Parses the five-field ASCII AIGER transition subset used by proof APIs.
+///
+/// Optional latch initializers are syntax-checked but are not part of the
+/// transition relation. Callers supply initial states to bounded composition.
+pub fn parse_ascii_aiger_transition(bytes: &[u8]) -> Result<AigerTransition, AigerObligationError> {
+    if bytes.len() > MAX_ASCII_AIGER_BYTES || !bytes.is_ascii() {
+        return Err(reject("ASCII AIGER input size or encoding is invalid"));
+    }
+    let source = std::str::from_utf8(bytes).map_err(|_| reject("ASCII AIGER is not UTF-8"))?;
+    let mut lines = source.lines();
+    let mut header = lines
+        .next()
+        .ok_or_else(|| reject("ASCII AIGER input is empty"))?
+        .split_whitespace();
+    if header.next() != Some("aag") {
+        return Err(reject("ASCII AIGER magic mismatch"));
+    }
+    let max_variable = parse_usize(header.next(), "maximum variable")?;
+    let input_count = parse_usize(header.next(), "input count")?;
+    let latch_count = parse_usize(header.next(), "latch count")?;
+    let output_count = parse_usize(header.next(), "output count")?;
+    let and_count = parse_usize(header.next(), "AND count")?;
+    if header.next().is_some()
+        || input_count > MAX_AIGER_INPUTS
+        || latch_count == 0
+        || latch_count > MAX_AIGER_LATCHES
+        || output_count > MAX_AIGER_OUTPUTS
+        || input_count
+            .checked_add(latch_count)
+            .and_then(|count| count.checked_add(and_count))
+            != Some(max_variable)
+    {
+        return Err(reject("ASCII AIGER header dimensions are invalid"));
+    }
+
+    let mut inputs = Vec::with_capacity(input_count);
+    for index in 0..input_count {
+        let mut fields = lines
+            .next()
+            .ok_or_else(|| reject(format!("truncated ASCII AIGER input {index}")))?
+            .split_whitespace();
+        let literal = parse_usize(fields.next(), "input literal")?;
+        if fields.next().is_some() {
+            return Err(reject("ASCII AIGER input line has trailing fields"));
+        }
+        inputs.push(literal);
+    }
+    let mut latches = Vec::with_capacity(latch_count);
+    for index in 0..latch_count {
+        let fields = lines
+            .next()
+            .ok_or_else(|| reject(format!("truncated ASCII AIGER latch {index}")))?
+            .split_whitespace()
+            .collect::<Vec<_>>();
+        if !(2..=3).contains(&fields.len()) {
+            return Err(reject("ASCII AIGER latch line shape is invalid"));
+        }
+        let current = parse_usize(fields.first().copied(), "latch current literal")?;
+        let next = parse_usize(fields.get(1).copied(), "latch next literal")?;
+        if let Some(initial) = fields.get(2).copied()
+            && initial != "0"
+            && initial != "1"
+            && initial.parse::<usize>().ok() != Some(current)
+        {
+            return Err(reject("ASCII AIGER latch initializer is invalid"));
+        }
+        latches.push(AigerLatch { current, next });
+    }
+    let mut outputs = Vec::with_capacity(output_count);
+    for index in 0..output_count {
+        let mut fields = lines
+            .next()
+            .ok_or_else(|| reject(format!("truncated ASCII AIGER output {index}")))?
+            .split_whitespace();
+        let literal = parse_usize(fields.next(), "output literal")?;
+        if fields.next().is_some() {
+            return Err(reject("ASCII AIGER output line has trailing fields"));
+        }
+        outputs.push(literal);
+    }
+    let mut ands = Vec::with_capacity(and_count);
+    for index in 0..and_count {
+        let mut fields = lines
+            .next()
+            .ok_or_else(|| reject(format!("truncated ASCII AIGER AND {index}")))?
+            .split_whitespace();
+        let output = parse_usize(fields.next(), "AND output literal")?;
+        let left = parse_usize(fields.next(), "AND left literal")?;
+        let right = parse_usize(fields.next(), "AND right literal")?;
+        if fields.next().is_some() {
+            return Err(reject("ASCII AIGER AND line has trailing fields"));
+        }
+        ands.push(AigerAnd {
+            output,
+            left,
+            right,
+        });
+    }
+    let transition = AigerTransition {
+        max_variable,
+        inputs,
+        latches,
+        outputs,
+        ands,
+    };
+    transition.validate()?;
+    Ok(transition)
 }
 
 fn evaluate_literal(literal: usize, values: &[bool]) -> bool {

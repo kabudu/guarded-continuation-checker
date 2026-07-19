@@ -118,6 +118,10 @@ designs, maintained model-checker agreement, cross-platform replication,
 release compatibility, and independent acceptance remain open. This capability
 cannot change any production-readiness row until those gates close.
 
+The first pinned public washing-controller candidate fails the controller
+transducer admission gate with 1,028 canonical cells. It is retained as a
+negative product-scale regression, not counted as public-product support.
+
 ## Rules
 
 - No timing-based per-formula calibration.

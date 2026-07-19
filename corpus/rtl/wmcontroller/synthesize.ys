@@ -1,0 +1,11 @@
+read_verilog upstream/Controller.v
+hierarchy -check -top Controller
+proc
+flatten
+opt
+setundef -zero
+techmap
+opt
+dffunmap
+aigmap
+write_aiger -ascii -symbols generated/controller.aag

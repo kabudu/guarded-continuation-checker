@@ -10,7 +10,7 @@ use crate::unsat_proof::{MAX_UNSAT_PROOF_BYTES, generate_unsat_proof, verify_uns
 
 pub const CONTROLLER_TRANSDUCER_VERSION: u32 = 1;
 pub const MAX_TRANSDUCER_INPUTS: usize = 16;
-pub const MAX_TRANSDUCER_LATCHES: usize = 4;
+pub const MAX_TRANSDUCER_LATCHES: usize = 6;
 pub const MAX_TRANSDUCER_OUTPUTS: usize = 4;
 pub const MAX_TRANSDUCER_CELLS: usize = 256;
 pub const MAX_TRANSDUCER_PROOFS: usize = 4_096;
