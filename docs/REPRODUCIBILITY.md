@@ -677,3 +677,18 @@ committed reference summaries are
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
 agreement, and witness-validity columns are part of the experimental contract.
+
+### Proof-carrying controller batch benchmark
+
+Compare repeated public composition calls with the verified-controller batch
+path in an optimised build:
+
+```sh
+cargo run --release --example controller_plant_batch_benchmark
+```
+
+The benchmark uses 101 interleaved trials at batch sizes 1 through 64, requires
+exact agreement for every member, and reports both median checking time and
+controller-evidence byte ratios. The comparison deliberately excludes member
+result serialization because a canonical member-result artifact has not yet
+been specified.

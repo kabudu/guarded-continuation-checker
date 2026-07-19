@@ -88,6 +88,37 @@ version under the same proof and checking baselines.
 | Public product | One revision-pinned, unmodified embedded controller supplies at least two realistic environments |
 | Cross-platform | Production and checking agree on Linux, macOS, and Windows |
 
+## First batch-checking result
+
+Run the predeclared parse-once comparison in an optimised build:
+
+```console
+cargo run --release --example controller_plant_batch_benchmark
+```
+
+The baseline calls the public proof-carrying composition API independently for
+every member, so it rechecks the same source-bound controller proofs each time.
+The shared path uses the public batch API and checks those proofs once. Across
+101 interleaved trials, the retained one-bit controller fixture produced these
+median ratios:
+
+| Members | Shared/repeated checking time | Shared/repeated controller evidence |
+|---:|---:|---:|
+| 1 | 1.000 | 1.000 |
+| 2 | 0.621 | 0.500 |
+| 4 | 0.438 | 0.250 |
+| 8 | 0.361 | 0.125 |
+| 16 | 0.307 | 0.062 |
+| 32 | 0.288 | 0.031 |
+| 64 | 0.276 | 0.016 |
+
+Every shared result exactly matched its independently checked counterpart. This
+passes the mechanism-level checking gate on the synthetic fixture. It does not
+yet pass the public-product gate, and the evidence byte comparison covers only
+the repeated controller evidence rather than complete canonical member result
+artifacts. Those two limitations prevent treating this as the final strong
+artifact or product result.
+
 ## Falsification conditions
 
 The experiment fails for a cohort if its exact canonical partition exceeds the

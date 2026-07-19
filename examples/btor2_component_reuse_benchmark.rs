@@ -37,9 +37,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for &count in counts {
             let inputs = (0..count)
                 .map(|index| ComponentBatchInput {
-                    plant_source: if cohort != "admitted" && index % 4 == 3 {
-                        BASE_PLANT
-                    } else if index.is_multiple_of(2) {
+                    plant_source: if (cohort != "admitted" && index % 4 == 3)
+                        || index.is_multiple_of(2)
+                    {
                         BASE_PLANT
                     } else {
                         FAST_PLANT
