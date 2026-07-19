@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add experimental BTOR2 word semantic core v1. Preserve strict 1 to 64-bit
+  counter and timer expressions, exact modular evaluation, deterministic state
+  transitions, constraints, bad properties, resource bounds, and a versioned
+  inspection command. Unsupported BTOR2 semantics fail closed. This establishes
+  a source boundary for future certificates, not a solver or novelty claim.
+
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability
   snapshots, and internal SHA-256 manifests; independently verify structure,

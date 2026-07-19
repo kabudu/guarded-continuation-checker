@@ -1,3 +1,4 @@
+use guarded_continuation_checker::btor2;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::env;
@@ -24753,6 +24754,73 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         return Ok(false);
     };
     match command {
+        "btor2-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
+            }
+            println!(
+                "btor2_cli_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                btor2::BTOR2_CORE_VERSION,
+                btor2::MAX_BTOR2_BYTES,
+                btor2::MAX_BTOR2_LINES,
+                btor2::MAX_BTOR2_NODES,
+                btor2::MAX_BIT_WIDTH,
+            );
+            Ok(true)
+        }
+        "inspect-btor2" => {
+            if args.len() != 2 {
+                return Err(
+                    "usage: guarded-continuation-checker inspect-btor2 INPUT.btor2".to_string(),
+                );
+            }
+            let path = Path::new(&args[1]);
+            let mut options = fs::OpenOptions::new();
+            options.read(true);
+            #[cfg(unix)]
+            options.custom_flags(libc::O_NOFOLLOW);
+            let file = options
+                .open(path)
+                .map_err(|error| format!("open BTOR2 {}: {error}", path.display()))?;
+            let metadata = file
+                .metadata()
+                .map_err(|error| format!("inspect open BTOR2 {}: {error}", path.display()))?;
+            if !metadata.file_type().is_file() {
+                return Err("BTOR2 input must be a regular non-symlink file".to_string());
+            }
+            if metadata.len() > btor2::MAX_BTOR2_BYTES as u64 {
+                return Err(format!(
+                    "BTOR2 input exceeds {} bytes",
+                    btor2::MAX_BTOR2_BYTES
+                ));
+            }
+            let mut bytes = Vec::new();
+            file.take((btor2::MAX_BTOR2_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)
+                .map_err(|error| format!("read BTOR2 {}: {error}", path.display()))?;
+            if bytes.len() > btor2::MAX_BTOR2_BYTES {
+                return Err(format!(
+                    "BTOR2 input exceeds {} bytes",
+                    btor2::MAX_BTOR2_BYTES
+                ));
+            }
+            let model = btor2::parse_bytes(&bytes).map_err(|error| error.to_string())?;
+            let digest = Sha256::digest(&bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            println!(
+                "btor2-inspect status=VALID core_version={} sha256={digest} nodes={} inputs={} states={} bad={} constraints={} max_width={} word_semantics=preserved",
+                btor2::BTOR2_CORE_VERSION,
+                model.nodes().len(),
+                model.inputs().len(),
+                model.states().len(),
+                model.bad_properties().len(),
+                model.constraints().len(),
+                model.max_width(),
+            );
+            Ok(true)
+        }
         "predicate-cli-version" => {
             if args.len() != 1 {
                 return Err("usage: guarded-continuation-checker predicate-cli-version".to_string());
@@ -34566,6 +34634,21 @@ mod tests {
         fs::remove_file(certificate_path).unwrap();
         fs::remove_file(duplicate_path).unwrap();
         fs::remove_file(unsafe_certificate).unwrap();
+    }
+
+    #[test]
+    fn btor2_cli_v1_inspects_word_level_fixture_and_rejects_bad_arguments() {
+        assert!(run_artifact_cli(&["btor2-cli-version".to_string()]).unwrap());
+        assert!(
+            run_artifact_cli(&["btor2-cli-version".to_string(), "unexpected".to_string(),])
+                .is_err()
+        );
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/btor2/watchdog-counter-v1.btor2");
+        assert!(
+            run_artifact_cli(&["inspect-btor2".to_string(), fixture.display().to_string(),])
+                .unwrap()
+        );
     }
 
     #[test]

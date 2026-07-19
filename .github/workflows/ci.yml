@@ -27,6 +27,18 @@ jobs:
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
+        run: |
+          git init /tmp/btor2tools
+          git -C /tmp/btor2tools remote add origin https://github.com/Boolector/btor2tools.git
+          git -C /tmp/btor2tools fetch --depth 1 origin d33c73ff1d173f1bfac8ba6b1c6d68ba62c55f8e
+          git -C /tmp/btor2tools checkout --detach FETCH_HEAD
+          cmake -S /tmp/btor2tools -B /tmp/btor2tools/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/btor2tools/build --parallel 2
+          cargo build --locked
+          scripts/test-btor2tools-baseline.sh \
+            target/debug/guarded-continuation-checker \
+            /tmp/btor2tools/build/bin
       - name: Test external production evidence gate
         run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test

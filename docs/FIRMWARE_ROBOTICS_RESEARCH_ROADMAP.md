@@ -56,8 +56,12 @@ close either register by itself.
    Tagged compatibility, watchdog/DMA/shared-peripheral semantics, and public
    design evidence remain open.
 
-5. **Word-level BTOR2 interfaces.** Preserve bit-vector arithmetic, counters,
-   timers, memory indices, and saturating control laws before bit blasting.
+5. **Word-level BTOR2 interfaces (strict semantic core implemented
+   experimentally).** The [v1 core](BTOR2_WORD_CORE_V1.md) preserves bounded
+   bit-vector arithmetic, counters, timers, deterministic state updates,
+   constraints, and bad properties before bit blasting. Arrays, memory indices,
+   signed arithmetic, proof-carrying composition, exact fallback, and external
+   BTOR2Tools plus Bitwuzla agreement remain open.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant

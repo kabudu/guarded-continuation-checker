@@ -131,3 +131,10 @@ productisation evidence, not a novelty result. Exact fallback, typed discovery,
 resource controls, and answer balance do not by themselves distinguish the
 underlying algorithm from established symbolic model checking, proof-carrying
 SAT, contract checking, or solver portfolios.
+
+The experimental [BTOR2 word semantic core v1](BTOR2_WORD_CORE_V1.md) preserves
+bounded counter and timer expressions before bit blasting. BTOR2 parsing,
+bit-vector evaluation, bounded model checking, and word-level SMT solving are
+established prior art. The core does not change any novelty gate. A future claim
+would require proof-carrying word-level composition beyond BTOR2Tools, BtorMC,
+Bitwuzla, and straightforward combinations of existing certificate methods.
