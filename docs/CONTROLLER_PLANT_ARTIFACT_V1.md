@@ -37,3 +37,9 @@ one canonical controller MTBDD. It retains the same ordered source-bound member
 records, result encoding, 64-member limit, 16 MiB byte limit, and whole-artifact
 integrity trailer. Its independent verifier checks MTBDD source equivalence
 once, then recomputes and compares every complete member result.
+
+The [controller MTBDD plant CLI v1](CONTROLLER_MTBDD_CLI_V1.md) exposes this
+variant as a canonical file workflow. The CLI additionally requires the MTBDD
+boundary and every ordered member digest, wiring vector, initial state,
+property and horizon to equal the supplied manifest. A valid artifact for a
+different query therefore fails closed.

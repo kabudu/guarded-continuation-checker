@@ -31,6 +31,13 @@ Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
 
+The experimental [controller MTBDD plant CLI v1](docs/CONTROLLER_MTBDD_CLI_V1.md)
+provides a self-service producer and independent verifier for one public
+controller composed with an ordered plant-property batch. Its canonical
+manifest, exact query binding, stable per-member results, no-clobber output and
+hostile-input controls close a local integration gap. Independent acceptance,
+tagged compatibility and source-to-model attestation remain open.
+
 The experimental [BTOR2 braking-phase certificate](docs/BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md)
 now composes exact accelerate, brake, and stopped regions for a resettable
 controller. Bounded portfolio v3 proves both bundled SAFE boundaries with

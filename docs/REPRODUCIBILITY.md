@@ -752,16 +752,6 @@ four exact bad frames, and checks that both expected-SAFE assertions survive
 through frame 32. The committed reference is
 `results/public-washing-controller-physical-oracle-v1.csv`.
 
-Run the maintained single-session formal oracle for the same six properties:
-
-```sh
-scripts/test-public-washing-controller-physical-oracle.sh /path/to/sby.py
-```
-
-It must report four failing assertions at steps 4, 7, 15, and 15, no failures
-for the two expected-SAFE assertions, and completion through step 32. The
-retained rows are `results/public-washing-controller-physical-oracle-v1.csv`.
-
 Regenerate and check the seven-action complete-cycle plant, then run its exact
 composition regression:
 
@@ -773,3 +763,17 @@ shasum -a 256 -c SHA256SUMS
 cd ../../../..
 cargo test --locked --test public_washing_controller_physical_plant_api
 ```
+
+### Controller MTBDD self-service acceptance
+
+```sh
+cargo build --release --locked
+scripts/run-controller-mtbdd-self-service-acceptance.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-mtbdd-acceptance.csv
+diff -u results/controller-mtbdd-self-service-acceptance-v1.csv \
+  target/controller-mtbdd-acceptance.csv
+```
+
+The harness requires exact answers and bad frames in a fresh verifier process,
+then rejects manifest drift and artifact mutation.

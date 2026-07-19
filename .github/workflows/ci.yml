@@ -46,7 +46,8 @@ jobs:
             scripts/run-btor2-component-batch-acceptance.sh \
             scripts/run-btor2-component-reuse-benchmark.sh \
             scripts/test-public-washing-controller-oracle.sh \
-            scripts/test-public-washing-controller-physical-oracle.sh
+            scripts/test-public-washing-controller-physical-oracle.sh \
+            scripts/run-controller-mtbdd-self-service-acceptance.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -202,6 +203,13 @@ jobs:
         run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Cross-check stateful physical-plant batch with SymbiYosys
         run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Reproduce controller MTBDD self-service acceptance
+        run: |
+          scripts/run-controller-mtbdd-self-service-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/controller-mtbdd-acceptance.csv
+          diff -u results/controller-mtbdd-self-service-acceptance-v1.csv \
+            /tmp/controller-mtbdd-acceptance.csv
       - name: Run pinned historical Yosys 0.36
         run: |
           docker run --rm \

@@ -149,6 +149,13 @@ Reduced ordered decision diagrams, multi-terminal BDDs, AIGs, and equivalence
 checking are established. No novelty claim is made without a closest-system
 comparison showing a distinct reusable artifact or verification result.
 
+The [controller MTBDD plant CLI v1](CONTROLLER_MTBDD_CLI_V1.md) now supplies a
+self-service file boundary for this artifact. It independently reproduces all
+six stateful-plant answers and the four shortest bad frames, then rejects query
+drift, artifact mutation and output overwrite. This closes local integration,
+not tagged compatibility, independent acceptance or source-to-model
+attestation.
+
 The first [closest-system analysis](CONTROLLER_MTBDD_CLOSEST_SYSTEMS.md) confirms
 that compile-once relation reuse is also established and strengthens the next
 baseline accordingly. Future measurements must compare the shared artifact

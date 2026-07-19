@@ -1,7 +1,9 @@
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search,
+    btor2_search, controller_mtbdd,
+    controller_plant::ControllerPlantWiring,
+    controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
     unsat_proof::{self, CnfClause as Clause},
 };
@@ -32,12 +34,35 @@ const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
 const EVIDENCE_TOTAL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
 const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
+const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
+const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
 #[derive(Debug)]
 struct ComponentBatchManifestMember {
     plant_path: PathBuf,
     contract_path: PathBuf,
     horizon: u32,
+}
+
+#[derive(Debug)]
+struct ControllerMtbddPlantManifestMember {
+    plant_source_path: PathBuf,
+    plant_aiger_path: PathBuf,
+    wiring: ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+}
+
+#[derive(Debug)]
+struct ControllerMtbddPlantManifest {
+    controller_source_path: PathBuf,
+    controller_aiger_path: PathBuf,
+    relevant_inputs: Vec<usize>,
+    observed_outputs: Vec<usize>,
+    members: Vec<ControllerMtbddPlantManifestMember>,
 }
 
 fn synthesis_memory_limit_kind() -> &'static str {
@@ -24738,6 +24763,203 @@ fn parse_component_batch_manifest(
     Ok(members)
 }
 
+fn parse_controller_mtbdd_plant_manifest(
+    manifest_path: &Path,
+) -> Result<ControllerMtbddPlantManifest, String> {
+    use std::path::Component;
+
+    let bytes = read_bounded_regular_file(
+        manifest_path,
+        CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES,
+        "controller MTBDD plant manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller MTBDD plant manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller MTBDD plant manifest must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller MTBDD plant manifest expected {key}"))
+    };
+    let version_text = take("controller_mtbdd_plant_manifest_version")?;
+    if version_text != CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION.to_string() {
+        return Err("unsupported controller MTBDD plant manifest version".to_string());
+    }
+    let base = fs::canonicalize(manifest_path.parent().unwrap_or_else(|| Path::new(".")))
+        .map_err(|error| format!("resolve controller MTBDD manifest directory: {error}"))?;
+    let normalized_path = |value: &str, label: &str| -> Result<PathBuf, String> {
+        if value.is_empty() || value.len() > 4096 {
+            return Err(format!("controller MTBDD {label} path length is invalid"));
+        }
+        let path = Path::new(value);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(format!(
+                "controller MTBDD {label} path must be a normalized relative path"
+            ));
+        }
+        let mut resolved = base.clone();
+        for component in path.components() {
+            let Component::Normal(component) = component else {
+                unreachable!("path components were validated above");
+            };
+            resolved.push(component);
+            let metadata = fs::symlink_metadata(&resolved).map_err(|error| {
+                format!(
+                    "inspect controller MTBDD {label} path {}: {error}",
+                    resolved.display()
+                )
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "controller MTBDD {label} path must not contain symlinks"
+                ));
+            }
+        }
+        Ok(resolved)
+    };
+    let parse_vector = |value: &str, label: &str, maximum: usize| -> Result<Vec<usize>, String> {
+        if value.is_empty() {
+            return Err(format!("controller MTBDD {label} vector is empty"));
+        }
+        let values = value
+            .split(',')
+            .map(|item| {
+                let parsed = item
+                    .parse::<usize>()
+                    .map_err(|_| format!("controller MTBDD {label} index is invalid"))?;
+                if parsed.to_string() != item {
+                    return Err(format!("controller MTBDD {label} index is noncanonical"));
+                }
+                Ok(parsed)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if values.len() > maximum || values.windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err(format!(
+                "controller MTBDD {label} vector is outside limits or not strictly sorted"
+            ));
+        }
+        Ok(values)
+    };
+    let parse_usize = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller MTBDD {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!("controller MTBDD {label} is noncanonical"));
+        }
+        Ok(parsed)
+    };
+
+    let controller_source_text = take("controller_source_path")?;
+    let controller_source_path = normalized_path(controller_source_text, "controller source")?;
+    let controller_aiger_text = take("controller_aiger_path")?;
+    let controller_aiger_path = normalized_path(controller_aiger_text, "controller AIGER")?;
+    let relevant_text = take("relevant_inputs")?;
+    let relevant_inputs = parse_vector(
+        relevant_text,
+        "relevant inputs",
+        controller_mtbdd::MAX_MTBDD_INPUTS,
+    )?;
+    let observed_text = take("observed_outputs")?;
+    let observed_outputs = parse_vector(
+        observed_text,
+        "observed outputs",
+        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+    )?;
+    let count_text = take("member_count")?;
+    let count = parse_usize(count_text, "member count")?;
+    if count == 0 || count > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
+        return Err("controller MTBDD plant member count is outside limit".to_string());
+    }
+
+    let mut canonical = format!(
+        "controller_mtbdd_plant_manifest_version={version_text}\ncontroller_source_path={controller_source_text}\ncontroller_aiger_path={controller_aiger_text}\nrelevant_inputs={relevant_text}\nobserved_outputs={observed_text}\nmember_count={count}\n"
+    );
+    let mut members = Vec::with_capacity(count);
+    for _ in 0..count {
+        let plant_source_text = take("plant_source_path")?;
+        let plant_source_path = normalized_path(plant_source_text, "plant source")?;
+        let plant_aiger_text = take("plant_aiger_path")?;
+        let plant_aiger_path = normalized_path(plant_aiger_text, "plant AIGER")?;
+        let controller_sensor_text = take("controller_sensor_inputs")?;
+        let controller_sensor_inputs = parse_vector(
+            controller_sensor_text,
+            "controller sensor inputs",
+            controller_mtbdd::MAX_MTBDD_INPUTS,
+        )?;
+        let controller_action_text = take("controller_action_outputs")?;
+        let controller_action_outputs = parse_vector(
+            controller_action_text,
+            "controller action outputs",
+            controller_mtbdd::MAX_MTBDD_OUTPUTS,
+        )?;
+        let plant_sensor_text = take("plant_sensor_outputs")?;
+        let plant_sensor_outputs = parse_vector(
+            plant_sensor_text,
+            "plant sensor outputs",
+            controller_mtbdd::MAX_MTBDD_INPUTS,
+        )?;
+        let plant_action_text = take("plant_action_inputs")?;
+        let plant_action_inputs = parse_vector(
+            plant_action_text,
+            "plant action inputs",
+            controller_mtbdd::MAX_MTBDD_OUTPUTS,
+        )?;
+        let initial_controller_text = take("initial_controller_state")?;
+        let initial_controller_state =
+            parse_usize(initial_controller_text, "initial controller state")?;
+        let initial_plant_text = take("initial_plant_state")?;
+        let initial_plant_state = parse_usize(initial_plant_text, "initial plant state")?;
+        let bad_output_text = take("bad_plant_output")?;
+        let bad_plant_output = parse_usize(bad_output_text, "bad plant output")?;
+        let horizon_text = take("horizon")?;
+        let horizon = parse_usize(horizon_text, "horizon")?;
+        canonical.push_str(&format!(
+            "plant_source_path={plant_source_text}\nplant_aiger_path={plant_aiger_text}\ncontroller_sensor_inputs={controller_sensor_text}\ncontroller_action_outputs={controller_action_text}\nplant_sensor_outputs={plant_sensor_text}\nplant_action_inputs={plant_action_text}\ninitial_controller_state={initial_controller_text}\ninitial_plant_state={initial_plant_text}\nbad_plant_output={bad_output_text}\nhorizon={horizon_text}\n"
+        ));
+        members.push(ControllerMtbddPlantManifestMember {
+            plant_source_path,
+            plant_aiger_path,
+            wiring: ControllerPlantWiring {
+                controller_sensor_inputs,
+                controller_action_outputs,
+                plant_sensor_outputs,
+                plant_action_inputs,
+            },
+            initial_controller_state,
+            initial_plant_state,
+            bad_plant_output,
+            horizon,
+        });
+    }
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller MTBDD plant manifest is incomplete or has trailing fields".to_string(),
+        );
+    }
+    canonical.push_str("status=complete\n");
+    if canonical != text {
+        return Err("controller MTBDD plant manifest is not canonical".to_string());
+    }
+    Ok(ControllerMtbddPlantManifest {
+        controller_source_path,
+        controller_aiger_path,
+        relevant_inputs,
+        observed_outputs,
+        members,
+    })
+}
+
 fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, String> {
     let raw_phases = raw.split(',').collect::<Vec<_>>();
     if raw_phases.is_empty() || raw_phases.len() > btor2_phase::MAX_PHASES {
@@ -24781,6 +25003,204 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         return Ok(false);
     };
     match command {
+        "controller-mtbdd-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-mtbdd-cli-version".to_string(),
+                );
+            }
+            println!(
+                "controller_mtbdd_cli_version={CONTROLLER_MTBDD_CLI_VERSION} mtbdd_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_members={} max_state_bits={} max_inputs={} max_outputs={} max_nodes={} max_terminals={} max_assignments={} max_horizon={} unsupported=fail-closed",
+                controller_mtbdd::CONTROLLER_MTBDD_VERSION,
+                controller_plant_artifact::MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                controller_mtbdd::MAX_MTBDD_STATE_BITS,
+                controller_mtbdd::MAX_MTBDD_INPUTS,
+                controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                controller_mtbdd::MAX_MTBDD_NODES,
+                controller_mtbdd::MAX_MTBDD_TERMINALS,
+                controller_mtbdd::MAX_MTBDD_ASSIGNMENTS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+            );
+            Ok(true)
+        }
+        "certify-controller-mtbdd-plant-batch" | "verify-controller-mtbdd-plant-batch" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-mtbdd-plant-batch" {
+                        "OUTPUT.mtbdd-plant"
+                    } else {
+                        "INPUT.mtbdd-plant"
+                    }
+                ));
+            }
+            let manifest = parse_controller_mtbdd_plant_manifest(Path::new(&args[1]))?;
+            let controller_source = read_bounded_regular_file(
+                &manifest.controller_source_path,
+                AAG_INPUT_LIMIT_BYTES as usize,
+                "controller source",
+            )?;
+            let controller_aiger = read_bounded_regular_file(
+                &manifest.controller_aiger_path,
+                AAG_INPUT_LIMIT_BYTES as usize,
+                "controller AIGER model",
+            )?;
+            let controller = aiger_obligation::parse_ascii_aiger_transition(&controller_aiger)
+                .map_err(|error| error.to_string())?;
+            let controller_digest: [u8; 32] = Sha256::digest(&controller_source).into();
+            let mut plant_sources = Vec::with_capacity(manifest.members.len());
+            let mut plants = Vec::with_capacity(manifest.members.len());
+            for member in &manifest.members {
+                plant_sources.push(read_bounded_regular_file(
+                    &member.plant_source_path,
+                    AAG_INPUT_LIMIT_BYTES as usize,
+                    "plant source",
+                )?);
+                let plant_aiger = read_bounded_regular_file(
+                    &member.plant_aiger_path,
+                    AAG_INPUT_LIMIT_BYTES as usize,
+                    "plant AIGER model",
+                )?;
+                plants.push(
+                    aiger_obligation::parse_ascii_aiger_transition(&plant_aiger)
+                        .map_err(|error| error.to_string())?,
+                );
+            }
+            let plant_digests = plant_sources
+                .iter()
+                .map(|source| <[u8; 32]>::from(Sha256::digest(source)))
+                .collect::<Vec<_>>();
+            let source_pairs = plants
+                .iter()
+                .zip(&plant_digests)
+                .map(|(plant, &digest)| (plant, digest))
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            let (encoded, action) = if command == "certify-controller-mtbdd-plant-batch" {
+                let mtbdd = controller_mtbdd::produce_controller_mtbdd(
+                    &controller,
+                    controller_digest,
+                    &manifest.relevant_inputs,
+                    &manifest.observed_outputs,
+                )
+                .map_err(|error| error.to_string())?;
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let artifact = controller_plant_artifact::produce_controller_mtbdd_plant_artifact(
+                    &controller,
+                    controller_digest,
+                    &mtbdd,
+                    &inputs,
+                )
+                .map_err(|error| error.to_string())?;
+                let encoded =
+                    controller_plant_artifact::encode_controller_mtbdd_plant_artifact(&artifact)
+                        .map_err(|error| error.to_string())?;
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED")
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "controller MTBDD plant artifact",
+                    )?,
+                    "VERIFIED",
+                )
+            };
+            let decoded =
+                controller_plant_artifact::decode_controller_mtbdd_plant_artifact(&encoded)
+                    .map_err(|error| error.to_string())?;
+            let decoded_mtbdd =
+                controller_mtbdd::decode_controller_mtbdd(&decoded.controller_mtbdd)
+                    .map_err(|error| error.to_string())?;
+            if decoded_mtbdd.relevant_inputs != manifest.relevant_inputs
+                || decoded_mtbdd.observed_outputs != manifest.observed_outputs
+                || decoded.members.len() != manifest.members.len()
+            {
+                return Err(
+                    "controller MTBDD plant artifact does not match manifest boundary".to_string(),
+                );
+            }
+            for ((claimed, expected), expected_digest) in decoded
+                .members
+                .iter()
+                .zip(&manifest.members)
+                .zip(&plant_digests)
+            {
+                if claimed.plant_source_sha256 != *expected_digest
+                    || claimed.wiring != expected.wiring
+                    || claimed.initial_controller_state != expected.initial_controller_state
+                    || claimed.initial_plant_state != expected.initial_plant_state
+                    || claimed.bad_plant_output != expected.bad_plant_output
+                    || claimed.horizon != expected.horizon
+                {
+                    return Err(
+                        "controller MTBDD plant artifact does not match manifest member"
+                            .to_string(),
+                    );
+                }
+            }
+            let summary = controller_plant_artifact::verify_controller_mtbdd_plant_artifact(
+                &controller,
+                controller_digest,
+                &source_pairs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            println!(
+                "controller-mtbdd-plant-batch status={action} cli_version={CONTROLLER_MTBDD_CLI_VERSION} artifact_version={} members={} safe={} unsafe={} mtbdd_nodes={} mtbdd_terminals={} assignments_checked={} reachable_product_states={} explored_transitions={} artifact_bytes={} elapsed_micros={}{}",
+                controller_plant_artifact::MTBDD_PLANT_ARTIFACT_VERSION,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.mtbdd_nodes,
+                summary.mtbdd_terminals,
+                summary.assignments_checked,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if action == "CREATED" {
+                    format!(" output={}", args[2])
+                } else {
+                    String::new()
+                }
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-mtbdd-plant-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe =>
+                            "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe =>
+                            "UNSAFE",
+                    },
+                    member.horizon,
+                    member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
         "btor2-cli-version" => {
             if args.len() != 1 {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add experimental controller MTBDD plant CLI v1 with machine-readable
+  discovery, a strict canonical source and query manifest, create-new batch
+  production, independent file verification, exact per-member reports, hostile
+  input regressions, and a six-member self-service acceptance harness.
+
 - Add a maintained single-session SymbiYosys, Yosys, and Z3 baseline for the
   six-property stateful plant. Reuse one compiled closed-loop model, reproduce
   all four shortest bad frames, prove the other two properties through frame

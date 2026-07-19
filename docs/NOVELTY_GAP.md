@@ -299,3 +299,10 @@ properties in one compiled closed-loop session. It reproduces all four shortest
 bad frames and preserves both bounded SAFE results. This closes external answer
 agreement for the fixture, not the missing external cost comparison. Peak
 memory, a non-repository-authored environment, and expert review remain open.
+
+The versioned [controller MTBDD file workflow](CONTROLLER_MTBDD_CLI_V1.md) makes
+the reusable evidence contract self-service and independently consumable.
+Strict manifests, source-bound artifacts, hostile-input rejection, and
+per-member reports are productisation properties, not novelty. They enable a
+fair process-level cost and memory comparison but do not change the prior-art
+conclusion.

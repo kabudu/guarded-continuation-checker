@@ -144,17 +144,12 @@ remaining at practical parity with checked in-process reuse in the retained
 run. This closes a representative mechanism and stronger local-baseline gate.
 It does not close real-product validity because the plant is not independently
 sourced or physically calibrated. Maintained external batch comparison, peak
-memory, CLI integration, compatibility history, and acceptance remain open.
+memory, compatibility history, and acceptance remain open.
 Pinned SymbiYosys with maintained Yosys and Z3 now reproduces the four exact bad
 frames and two bounded SAFE results in one compiled formal session. This closes
 maintained answer agreement for the disturbance fixture only. External cost and
 memory comparison, independent plant provenance, and acceptance remain open.
 
-A single compiled SymbiYosys/Yosys model and one incremental Z3 session now
-reproduce all six stateful-plant answers and all four shortest bad frames. This
-closes maintained external semantic agreement for the repository-authored plant.
-Comparable peak memory, CLI integration, compatibility history, calibrated
-plant validity, and independent acceptance remain open.
 An additional five-state-bit full-action plant checks all seven physical
 controller actions against three expected-SAFE process properties through
 horizon 64. It validates the expanded eight-output MTBDD boundary but remains a
@@ -164,6 +159,17 @@ The complete-cycle follow-up expands the fixed MTBDD action boundary to eight
 and exercises seven fill-to-spin actions while preserving all other resource
 caps. Three stateful process properties exactly match direct evaluation through
 horizon 64. This closes the local complete-action-surface mechanism gate only.
+
+Controller MTBDD CLI v1 adds machine-readable discovery, a canonical 64-KiB
+source and query manifest, create-new production, independent verification,
+exact per-member results, normalized paths, bounded no-follow file reads, and
+hostile manifest, source-drift, artifact-mutation, and no-clobber regressions.
+A six-member simulated self-service acceptance run reproduces all answers and
+bad frames using only repository instructions. This closes local file
+integration and simulated acceptance mechanism gates. Typed subprocess API,
+portfolio fallback, resource metrics, hosted cross-platform replication,
+tagged compatibility, source-to-model attestation, calibrated plant validity,
+and independent acceptance remain open.
 
 ## Rules
 
