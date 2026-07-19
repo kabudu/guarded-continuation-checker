@@ -1,0 +1,11 @@
+schema_version,cohort,members,trials,naive_artifact_bytes,reusable_artifact_bytes,artifact_ratio,naive_produce_median_nanos,reusable_produce_median_nanos,produce_ratio,naive_verify_median_nanos,reusable_verify_median_nanos,verify_ratio,break_even_verifications,reused_phase,exact_fallback,status
+2,admitted,1,101,725,875,1.207,13167,17708,1.345,13333,12125,0.909,4,1,0,ok
+2,admitted,2,101,1216,1192,0.980,25292,31083,1.229,23208,20708,0.892,3,2,0,ok
+2,admitted,4,101,2201,1829,0.831,49667,57791,1.164,42625,38291,0.898,2,4,0,ok
+2,admitted,8,101,4171,3103,0.744,97333,109458,1.125,80750,71417,0.884,2,8,0,ok
+2,admitted,16,101,8115,5656,0.697,193333,214875,1.111,158917,140209,0.882,2,16,0,ok
+2,admitted,32,101,16003,10760,0.672,384000,424792,1.106,312084,272708,0.874,2,32,0,ok
+2,admitted,64,101,31793,20982,0.660,766250,844125,1.102,619792,544542,0.879,2,64,0,ok
+2,mixed-25-percent-fallback,4,101,2611,3353,1.284,71290875,70528500,0.989,264292,265625,1.005,none,3,1,ok
+2,mixed-25-percent-fallback,8,101,4991,6151,1.232,132171542,132607833,1.003,489042,488750,0.999,1495,6,2,ok
+2,mixed-25-percent-fallback,16,101,9753,11750,1.205,264733417,264678292,1.000,969125,966833,0.998,1,12,4,ok

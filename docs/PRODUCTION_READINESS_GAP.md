@@ -84,9 +84,13 @@ reachability and its SAFE
   lacks tagged compatibility, proof reuse, contract refinement, public-product
   evidence, independent acceptance, and operational deployment guidance.
   The controller-obligation v1 prototype is canonical, bounded, source-bound,
-  independently checked, and exposed through Rust and CLI interfaces. It is not
-  yet integrated into an exact mixed-answer batch, resource-governed cache, or
-  packaged self-service workflow.
+  independently checked, and exposed through Rust and CLI interfaces. It now
+  drives a bounded exact mixed-answer batch with canonical artifacts and a
+  normalized manifest workflow. Fully admitted local batches pass the strong
+  artifact and checking baselines, while the 25% fallback control correctly
+  records no efficiency claim. A static top-level portfolio artifact,
+  cross-platform packaging, maintained external controls, public-product
+  evidence, and independent acceptance remain open.
   A six-case self-service acceptance harness proves the bundled workflow can be
   repeated without formula calibration, but it is simulated rather than
   independent evidence. Portfolio v3 exposes a stable typed selection reason

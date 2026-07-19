@@ -82,15 +82,19 @@ close either register by itself.
    single-pair performance novelty. Cross-certificate controller-proof reuse
    now has a source-bound
    [controller-obligation format and predeclared strong baselines](BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md),
-   but batch composition and measured reuse remain open. A pinned Bitwuzla
-   0.9.1 gate agrees on counter, motion, and braking boundaries.
+   an exact compact batch, and a measured local win for fully admitted batches.
+   Mixed fallback batches do not win, and public-product validity remains open.
+   A pinned Bitwuzla 0.9.1 gate agrees on counter, motion, and braking
+   boundaries.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
    monitors; identify which component invalidates a system guarantee. The
    first exact controller/plant wiring contract and both-answer fallback are
-   implemented. Reusable local obligations, contract refinement, multiple
-   components, and blame assignment remain open.
+   implemented. The first reusable controller-local obligation and compact
+   plant-member batch are implemented for one controller family. Contract
+   refinement, multiple interacting components, and blame assignment remain
+   open.
 
 7. **Robotics controller verification.** The first exact coupled-motion
    envelope and resettable braking-phase primitives are implemented. Extend

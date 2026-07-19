@@ -195,6 +195,13 @@ No novelty claim is made. The candidate now requires independently reusable
 controller-local obligations that materially beat repeated monolithic checking
 and straightforward certificate bundling. The first
 [controller-obligation reuse specification](BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md)
-now fixes a stronger parse-once, in-process baseline and implements the
-standalone source-bound obligation. Batch reuse, break-even evidence, and a
-public unmodified product family remain unproven, so no novelty claim is made.
+now fixes a stronger parse-once, shared-model baseline and implements the
+standalone source-bound obligation, compact batch, independent verifier,
+canonical artifact, and self-service CLI. The first local result passes the
+artifact and checking gates for fully admitted batches: at 64 members the
+artifact is 34.0% smaller and checking is 12.1% faster in the retained run,
+with five-run checking ratios from 0.866 to 0.885. A 25% fallback control fails
+the artifact gate and has no stable checking win, so universal selection is
+falsified. A public unmodified product family, maintained external-tool
+agreement, cross-platform replication, and external review remain unproven.
+No novelty claim is made.

@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
+use std::sync::Arc;
 
 pub const COMPONENT_CONTRACT_VERSION: u32 = 1;
 pub const COMPONENT_CERTIFICATE_VERSION: u32 = 1;
@@ -206,7 +207,7 @@ struct Endpoint {
 }
 
 struct Composition<'a> {
-    controller: Btor2Model,
+    controller: Arc<Btor2Model>,
     plant: Btor2Model,
     contract: &'a ComponentContract,
 }
@@ -352,7 +353,16 @@ fn build_composition<'a>(
     contract: &'a ComponentContract,
 ) -> Result<Composition<'a>, ComponentError> {
     let controller =
-        btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?;
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
+    build_composition_with_controller(&controller, plant_source, contract)
+}
+
+fn build_composition_with_controller<'a>(
+    controller: &Arc<Btor2Model>,
+    plant_source: &[u8],
+    contract: &'a ComponentContract,
+) -> Result<Composition<'a>, ComponentError> {
+    let controller = Arc::clone(controller);
     let plant = btor2::parse_bytes(plant_source).map_err(|error| reject(error.to_string()))?;
     if controller.inputs()
         != [
@@ -703,7 +713,14 @@ fn verify_search(
         ));
     }
     let composition = build_composition(controller_source, plant_source, contract)?;
-    let initial = initial_state(&composition)?;
+    verify_search_composition(&composition, certificate)
+}
+
+fn verify_search_composition(
+    composition: &Composition<'_>,
+    certificate: &ComponentSearchCertificate,
+) -> Result<ComponentSummary, ComponentError> {
+    let initial = initial_state(composition)?;
     match certificate.result {
         ComponentResult::Unsafe => {
             let frame = certificate
@@ -716,13 +733,13 @@ fn verify_search(
                 return Err(reject("unsafe component witness shape is invalid"));
             }
             let mut state = initial;
-            if frame == 0 && !bad_active(&composition, &state)? {
+            if frame == 0 && !bad_active(composition, &state)? {
                 return Err(reject("component initial state is not bad"));
             }
             for reset in &certificate.witness_resets {
-                state = step(&composition, &state, *reset)?;
+                state = step(composition, &state, *reset)?;
             }
-            if !bad_active(&composition, &state)? {
+            if !bad_active(composition, &state)? {
                 return Err(reject("component witness does not reach bad property"));
             }
             Ok(ComponentSummary {
@@ -748,11 +765,11 @@ fn verify_search(
                     return Err(reject("safe component layer is not canonical or safe"));
                 }
                 for state in layer {
-                    if bad_active(&composition, state)? {
+                    if bad_active(composition, state)? {
                         return Err(reject("safe component layer contains a bad state"));
                     }
                 }
-                budget.add_layer(&composition, layer.len())?;
+                budget.add_layer(composition, layer.len())?;
                 total = total
                     .checked_add(layer.len() as u64)
                     .ok_or_else(|| reject("component logical state count overflowed"))?;
@@ -760,7 +777,7 @@ fn verify_search(
                     let mut expected = BTreeSet::new();
                     for state in layer {
                         for reset in [false, true] {
-                            expected.insert(step(&composition, state, reset)?);
+                            expected.insert(step(composition, state, reset)?);
                         }
                     }
                     if expected.into_iter().collect::<Vec<_>>() != certificate.layers[frame + 1] {
@@ -888,7 +905,7 @@ pub fn produce_controller_obligation(
 ) -> Result<ControllerObligation, ComponentError> {
     let contract = parse_contract(contract_source)?;
     let controller =
-        btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?;
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
     let (velocity_width, brake_velocity) = controller_obligation_shape(&controller, &contract)?;
     Ok(ControllerObligation {
         controller_sha256: digest(controller_source),
@@ -909,7 +926,7 @@ pub fn verify_controller_obligation(
         return Err(reject("controller obligation source binding is invalid"));
     }
     let controller =
-        btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?;
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
     let projection = ComponentContract {
         controller_reset_input: obligation.reset_input,
         controller_velocity_input: obligation.velocity_input,
@@ -1594,7 +1611,14 @@ fn verify_phase(
         ));
     }
     let composition = build_composition(controller_source, plant_source, contract)?;
-    let shape = checker_phase_shape(&composition, certificate)?;
+    verify_phase_composition(&composition, certificate)
+}
+
+fn verify_phase_composition(
+    composition: &Composition<'_>,
+    certificate: &ComponentPhaseCertificate,
+) -> Result<ComponentSummary, ComponentError> {
+    let shape = checker_phase_shape(composition, certificate)?;
     let endpoint = checker_endpoint(shape, u64::from(certificate.query_horizon))
         .ok_or_else(|| reject("component phase arithmetic is not exact"))?;
     if endpoint.switch_frame != certificate.switch_frame
@@ -1712,6 +1736,8 @@ pub fn verify_naive_component_batch(
     {
         return Err(reject("component batch binding or member count is invalid"));
     }
+    let controller =
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
     let mut members = Vec::with_capacity(inputs.len());
     let mut safe = 0usize;
     let mut unsafe_count = 0usize;
@@ -1723,12 +1749,35 @@ pub fn verify_naive_component_batch(
         if member_horizon != input.horizon {
             return Err(reject("component batch horizon binding is invalid"));
         }
-        let summary = verify(
-            controller_source,
-            input.plant_source,
-            input.contract_source,
-            member,
-        )?;
+        let contract = parse_contract(input.contract_source)?;
+        let composition =
+            build_composition_with_controller(&controller, input.plant_source, &contract)?;
+        let summary = match member {
+            ComponentCertificate::Phase(member) => {
+                if member.controller_sha256 != digest(controller_source)
+                    || member.plant_sha256 != digest(input.plant_source)
+                    || member.contract_sha256 != digest(input.contract_source)
+                    || member.query_horizon > MAX_COMPONENT_PHASE_HORIZON
+                {
+                    return Err(reject(
+                        "component phase source binding or horizon is invalid",
+                    ));
+                }
+                verify_phase_composition(&composition, member)?
+            }
+            ComponentCertificate::Search(member) => {
+                if member.controller_sha256 != digest(controller_source)
+                    || member.plant_sha256 != digest(input.plant_source)
+                    || member.contract_sha256 != digest(input.contract_source)
+                    || member.query_horizon > MAX_COMPONENT_SEARCH_HORIZON
+                {
+                    return Err(reject(
+                        "component search source binding or horizon is invalid",
+                    ));
+                }
+                verify_search_composition(&composition, member)?
+            }
+        };
         match summary.result {
             ComponentResult::Safe => safe += 1,
             ComponentResult::Unsafe => unsafe_count += 1,

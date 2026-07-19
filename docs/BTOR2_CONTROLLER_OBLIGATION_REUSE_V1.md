@@ -5,9 +5,12 @@
 This document predeclares the experiment for reusing one independently checked
 controller obligation across multiple plant variants. The obligation format and
 standalone producer and verifier are implemented. The exact, bounded,
-mixed-answer naive-bundle baseline is also executable through the public Rust
-API. Compact batch composition and its comparative measurements remain in
-progress. This is not a novelty or production-readiness claim.
+mixed-answer naive-bundle baseline is executable through the public Rust API.
+Compact batch composition, independent verification, a canonical artifact, and
+a manifest-driven CLI are implemented. The first local strong-baseline result
+passes for fully admitted batches and fails for a 25 percent fallback control.
+Product validity, maintained external controls, and cross-platform replication
+remain open. This is not yet a novelty or production-readiness claim.
 
 ## Reusable obligation
 
@@ -40,7 +43,9 @@ avoidable parsing and launch overhead from the claimed benefit.
 `produce_naive_component_batch` and `verify_naive_component_batch` freeze that
 baseline. They preserve ordinary specialised and exact-fallback certificates,
 bind controller digest, member count, order, sources, contracts, and horizons,
-and admit at most 64 members. The retained test combines specialised SAFE,
+parse the immutable controller model exactly once, and share that parsed model
+without a per-member model clone. They admit at most 64 members. The retained
+test combines specialised SAFE,
 fallback SAFE, and fallback UNSAFE members and rejects query reordering.
 
 The reusable batch must preserve:
@@ -69,6 +74,38 @@ The reusable batch must preserve:
 Failure of either strong baseline falsifies the performance-reuse hypothesis.
 Passing only fixture, artifact-size, or process-startup comparisons is
 insufficient for a novelty claim.
+
+## First strong-baseline result
+
+The release-mode benchmark alternates the base and fast braking plants, runs 101
+interleaved trials per row, and compares in-process verification. The baseline
+parses the controller once and shares its immutable model. The challenger
+independently verifies one controller obligation, then parses and checks only
+the plant side of each admitted member.
+
+For fully admitted batches, the reusable artifact breaks even at 2 members and
+is 34.0 percent smaller at 64 members. Median verification is faster in every
+row. Across five repeated runs, the 64-member verification ratio stayed between
+0.866 and 0.885, which is an 11.5 to 13.4 percent reduction. Production is
+slower because the current producer first builds ordinary certificates and then
+projects them into compact members. One to five subsequent verifications repay
+that cost depending on batch size. Batches of 4 or more repaid it within two
+verifications in every retained run.
+
+The hostile control replaces 25 percent of members with exact UNSAFE fallback
+certificates. It fails the artifact gate by 20.5 to 28.4 percent and shows no
+stable verification improvement. Therefore, v1 must not be selected universally.
+The evidence supports a static portfolio rule that selects reusable encoding
+only when every member is admitted. Mixed batches retain exact answers but do
+not support the efficiency claim.
+
+The retained data is in
+[`results/btor2-component-reuse-v1.csv`](../results/btor2-component-reuse-v1.csv).
+Reproduce it with:
+
+```sh
+scripts/run-btor2-component-reuse-benchmark.sh all /tmp/component-reuse.csv
+```
 
 ## Closest prior art and claim boundary
 
