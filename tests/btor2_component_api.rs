@@ -64,3 +64,34 @@ fn public_naive_batch_baseline_preserves_member_bindings() {
         btor2_component::verify_naive_component_batch(CONTROLLER, &inputs, &certificate).unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
 }
+
+#[test]
+fn public_reusable_batch_api_round_trips_and_preserves_exact_answers() {
+    let inputs = [
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 255,
+        },
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 256,
+        },
+    ];
+    let certificate =
+        btor2_component::produce_reusable_component_batch(CONTROLLER, &inputs).unwrap();
+    assert!(matches!(
+        certificate.members[0],
+        btor2_component::ReusableBatchMember::ReusedPhase(_)
+    ));
+    assert!(matches!(
+        certificate.members[1],
+        btor2_component::ReusableBatchMember::ExactFallback(_)
+    ));
+    let encoded = btor2_component::encode_reusable_component_batch(&certificate).unwrap();
+    let decoded = btor2_component::decode_reusable_component_batch(encoded.as_bytes()).unwrap();
+    let summary =
+        btor2_component::verify_reusable_component_batch(CONTROLLER, &inputs, &decoded).unwrap();
+    assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+}

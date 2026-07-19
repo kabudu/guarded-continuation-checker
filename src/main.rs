@@ -28,6 +28,15 @@ const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
 const EVIDENCE_TOTAL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
+const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+
+#[derive(Debug)]
+struct ComponentBatchManifestMember {
+    plant_path: PathBuf,
+    contract_path: PathBuf,
+    horizon: u32,
+}
 
 fn synthesis_memory_limit_kind() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -24779,6 +24788,94 @@ fn read_bounded_regular_file(path: &Path, limit: usize, label: &str) -> Result<V
     Ok(bytes)
 }
 
+fn parse_component_batch_manifest(
+    manifest_path: &Path,
+) -> Result<Vec<ComponentBatchManifestMember>, String> {
+    use std::path::Component;
+
+    let bytes = read_bounded_regular_file(
+        manifest_path,
+        BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES,
+        "component batch manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "component batch manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err("component batch manifest must be canonical LF text without NUL".to_string());
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("component batch manifest expected {key}"))
+    };
+    let version = take("component_batch_manifest_version")?
+        .parse::<u32>()
+        .map_err(|_| "component batch manifest version is invalid".to_string())?;
+    if version != BTOR2_COMPONENT_BATCH_MANIFEST_VERSION {
+        return Err("unsupported component batch manifest version".to_string());
+    }
+    let count_text = take("member_count")?;
+    let count = count_text
+        .parse::<usize>()
+        .map_err(|_| "component batch member count is invalid".to_string())?;
+    if count.to_string() != count_text
+        || count == 0
+        || count > btor2_component::MAX_COMPONENT_BATCH_MEMBERS
+    {
+        return Err("component batch member count is outside limit or noncanonical".to_string());
+    }
+    let base = manifest_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut members = Vec::with_capacity(count);
+    let mut canonical = format!(
+        "component_batch_manifest_version={BTOR2_COMPONENT_BATCH_MANIFEST_VERSION}\nmember_count={count}\n"
+    );
+    for _ in 0..count {
+        let plant = take("plant_path")?;
+        let contract = take("contract_path")?;
+        let horizon_text = take("horizon")?;
+        let horizon = horizon_text
+            .parse::<u32>()
+            .map_err(|_| "component batch horizon is invalid".to_string())?;
+        if horizon.to_string() != horizon_text {
+            return Err("component batch horizon is noncanonical".to_string());
+        }
+        let validate_path = |value: &str, label: &str| -> Result<PathBuf, String> {
+            if value.is_empty() || value.len() > 4096 {
+                return Err(format!("component batch {label} path length is invalid"));
+            }
+            let path = Path::new(value);
+            if path.is_absolute()
+                || path
+                    .components()
+                    .any(|component| !matches!(component, Component::Normal(_)))
+            {
+                return Err(format!(
+                    "component batch {label} path must be a normalized relative path"
+                ));
+            }
+            Ok(base.join(path))
+        };
+        members.push(ComponentBatchManifestMember {
+            plant_path: validate_path(plant, "plant")?,
+            contract_path: validate_path(contract, "contract")?,
+            horizon,
+        });
+        canonical.push_str(&format!(
+            "plant_path={plant}\ncontract_path={contract}\nhorizon={horizon}\n"
+        ));
+    }
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err("component batch manifest is incomplete or has trailing fields".to_string());
+    }
+    canonical.push_str("status=complete\n");
+    if canonical != text {
+        return Err("component batch manifest is not canonical".to_string());
+    }
+    Ok(members)
+}
+
 fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, String> {
     let raw_phases = raw.split(',').collect::<Vec<_>>();
     if raw_phases.is_empty() || raw_phases.len() > btor2_phase::MAX_PHASES {
@@ -24827,7 +24924,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} controller_obligation_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_controller_obligation_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} controller_obligation_version={} reusable_component_batch_version={} component_batch_manifest_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_controller_obligation_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} max_component_batch_members={} max_reusable_component_batch_bytes={} max_component_batch_manifest_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
@@ -24838,6 +24935,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_component::COMPONENT_CONTRACT_VERSION,
                 btor2_component::COMPONENT_CERTIFICATE_VERSION,
                 btor2_component::CONTROLLER_OBLIGATION_VERSION,
+                btor2_component::REUSABLE_COMPONENT_BATCH_VERSION,
+                BTOR2_COMPONENT_BATCH_MANIFEST_VERSION,
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
@@ -24864,6 +24963,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_component::MAX_COMPONENT_PHASE_HORIZON,
                 btor2_component::MAX_COMPONENT_SEARCH_HORIZON,
                 btor2_component::MAX_COMPONENT_CERTIFICATE_BYTES,
+                btor2_component::MAX_COMPONENT_BATCH_MEMBERS,
+                btor2_component::MAX_REUSABLE_COMPONENT_BATCH_BYTES,
+                BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES,
             );
             Ok(true)
         }
@@ -25031,6 +25133,105 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 summary.logical_reachable_states,
                 encoded.len(),
                 started.elapsed().as_micros()
+            );
+            Ok(true)
+        }
+        "check-btor2-component-batch" | "verify-btor2-component-batch" => {
+            if args.len() != 4 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} CONTROLLER.btor2 MANIFEST.txt {}",
+                    if command == "check-btor2-component-batch" {
+                        "OUTPUT.component-batch"
+                    } else {
+                        "INPUT.component-batch"
+                    }
+                ));
+            }
+            let controller = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "controller BTOR2 input",
+            )?;
+            let manifest_path = Path::new(&args[2]);
+            let manifest = parse_component_batch_manifest(manifest_path)?;
+            let mut plants = Vec::with_capacity(manifest.len());
+            let mut contracts = Vec::with_capacity(manifest.len());
+            for member in &manifest {
+                plants.push(read_bounded_regular_file(
+                    &member.plant_path,
+                    btor2::MAX_BTOR2_BYTES,
+                    "plant BTOR2 input",
+                )?);
+                contracts.push(read_bounded_regular_file(
+                    &member.contract_path,
+                    btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                    "component contract",
+                )?);
+            }
+            let inputs = manifest
+                .iter()
+                .enumerate()
+                .map(|(index, member)| btor2_component::ComponentBatchInput {
+                    plant_source: plants[index].as_slice(),
+                    contract_source: contracts[index].as_slice(),
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            let (certificate, encoded, action) = if command == "check-btor2-component-batch" {
+                let certificate =
+                    btor2_component::produce_reusable_component_batch(&controller, &inputs)
+                        .map_err(|error| error.to_string())?;
+                let encoded = btor2_component::encode_reusable_component_batch(&certificate)
+                    .map_err(|error| error.to_string())?;
+                (certificate, encoded, "CREATED")
+            } else {
+                let encoded = read_bounded_regular_file(
+                    Path::new(&args[3]),
+                    btor2_component::MAX_REUSABLE_COMPONENT_BATCH_BYTES,
+                    "reusable component batch",
+                )?;
+                let certificate = btor2_component::decode_reusable_component_batch(&encoded)
+                    .map_err(|error| error.to_string())?;
+                (
+                    certificate,
+                    String::from_utf8(encoded)
+                        .map_err(|_| "reusable component batch is not UTF-8".to_string())?,
+                    "VERIFIED",
+                )
+            };
+            let summary = btor2_component::verify_reusable_component_batch(
+                &controller,
+                &inputs,
+                &certificate,
+            )
+            .map_err(|error| error.to_string())?;
+            let reused = certificate
+                .members
+                .iter()
+                .filter(|member| {
+                    matches!(member, btor2_component::ReusableBatchMember::ReusedPhase(_))
+                })
+                .count();
+            let fallback = certificate.members.len() - reused;
+            if command == "check-btor2-component-batch" {
+                write_new_certificate(Path::new(&args[3]), encoded.as_bytes())?;
+            }
+            println!(
+                "btor2-component-batch status={action} batch_version={} members={} reused_phase={} exact_fallback={} safe={} unsafe={} certificate_bytes={} elapsed_micros={}{}",
+                btor2_component::REUSABLE_COMPONENT_BATCH_VERSION,
+                certificate.members.len(),
+                reused,
+                fallback,
+                summary.safe,
+                summary.unsafe_count,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if command == "check-btor2-component-batch" {
+                    format!(" output={}", args[3])
+                } else {
+                    String::new()
+                }
             );
             Ok(true)
         }
@@ -35509,6 +35710,68 @@ mod tests {
             );
             fs::remove_file(&certificate).unwrap();
         }
+    }
+
+    #[test]
+    fn btor2_component_batch_cli_is_manifest_bound_and_self_verifying() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/btor2/components");
+        let scratch =
+            std::env::temp_dir().join(format!("gcc-btor2-component-batch-{}", std::process::id()));
+        if scratch.exists() {
+            fs::remove_dir_all(&scratch).unwrap();
+        }
+        fs::create_dir(&scratch).unwrap();
+        for name in [
+            "braking-controller-v1.btor2",
+            "motion-plant-v1.btor2",
+            "semi-implicit-motion-plant-v1.btor2",
+            "braking-motion-contract-v1.txt",
+        ] {
+            fs::copy(source.join(name), scratch.join(name)).unwrap();
+        }
+        let manifest = scratch.join("batch.txt");
+        fs::write(
+            &manifest,
+            "component_batch_manifest_version=1\nmember_count=3\nplant_path=motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=255\nplant_path=motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=256\nplant_path=semi-implicit-motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=127\nstatus=complete\n",
+        )
+        .unwrap();
+        let certificate = scratch.join("batch.component-batch");
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-component-batch".to_string(),
+                scratch
+                    .join("braking-controller-v1.btor2")
+                    .display()
+                    .to_string(),
+                manifest.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        let encoded = fs::read_to_string(&certificate).unwrap();
+        assert!(encoded.starts_with("reusable_component_batch_version=1\n"));
+        assert!(encoded.contains("member=reused-phase\n"));
+        assert!(encoded.contains("member=exact-fallback\n"));
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-component-batch".to_string(),
+                scratch
+                    .join("braking-controller-v1.btor2")
+                    .display()
+                    .to_string(),
+                manifest.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+
+        fs::write(
+            &manifest,
+            "component_batch_manifest_version=1\nmember_count=1\nplant_path=../motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=255\nstatus=complete\n",
+        )
+        .unwrap();
+        assert!(parse_component_batch_manifest(&manifest).is_err());
+        fs::remove_dir_all(&scratch).unwrap();
     }
 
     #[test]
