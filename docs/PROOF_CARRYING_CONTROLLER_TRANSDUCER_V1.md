@@ -9,8 +9,11 @@ source-bound obligation, deterministic partition producer, and independent
 verifier now exist behind a public Rust API. A bounded canonical binary codec
 round-trips byte-identically and rejects every truncation and single-byte
 mutation in the retained artifact test. Broader hostile corpora, composition
-portfolio, and product gates do not yet exist. This is not a novelty or
-production-readiness claim.
+portfolio, and product gates do not yet exist. An exact sampled-control
+composition API now verifies the controller obligation once, rejects
+same-step sensor dependencies, explores bounded external plant inputs, and
+reconstructs unsafe traces. Static portfolio fallback and strong baselines
+remain incomplete. This is not a novelty or production-readiness claim.
 
 ## Hypothesis
 
