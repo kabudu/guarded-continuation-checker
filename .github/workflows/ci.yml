@@ -49,7 +49,8 @@ jobs:
             scripts/test-public-washing-controller-physical-oracle.sh \
             scripts/run-controller-mtbdd-self-service-acceptance.sh \
             scripts/benchmark-controller-mtbdd-process-resources.sh \
-            scripts/run-controller-plant-portfolio-acceptance.sh
+            scripts/run-controller-plant-portfolio-acceptance.sh \
+            scripts/benchmark-controller-plant-portfolio-phases.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -219,6 +220,14 @@ jobs:
             /tmp/controller-plant-portfolio.csv
           diff -u results/controller-plant-portfolio-acceptance-v1.csv \
             /tmp/controller-plant-portfolio.csv
+      - name: Exercise controller plant phase observability
+        env:
+          TRIALS: 1
+        run: |
+          scripts/benchmark-controller-plant-portfolio-phases.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/controller-plant-phases.csv
+          test "$(wc -l < /tmp/controller-plant-phases.csv)" -eq 5
       - name: Measure controller MTBDD process resources
         env:
           TRIALS: 1

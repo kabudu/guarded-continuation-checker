@@ -1,0 +1,13 @@
+schema_version,route,operation,trial,load_micros,artifact_micros,verification_micros,write_micros,elapsed_micros,backend,reason,status
+1,admitted,produce,1,709,1453779,971710,8625,2434841,MTBDD,mtbdd-admitted,ok
+1,admitted,verify,1,410,25,962823,0,963261,MTBDD,mtbdd-admitted,ok
+1,fallback,produce,1,195,135,132,5300,5764,DIRECT_EXACT,boundary-limit,ok
+1,fallback,verify,1,168,19,139,0,328,DIRECT_EXACT,boundary-limit,ok
+1,admitted,produce,2,417,1452820,972966,4504,2430709,MTBDD,mtbdd-admitted,ok
+1,admitted,verify,2,449,25,958658,0,959135,MTBDD,mtbdd-admitted,ok
+1,fallback,produce,2,166,138,138,4344,4788,DIRECT_EXACT,boundary-limit,ok
+1,fallback,verify,2,152,18,130,0,303,DIRECT_EXACT,boundary-limit,ok
+1,admitted,produce,3,399,1432542,959946,4601,2397490,MTBDD,mtbdd-admitted,ok
+1,admitted,verify,3,418,26,973320,0,973767,MTBDD,mtbdd-admitted,ok
+1,fallback,produce,3,162,139,135,6301,6740,DIRECT_EXACT,boundary-limit,ok
+1,fallback,verify,3,170,21,142,0,335,DIRECT_EXACT,boundary-limit,ok

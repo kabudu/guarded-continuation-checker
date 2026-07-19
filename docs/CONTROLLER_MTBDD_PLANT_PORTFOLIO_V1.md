@@ -60,6 +60,10 @@ validates the complete portfolio capability contract, invokes the producer or
 verifier without a shell, applies the shared bounded execution policy, and
 returns typed backend, route, aggregate, member, and invocation results.
 
+The summary also reports phase-level timing observations. They are documented
+in [the phase baseline](CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) and never
+participate in routing.
+
 ## Retained tests
 
 The admitted fixture selects MTBDD and returns one SAFE and one UNSAFE member.

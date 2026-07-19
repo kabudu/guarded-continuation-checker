@@ -819,3 +819,16 @@ The harness requires the public six-member batch to take the MTBDD route and a
 nine-action boundary fixture to take direct exact fallback. It preserves both
 answers, then rejects mutation and output collision. Unit and downstream tests
 add reason-tampering, downgrade, truncation, and complete mutation coverage.
+
+Measure portfolio phase attribution without changing static routing:
+
+```sh
+cargo build --release --locked
+TRIALS=3 scripts/benchmark-controller-plant-portfolio-phases.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-plant-portfolio-phases.csv
+```
+
+The retained host observations are
+`results/controller-plant-portfolio-phases-v1.csv`. Timing rows vary by host
+and are exercised, but not compared byte for byte, in CI.

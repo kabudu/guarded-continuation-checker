@@ -426,6 +426,10 @@ pub struct ControllerPlantPortfolioBatchSummary {
     pub reachable_product_states: usize,
     pub explored_transitions: usize,
     pub artifact_bytes: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub write_micros: usize,
     pub elapsed_micros: usize,
     pub members: Vec<ControllerMtbddMemberResult>,
 }
@@ -1639,6 +1643,10 @@ fn parse_controller_plant_portfolio_summary(
             "reachable_product_states",
             "explored_transitions",
             "artifact_bytes",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "write_micros",
             "elapsed_micros",
         ];
         if fields.len() != keys.len() || fields[0] != keys[0] {
@@ -1822,7 +1830,11 @@ fn parse_controller_plant_portfolio_summary(
             reachable_product_states: numeric[3],
             explored_transitions: numeric[4],
             artifact_bytes: numeric[5],
-            elapsed_micros: numeric[6],
+            load_micros: numeric[6],
+            artifact_micros: numeric[7],
+            verification_micros: numeric[8],
+            write_micros: numeric[9],
+            elapsed_micros: numeric[10],
             members,
         })
     })();

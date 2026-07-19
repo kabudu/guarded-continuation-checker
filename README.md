@@ -46,6 +46,9 @@ controller, and otherwise preserves the identical bounded query through direct
 exact evaluation through both Rust and file interfaces. Only three explicit
 resource-limit rejections permit fallback; malformed models, semantic errors,
 query drift, and forced downgrades fail closed.
+Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
+semantic replay, rather than model loading, dominates the admitted public
+workflow. Phase observations remain excluded from routing decisions.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

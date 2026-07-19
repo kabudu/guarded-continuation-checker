@@ -25102,12 +25102,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     }
                 ));
             }
+            let invocation_started = Instant::now();
             let (manifest, controller, controller_digest, plants, plant_digests) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
                     guarded_continuation_checker::controller_plant::MAX_PLANT_INPUTS,
                 )?;
+            let load_micros = invocation_started.elapsed().as_micros();
             let inputs = manifest
                 .members
                 .iter()
@@ -25122,8 +25124,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     horizon: member.horizon,
                 })
                 .collect::<Vec<_>>();
-            let started = Instant::now();
-            let (encoded, action) = if command == "certify-controller-plant-portfolio" {
+            let artifact_started = Instant::now();
+            let (encoded, action, write_micros) = if command == "certify-controller-plant-portfolio"
+            {
                 let encoded = controller_plant_artifact::produce_controller_mtbdd_plant_portfolio(
                     &controller,
                     controller_digest,
@@ -25132,8 +25135,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     &inputs,
                 )
                 .map_err(|error| error.to_string())?;
+                let write_started = Instant::now();
                 write_new_certificate(Path::new(&args[2]), &encoded)?;
-                (encoded, "CREATED")
+                (encoded, "CREATED", write_started.elapsed().as_micros())
             } else {
                 (
                     read_bounded_regular_file(
@@ -25142,8 +25146,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         "controller plant portfolio",
                     )?,
                     "VERIFIED",
+                    0,
                 )
             };
+            let artifact_micros = artifact_started
+                .elapsed()
+                .as_micros()
+                .saturating_sub(write_micros);
+            let verification_started = Instant::now();
             let summary = controller_plant_artifact::verify_controller_mtbdd_plant_portfolio(
                 &controller,
                 controller_digest,
@@ -25153,8 +25163,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 &encoded,
             )
             .map_err(|error| error.to_string())?;
+            let verification_micros = verification_started.elapsed().as_micros();
             println!(
-                "controller-plant-portfolio status={action} cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} elapsed_micros={}{}",
+                "controller-plant-portfolio status={action} cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} write_micros={write_micros} elapsed_micros={}{}",
                 controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
                 match summary.backend {
                     controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::Mtbdd =>
@@ -25178,7 +25189,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 summary.reachable_product_states,
                 summary.explored_transitions,
                 encoded.len(),
-                started.elapsed().as_micros(),
+                invocation_started.elapsed().as_micros(),
                 if action == "CREATED" {
                     format!(" output={}", args[2])
                 } else {

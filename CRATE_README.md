@@ -128,6 +128,8 @@ The
 [exact controller plant portfolio](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 uses deterministic MTBDD admission with direct exact fallback and downgrade
 detection.
+Its typed summaries include non-routing phase observations so integrations can
+attribute loading, artifact, replay, publication, and total command cost.
 The retained
 [process-resource baseline](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 records a negative small-batch speed result and lower peak-memory observations

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add phase-level portfolio observability for model loading, artifact handling,
+  semantic verification, publication, and complete elapsed time. Retain the
+  finding that semantic replay, not source/model loading, dominates the public
+  admitted batch and keep every timing field outside routing decisions.
+
 - Make the washing-controller oracle portable across Yosys versions. Require
   byte-identical regeneration only with the recorded Yosys 0.67 build; other
   hosts still verify pinned source and model digests plus formal properties and

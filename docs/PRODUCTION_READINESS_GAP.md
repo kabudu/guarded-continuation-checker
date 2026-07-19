@@ -179,6 +179,12 @@ times slower but uses 85.2% less peak RSS than the maintained formal oracle.
 Hosted Linux replication, phase-level attribution and independent measurement
 remain open, so no production-readiness row changes.
 
+Phase-level portfolio observations now separate bounded input loading, artifact
+handling, semantic replay, publication, and total command time. The public
+admitted batch shows replay dominates while loading is negligible. This closes
+local phase attribution, not multi-job aggregation, hosted comparability, or
+the controller-replay optimisation gap.
+
 The library-level controller MTBDD plant portfolio now preserves valid bounded
 queries through exact direct fallback for three explicit static resource-limit
 rejections. Malformed models, semantic errors, query drift, and forced
