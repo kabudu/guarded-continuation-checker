@@ -1,6 +1,8 @@
 use guarded_continuation_checker::{
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search, dense_relation::DenseRelation,
+    btor2_search,
+    dense_relation::DenseRelation,
+    unsat_proof::{self, CnfClause as Clause},
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -19,8 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::Instant;
-use varisat::{ExtendFormula, Lit, ProofFormat, Solver, Var};
-use varisat_checker::Checker as VarisatProofChecker;
+use varisat::{ExtendFormula, Lit, Solver, Var};
 
 const RTL_ARTIFACT_SCHEMA_VERSION: usize = 4;
 const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
@@ -53,9 +54,6 @@ fn synthesis_memory_limit_bytes() -> u64 {
         YOSYS_MEMORY_LIMIT_BYTES
     }
 }
-
-#[derive(Clone, Debug)]
-struct Clause(Vec<(usize, bool)>);
 
 #[derive(Clone, Debug)]
 struct CachedHelperFormula {
@@ -9905,24 +9903,10 @@ fn predicate_terminal_completeness_clauses_for_predicate(
 }
 
 fn generate_varisat_unsat_proof(clauses: &[Clause]) -> Result<Vec<u8>, String> {
-    let mut proof = Vec::new();
-    {
-        let mut solver = Solver::new();
-        solver.write_proof(&mut proof, ProofFormat::Varisat);
-        add_to_varisat(&mut solver, clauses);
-        if solver
-            .solve()
-            .map_err(|error| format!("solve predicate proof obligation: {error}"))?
-        {
-            return Err("predicate completeness obligation is satisfiable".to_string());
-        }
-        solver
-            .close_proof()
-            .map_err(|error| format!("close predicate proof obligation: {error}"))?;
-    }
-    Ok(proof)
+    unsat_proof::generate_unsat_proof(clauses).map_err(|error| error.to_string())
 }
 
+#[allow(dead_code)]
 fn read_predicate_proof_vli(proof: &[u8], offset: &mut usize) -> Result<u64, String> {
     let start = *offset;
     let mut marker = None;
@@ -9952,6 +9936,7 @@ fn read_predicate_proof_vli(proof: &[u8], offset: &mut usize) -> Result<u64, Str
     Ok(value as u64)
 }
 
+#[allow(dead_code)]
 fn preflight_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
     const CODE_END: u64 = 0x9ac3_391f_4294_c211;
     const MAX_PROOF_STEPS: usize = 100_000;
@@ -10036,27 +10021,7 @@ fn preflight_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(),
 }
 
 fn verify_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
-    preflight_varisat_unsat_proof(clauses, proof)?;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut checker = VarisatProofChecker::new();
-        for clause in clauses {
-            let literals = clause
-                .0
-                .iter()
-                .map(|&(variable, positive)| Lit::from_var(Var::from_index(variable), positive))
-                .collect::<Vec<_>>();
-            checker
-                .add_clause(&literals)
-                .map_err(|error| format!("load predicate proof obligation: {error}"))?;
-        }
-        checker
-            .check_proof(proof)
-            .map_err(|error| format!("check predicate proof obligation: {error}"))
-    }));
-    match result {
-        Ok(result) => result,
-        Err(_) => Err("check predicate proof obligation: malformed proof was rejected".to_string()),
-    }
+    unsat_proof::verify_unsat_proof(clauses, proof).map_err(|error| error.to_string())
 }
 
 #[derive(Debug)]
@@ -35303,6 +35268,12 @@ mod tests {
         assert_eq!(
             fs::read(&certificate_path).unwrap(),
             fs::read(&duplicate_path).unwrap()
+        );
+        let compatibility_bytes = fs::read(&certificate_path).unwrap();
+        assert_eq!(compatibility_bytes.len(), 9_706);
+        assert_eq!(
+            predicate_bytes_hex(&Sha256::digest(&compatibility_bytes)),
+            "6a1ffce05d42bfaa65a227da57647ba6abeac26c82b620219b84011d05ab1f6d"
         );
         assert!(
             certify_aiger_predicate_v2(&input, 0, &transcript, &certificate_path)
