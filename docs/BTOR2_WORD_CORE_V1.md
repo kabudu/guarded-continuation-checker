@@ -84,4 +84,5 @@ cohort and checks the watchdog witness. The remaining requirements are:
    models rather than parser agreement alone;
 2. compare full bounded answers, not endpoint equations alone, with historical
    BtorMC or a maintained Bitwuzla unrolling; and
-3. preserve unsupported models through an exact fail-closed portfolio path.
+3. extend the new exact replay fallback beyond supplied one-input endpoint
+   traces to bounded search queries while retaining fail-closed semantics.

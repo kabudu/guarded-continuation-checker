@@ -13,6 +13,11 @@
   Include accepted watchdog and actuator examples plus a rejected saturating
   near-neighbour. This remains a narrow candidate primitive without a novelty
   or production-readiness claim.
+- Add the BTOR2 counter-trace exact replay portfolio. Preserve a rejected
+  one-bit-input phase trace through bounded step-by-step execution, emit a
+  distinct source-bound replay certificate, and verify its full final state and
+  bad endpoint. The static fallback is capped at 100,000 transitions; the
+  accelerated backend retains its separate trillion-transition bound.
 
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability

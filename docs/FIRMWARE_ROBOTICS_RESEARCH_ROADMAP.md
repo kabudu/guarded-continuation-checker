@@ -62,8 +62,9 @@ close either register by itself.
    constraints, and bad properties before bit blasting. Arrays, memory indices,
    signed arithmetic and generic proof-carrying composition remain open. The
    [counter-phase candidate](BTOR2_COUNTER_PHASE_CERTIFICATE_V1.md) now binds
-   and verifies a strict reset-or-affine recurrence. Broader composition, exact
-   portfolio fallback, and full sequential solver agreement remain open. A
+   and verifies a strict reset-or-affine recurrence. A static counter-trace
+   portfolio preserves rejected supplied traces through bounded exact replay.
+   Broader composition and exact fallback for bounded search remain open. A
    pinned Bitwuzla 0.9.1 gate now agrees on the candidate's endpoint formulas
    and rejects a tampered endpoint.
 

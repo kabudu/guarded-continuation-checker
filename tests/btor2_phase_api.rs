@@ -26,4 +26,19 @@ fn downstream_api_produces_decodes_and_verifies_a_source_bound_phase_certificate
     assert_eq!(summary.phases, 2);
     assert_eq!(summary.final_state, 3);
     assert_eq!(summary.bad_property, 13);
+
+    let saturating = include_bytes!("../examples/btor2/saturating-timer-rejected-v1.btor2");
+    let replay = btor2_phase::produce_replay(
+        saturating,
+        &[PhaseSpec {
+            input: false,
+            length: 255,
+        }],
+        15,
+    )
+    .unwrap();
+    let encoded = btor2_phase::encode_replay(&replay).unwrap();
+    let decoded = btor2_phase::decode_replay(encoded.as_bytes()).unwrap();
+    let summary = btor2_phase::verify_replay(saturating, &decoded).unwrap();
+    assert_eq!(summary.final_state, 255);
 }

@@ -54,7 +54,9 @@ recurrence, passes accepted watchdog and actuator examples, rejects a
 saturating near-neighbour, and agrees with pinned BTOR2Tools parsing plus
 Bitwuzla endpoint formulas. It proves only a claimed bad endpoint for a supplied
 phase trace. It does not prove safety, absence of earlier failures,
-unavoidability, generic BTOR2 semantics, or exact fallback for rejected models.
+unavoidability, or generic BTOR2 semantics. The counter-trace portfolio now
+preserves rejected supplied one-input traces through exact replay up to 100,000
+transitions, but does not provide fallback for universal or existential search.
 It cannot change any production-readiness row until those gaps, stable release
 compatibility, full hostile-input coverage, and public product evidence close.
 
