@@ -7,13 +7,14 @@ use sha2::{Digest, Sha256};
 
 use crate::aiger_obligation::AigerTransition;
 use crate::controller_mtbdd::{
-    ControllerMtbddArtifact, decode_controller_mtbdd, encode_controller_mtbdd,
+    ControllerMtbddAdmissionFailure, ControllerMtbddArtifact, decode_controller_mtbdd,
+    encode_controller_mtbdd, produce_controller_mtbdd,
 };
 use crate::controller_plant::{
     ControllerPlantAnswer, ControllerPlantBatchInput, ControllerPlantBatchResult,
     ControllerPlantResult, ControllerPlantTraceStep, ControllerPlantWiring,
-    MAX_COMPOSITION_HORIZON, compose_controller_plant_batch, compose_verified_mtbdd_plant,
-    verify_mtbdd_for_composition,
+    MAX_COMPOSITION_HORIZON, compose_controller_plant_batch, compose_controller_plant_direct_batch,
+    compose_verified_mtbdd_plant, verify_mtbdd_for_composition,
 };
 use crate::controller_transducer::{
     ControllerTransducerObligation, decode_controller_transducer, encode_controller_transducer,
@@ -25,6 +26,10 @@ pub const MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS: usize = 64;
 const MAGIC: &[u8; 8] = b"GCCCPA01";
 pub const MTBDD_PLANT_ARTIFACT_VERSION: u32 = 1;
 const MTBDD_MAGIC: &[u8; 8] = b"GCCMPA01";
+pub const DIRECT_PLANT_ARTIFACT_VERSION: u32 = 1;
+const DIRECT_MAGIC: &[u8; 8] = b"GCCDPA01";
+pub const MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
+const PORTFOLIO_MAGIC: &[u8; 8] = b"GCCMPP01";
 
 #[derive(Clone, Copy, Debug)]
 pub struct ControllerPlantArtifactInput<'a> {
@@ -60,6 +65,48 @@ pub struct ControllerMtbddPlantBatchArtifact {
     pub version: u32,
     pub controller_mtbdd: Vec<u8>,
     pub members: Vec<ControllerPlantArtifactMember>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerDirectPlantBatchArtifact {
+    pub version: u32,
+    pub controller_source_sha256: [u8; 32],
+    pub members: Vec<ControllerPlantArtifactMember>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerMtbddPlantPortfolioBackend {
+    Mtbdd,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerMtbddPlantSelectionReason {
+    MtbddAdmitted,
+    BoundaryLimit,
+    TerminalLimit,
+    NodeLimit,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerMtbddPlantPortfolioArtifact {
+    pub version: u32,
+    pub backend: ControllerMtbddPlantPortfolioBackend,
+    pub reason: ControllerMtbddPlantSelectionReason,
+    pub relevant_inputs: Vec<usize>,
+    pub observed_outputs: Vec<usize>,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerMtbddPlantPortfolioSummary {
+    pub backend: ControllerMtbddPlantPortfolioBackend,
+    pub reason: ControllerMtbddPlantSelectionReason,
+    pub members: Vec<ControllerPlantResult>,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -653,6 +700,501 @@ pub fn verify_controller_mtbdd_plant_artifact(
         mtbdd_nodes: verified.summary().nodes,
         mtbdd_terminals: verified.summary().terminals,
         assignments_checked: verified.summary().assignments_checked,
+        reachable_product_states,
+        explored_transitions,
+    })
+}
+
+pub fn produce_controller_direct_plant_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<ControllerDirectPlantBatchArtifact, ControllerPlantArtifactError> {
+    let inputs = members
+        .iter()
+        .map(|member| ControllerPlantBatchInput {
+            plant: member.plant,
+            wiring: member.wiring,
+            initial_controller_state: member.initial_controller_state,
+            initial_plant_state: member.initial_plant_state,
+            bad_plant_output: member.bad_plant_output,
+            horizon: member.horizon,
+        })
+        .collect::<Vec<_>>();
+    let batch = compose_controller_plant_direct_batch(controller_model, &inputs)
+        .map_err(|error| reject(error.to_string()))?;
+    let artifact_members = members
+        .iter()
+        .zip(batch.members)
+        .map(|(member, result)| ControllerPlantArtifactMember {
+            plant_source_sha256: member.plant_source_sha256,
+            wiring: member.wiring.clone(),
+            initial_controller_state: member.initial_controller_state,
+            initial_plant_state: member.initial_plant_state,
+            bad_plant_output: member.bad_plant_output,
+            horizon: member.horizon,
+            result,
+        })
+        .collect();
+    Ok(ControllerDirectPlantBatchArtifact {
+        version: DIRECT_PLANT_ARTIFACT_VERSION,
+        controller_source_sha256,
+        members: artifact_members,
+    })
+}
+
+pub fn encode_controller_direct_plant_artifact(
+    artifact: &ControllerDirectPlantBatchArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if artifact.version != DIRECT_PLANT_ARTIFACT_VERSION
+        || artifact.members.is_empty()
+        || artifact.members.len() > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+    {
+        return Err(reject(
+            "controller direct plant artifact dimensions are invalid",
+        ));
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(DIRECT_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.extend_from_slice(&artifact.controller_source_sha256);
+    bytes.push(artifact.members.len() as u8);
+    for member in &artifact.members {
+        bytes.extend_from_slice(&member.plant_source_sha256);
+        put_vec(&mut bytes, &member.wiring.controller_sensor_inputs)?;
+        put_vec(&mut bytes, &member.wiring.controller_action_outputs)?;
+        put_vec(&mut bytes, &member.wiring.plant_sensor_outputs)?;
+        put_vec(&mut bytes, &member.wiring.plant_action_inputs)?;
+        for (value, field) in [
+            (member.initial_controller_state, "initial controller state"),
+            (member.initial_plant_state, "initial plant state"),
+            (member.bad_plant_output, "bad plant output"),
+            (member.horizon, "member horizon"),
+        ] {
+            bytes.extend_from_slice(&narrow(value, field)?.to_le_bytes());
+        }
+        put_result(&mut bytes, &member.result)?;
+    }
+    let integrity = Sha256::digest(&bytes);
+    bytes.extend_from_slice(&integrity);
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject(
+            "controller direct plant artifact exceeds byte limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_controller_direct_plant_artifact(
+    bytes: &[u8],
+) -> Result<ControllerDirectPlantBatchArtifact, ControllerPlantArtifactError> {
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES || bytes.len() < 77 {
+        return Err(reject("controller direct plant artifact size is invalid"));
+    }
+    let payload_len = bytes.len() - 32;
+    let (payload, claimed_integrity) = bytes.split_at(payload_len);
+    if Sha256::digest(payload).as_slice() != claimed_integrity {
+        return Err(reject(
+            "controller direct plant artifact integrity mismatch",
+        ));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, DIRECT_MAGIC.len())? != DIRECT_MAGIC {
+        return Err(reject("controller direct plant artifact magic mismatch"));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != DIRECT_PLANT_ARTIFACT_VERSION {
+        return Err(reject("controller direct plant artifact version mismatch"));
+    }
+    let controller_source_sha256 = take(payload, &mut cursor, 32)?
+        .try_into()
+        .map_err(|_| reject("controller digest decode failed"))?;
+    let member_count = read_u8(payload, &mut cursor)? as usize;
+    if member_count == 0 || member_count > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
+        return Err(reject(
+            "controller direct plant member count is outside limit",
+        ));
+    }
+    let mut members = Vec::with_capacity(member_count);
+    for _ in 0..member_count {
+        let plant_source_sha256 = take(payload, &mut cursor, 32)?
+            .try_into()
+            .map_err(|_| reject("plant digest decode failed"))?;
+        let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: read_vec(payload, &mut cursor)?,
+            controller_action_outputs: read_vec(payload, &mut cursor)?,
+            plant_sensor_outputs: read_vec(payload, &mut cursor)?,
+            plant_action_inputs: read_vec(payload, &mut cursor)?,
+        };
+        let initial_controller_state = read_u32(payload, &mut cursor)? as usize;
+        let initial_plant_state = read_u32(payload, &mut cursor)? as usize;
+        let bad_plant_output = read_u32(payload, &mut cursor)? as usize;
+        let horizon = read_u32(payload, &mut cursor)? as usize;
+        let result = read_result(payload, &mut cursor)?;
+        members.push(ControllerPlantArtifactMember {
+            plant_source_sha256,
+            wiring,
+            initial_controller_state,
+            initial_plant_state,
+            bad_plant_output,
+            horizon,
+            result,
+        });
+    }
+    if cursor != payload.len() {
+        return Err(reject(
+            "controller direct plant artifact has trailing bytes",
+        ));
+    }
+    Ok(ControllerDirectPlantBatchArtifact {
+        version,
+        controller_source_sha256,
+        members,
+    })
+}
+
+pub fn verify_controller_direct_plant_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    plants: &[(&AigerTransition, [u8; 32])],
+    artifact_bytes: &[u8],
+) -> Result<ControllerPlantBatchResult, ControllerPlantArtifactError> {
+    let artifact = decode_controller_direct_plant_artifact(artifact_bytes)?;
+    if artifact.controller_source_sha256 != controller_source_sha256
+        || plants.len() != artifact.members.len()
+    {
+        return Err(reject("controller direct plant source binding mismatch"));
+    }
+    let inputs = plants
+        .iter()
+        .zip(&artifact.members)
+        .map(|(&(plant, digest), member)| {
+            if digest != member.plant_source_sha256 {
+                return Err(reject("controller direct plant source digest mismatch"));
+            }
+            Ok(ControllerPlantBatchInput {
+                plant,
+                wiring: &member.wiring,
+                initial_controller_state: member.initial_controller_state,
+                initial_plant_state: member.initial_plant_state,
+                bad_plant_output: member.bad_plant_output,
+                horizon: member.horizon,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let verified = compose_controller_plant_direct_batch(controller_model, &inputs)
+        .map_err(|error| reject(error.to_string()))?;
+    if verified
+        .members
+        .iter()
+        .zip(&artifact.members)
+        .any(|(actual, claimed)| actual != &claimed.result)
+    {
+        return Err(reject("controller direct plant member result mismatch"));
+    }
+    Ok(verified)
+}
+
+fn portfolio_reason_from_failure(
+    failure: ControllerMtbddAdmissionFailure,
+) -> ControllerMtbddPlantSelectionReason {
+    match failure {
+        ControllerMtbddAdmissionFailure::BoundaryLimit => {
+            ControllerMtbddPlantSelectionReason::BoundaryLimit
+        }
+        ControllerMtbddAdmissionFailure::TerminalLimit => {
+            ControllerMtbddPlantSelectionReason::TerminalLimit
+        }
+        ControllerMtbddAdmissionFailure::NodeLimit => {
+            ControllerMtbddPlantSelectionReason::NodeLimit
+        }
+    }
+}
+
+fn portfolio_backend_tag(backend: ControllerMtbddPlantPortfolioBackend) -> u8 {
+    match backend {
+        ControllerMtbddPlantPortfolioBackend::Mtbdd => 0,
+        ControllerMtbddPlantPortfolioBackend::DirectExact => 1,
+    }
+}
+
+fn portfolio_reason_tag(reason: ControllerMtbddPlantSelectionReason) -> u8 {
+    match reason {
+        ControllerMtbddPlantSelectionReason::MtbddAdmitted => 0,
+        ControllerMtbddPlantSelectionReason::BoundaryLimit => 1,
+        ControllerMtbddPlantSelectionReason::TerminalLimit => 2,
+        ControllerMtbddPlantSelectionReason::NodeLimit => 3,
+    }
+}
+
+pub fn encode_controller_mtbdd_plant_portfolio(
+    artifact: &ControllerMtbddPlantPortfolioArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    let route_is_valid = matches!(
+        (artifact.backend, artifact.reason),
+        (
+            ControllerMtbddPlantPortfolioBackend::Mtbdd,
+            ControllerMtbddPlantSelectionReason::MtbddAdmitted
+        ) | (
+            ControllerMtbddPlantPortfolioBackend::DirectExact,
+            ControllerMtbddPlantSelectionReason::BoundaryLimit
+                | ControllerMtbddPlantSelectionReason::TerminalLimit
+                | ControllerMtbddPlantSelectionReason::NodeLimit
+        )
+    );
+    if artifact.version != MTBDD_PLANT_PORTFOLIO_VERSION
+        || !route_is_valid
+        || artifact.relevant_inputs.is_empty()
+        || artifact.observed_outputs.is_empty()
+        || artifact.payload.is_empty()
+    {
+        return Err(reject("controller MTBDD portfolio dimensions are invalid"));
+    }
+    match artifact.backend {
+        ControllerMtbddPlantPortfolioBackend::Mtbdd => {
+            decode_controller_mtbdd_plant_artifact(&artifact.payload)?;
+        }
+        ControllerMtbddPlantPortfolioBackend::DirectExact => {
+            decode_controller_direct_plant_artifact(&artifact.payload)?;
+        }
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(PORTFOLIO_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.push(portfolio_backend_tag(artifact.backend));
+    bytes.push(portfolio_reason_tag(artifact.reason));
+    put_vec(&mut bytes, &artifact.relevant_inputs)?;
+    put_vec(&mut bytes, &artifact.observed_outputs)?;
+    bytes.extend_from_slice(
+        &narrow(artifact.payload.len(), "portfolio payload length")?.to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.payload);
+    let integrity = Sha256::digest(&bytes);
+    bytes.extend_from_slice(&integrity);
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject("controller MTBDD portfolio exceeds byte limit"));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_controller_mtbdd_plant_portfolio(
+    bytes: &[u8],
+) -> Result<ControllerMtbddPlantPortfolioArtifact, ControllerPlantArtifactError> {
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES || bytes.len() < 52 {
+        return Err(reject("controller MTBDD portfolio size is invalid"));
+    }
+    let payload_len = bytes.len() - 32;
+    let (payload, claimed_integrity) = bytes.split_at(payload_len);
+    if Sha256::digest(payload).as_slice() != claimed_integrity {
+        return Err(reject("controller MTBDD portfolio integrity mismatch"));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, PORTFOLIO_MAGIC.len())? != PORTFOLIO_MAGIC {
+        return Err(reject("controller MTBDD portfolio magic mismatch"));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != MTBDD_PLANT_PORTFOLIO_VERSION {
+        return Err(reject("controller MTBDD portfolio version mismatch"));
+    }
+    let backend = match read_u8(payload, &mut cursor)? {
+        0 => ControllerMtbddPlantPortfolioBackend::Mtbdd,
+        1 => ControllerMtbddPlantPortfolioBackend::DirectExact,
+        _ => return Err(reject("controller MTBDD portfolio backend is invalid")),
+    };
+    let reason = match read_u8(payload, &mut cursor)? {
+        0 => ControllerMtbddPlantSelectionReason::MtbddAdmitted,
+        1 => ControllerMtbddPlantSelectionReason::BoundaryLimit,
+        2 => ControllerMtbddPlantSelectionReason::TerminalLimit,
+        3 => ControllerMtbddPlantSelectionReason::NodeLimit,
+        _ => return Err(reject("controller MTBDD portfolio reason is invalid")),
+    };
+    let relevant_inputs = read_vec(payload, &mut cursor)?;
+    let observed_outputs = read_vec(payload, &mut cursor)?;
+    let embedded_len = read_u32(payload, &mut cursor)? as usize;
+    let embedded = take(payload, &mut cursor, embedded_len)?.to_vec();
+    if cursor != payload.len() {
+        return Err(reject("controller MTBDD portfolio has trailing bytes"));
+    }
+    let artifact = ControllerMtbddPlantPortfolioArtifact {
+        version,
+        backend,
+        reason,
+        relevant_inputs,
+        observed_outputs,
+        payload: embedded,
+    };
+    encode_controller_mtbdd_plant_portfolio(&artifact)?;
+    Ok(artifact)
+}
+
+pub fn produce_controller_mtbdd_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "controller MTBDD portfolio member boundary mismatch",
+        ));
+    }
+    let (backend, reason, payload) = match produce_controller_mtbdd(
+        controller_model,
+        controller_source_sha256,
+        relevant_inputs,
+        observed_outputs,
+    ) {
+        Ok(mtbdd) => {
+            let artifact = produce_controller_mtbdd_plant_artifact(
+                controller_model,
+                controller_source_sha256,
+                &mtbdd,
+                members,
+            )?;
+            (
+                ControllerMtbddPlantPortfolioBackend::Mtbdd,
+                ControllerMtbddPlantSelectionReason::MtbddAdmitted,
+                encode_controller_mtbdd_plant_artifact(&artifact)?,
+            )
+        }
+        Err(error) => {
+            let failure = error
+                .admission_failure()
+                .ok_or_else(|| reject(error.to_string()))?;
+            let artifact = produce_controller_direct_plant_artifact(
+                controller_model,
+                controller_source_sha256,
+                members,
+            )?;
+            (
+                ControllerMtbddPlantPortfolioBackend::DirectExact,
+                portfolio_reason_from_failure(failure),
+                encode_controller_direct_plant_artifact(&artifact)?,
+            )
+        }
+    };
+    encode_controller_mtbdd_plant_portfolio(&ControllerMtbddPlantPortfolioArtifact {
+        version: MTBDD_PLANT_PORTFOLIO_VERSION,
+        backend,
+        reason,
+        relevant_inputs: relevant_inputs.to_vec(),
+        observed_outputs: observed_outputs.to_vec(),
+        payload,
+    })
+}
+
+fn portfolio_boundary_matches_members(
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> bool {
+    !members.is_empty()
+        && members.iter().all(|member| {
+            member.wiring.controller_sensor_inputs == relevant_inputs
+                && member.wiring.controller_action_outputs == observed_outputs
+        })
+}
+
+fn portfolio_members_match(
+    claimed: &[ControllerPlantArtifactMember],
+    expected: &[ControllerPlantArtifactInput<'_>],
+) -> bool {
+    claimed.len() == expected.len()
+        && claimed.iter().zip(expected).all(|(claimed, expected)| {
+            claimed.plant_source_sha256 == expected.plant_source_sha256
+                && claimed.wiring == *expected.wiring
+                && claimed.initial_controller_state == expected.initial_controller_state
+                && claimed.initial_plant_state == expected.initial_plant_state
+                && claimed.bad_plant_output == expected.bad_plant_output
+                && claimed.horizon == expected.horizon
+        })
+}
+
+pub fn verify_controller_mtbdd_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+) -> Result<ControllerMtbddPlantPortfolioSummary, ControllerPlantArtifactError> {
+    let artifact = decode_controller_mtbdd_plant_portfolio(bytes)?;
+    if artifact.relevant_inputs != relevant_inputs || artifact.observed_outputs != observed_outputs
+    {
+        return Err(reject("controller MTBDD portfolio boundary mismatch"));
+    }
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "controller MTBDD portfolio member boundary mismatch",
+        ));
+    }
+    let plants = members
+        .iter()
+        .map(|member| (member.plant, member.plant_source_sha256))
+        .collect::<Vec<_>>();
+    let (results, safe, unsafe_count, reachable_product_states, explored_transitions) =
+        match artifact.backend {
+            ControllerMtbddPlantPortfolioBackend::Mtbdd => {
+                let decoded = decode_controller_mtbdd_plant_artifact(&artifact.payload)?;
+                if !portfolio_members_match(&decoded.members, members) {
+                    return Err(reject("controller MTBDD portfolio member mismatch"));
+                }
+                let summary = verify_controller_mtbdd_plant_artifact(
+                    controller_model,
+                    controller_source_sha256,
+                    &plants,
+                    &artifact.payload,
+                )?;
+                (
+                    summary.members,
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                )
+            }
+            ControllerMtbddPlantPortfolioBackend::DirectExact => {
+                let expected_reason = match produce_controller_mtbdd(
+                    controller_model,
+                    controller_source_sha256,
+                    relevant_inputs,
+                    observed_outputs,
+                ) {
+                    Ok(_) => return Err(reject("controller MTBDD portfolio downgrade detected")),
+                    Err(error) => error
+                        .admission_failure()
+                        .map(portfolio_reason_from_failure)
+                        .ok_or_else(|| reject(error.to_string()))?,
+                };
+                if artifact.reason != expected_reason {
+                    return Err(reject("controller MTBDD portfolio reason mismatch"));
+                }
+                let decoded = decode_controller_direct_plant_artifact(&artifact.payload)?;
+                if !portfolio_members_match(&decoded.members, members) {
+                    return Err(reject("controller MTBDD portfolio member mismatch"));
+                }
+                let summary = verify_controller_direct_plant_artifact(
+                    controller_model,
+                    controller_source_sha256,
+                    &plants,
+                    &artifact.payload,
+                )?;
+                (
+                    summary.members,
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                )
+            }
+        };
+    Ok(ControllerMtbddPlantPortfolioSummary {
+        backend: artifact.backend,
+        reason: artifact.reason,
+        members: results,
+        safe,
+        unsafe_count,
         reachable_product_states,
         explored_transitions,
     })

@@ -803,3 +803,19 @@ for GCC artifact production, fresh verification and the maintained formal
 oracle. `TRIALS` defaults to 3 and is bounded to 100. Exact timings are host
 observations and must not be used as portfolio inputs. The retained arm64
 reference is `results/controller-mtbdd-process-resources-v1.csv`.
+
+### Controller plant exact portfolio acceptance
+
+```sh
+cargo build --release --locked
+scripts/run-controller-plant-portfolio-acceptance.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-plant-portfolio.csv
+diff -u results/controller-plant-portfolio-acceptance-v1.csv \
+  target/controller-plant-portfolio.csv
+```
+
+The harness requires the public six-member batch to take the MTBDD route and a
+nine-action boundary fixture to take direct exact fallback. It preserves both
+answers, then rejects mutation and output collision. Unit and downstream tests
+add reason-tampering, downgrade, truncation, and complete mutation coverage.

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add a timing-free controller MTBDD plant portfolio through public Rust and
+  self-service file interfaces. Select the
+  reusable MTBDD artifact when admitted and preserve the identical ordered
+  bounded query through independently replayed direct exact evidence only for
+  explicit boundary, terminal, or node-limit rejection. Bind the selected
+  backend, reason, boundary, member queries, sources, and payload; reject
+  malformed models, semantic errors, query drift, mutation, and downgrade
+  attempts. Add typed capability discovery, bounded subprocess execution,
+  stable route and member results, and a six-case Linux acceptance gate.
+
 - Add a portable three-way process-resource harness for controller MTBDD
   production, independent verification, and the maintained SymbiYosys oracle.
   Retain the negative 2.67-times verification-speed result and the positive

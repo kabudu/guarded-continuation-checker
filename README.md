@@ -40,6 +40,12 @@ tagged compatibility and source-to-model attestation remain open.
 Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
 shell-free production and verification, typed batch and member results, and
 invocation metrics without parsing command output.
+The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
+now selects the reusable MTBDD path when its frozen structural limits admit the
+controller, and otherwise preserves the identical bounded query through direct
+exact evaluation through both Rust and file interfaces. Only three explicit
+resource-limit rejections permit fallback; malformed models, semantic errors,
+query drift, and forced downgrades fail closed.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

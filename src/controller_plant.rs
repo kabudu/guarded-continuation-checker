@@ -736,6 +736,53 @@ pub fn compose_controller_plant_direct(
     )
 }
 
+pub fn compose_controller_plant_direct_batch(
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantBatchInput<'_>],
+) -> Result<ControllerPlantBatchResult, ControllerPlantError> {
+    if members.is_empty() || members.len() > 64 {
+        return Err(reject(
+            "controller-plant batch member count is outside limit",
+        ));
+    }
+    let mut results = Vec::with_capacity(members.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    let mut reachable_product_states = 0usize;
+    let mut explored_transitions = 0usize;
+    for member in members {
+        let result = compose_controller_plant_direct(
+            controller_model,
+            member.plant,
+            member.wiring,
+            member.initial_controller_state,
+            member.initial_plant_state,
+            member.bad_plant_output,
+            member.horizon,
+        )?;
+        match result.answer {
+            ControllerPlantAnswer::Safe => safe += 1,
+            ControllerPlantAnswer::Unsafe => unsafe_count += 1,
+        }
+        reachable_product_states = reachable_product_states
+            .checked_add(result.reachable_product_states)
+            .ok_or_else(|| reject("controller-plant batch reachable count overflow"))?;
+        explored_transitions = explored_transitions
+            .checked_add(result.explored_transitions)
+            .ok_or_else(|| reject("controller-plant batch transition count overflow"))?;
+        results.push(result);
+    }
+    Ok(ControllerPlantBatchResult {
+        members: results,
+        safe,
+        unsafe_count,
+        controller_cells: 0,
+        controller_proof_bytes: 0,
+        reachable_product_states,
+        explored_transitions,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn compose_controller_plant_portfolio(
     controller_model: &AigerTransition,

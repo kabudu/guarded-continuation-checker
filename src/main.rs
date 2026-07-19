@@ -35,6 +35,7 @@ const EVIDENCE_TOTAL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
 const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
+const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
@@ -24765,6 +24766,8 @@ fn parse_component_batch_manifest(
 
 fn parse_controller_mtbdd_plant_manifest(
     manifest_path: &Path,
+    max_controller_inputs: usize,
+    max_controller_outputs: usize,
 ) -> Result<ControllerMtbddPlantManifest, String> {
     use std::path::Component;
 
@@ -24865,17 +24868,9 @@ fn parse_controller_mtbdd_plant_manifest(
     let controller_aiger_text = take("controller_aiger_path")?;
     let controller_aiger_path = normalized_path(controller_aiger_text, "controller AIGER")?;
     let relevant_text = take("relevant_inputs")?;
-    let relevant_inputs = parse_vector(
-        relevant_text,
-        "relevant inputs",
-        controller_mtbdd::MAX_MTBDD_INPUTS,
-    )?;
+    let relevant_inputs = parse_vector(relevant_text, "relevant inputs", max_controller_inputs)?;
     let observed_text = take("observed_outputs")?;
-    let observed_outputs = parse_vector(
-        observed_text,
-        "observed outputs",
-        controller_mtbdd::MAX_MTBDD_OUTPUTS,
-    )?;
+    let observed_outputs = parse_vector(observed_text, "observed outputs", max_controller_outputs)?;
     let count_text = take("member_count")?;
     let count = parse_usize(count_text, "member count")?;
     if count == 0 || count > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
@@ -24895,25 +24890,25 @@ fn parse_controller_mtbdd_plant_manifest(
         let controller_sensor_inputs = parse_vector(
             controller_sensor_text,
             "controller sensor inputs",
-            controller_mtbdd::MAX_MTBDD_INPUTS,
+            max_controller_inputs,
         )?;
         let controller_action_text = take("controller_action_outputs")?;
         let controller_action_outputs = parse_vector(
             controller_action_text,
             "controller action outputs",
-            controller_mtbdd::MAX_MTBDD_OUTPUTS,
+            max_controller_outputs,
         )?;
         let plant_sensor_text = take("plant_sensor_outputs")?;
         let plant_sensor_outputs = parse_vector(
             plant_sensor_text,
             "plant sensor outputs",
-            controller_mtbdd::MAX_MTBDD_INPUTS,
+            max_controller_inputs,
         )?;
         let plant_action_text = take("plant_action_inputs")?;
         let plant_action_inputs = parse_vector(
             plant_action_text,
             "plant action inputs",
-            controller_mtbdd::MAX_MTBDD_OUTPUTS,
+            max_controller_outputs,
         )?;
         let initial_controller_text = take("initial_controller_state")?;
         let initial_controller_state =
@@ -24958,6 +24953,62 @@ fn parse_controller_mtbdd_plant_manifest(
         observed_outputs,
         members,
     })
+}
+
+type LoadedControllerPlantManifest = (
+    ControllerMtbddPlantManifest,
+    AigerTransition,
+    [u8; 32],
+    Vec<AigerTransition>,
+    Vec<[u8; 32]>,
+);
+
+fn load_controller_plant_manifest(
+    path: &Path,
+    max_controller_inputs: usize,
+    max_controller_outputs: usize,
+) -> Result<LoadedControllerPlantManifest, String> {
+    let manifest =
+        parse_controller_mtbdd_plant_manifest(path, max_controller_inputs, max_controller_outputs)?;
+    let controller_source = read_bounded_regular_file(
+        &manifest.controller_source_path,
+        AAG_INPUT_LIMIT_BYTES as usize,
+        "controller source",
+    )?;
+    let controller_aiger = read_bounded_regular_file(
+        &manifest.controller_aiger_path,
+        AAG_INPUT_LIMIT_BYTES as usize,
+        "controller AIGER model",
+    )?;
+    let controller = aiger_obligation::parse_ascii_aiger_transition(&controller_aiger)
+        .map_err(|error| error.to_string())?;
+    let controller_digest: [u8; 32] = Sha256::digest(&controller_source).into();
+    let mut plant_digests = Vec::with_capacity(manifest.members.len());
+    let mut plants = Vec::with_capacity(manifest.members.len());
+    for member in &manifest.members {
+        let plant_source = read_bounded_regular_file(
+            &member.plant_source_path,
+            AAG_INPUT_LIMIT_BYTES as usize,
+            "plant source",
+        )?;
+        let plant_aiger = read_bounded_regular_file(
+            &member.plant_aiger_path,
+            AAG_INPUT_LIMIT_BYTES as usize,
+            "plant AIGER model",
+        )?;
+        plant_digests.push(<[u8; 32]>::from(Sha256::digest(&plant_source)));
+        plants.push(
+            aiger_obligation::parse_ascii_aiger_transition(&plant_aiger)
+                .map_err(|error| error.to_string())?,
+        );
+    }
+    Ok((
+        manifest,
+        controller,
+        controller_digest,
+        plants,
+        plant_digests,
+    ))
 }
 
 fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, String> {
@@ -25025,6 +25076,133 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "controller-plant-portfolio-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-plant-portfolio-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_plant_portfolio_cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_members={} backends=mtbdd,direct-exact routing=static fallback=exact unsupported=fail-closed",
+                controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+            );
+            Ok(true)
+        }
+        "certify-controller-plant-portfolio" | "verify-controller-plant-portfolio" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-plant-portfolio" {
+                        "OUTPUT.controller-plant"
+                    } else {
+                        "INPUT.controller-plant"
+                    }
+                ));
+            }
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
+                    guarded_continuation_checker::controller_plant::MAX_PLANT_INPUTS,
+                )?;
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            let (encoded, action) = if command == "certify-controller-plant-portfolio" {
+                let encoded = controller_plant_artifact::produce_controller_mtbdd_plant_portfolio(
+                    &controller,
+                    controller_digest,
+                    &manifest.relevant_inputs,
+                    &manifest.observed_outputs,
+                    &inputs,
+                )
+                .map_err(|error| error.to_string())?;
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED")
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "controller plant portfolio",
+                    )?,
+                    "VERIFIED",
+                )
+            };
+            let summary = controller_plant_artifact::verify_controller_mtbdd_plant_portfolio(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+                &inputs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            println!(
+                "controller-plant-portfolio status={action} cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} elapsed_micros={}{}",
+                controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
+                match summary.backend {
+                    controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::Mtbdd =>
+                        "MTBDD",
+                    controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::DirectExact =>
+                        "DIRECT_EXACT",
+                },
+                match summary.reason {
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::MtbddAdmitted =>
+                        "mtbdd-admitted",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::BoundaryLimit =>
+                        "boundary-limit",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::TerminalLimit =>
+                        "terminal-limit",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::NodeLimit =>
+                        "node-limit",
+                },
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if action == "CREATED" {
+                    format!(" output={}", args[2])
+                } else {
+                    String::new()
+                }
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-plant-portfolio-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe =>
+                            "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe =>
+                            "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
         "certify-controller-mtbdd-plant-batch" | "verify-controller-mtbdd-plant-batch" => {
             if args.len() != 3 {
                 return Err(format!(
@@ -25036,42 +25214,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     }
                 ));
             }
-            let manifest = parse_controller_mtbdd_plant_manifest(Path::new(&args[1]))?;
-            let controller_source = read_bounded_regular_file(
-                &manifest.controller_source_path,
-                AAG_INPUT_LIMIT_BYTES as usize,
-                "controller source",
-            )?;
-            let controller_aiger = read_bounded_regular_file(
-                &manifest.controller_aiger_path,
-                AAG_INPUT_LIMIT_BYTES as usize,
-                "controller AIGER model",
-            )?;
-            let controller = aiger_obligation::parse_ascii_aiger_transition(&controller_aiger)
-                .map_err(|error| error.to_string())?;
-            let controller_digest: [u8; 32] = Sha256::digest(&controller_source).into();
-            let mut plant_sources = Vec::with_capacity(manifest.members.len());
-            let mut plants = Vec::with_capacity(manifest.members.len());
-            for member in &manifest.members {
-                plant_sources.push(read_bounded_regular_file(
-                    &member.plant_source_path,
-                    AAG_INPUT_LIMIT_BYTES as usize,
-                    "plant source",
-                )?);
-                let plant_aiger = read_bounded_regular_file(
-                    &member.plant_aiger_path,
-                    AAG_INPUT_LIMIT_BYTES as usize,
-                    "plant AIGER model",
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
                 )?;
-                plants.push(
-                    aiger_obligation::parse_ascii_aiger_transition(&plant_aiger)
-                        .map_err(|error| error.to_string())?,
-                );
-            }
-            let plant_digests = plant_sources
-                .iter()
-                .map(|source| <[u8; 32]>::from(Sha256::digest(source)))
-                .collect::<Vec<_>>();
             let source_pairs = plants
                 .iter()
                 .zip(&plant_digests)

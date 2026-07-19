@@ -179,6 +179,13 @@ times slower but uses 85.2% less peak RSS than the maintained formal oracle.
 Hosted Linux replication, phase-level attribution and independent measurement
 remain open, so no production-readiness row changes.
 
+The library-level controller MTBDD plant portfolio now preserves valid bounded
+queries through exact direct fallback for three explicit static resource-limit
+rejections. Malformed models, semantic errors, query drift, and forced
+downgrades fail closed. This closes the local fallback-integrity mechanism gap.
+Hosted compatibility, independent acceptance, and source-to-model attestation
+remain open, so no production-readiness row changes.
+
 ## Rules
 
 - No timing-based per-formula calibration.

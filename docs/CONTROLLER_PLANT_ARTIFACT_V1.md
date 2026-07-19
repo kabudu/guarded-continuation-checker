@@ -43,3 +43,15 @@ variant as a canonical file workflow. The CLI additionally requires the MTBDD
 boundary and every ordered member digest, wiring vector, initial state,
 property and horizon to equal the supplied manifest. A valid artifact for a
 different query therefore fails closed.
+
+## Static MTBDD portfolio
+
+The library-level `GCCMPP01` portfolio selects the MTBDD batch when admitted
+and otherwise embeds a direct exact `GCCDPA01` batch only for an explicit
+boundary, terminal, or node-limit rejection. Its route and reason are
+integrity-bound. Verification reruns admission, rejects a forced downgrade,
+checks the full member query, and independently replays the selected backend.
+See [controller MTBDD plant portfolio v1](CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md).
+
+Hosted cross-platform replication, compatibility history, source-to-model
+attestation, calibrated plant validity, and independent acceptance remain open.

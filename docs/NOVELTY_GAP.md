@@ -313,3 +313,8 @@ formal route is 2.67 times faster than fresh GCC verification, while GCC uses
 speed result rules out a solver-performance distinction. The lower-memory
 trust-transfer result is useful engineering, but proof-carrying model checking
 and portable evidence are established, so the novelty gap remains open.
+
+The controller MTBDD plant portfolio adds timing-free selection and exact
+fallback with downgrade detection. This is useful integrity engineering, but
+static portfolio routing and exact fallback are established techniques. It does
+not change the novelty assessment.

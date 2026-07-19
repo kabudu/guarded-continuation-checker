@@ -84,7 +84,8 @@ guarded-continuation-checker controller-mtbdd-cli-version
 
 ```rust,no_run
 use guarded_continuation_checker::{
-    ControllerMtbddTool, EventContractTool, ExecutionPolicy, PredicateTool,
+    ControllerMtbddTool, ControllerPlantPortfolioTool, EventContractTool,
+    ExecutionPolicy, PredicateTool,
 };
 
 # fn discover() -> Result<(), Box<dyn std::error::Error>> {
@@ -105,6 +106,11 @@ let controller_mtbdd = ControllerMtbddTool::discover_with_policy(
     policy,
 )?;
 assert_eq!(controller_mtbdd.capabilities().cli_version, 1);
+let controller_portfolio = ControllerPlantPortfolioTool::discover_with_policy(
+    "guarded-continuation-checker",
+    policy,
+)?;
+assert_eq!(controller_portfolio.capabilities().cli_version, 1);
 # Ok(())
 # }
 ```
@@ -118,6 +124,10 @@ for predicate certificate examples and the
 for certificate v3, exact portfolio fallback, and report replay. The
 [controller MTBDD CLI contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_CLI_V1.md)
 covers source-bound controller-plus-plant batch production and verification.
+The
+[exact controller plant portfolio](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
+uses deterministic MTBDD admission with direct exact fallback and downgrade
+detection.
 The retained
 [process-resource baseline](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 records a negative small-batch speed result and lower peak-memory observations

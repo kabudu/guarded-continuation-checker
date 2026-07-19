@@ -50,6 +50,33 @@ pub struct ControllerMtbddSummary {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerMtbddError(pub String);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerMtbddAdmissionFailure {
+    BoundaryLimit,
+    TerminalLimit,
+    NodeLimit,
+}
+
+impl ControllerMtbddError {
+    /// Classify only static producer limits that an exact portfolio may route
+    /// around. Malformed models and semantic failures are never admission
+    /// failures and must remain errors.
+    pub fn admission_failure(&self) -> Option<ControllerMtbddAdmissionFailure> {
+        match self.0.as_str() {
+            "controller MTBDD boundary exceeds limits" => {
+                Some(ControllerMtbddAdmissionFailure::BoundaryLimit)
+            }
+            "controller MTBDD terminal count exceeds limit" => {
+                Some(ControllerMtbddAdmissionFailure::TerminalLimit)
+            }
+            "controller MTBDD node count exceeds limit" => {
+                Some(ControllerMtbddAdmissionFailure::NodeLimit)
+            }
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for ControllerMtbddError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
@@ -90,16 +117,19 @@ fn validate_boundary(
         || relevant_inputs.len() > MAX_MTBDD_INPUTS
         || observed_outputs.len() > MAX_MTBDD_OUTPUTS
         || assignments > MAX_MTBDD_ASSIGNMENTS
-        || relevant_inputs
-            .iter()
-            .any(|&input| input >= model.inputs.len())
+    {
+        return Err(reject("controller MTBDD boundary exceeds limits"));
+    }
+    if relevant_inputs
+        .iter()
+        .any(|&input| input >= model.inputs.len())
         || relevant_inputs.windows(2).any(|pair| pair[0] >= pair[1])
         || observed_outputs
             .iter()
             .any(|&output| output >= model.outputs.len())
         || observed_outputs.windows(2).any(|pair| pair[0] >= pair[1])
     {
-        return Err(reject("controller MTBDD boundary exceeds limits"));
+        return Err(reject("controller MTBDD boundary is invalid"));
     }
     Ok((bits, assignments))
 }
