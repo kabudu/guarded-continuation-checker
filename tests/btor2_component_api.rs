@@ -44,3 +44,23 @@ fn public_controller_obligation_api_round_trips_and_verifies() {
     assert_eq!(decoded.velocity_width, 16);
     assert_eq!(decoded.brake_velocity, 256);
 }
+
+#[test]
+fn public_naive_batch_baseline_preserves_member_bindings() {
+    let inputs = [
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 255,
+        },
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 256,
+        },
+    ];
+    let certificate = btor2_component::produce_naive_component_batch(CONTROLLER, &inputs).unwrap();
+    let summary =
+        btor2_component::verify_naive_component_batch(CONTROLLER, &inputs, &certificate).unwrap();
+    assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+}

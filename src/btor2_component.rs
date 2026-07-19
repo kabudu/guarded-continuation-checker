@@ -17,6 +17,7 @@ pub const MAX_COMPONENT_STATES_PER_LAYER: usize = 65_536;
 pub const MAX_COMPONENT_TOTAL_STATES: usize = 262_144;
 pub const MAX_COMPONENT_NODE_STEPS: u64 = 30_000_000;
 pub const MAX_COMPONENT_CERTIFICATE_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_COMPONENT_BATCH_MEMBERS: usize = 64;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentContract {
@@ -125,6 +126,26 @@ pub struct ComponentSummary {
     pub query_horizon: u32,
     pub bad_frame: Option<u32>,
     pub logical_reachable_states: u64,
+}
+
+#[derive(Clone, Copy)]
+pub struct ComponentBatchInput<'a> {
+    pub plant_source: &'a [u8],
+    pub contract_source: &'a [u8],
+    pub horizon: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NaiveComponentBatchCertificate {
+    pub controller_sha256: String,
+    pub members: Vec<ComponentCertificate>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComponentBatchSummary {
+    pub members: Vec<ComponentSummary>,
+    pub safe: usize,
+    pub unsafe_count: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1479,6 +1500,73 @@ pub fn verify(
     }
 }
 
+pub fn produce_naive_component_batch(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+) -> Result<NaiveComponentBatchCertificate, ComponentError> {
+    if inputs.is_empty() || inputs.len() > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let mut members = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        members.push(
+            produce(
+                controller_source,
+                input.plant_source,
+                input.contract_source,
+                input.horizon,
+            )?
+            .certificate,
+        );
+    }
+    Ok(NaiveComponentBatchCertificate {
+        controller_sha256: digest(controller_source),
+        members,
+    })
+}
+
+pub fn verify_naive_component_batch(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+    certificate: &NaiveComponentBatchCertificate,
+) -> Result<ComponentBatchSummary, ComponentError> {
+    if inputs.is_empty()
+        || inputs.len() > MAX_COMPONENT_BATCH_MEMBERS
+        || certificate.members.len() != inputs.len()
+        || certificate.controller_sha256 != digest(controller_source)
+    {
+        return Err(reject("component batch binding or member count is invalid"));
+    }
+    let mut members = Vec::with_capacity(inputs.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    for (input, member) in inputs.iter().zip(&certificate.members) {
+        let member_horizon = match member {
+            ComponentCertificate::Phase(member) => member.query_horizon,
+            ComponentCertificate::Search(member) => member.query_horizon,
+        };
+        if member_horizon != input.horizon {
+            return Err(reject("component batch horizon binding is invalid"));
+        }
+        let summary = verify(
+            controller_source,
+            input.plant_source,
+            input.contract_source,
+            member,
+        )?;
+        match summary.result {
+            ComponentResult::Safe => safe += 1,
+            ComponentResult::Unsafe => unsafe_count += 1,
+        }
+        members.push(summary);
+    }
+    Ok(ComponentBatchSummary {
+        members,
+        safe,
+        unsafe_count,
+    })
+}
+
 fn encode_state(state: &ComponentState) -> String {
     fn side(values: &[(NodeId, u64)]) -> String {
         values
@@ -1817,6 +1905,38 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn naive_batch_baseline_preserves_mixed_exact_answers() {
+        let inputs = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 256,
+            },
+            ComponentBatchInput {
+                plant_source: SEMI_IMPLICIT,
+                contract_source: CONTRACT,
+                horizon: 127,
+            },
+        ];
+        let certificate = produce_naive_component_batch(CONTROLLER, &inputs).unwrap();
+        let summary = verify_naive_component_batch(CONTROLLER, &inputs, &certificate).unwrap();
+        assert_eq!(summary.safe, 2);
+        assert_eq!(summary.unsafe_count, 1);
+        assert_eq!(summary.members[0].backend, ComponentBackend::PhaseContract);
+        assert_eq!(summary.members[1].backend, ComponentBackend::ComposedSearch);
+        assert_eq!(summary.members[2].backend, ComponentBackend::ComposedSearch);
+
+        let mut reordered = inputs;
+        reordered.swap(0, 1);
+        assert!(verify_naive_component_batch(CONTROLLER, &reordered, &certificate).is_err());
     }
 
     #[test]

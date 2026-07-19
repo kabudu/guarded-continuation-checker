@@ -4,9 +4,10 @@
 
 This document predeclares the experiment for reusing one independently checked
 controller obligation across multiple plant variants. The obligation format and
-standalone producer and verifier are implemented. Batch composition and its
-comparative measurements remain in progress. This is not a novelty or
-production-readiness claim.
+standalone producer and verifier are implemented. The exact, bounded,
+mixed-answer naive-bundle baseline is also executable through the public Rust
+API. Compact batch composition and its comparative measurements remain in
+progress. This is not a novelty or production-readiness claim.
 
 ## Reusable obligation
 
@@ -35,6 +36,12 @@ The experiment will not compare only with repeated process startup. Its baseline
 must parse and validate the controller once in-process, then use straightforward
 ordinary component-certificate bundling for every plant query. This removes
 avoidable parsing and launch overhead from the claimed benefit.
+
+`produce_naive_component_batch` and `verify_naive_component_batch` freeze that
+baseline. They preserve ordinary specialised and exact-fallback certificates,
+bind controller digest, member count, order, sources, contracts, and horizons,
+and admit at most 64 members. The retained test combines specialised SAFE,
+fallback SAFE, and fallback UNSAFE members and rejects query reordering.
 
 The reusable batch must preserve:
 
