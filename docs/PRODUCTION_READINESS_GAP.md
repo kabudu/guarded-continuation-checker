@@ -124,14 +124,16 @@ negative product-scale regression, not counted as public-product support.
 The separate fixed-order MTBDD backend admits the same exact relation in 6,217
 bytes and independently checks all 131,072 assignments. It does not yet compose
 with representative physical product environments, expose a CLI file workflow,
-have an external oracle, or carry release compatibility, so it does not close a
-readiness row. Two minimal appliance monitors now cover exact SAFE and UNSAFE
-composition and direct-controller agreement, but remain repository-authored
-mechanism tests.
+or carry release compatibility, so it does not close a readiness row. Two
+minimal appliance monitors now cover exact SAFE and UNSAFE composition,
+direct-controller agreement, and maintained SymbiYosys plus Z3 agreement, but
+remain repository-authored mechanism tests.
 The public-controller complete-artifact reuse benchmark passes through 16
 members, where shared bytes are 10.6% and checking time is 6.2% of repeated
 artifacts. This closes the local strong-baseline mechanism gate only. Maintained
-external agreement, realistic physical environments, CLI integration,
+SymbiYosys/Yosys/Z3 now independently agrees on both minimal monitor answers and
+the unsafe frame-10 result. This closes the maintained external agreement gate
+for this narrow fixture only. Realistic physical environments, CLI integration,
 compatibility history, and independent acceptance remain open.
 
 ## Rules

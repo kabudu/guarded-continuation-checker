@@ -1,7 +1,8 @@
 # Proof-carrying controller MTBDD v1 experiment
 
-Status: experimental. The fixed representation and structural gates pass on the
-first pinned public controller. Composition and product gates remain open.
+Status: experimental. The fixed representation, structural gates, exact
+composition, complete-artifact reuse baseline, and maintained bounded oracle
+pass on the first pinned public controller.
 
 ## Hypothesis and fixed order
 
@@ -57,9 +58,9 @@ cargo run --release --example public_washing_controller_mtbdd
 ```
 
 This is a real representation breakthrough relative to both cube vocabularies,
-but not yet a product or novelty breakthrough. Exact plant composition, strong
-complete-artifact baselines, a maintained independent oracle, and closest-system
-analysis remain open.
+but not yet a product or novelty breakthrough. Representative physical plant
+composition, closest-system analysis, and independent external evaluation
+remain open.
 
 ## First exact compositions
 
@@ -78,7 +79,33 @@ pattern. This avoids treating an assumed-constant clock input as evidence.
 
 These minimal monitors exercise both answers and the real public controller
 boundary. They are not yet representative physical plant models and do not
-close the maintained-oracle or product-quality gates.
+close the representative-environment or product-quality gates.
+
+## Maintained model-checker oracle
+
+Pinned SymbiYosys, maintained Yosys, and Z3 now check the same generated AIGER
+transition, fixed sensor pattern, initial state, horizon, and two monitor
+properties independently of the Rust implementation. The water/fault exclusion
+property passes through depth 32. The fill-only water-valve property fails at
+step 10, exactly matching GCC's shortest bad frame.
+
+The synthesis recipe explicitly resolves the upstream controller's
+uninitialised `next_State` register before AIGER generation. The oracle reads
+the generated AIGER model without overriding latch initialisation, so GCC and
+the formal jobs use the same zero-initialised state interpretation. An earlier
+model that left these latches nondeterministic produced a different result and
+was rejected rather than reported as agreement. The retained machine-readable
+result is `results/public-washing-controller-mtbdd-oracle-v1.csv`; reproduce it
+with:
+
+```sh
+scripts/test-public-washing-controller-oracle.sh /path/to/sby.py
+```
+
+The script verifies pinned file digests and regenerates the AIGER model byte for
+byte before both formal jobs. This supplies a separate solver and checking path,
+but does not independently validate Yosys synthesis because Yosys both produces
+and imports the AIGER model in this path.
 
 ## Complete-artifact reuse baseline
 

@@ -706,3 +706,15 @@ monitor members. It requires every complete shared result to equal the repeated
 independently verified result and reports encoded bytes plus median release-mode
 checking time. The committed reference is
 `results/public-washing-controller-mtbdd-reuse-v1.csv`.
+
+Cross-check the two retained public-controller composition answers with a
+SymbiYosys checkout at revision
+`fea6e467d067b3ea84b6b5ac08cd48beb59f0d42`, maintained Yosys, and Z3:
+
+```sh
+scripts/test-public-washing-controller-oracle.sh /path/to/sby.py
+```
+
+The expected result is one depth-32 PASS and one step-10 FAIL, recorded in
+`results/public-washing-controller-mtbdd-oracle-v1.csv`. The script verifies
+the pinned inputs and regenerates the AIGER file byte for byte before checking.

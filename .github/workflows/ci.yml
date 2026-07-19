@@ -44,7 +44,8 @@ jobs:
             scripts/run-btor2-component-self-service-acceptance.sh \
             scripts/run-btor2-component-cost.sh \
             scripts/run-btor2-component-batch-acceptance.sh \
-            scripts/run-btor2-component-reuse-benchmark.sh
+            scripts/run-btor2-component-reuse-benchmark.sh \
+            scripts/test-public-washing-controller-oracle.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -196,6 +197,8 @@ jobs:
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             corpus/rtl/yosys-simple /tmp/corpus-current /tmp/sby/sbysrc/sby.py
           cat /tmp/corpus-current/results.csv
+      - name: Cross-check public controller compositions with SymbiYosys
+        run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Run pinned historical Yosys 0.36
         run: |
           docker run --rm \

@@ -10,8 +10,10 @@ Their inclusion does not change the licence of GCC, and downstream redistributio
 must preserve the applicable upstream licence.
 
 The repository-authored `synthesize.ys` records the exact synthesis
-interpretation. In particular, `setundef -zero` resolves upstream's
-uninitialized `next_State` register. `generated/controller.aag` was produced by
+interpretation. In particular, `setattr` resolves upstream's uninitialized
+`next_State` register by assigning its synthesis `init` attribute before process
+lowering; `setundef -zero` resolves any remaining undefined combinational
+values. `generated/controller.aag` was produced by
 Yosys 0.67+post with git revision `b8e7da6f40ae8f552c116bf6c359b07c6533e159`.
 The generated model is experimental evidence derived from the GPL-2.0 source
 and is distributed with the same upstream licence notice.
@@ -19,3 +21,15 @@ and is distributed with the same upstream licence notice.
 Verify the source and licence bytes with `shasum -a 256 -c SHA256SUMS`. The
 experiment must additionally regenerate the AIGER model and compare it before
 publishing a result.
+
+The maintained oracle reads that generated AIGER model without overriding its
+latch initialisation. This makes the synthesis recipe, GCC, and SymbiYosys use
+the same zero-initialised `next_State` interpretation. The oracle provides a
+separate bounded model-checking path through SymbiYosys and Z3; it does not
+claim to validate Yosys synthesis independently of Yosys.
+
+The repository-authored formal monitors and SymbiYosys job files are
+Apache-2.0 GCC code. CI runs them with SymbiYosys revision
+`fea6e467d067b3ea84b6b5ac08cd48beb59f0d42`, maintained Yosys, and Z3. The
+formal jobs read the pinned generated AIGER transition and its zero latch
+initialisation directly, without overriding the model.

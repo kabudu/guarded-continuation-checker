@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a pinned SymbiYosys, maintained-Yosys, and Z3 oracle for both public
+  washing-controller MTBDD composition answers. Match GCC's explicit zero
+  initial state, reproduce the SAFE depth-32 result and the UNSAFE step-10
+  result, retain machine-readable agreement, and gate it in CI.
+
 - Add experimental BTOR2 word semantic core v1. Preserve strict 1 to 64-bit
   counter and timer expressions, exact modular evaluation, deterministic state
   transitions, constraints, bad properties, resource bounds, and a versioned

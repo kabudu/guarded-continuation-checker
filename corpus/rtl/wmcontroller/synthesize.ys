@@ -1,5 +1,6 @@
 read_verilog upstream/Controller.v
 hierarchy -check -top Controller
+setattr -set init 0 Controller/w:next_State
 proc
 flatten
 opt

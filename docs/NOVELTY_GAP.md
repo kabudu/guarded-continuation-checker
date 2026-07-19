@@ -250,6 +250,9 @@ The first complete-artifact reuse baseline now passes on the public controller
 and repository-authored appliance monitors. At 16 members, shared bytes are
 10.6% and checking time is 6.2% of repeated complete artifacts, with exact
 agreement. This is meaningful reusable-certificate evidence, but BDD sharing,
-model compilation, and amortized equivalence checking are established. A
-closest-system review and maintained external comparison remain mandatory
-before narrowing or asserting novelty.
+model compilation, and amortized equivalence checking are established. Pinned
+SymbiYosys with maintained Yosys and Z3 now reproduces both minimal composition
+answers and the unsafe step-10 boundary through a separate checking path. This
+removes an implementation-trust gap but supplies no novelty evidence. A
+closest-system review and comparisons on representative physical environments
+remain mandatory before narrowing or asserting novelty.
