@@ -46,6 +46,14 @@
   near-neighbour cases. Reduce two SAFE artifacts from 1,180,313 and 453,342
   bytes to 386 bytes. Piecewise-affine reachability and braking invariants are
   established prior art; this is not a novelty or production-readiness claim.
+- Add source-separated BTOR2 component contract v1. Bind independent
+  controller, plant, and wiring sources; verify the exact feedback relation
+  without constructing a monolithic BTOR2 product; and retain both-answer exact
+  composed-search fallback. Preserve eight answer-balanced rows, controller
+  reuse across two plants, strict hostile-input controls, CLI and Rust APIs, and
+  a simulated self-service run. Retain the negative single-pair comparison:
+  component proofs are 107 to 108 bytes larger and 1.35x to 1.38x slower to
+  check than the monolithic specialised proofs, so no novelty claim follows.
 
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability

@@ -20,10 +20,10 @@ The package provides:
 - deterministic certificate formats with independent source-bound verification;
   and
 - experimental BTOR2 word semantics, counter-phase certificates, exact trace
-  replay, proof-carrying exact word regions, coupled-motion curves and
-  resettable braking phases, and
-  both-answer bounded reachability with a static exact-search fallback and
-  fixed resource limits.
+  replay, proof-carrying exact word regions, coupled-motion curves, resettable
+  braking phases, source-separated controller/plant contracts, and both-answer
+  bounded reachability with static exact-search fallbacks and fixed resource
+  limits.
 
 ## Status and claim boundary
 
@@ -42,6 +42,12 @@ Bounded portfolio v3 source-binds and independently checks the exact
 accelerate, brake, and stopped relation, with unchanged exact-search fallback
 for every unsupported or intersecting query. This remains a narrow experimental
 result, not a production or novelty claim.
+
+The experimental `btor2_component` API separately binds a controller, plant,
+and synchronous wiring contract. It supplies an exact phase certificate and a
+both-answer composed-search fallback without generating a monolithic source.
+The first cost result is deliberately retained as negative against the existing
+monolithic specialisation, so no performance or novelty claim follows.
 
 ## Installation
 

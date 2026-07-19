@@ -18,6 +18,13 @@ semi_implicit=examples/btor2/semi-implicit-motion-rejected-v1.btor2
 braking=examples/btor2/braking-controller-v1.btor2
 motor_stop=examples/btor2/motor-emergency-stop-v1.btor2
 semi_implicit_braking=examples/btor2/semi-implicit-braking-rejected-v1.btor2
+component_controller=examples/btor2/components/braking-controller-v1.btor2
+component_plant=examples/btor2/components/motion-plant-v1.btor2
+component_fast_plant=examples/btor2/components/fast-motion-plant-v1.btor2
+component_motor_controller=examples/btor2/components/motor-stop-controller-v1.btor2
+component_motor_plant=examples/btor2/components/motor-plant-v1.btor2
+component_semi_implicit=examples/btor2/components/semi-implicit-motion-plant-v1.btor2
+component_contract=examples/btor2/components/braking-motion-contract-v1.txt
 certificate=${TMPDIR:-/tmp}/gcc-btor2-phase-$$.cert
 actuator_witness=${TMPDIR:-/tmp}/gcc-btor2-actuator-$$.witness
 saturating_witness=${TMPDIR:-/tmp}/gcc-btor2-saturating-$$.witness
@@ -65,6 +72,12 @@ printf '%s\n' "$inspection" | grep -q ' word_semantics=preserved$'
 "$btor2tools_bin_dir/catbtor" "$braking" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$motor_stop" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$semi_implicit_braking" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$component_controller" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$component_plant" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$component_fast_plant" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$component_motor_controller" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$component_motor_plant" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$component_semi_implicit" >/dev/null
 "$btor2tools_bin_dir/btorsim" -c "$model" "$witness"
 write_zero_input_witness "$actuator_witness" 201 home
 write_zero_input_witness "$saturating_witness" 255 reset
@@ -138,5 +151,30 @@ check_bounded "$semi_implicit_braking" 31 127 SAFE search
 check_bounded "$semi_implicit_braking" 31 128 UNSAFE search
 check_bounded "$motor_stop" 31 159 SAFE braking
 check_bounded "$motor_stop" 31 160 UNSAFE search
+
+check_components() {
+  controller=$1
+  plant=$2
+  horizon=$3
+  expected=$4
+  backend=$5
+  "$gcc_binary" check-btor2-components \
+    "$controller" "$plant" "$component_contract" "$horizon" "$certificate"
+  grep -q '^component_certificate_version=1$' "$certificate"
+  grep -q "^backend=${backend}$" "$certificate"
+  grep -q "^result=${expected}$" "$certificate"
+  "$gcc_binary" verify-btor2-components \
+    "$controller" "$plant" "$component_contract" "$certificate"
+  rm -f "$certificate"
+}
+
+check_components "$component_controller" "$component_plant" 255 SAFE phase-contract
+check_components "$component_controller" "$component_plant" 256 UNSAFE composed-search
+check_components "$component_controller" "$component_fast_plant" 127 SAFE phase-contract
+check_components "$component_controller" "$component_fast_plant" 128 UNSAFE composed-search
+check_components "$component_motor_controller" "$component_motor_plant" 159 SAFE phase-contract
+check_components "$component_motor_controller" "$component_motor_plant" 160 UNSAFE composed-search
+check_components "$component_controller" "$component_semi_implicit" 127 SAFE composed-search
+check_components "$component_controller" "$component_semi_implicit" 128 UNSAFE composed-search
 
 echo 'btor2tools_baseline=PASS'

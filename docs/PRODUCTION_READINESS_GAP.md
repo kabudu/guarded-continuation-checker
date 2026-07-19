@@ -77,6 +77,12 @@ reachability and its SAFE
   It remains unsigned, discrete, and closed-loop within one source model. It
   does not cover separately supplied plant/controller components, external
   disturbances, asynchronous inputs, or a public robot design.
+  Component contract v1 now binds separate controller, plant, and wiring files,
+  exposes a shell-free Rust API and two CLI commands, preserves exact
+  both-answer composed fallback, and retains an eight-case simulated acceptance
+  run. It has only one feedback word, one control bit, and one shared reset. It
+  lacks tagged compatibility, proof reuse, contract refinement, public-product
+  evidence, independent acceptance, and operational deployment guidance.
   A six-case self-service acceptance harness proves the bundled workflow can be
   repeated without formula calibration, but it is simulated rather than
   independent evidence. Portfolio v3 exposes a stable typed selection reason

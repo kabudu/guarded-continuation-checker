@@ -74,17 +74,26 @@ close either register by itself.
    phase composition now includes the
    [resettable braking certificate](BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md),
    which exactly joins accelerate, brake, and stopped regions under every reset
-   schedule. Separate controller/plant contracts, multi-input composition,
-   constraint semantics, and product validity remain open. A pinned Bitwuzla
+   schedule. General controller/plant contracts, multi-input composition,
+   constraint semantics, and product validity remain open. The first narrow
+   [source-separated component contract](BTOR2_COMPONENT_CONTRACT_V1.md) now
+   binds controller, plant, and wiring independently and preserves exact
+   composed fallback. It closes the source-separation primitive but falsifies
+   single-pair performance novelty. Cross-certificate controller-proof reuse
+   remains open. A pinned Bitwuzla
    0.9.1 gate agrees on counter, motion, and braking boundaries.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
-   monitors; identify which component invalidates a system guarantee.
+   monitors; identify which component invalidates a system guarantee. The
+   first exact controller/plant wiring contract and both-answer fallback are
+   implemented. Reusable local obligations, contract refinement, multiple
+   components, and blame assignment remain open.
 
 7. **Robotics controller verification.** The first exact coupled-motion
    envelope and resettable braking-phase primitives are implemented. Extend
-   them to separately sourced controller/plant contracts, bounded control
+   them from the first separately sourced controller/plant contract to reusable
+   local proofs, bounded control
    inputs, signed coordinates, actuator interlocks, asynchronous emergency
    stops, motion envelopes, and bounded mission controllers using unmodified
    public designs.

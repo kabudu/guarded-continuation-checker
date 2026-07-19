@@ -39,6 +39,15 @@ near-neighbour cases, and agrees with official BTOR2Tools plus independent SMT
 controls. This is a narrow piecewise-affine result with established prior art,
 not a general robotics or novelty claim.
 
+The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
+keeps controller, plant, and synchronous wiring contract as separately hashed
+sources. Its specialised checker verifies the feedback relation without
+building a monolithic BTOR2 product, while exact composed search preserves both
+answers for rejected shapes. The first cohort proves modular correctness but
+falsifies a single-pair performance claim: component checking is 35% to 38%
+slower and about 108 bytes larger than the equivalent monolithic specialised
+proof. Reusable controller-local obligations remain the open candidate.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual
