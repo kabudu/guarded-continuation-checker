@@ -15,6 +15,8 @@ pub const MAX_TRANSDUCER_OUTPUTS: usize = 4;
 pub const MAX_TRANSDUCER_CELLS: usize = 256;
 pub const MAX_TRANSDUCER_PROOFS: usize = 4_096;
 pub const MAX_TRANSDUCER_PROOF_BYTES: usize = 8 * 1024 * 1024;
+pub const MAX_TRANSDUCER_ARTIFACT_BYTES: usize = 9 * 1024 * 1024;
+const CONTROLLER_TRANSDUCER_MAGIC: &[u8; 8] = b"GCCTRN01";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerTransducerRow {
@@ -400,6 +402,247 @@ pub fn verify_controller_transducer(
     })
 }
 
+fn validate_artifact_shape(
+    obligation: &ControllerTransducerObligation,
+) -> Result<(), ControllerTransducerError> {
+    if obligation.version != CONTROLLER_TRANSDUCER_VERSION
+        || obligation.relevant_inputs.len() > MAX_TRANSDUCER_INPUTS
+        || obligation.observed_outputs.len() > MAX_TRANSDUCER_OUTPUTS
+        || obligation.state_count == 0
+        || obligation.state_count > (1usize << MAX_TRANSDUCER_LATCHES)
+        || obligation.cells.is_empty()
+        || obligation.cells.len() > MAX_TRANSDUCER_CELLS
+        || obligation
+            .relevant_inputs
+            .iter()
+            .any(|&input| input > u8::MAX as usize)
+        || obligation
+            .relevant_inputs
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+        || obligation
+            .observed_outputs
+            .iter()
+            .any(|&output| output > u8::MAX as usize)
+        || obligation
+            .observed_outputs
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(reject("controller transducer artifact shape is invalid"));
+    }
+    let mut total_proof_bytes = 0usize;
+    for cell in &obligation.cells {
+        if cell.cube.len() != obligation.relevant_inputs.len()
+            || cell.rows.len() != obligation.state_count
+        {
+            return Err(reject(
+                "controller transducer artifact cell shape is invalid",
+            ));
+        }
+        for row in &cell.rows {
+            if row.outcome.target >= obligation.state_count
+                || row.outcome.outputs > u8::MAX as u128
+                || (obligation.observed_outputs.len() < u8::BITS as usize
+                    && row.outcome.outputs >> obligation.observed_outputs.len() != 0)
+                || row.proof.is_empty()
+                || row.proof.len() > MAX_UNSAT_PROOF_BYTES
+            {
+                return Err(reject("controller transducer artifact row is invalid"));
+            }
+            total_proof_bytes = total_proof_bytes
+                .checked_add(row.proof.len())
+                .ok_or_else(|| reject("controller transducer artifact proof bytes overflow"))?;
+            if total_proof_bytes > MAX_TRANSDUCER_PROOF_BYTES {
+                return Err(reject(
+                    "controller transducer artifact proof bytes exceed limit",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn encode_controller_transducer(
+    obligation: &ControllerTransducerObligation,
+) -> Result<Vec<u8>, ControllerTransducerError> {
+    validate_artifact_shape(obligation)?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(CONTROLLER_TRANSDUCER_MAGIC);
+    bytes.extend_from_slice(&obligation.version.to_le_bytes());
+    bytes.extend_from_slice(&obligation.source_sha256);
+    bytes.push(obligation.relevant_inputs.len() as u8);
+    bytes.extend(obligation.relevant_inputs.iter().map(|&input| input as u8));
+    bytes.push(obligation.observed_outputs.len() as u8);
+    bytes.extend(
+        obligation
+            .observed_outputs
+            .iter()
+            .map(|&output| output as u8),
+    );
+    bytes.push(obligation.state_count as u8);
+    bytes.extend_from_slice(&(obligation.cells.len() as u16).to_le_bytes());
+    for cell in &obligation.cells {
+        bytes.extend(cell.cube.iter().map(|required| match required {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        }));
+        for row in &cell.rows {
+            bytes.push(row.outcome.target as u8);
+            bytes.push(row.outcome.outputs as u8);
+            bytes.extend_from_slice(&row.witness_input.to_le_bytes());
+            bytes.extend_from_slice(&(row.proof.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&row.proof);
+        }
+    }
+    if bytes.len() > MAX_TRANSDUCER_ARTIFACT_BYTES {
+        return Err(reject("controller transducer artifact exceeds byte limit"));
+    }
+    Ok(bytes)
+}
+
+fn take<'a>(
+    bytes: &'a [u8],
+    cursor: &mut usize,
+    count: usize,
+) -> Result<&'a [u8], ControllerTransducerError> {
+    let end = cursor
+        .checked_add(count)
+        .ok_or_else(|| reject("controller transducer artifact cursor overflow"))?;
+    let value = bytes
+        .get(*cursor..end)
+        .ok_or_else(|| reject("controller transducer artifact is truncated"))?;
+    *cursor = end;
+    Ok(value)
+}
+
+fn read_u8(bytes: &[u8], cursor: &mut usize) -> Result<u8, ControllerTransducerError> {
+    Ok(take(bytes, cursor, 1)?[0])
+}
+
+fn read_u16(bytes: &[u8], cursor: &mut usize) -> Result<u16, ControllerTransducerError> {
+    Ok(u16::from_le_bytes(
+        take(bytes, cursor, 2)?
+            .try_into()
+            .map_err(|_| reject("controller transducer u16 decode failed"))?,
+    ))
+}
+
+fn read_u32(bytes: &[u8], cursor: &mut usize) -> Result<u32, ControllerTransducerError> {
+    Ok(u32::from_le_bytes(
+        take(bytes, cursor, 4)?
+            .try_into()
+            .map_err(|_| reject("controller transducer u32 decode failed"))?,
+    ))
+}
+
+fn read_u64(bytes: &[u8], cursor: &mut usize) -> Result<u64, ControllerTransducerError> {
+    Ok(u64::from_le_bytes(
+        take(bytes, cursor, 8)?
+            .try_into()
+            .map_err(|_| reject("controller transducer u64 decode failed"))?,
+    ))
+}
+
+pub fn decode_controller_transducer(
+    bytes: &[u8],
+) -> Result<ControllerTransducerObligation, ControllerTransducerError> {
+    if bytes.len() > MAX_TRANSDUCER_ARTIFACT_BYTES {
+        return Err(reject("controller transducer artifact exceeds byte limit"));
+    }
+    let mut cursor = 0usize;
+    if take(bytes, &mut cursor, CONTROLLER_TRANSDUCER_MAGIC.len())? != CONTROLLER_TRANSDUCER_MAGIC {
+        return Err(reject("controller transducer artifact magic mismatch"));
+    }
+    let version = read_u32(bytes, &mut cursor)?;
+    if version != CONTROLLER_TRANSDUCER_VERSION {
+        return Err(reject("controller transducer artifact version mismatch"));
+    }
+    let source_sha256 = take(bytes, &mut cursor, 32)?
+        .try_into()
+        .map_err(|_| reject("controller transducer source digest decode failed"))?;
+    let input_count = read_u8(bytes, &mut cursor)? as usize;
+    if input_count > MAX_TRANSDUCER_INPUTS {
+        return Err(reject("controller transducer input count exceeds limit"));
+    }
+    let relevant_inputs = take(bytes, &mut cursor, input_count)?
+        .iter()
+        .map(|&input| input as usize)
+        .collect::<Vec<_>>();
+    let output_count = read_u8(bytes, &mut cursor)? as usize;
+    if output_count > MAX_TRANSDUCER_OUTPUTS {
+        return Err(reject("controller transducer output count exceeds limit"));
+    }
+    let observed_outputs = take(bytes, &mut cursor, output_count)?
+        .iter()
+        .map(|&output| output as usize)
+        .collect::<Vec<_>>();
+    let state_count = read_u8(bytes, &mut cursor)? as usize;
+    let cell_count = read_u16(bytes, &mut cursor)? as usize;
+    if state_count == 0
+        || state_count > (1usize << MAX_TRANSDUCER_LATCHES)
+        || cell_count == 0
+        || cell_count > MAX_TRANSDUCER_CELLS
+        || cell_count
+            .checked_mul(state_count)
+            .is_none_or(|proofs| proofs > MAX_TRANSDUCER_PROOFS)
+    {
+        return Err(reject(
+            "controller transducer artifact dimensions exceed limits",
+        ));
+    }
+    let mut total_proof_bytes = 0usize;
+    let mut cells = Vec::with_capacity(cell_count);
+    for _ in 0..cell_count {
+        let cube = take(bytes, &mut cursor, input_count)?
+            .iter()
+            .map(|symbol| match symbol {
+                0 => Ok(None),
+                1 => Ok(Some(false)),
+                2 => Ok(Some(true)),
+                _ => Err(reject("controller transducer cube symbol is invalid")),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut rows = Vec::with_capacity(state_count);
+        for _ in 0..state_count {
+            let target = read_u8(bytes, &mut cursor)? as usize;
+            let outputs = read_u8(bytes, &mut cursor)? as u128;
+            let witness_input = read_u64(bytes, &mut cursor)?;
+            let proof_len = read_u32(bytes, &mut cursor)? as usize;
+            if proof_len == 0 || proof_len > MAX_UNSAT_PROOF_BYTES {
+                return Err(reject("controller transducer proof length is invalid"));
+            }
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof_len)
+                .ok_or_else(|| reject("controller transducer proof bytes overflow"))?;
+            if total_proof_bytes > MAX_TRANSDUCER_PROOF_BYTES {
+                return Err(reject("controller transducer proof bytes exceed limit"));
+            }
+            let proof = take(bytes, &mut cursor, proof_len)?.to_vec();
+            rows.push(ControllerTransducerRow {
+                outcome: AigerOutcome { target, outputs },
+                witness_input,
+                proof,
+            });
+        }
+        cells.push(ControllerTransducerCell { cube, rows });
+    }
+    if cursor != bytes.len() {
+        return Err(reject("controller transducer artifact has trailing bytes"));
+    }
+    let obligation = ControllerTransducerObligation {
+        version,
+        source_sha256,
+        relevant_inputs,
+        observed_outputs,
+        state_count,
+        cells,
+    };
+    validate_artifact_shape(&obligation)?;
+    Ok(obligation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,5 +714,28 @@ mod tests {
     fn incomplete_sensed_input_boundary_is_rejected_by_completeness_proof() {
         let model = input_driven();
         assert!(produce_controller_transducer(&model, [1; 32], &[], &[0]).is_err());
+    }
+
+    #[test]
+    fn codec_is_canonical_bounded_and_hostile_mutations_fail_closed() {
+        let model = input_driven();
+        let digest = [3; 32];
+        let obligation = produce_controller_transducer(&model, digest, &[0], &[0]).unwrap();
+        let encoded = encode_controller_transducer(&obligation).unwrap();
+        let decoded = decode_controller_transducer(&encoded).unwrap();
+        assert_eq!(decoded, obligation);
+        assert_eq!(encode_controller_transducer(&decoded).unwrap(), encoded);
+
+        for length in 0..encoded.len() {
+            assert!(decode_controller_transducer(&encoded[..length]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.clone();
+            mutated[index] ^= 1;
+            let rejected = decode_controller_transducer(&mutated)
+                .and_then(|artifact| verify_controller_transducer(&model, digest, &artifact))
+                .is_err();
+            assert!(rejected, "mutation at byte {index} was accepted");
+        }
     }
 }
