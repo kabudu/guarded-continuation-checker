@@ -1,0 +1,2 @@
+schema_version,members,trials,safe,unsafe,repeated_artifact_bytes,shared_artifact_bytes,artifact_ratio,repeated_check_median_nanos,shared_check_median_nanos,shared_check_ratio,in_process_checked_reuse_median_nanos,shared_vs_in_process_ratio,answers_agree,status
+1,6,3,2,4,39879,8549,0.214,3370832666,984596292,0.292,996516875,0.988,true,ok

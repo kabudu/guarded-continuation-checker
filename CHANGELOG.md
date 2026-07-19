@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Expand the controller MTBDD static boundary from four to eight observed
+  actions without relaxing assignment, node, terminal, or artifact limits. Add
+  a seven-action fill-to-spin process whose 254-node, 189-terminal MTBDD checks
+  three stateful safety properties through horizon 64 with exact direct-model
+  agreement.
+
+- Add a six-state-bit washing-machine physical plant with nondeterministic door,
+  imbalance, and motor-failure events. Retain exact two-SAFE/four-UNSAFE
+  agreement and a three-way shared, repeated-evidence, and checked in-process
+  MTBDD reuse benchmark without relaxing the frozen controller gates.
+- Add a complementary five-state-bit full-action process model, expand the
+  bounded MTBDD action-output limit from four to eight, and retain exact direct
+  agreement for three expected-SAFE properties using seven controller actions.
+
 - Add a primary-source closest-system analysis for the public controller MTBDD
   result. Reject MTBDD and compile-once reuse as novelty, identify the ordinary
   in-process symbolic model as the missing strong runtime baseline, and define

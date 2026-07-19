@@ -11,7 +11,7 @@ use crate::aiger_obligation::{AigerOutcome, AigerTransition};
 pub const CONTROLLER_MTBDD_VERSION: u32 = 1;
 pub const MAX_MTBDD_STATE_BITS: usize = 6;
 pub const MAX_MTBDD_INPUTS: usize = 12;
-pub const MAX_MTBDD_OUTPUTS: usize = 4;
+pub const MAX_MTBDD_OUTPUTS: usize = 8;
 pub const MAX_MTBDD_NODES: usize = 512;
 pub const MAX_MTBDD_TERMINALS: usize = 1_024;
 pub const MAX_MTBDD_ASSIGNMENTS: usize = 131_072;

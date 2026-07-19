@@ -718,3 +718,37 @@ scripts/test-public-washing-controller-oracle.sh /path/to/sby.py
 The expected result is one depth-32 PASS and one step-10 FAIL, recorded in
 `results/public-washing-controller-mtbdd-oracle-v1.csv`. The script verifies
 the pinned inputs and regenerates the AIGER file byte for byte before checking.
+
+### Stateful physical-plant three-way baseline
+
+Regenerate the repository-authored physical plant and verify its digests:
+
+```sh
+cd corpus/rtl/wmcontroller/plant
+shasum -a 256 -c SHA256SUMS
+yosys -Q -q -s synthesize.ys
+shasum -a 256 -c SHA256SUMS
+cd ../../../..
+```
+
+Run the six-property shared, repeated, and checked in-process comparison:
+
+```sh
+cargo run --release --locked \
+  --example public_washing_controller_physical_plant_benchmark
+```
+
+Every run must report two SAFE and four UNSAFE answers, exact agreement, and
+`status=ok`. Timing values are observations and are expected to vary.
+
+Regenerate and check the seven-action complete-cycle plant, then run its exact
+composition regression:
+
+```sh
+cd corpus/rtl/wmcontroller/physical-plant
+shasum -a 256 -c SHA256SUMS
+yosys -Q -q -s synthesize.ys
+shasum -a 256 -c SHA256SUMS
+cd ../../../..
+cargo test --locked --test public_washing_controller_physical_plant_api
+```

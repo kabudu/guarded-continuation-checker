@@ -206,6 +206,11 @@ falsified. A public unmodified product family, maintained external-tool
 agreement, cross-platform replication, and external review remain unproven.
 No novelty claim is made.
 
+The seven-action complete-cycle follow-up retains a 254-node MTBDD and exact
+agreement on three horizon-64 process properties. It strengthens product-shaped
+coverage but does not alter the closest-system conclusion: MTBDD compilation
+and reuse are established, and the physical plant is repository-authored.
+
 The next [dense controller relation v1 experiment](DENSE_CONTROLLER_RELATION_V1_EXPERIMENT.md)
 tests a broader candidate boundary: reuse the existing witnessed-edge and UNSAT
 row-completeness proof primitives as one source-bound controller relation across
@@ -267,3 +272,13 @@ runtime baseline. The next experiment must additionally compare one ordinary
 compiled symbolic model reused in-process and must demonstrate a concrete
 producer-consumer trust-transfer advantage. Until then, the current result is
 useful engineering and not a novel algorithm or verification method.
+
+The first [stateful physical-plant experiment](PUBLIC_WASHING_PHYSICAL_PLANT_V1.md)
+passes exact agreement across six disturbance-aware properties and retains the
+shared evidence advantage: 78.6% fewer boundary bytes and 70.8% less checking
+time than repeated complete evidence. Shared checking is at practical parity
+with GCC's checked in-process reuse in the retained run. This isolates a useful
+portable-evidence result, but the in-process control uses the same GCC MTBDD
+implementation. A maintained external symbolic-session baseline, peak-memory
+measurement, and a non-repository-authored physical environment remain open.
+No novelty claim is made.

@@ -136,6 +136,25 @@ the unsafe frame-10 result. This closes the maintained external agreement gate
 for this narrow fixture only. Realistic physical environments, CLI integration,
 compatibility history, and independent acceptance remain open.
 
+The repository-authored stateful washing plant adds six physical state bits,
+three nondeterministic disturbance events, six ordered safety properties, and
+exact agreement for two SAFE plus four UNSAFE results. Its shared artifact is
+78.6% smaller and checks 70.8% faster than repeated complete evidence, while
+remaining at practical parity with checked in-process reuse in the retained
+run. This closes a representative mechanism and stronger local-baseline gate.
+It does not close real-product validity because the plant is not independently
+sourced or physically calibrated. Maintained external batch comparison, peak
+memory, CLI integration, compatibility history, and acceptance remain open.
+An additional five-state-bit full-action plant checks all seven physical
+controller actions against three expected-SAFE process properties through
+horizon 64. It validates the expanded eight-output MTBDD boundary but remains a
+repository-authored mechanism model and does not change a production gate.
+
+The complete-cycle follow-up expands the fixed MTBDD action boundary to eight
+and exercises seven fill-to-spin actions while preserving all other resource
+caps. Three stateful process properties exactly match direct evaluation through
+horizon 64. This closes the local complete-action-surface mechanism gate only.
+
 ## Rules
 
 - No timing-based per-formula calibration.

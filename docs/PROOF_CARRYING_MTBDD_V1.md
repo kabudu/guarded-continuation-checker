@@ -22,7 +22,7 @@ state-conditioned cube leaves.
 - at most 6 state bits and 12 selected sensed inputs;
 - at most 512 non-terminal nodes and 1,024 distinct outcome terminals;
 - at most 131,072 exhaustive state/input assignments;
-- exact complete next-state and up to 4 selected outputs for every assignment;
+- exact complete next-state and up to 8 selected outputs for every assignment;
 - source and boundary binding;
 - deterministic canonical encoding no larger than 1 MiB;
 - independent structural validation and exhaustive source equivalence checking;
@@ -47,6 +47,12 @@ on the pinned public washing controller:
 - 6,217 encoded bytes;
 - 479,660,375 ns production; and
 - 475,873,750 ns independent exhaustive verification.
+
+The first artifact selected four outputs. A later full-action physical-process
+control additively raised the static output limit to eight and selected seven
+controller actions. It retained the same 254 decision nodes, used 189 terminals,
+and checked the same 131,072 assignments. Node, terminal, assignment, and byte
+limits were not relaxed.
 
 The retained times are one reference run and are not selection inputs. The
 artifact round-trips canonically, binds the source and boundary, and rejects
