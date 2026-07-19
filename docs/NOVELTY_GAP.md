@@ -307,7 +307,9 @@ per-member reports are productisation properties, not novelty. They enable a
 fair process-level cost and memory comparison but do not change the prior-art
 conclusion.
 
-The first process-level comparison now rejects a speed advantage on the small
-public batch. GCC production and independent verification have lower measured
-peak RSS than the formal oracle, but check a stronger reusable-evidence scope.
-This is a useful engineering trade-off, not evidence of a novel algorithm.
+That process comparison is now retained on one arm64 host. The maintained
+formal route is 2.67 times faster than fresh GCC verification, while GCC uses
+85.2% less peak RSS and supplies a portable 8,549-byte artifact. The negative
+speed result rules out a solver-performance distinction. The lower-memory
+trust-transfer result is useful engineering, but proof-carrying model checking
+and portable evidence are established, so the novelty gap remains open.

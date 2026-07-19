@@ -788,16 +788,18 @@ This test discovers capabilities, produces and verifies a two-member artifact,
 checks ordered SAFE and UNSAFE results, and records the operation and success
 status exposed by invocation metrics schema v1.
 
-Measure process wall time and peak RSS for production, verification, and the
-maintained formal oracle:
+### Controller MTBDD whole-process resources
+
+With the pinned SymbiYosys checkout and an optimised GCC binary:
 
 ```sh
-cargo build --release --locked
-TRIALS=3 scripts/benchmark-controller-mtbdd-process-resources.sh \
-  target/release/guarded-continuation-checker \
-  /path/to/pinned/sbysrc/sby.py \
-  target/controller-mtbdd-process-resources.csv
+scripts/benchmark-controller-mtbdd-process-resources.sh \
+  target/release/guarded-continuation-checker /path/to/sby.py \
+  /tmp/controller-resources.csv
 ```
 
-See `docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md` for scope differences and
-the retained observation. Timing rows are not byte-stable CI fixtures.
+The no-overwrite CSV records wall time, peak RSS, timing backend and platform
+for GCC artifact production, fresh verification and the maintained formal
+oracle. `TRIALS` defaults to 3 and is bounded to 100. Exact timings are host
+observations and must not be used as portfolio inputs. The retained arm64
+reference is `results/controller-mtbdd-process-resources-v1.csv`.

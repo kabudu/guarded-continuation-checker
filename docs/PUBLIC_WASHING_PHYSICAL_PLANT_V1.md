@@ -1,8 +1,9 @@
 # Public controller with stateful physical plant v1
 
 Status: experimental mechanism evidence. The fixed experiment passes its exact
-answer, evidence-transfer, checked in-process comparison, and maintained
-external symbolic-session gates. Peak-memory comparison remains open.
+answer, evidence-transfer, checked in-process, maintained external symbolic
+session, and local process-resource gates. Hosted Linux resource replication
+remains open.
 
 ## Predeclared question
 
@@ -89,10 +90,12 @@ scripts/test-public-washing-controller-physical-oracle.sh /path/to/sby.py
 ```
 
 The retained agreement rows are in
-`results/public-washing-controller-physical-oracle-v1.csv`. This closes the
-maintained external answer-agreement gate for this fixture, but not a cost
-comparison against a production symbolic model checker. Peak resident memory
-must also be measured with a cross-platform method. No novelty claim is made.
+`results/public-washing-controller-physical-oracle-v1.csv`. A subsequent
+[whole-process resource baseline](CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
+finds that the formal oracle is 2.67 times faster than fresh GCC verification
+on the retained arm64 host, while GCC verification uses 85.2% less peak RSS and
+consumes a portable 8,549-byte artifact. This is not a speed or novelty claim.
+Hosted Linux replication remains open.
 
 ## Maintained single-session oracle
 
@@ -102,9 +105,9 @@ plant, wiring, initial state, and six assertions once. One incremental
 at 4, 7, 15, and 15, while the fault-actuation and conflicting-action
 assertions remain valid through frame 32. These results exactly match GCC.
 
-This closes the maintained external batch-answer gate for this fixture. It does
-not yet provide a comparable external runtime or peak-memory measurement because
-the tools expose different compilation and reporting boundaries.
+This closes the maintained external batch-answer gate for this fixture. The
+process-resource follow-up reports the different whole-command boundaries
+explicitly rather than presenting them as equivalent solver phases.
 
 ## Seven-action complete-cycle follow-up
 

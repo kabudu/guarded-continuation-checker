@@ -143,12 +143,12 @@ exact agreement for two SAFE plus four UNSAFE results. Its shared artifact is
 remaining at practical parity with checked in-process reuse in the retained
 run. This closes a representative mechanism and stronger local-baseline gate.
 It does not close real-product validity because the plant is not independently
-sourced or physically calibrated. Maintained external batch comparison, peak
-memory, compatibility history, and acceptance remain open.
+sourced or physically calibrated. Hosted resource replication, compatibility
+history, and acceptance remain open.
 Pinned SymbiYosys with maintained Yosys and Z3 now reproduces the four exact bad
 frames and two bounded SAFE results in one compiled formal session. This closes
-maintained answer agreement for the disturbance fixture only. External cost and
-memory comparison, independent plant provenance, and acceptance remain open.
+maintained answer agreement for the disturbance fixture only. Independent plant
+provenance and acceptance remain open.
 
 An additional five-state-bit full-action plant checks all seven physical
 controller actions against three expected-SAFE process properties through
@@ -173,10 +173,11 @@ multi-job metrics aggregation, hosted cross-platform replication, tagged
 compatibility, source-to-model attestation, calibrated plant validity, and
 independent acceptance remain open.
 
-A three-trial process baseline now records wall time and peak RSS against the
-maintained formal oracle. This closes the missing local process-memory
-measurement only. It rejects a small-batch speed claim, is not scope-equivalent,
-and does not close hosted replication or workload-representativeness gates.
+The first whole-process resource comparison closes the local peak-memory
+mechanism gap. On one arm64 development host, fresh GCC verification is 2.67
+times slower but uses 85.2% less peak RSS than the maintained formal oracle.
+Hosted Linux replication, phase-level attribution and independent measurement
+remain open, so no production-readiness row changes.
 
 ## Rules
 

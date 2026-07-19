@@ -4,8 +4,9 @@
 
 - Add a portable three-way process-resource harness for controller MTBDD
   production, independent verification, and the maintained SymbiYosys oracle.
-  Retain the negative small-batch speed result and the narrower peak-memory
-  observation without treating the different checked scopes as equivalent.
+  Retain the negative 2.67-times verification-speed result and the positive
+  85.2% peak-RSS reduction on one arm64 host without treating the different
+  checked scopes as equivalent.
 
 - Add experimental controller MTBDD plant CLI v1 with machine-readable
   discovery, a strict canonical source and query manifest, create-new batch

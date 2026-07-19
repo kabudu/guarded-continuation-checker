@@ -67,3 +67,10 @@ Advance this candidate only if the shared artifact:
 No claim is allowed merely because GCC beats the repeated-artifact baseline.
 If the ordinary model checker can export an equivalently bound and independently
 checkable batch at comparable cost, this candidate distinction is falsified.
+
+The first [whole-process comparison](CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
+is negative on speed: the maintained SymbiYosys route is 2.67 times faster than
+fresh GCC verification on the retained arm64 host. GCC uses 85.2% less peak RSS
+and transfers an 8,549-byte independently checked artifact, while the oracle
+must rerun and emits no comparable replay artifact. This demonstrates the
+predeclared evidence-delivery distinction but does not establish novelty.

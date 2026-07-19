@@ -1,52 +1,66 @@
-# Controller MTBDD process-resource baseline v1
+# Controller MTBDD process resource baseline v1
 
-Status: measured engineering baseline, not a performance superiority claim.
+Status: retained negative and positive process-level evidence on one arm64
+development host. A hosted Linux replication remains required.
 
 ## Question
 
-What wall time and peak resident memory do the self-service GCC producer and
-verifier consume relative to the maintained SymbiYosys, Yosys, and Z3 physical
-plant oracle?
+How does a fresh GCC consumer of the six-property controller MTBDD artifact
+compare with the maintained single-session SymbiYosys, Yosys and Z3 oracle when
+each is measured as an external process?
 
-The comparison deliberately reports three separate processes. Their scopes are
-not equivalent:
+This is not a solver race. It measures two different trust-transfer choices:
 
-- `gcc_produce` exhaustively verifies the controller function, checks all six
-  closed-loop properties, and creates source-bound reusable evidence.
-- `gcc_verify` independently checks that evidence, the complete controller
-  function, manifest bindings, and all six property results.
-- `symbiyosys_oracle` regenerates the two AIGER models and checks the six
-  closed-loop properties through frame 32. It does not create or check GCC's
-  reusable controller evidence contract.
+- GCC produces an 8,549-byte, source-bound artifact that a fresh process checks
+  by exhaustive controller equivalence and complete plant-result recomputation;
+- the formal route recompiles the same closed-loop model and reruns one
+  incremental Z3 session, but does not emit an independently replayable proof
+  artifact for a separate consumer.
 
-## Retained observation
+Both paths reproduce four UNSAFE results at frames 4, 7, 15 and 15 plus two SAFE
+results through frame 32.
 
-Three interleaved macOS trials used Rust 1.97.0 release builds and the pinned
-SymbiYosys revision. Median results were:
+## Frozen method
 
-| Process | Median time | Median peak RSS | Time / oracle | RSS / oracle |
-| --- | ---: | ---: | ---: | ---: |
-| GCC produce | 2.46 s | 17,285,120 B | 6.83 | 0.590 |
-| GCC verify | 0.97 s | 4,292,608 B | 2.69 | 0.147 |
-| SymbiYosys oracle | 0.36 s | 29,278,208 B | 1.00 | 1.000 |
+`scripts/benchmark-controller-mtbdd-process-resources.sh` uses `/usr/bin/time`
+around three whole-process operations: GCC production, fresh GCC verification,
+and the maintained formal oracle. It records wall time and maximum resident set
+size. Trial count is explicit, bounded to 100, and never influences backend
+selection.
 
-The result rejects a speed-win claim on this small public batch. It supports a
-narrow peak-memory observation, especially for independent verification. Since
-the checked scopes differ, neither ratio is an end-to-end solver comparison.
-The raw observations are retained in
+The retained host used macOS 26.5.1 arm64, Rust 1.97.0, Yosys 0.67+post at
+`b8e7da6f40ae8f552c116bf6c359b07c6533e159`, Z3 4.16.0, and SymbiYosys at
+`fea6e467d067b3ea84b6b5ac08cd48beb59f0d42`.
+
+## Result
+
+Three trials give these medians:
+
+| Process | Wall time | Peak RSS |
+|---|---:|---:|
+| GCC artifact production | 2.41 s | 17,350,656 bytes |
+| GCC fresh verification | 0.96 s | 4,341,760 bytes |
+| SymbiYosys oracle | 0.36 s | 29,392,896 bytes |
+
+The formal oracle is 2.67 times faster than fresh GCC verification on this host.
+Including GCC production makes the initial GCC transfer 9.36 times slower than
+rerunning the oracle. This is a clear negative speed result and rules out a
+runtime-performance claim for this fixture.
+
+Fresh GCC verification uses 85.2% less peak resident memory than the formal
+oracle and consumes the portable 8,549-byte artifact without Yosys, Z3 or the
+producer's in-memory state. This demonstrates a concrete low-memory and
+evidence-delivery advantage, not a novel algorithm.
+
+The machine-readable trials are
 `results/controller-mtbdd-process-resources-v1.csv`.
 
-## Reproduce
+## Limits
 
-```sh
-cargo build --release --locked
-TRIALS=3 scripts/benchmark-controller-mtbdd-process-resources.sh \
-  target/release/guarded-continuation-checker \
-  /path/to/pinned/sbysrc/sby.py \
-  target/controller-mtbdd-process-resources.csv
-```
-
-The harness supports BSD `time -l` on macOS and GNU `time` on Linux. Absolute
-values vary by host, workload, and toolchain. Compare medians within one
-interleaved run rather than comparing the retained macOS values to another
-machine.
+Peak RSS semantics differ between BSD and GNU `time`, so values must not be
+compared across operating systems as if they came from one population. The
+script labels both backend and platform. It measures process envelopes, not
+individual synthesis or solving phases. The plant is repository-authored, the
+host is not independent, and the external route does not export a comparable
+proof artifact. Hosted Linux, non-repository-authored plant, independent
+acceptance and closest-system expert review remain open.
