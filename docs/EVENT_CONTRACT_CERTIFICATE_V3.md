@@ -190,11 +190,14 @@ combination, and independent review remain mandatory.
 Before v3 can enter a stable portfolio:
 
 1. complete deterministic mutation, truncation, source-substitution, proof-swap,
-   resource, and process-isolation testing;
-2. publish answer-balanced generation and verification costs;
-3. freeze CLI/Rust API capability discovery and migration semantics;
-4. add a timing-free static admission rule evaluated on unseen contracts; and
-5. prove exact fail-closed CDCL fallback for every rejection and bounded failure.
+   resource, and process-isolation testing; and
+2. pass the frozen CLI/Rust API, portfolio, and hard-resource regressions on the
+   supported Linux release path.
 
 The maintained external proof-checker gate is now closed by the
 [CaDiCaL and DRAT-trim baseline](EXTERNAL_EVENT_CONTRACT_PROOF_BASELINE.md).
+The answer-balanced cost, timing-free static admission, exact fallback, and
+release-candidate API gates are closed by
+[`EVENT_CONTRACT_CLI_V1.md`](EVENT_CONTRACT_CLI_V1.md) and the retained
+[`event-contract-certificate-v3-balanced-v1`](../results/event-contract-certificate-v3-balanced-v1/README.md)
+cohort. Compatibility history does not begin until the first tagged release.

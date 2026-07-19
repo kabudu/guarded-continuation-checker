@@ -8693,6 +8693,8 @@ const EVENT_CONTRACT_CERTIFICATE_VERSION: usize = 3;
 const EVENT_CONTRACT_CERTIFICATE_MAX_BYTES: u64 = 32 * 1024 * 1024;
 const EVENT_CONTRACT_CERTIFICATE_SEMANTICS: &str = "bounded-named-cnf-terminal-bad-avoidance";
 const EVENT_CONTRACT_CERTIFICATE_COST_SCHEMA_VERSION: usize = 1;
+const EVENT_CONTRACT_CLI_CONTRACT_VERSION: usize = 1;
+const EVENT_CONTRACT_PORTFOLIO_VERSION: usize = 1;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct InputPredicate {
@@ -8773,6 +8775,18 @@ fn predicate_quotient_admitted(
         _ => unreachable!(),
     };
     horizon >= minimum_horizon
+}
+
+fn event_contract_v3_admitted(
+    relevant_inputs: usize,
+    latches: usize,
+    horizon: usize,
+    declared_initial_state: bool,
+) -> bool {
+    (PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS).contains(&relevant_inputs)
+        && (1..=PREDICATE_INTERFACE_MAX_LATCHES).contains(&latches)
+        && (1..=INTERFACE_QUOTIENT_MAX_HORIZON).contains(&horizon)
+        && declared_initial_state
 }
 
 #[derive(Debug)]
@@ -12081,6 +12095,22 @@ fn certify_aiger_event_contract_v3(
     contract_path: &Path,
     certificate_path: &Path,
 ) -> Result<(), String> {
+    certify_aiger_event_contract_v3_with_node_limit(
+        input,
+        bad_output,
+        contract_path,
+        certificate_path,
+        PREDICATE_INTERFACE_MAX_BDD_NODES,
+    )
+}
+
+fn certify_aiger_event_contract_v3_with_node_limit(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    certificate_path: &Path,
+    predicate_node_limit: usize,
+) -> Result<(), String> {
     if fs::symlink_metadata(certificate_path).is_ok() {
         return Err("event contract certificate v3 refuses to overwrite output".to_string());
     }
@@ -12091,7 +12121,7 @@ fn certify_aiger_event_contract_v3(
     if bad_output >= model.outputs.len() {
         return Err("event contract certificate v3 bad output is out of range".to_string());
     }
-    let mut quotient = PredicateQuotient::new(&model)?;
+    let mut quotient = PredicateQuotient::new_with_node_limit(&model, predicate_node_limit)?;
     let relevant_inputs = quotient.interface.projected_inputs.clone();
     let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
     let initial_state = model
@@ -12450,6 +12480,413 @@ fn verify_aiger_event_contract_certificate_v3(
         },
         checked_proofs,
         checker.evaluations
+    );
+    Ok(())
+}
+
+fn event_contract_resource_error(error: &str) -> bool {
+    predicate_resource_error(error)
+        || error == "event contract certificate v3 phase proof exceeds limit"
+        || error == "event contract certificate v3 terminal proof exceeds limit"
+        || error == "event contract certificate v3 proofs exceed aggregate limit"
+        || error == "event contract certificate v3 serialized artifact exceeds limit"
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_aiger_event_contract_portfolio(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    report_path: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    verify_aiger_event_contract_portfolio_with_node_limit(
+        input,
+        bad_output,
+        contract_path,
+        report_path,
+        certificate_path,
+        PREDICATE_INTERFACE_MAX_BDD_NODES,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_aiger_event_contract_portfolio_with_node_limit(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    report_path: &Path,
+    certificate_path: &Path,
+    predicate_node_limit: usize,
+) -> Result<(), String> {
+    if fs::symlink_metadata(report_path).is_ok() || fs::symlink_metadata(certificate_path).is_ok() {
+        return Err("event contract portfolio refuses to overwrite output artifacts".to_string());
+    }
+    let model = parse_aag(input)?;
+    if bad_output >= model.outputs.len() {
+        return Err("event contract portfolio bad output is out of range".to_string());
+    }
+    let gate_start = Instant::now();
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let admitted = event_contract_v3_admitted(
+        relevant_inputs.len(),
+        model.latches.len(),
+        contract.horizon,
+        model.latches.iter().all(|latch| latch.initial.is_some()),
+    );
+    let gate_ns = gate_start.elapsed().as_nanos();
+    let backend_start = Instant::now();
+    let mut certificate_verified = false;
+    let mut verifier_ns = 0u128;
+    let (avoidable, backend, reason) = if admitted {
+        match certify_aiger_event_contract_v3_with_node_limit(
+            input,
+            bad_output,
+            contract_path,
+            certificate_path,
+            predicate_node_limit,
+        ) {
+            Ok(()) => {
+                let verify_start = Instant::now();
+                if let Err(error) = verify_aiger_event_contract_certificate_v3(
+                    input,
+                    contract_path,
+                    certificate_path,
+                ) {
+                    let _ = fs::remove_file(certificate_path);
+                    return Err(error);
+                }
+                verifier_ns = verify_start.elapsed().as_nanos();
+                certificate_verified = true;
+                let certificate = match parse_event_contract_certificate_v3(certificate_path) {
+                    Ok(certificate) => certificate,
+                    Err(error) => {
+                        let _ = fs::remove_file(certificate_path);
+                        return Err(error);
+                    }
+                };
+                (
+                    certificate.avoidable,
+                    "event-contract-certificate-v3",
+                    "static-admission",
+                )
+            }
+            Err(error) if event_contract_resource_error(&error) => {
+                let _ = fs::remove_file(certificate_path);
+                let avoidable =
+                    solve_event_contract_cdcl(&model, &relevant_inputs, bad_output, &contract)?;
+                (
+                    avoidable,
+                    "persistent-cdcl",
+                    "event-contract-resource-fallback",
+                )
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        let avoidable = solve_event_contract_cdcl(&model, &relevant_inputs, bad_output, &contract)?;
+        (avoidable, "persistent-cdcl", "static-rejection")
+    };
+    let backend_ns = backend_start.elapsed().as_nanos();
+    let body = format!(
+        "event_contract_portfolio_version={EVENT_CONTRACT_PORTFOLIO_VERSION}\ninput_sha256={}\ncontract_sha256={}\nbad_output={bad_output}\nhorizon={}\nrelevant_inputs={}\nlatches={}\nadmitted={}\nbackend={backend}\nreason={reason}\nresult={}\ncertificate={}\ncertificate_verified={}\ngate_ns={gate_ns}\nbackend_ns={backend_ns}\nverifier_ns={verifier_ns}\nstatus=ok\n",
+        sha256_file(input)?,
+        sha256_file(contract_path)?,
+        contract.horizon,
+        relevant_inputs.len(),
+        model.latches.len(),
+        usize::from(admitted),
+        if avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        if certificate_verified { "present" } else { "-" },
+        usize::from(certificate_verified),
+    );
+    if let Err(error) = publish_causal_comparison(report_path, body.as_bytes()) {
+        if certificate_verified {
+            let _ = fs::remove_file(certificate_path);
+        }
+        return Err(error);
+    }
+    println!(
+        "event-contract-portfolio status=VERIFIED result={} backend={backend} reason={reason} report={}",
+        if avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        report_path.display()
+    );
+    Ok(())
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct EventContractPortfolioReport {
+    input_sha256: String,
+    contract_sha256: String,
+    bad_output: usize,
+    horizon: usize,
+    relevant_inputs: usize,
+    latches: usize,
+    admitted: bool,
+    backend: String,
+    reason: String,
+    avoidable: bool,
+    certificate_present: bool,
+    certificate_verified: bool,
+    gate_ns: u128,
+    backend_ns: u128,
+    verifier_ns: u128,
+}
+
+fn read_event_contract_portfolio_report(path: &Path) -> Result<String, String> {
+    const MAX_BYTES: u64 = 16 * 1024;
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "inspect event contract portfolio report {}: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.len() > MAX_BYTES {
+        return Err(
+            "event contract portfolio report must be a regular file no larger than 16384 bytes"
+                .to_string(),
+        );
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    options.custom_flags(libc::O_NOFOLLOW);
+    let file = options.open(path).map_err(|error| {
+        format!(
+            "open event contract portfolio report {}: {error}",
+            path.display()
+        )
+    })?;
+    let opened = file.metadata().map_err(|error| {
+        format!(
+            "inspect open event contract portfolio report {}: {error}",
+            path.display()
+        )
+    })?;
+    if !opened.is_file() || opened.len() > MAX_BYTES {
+        return Err("event contract portfolio opened report exceeds limit".to_string());
+    }
+    let mut bytes = Vec::with_capacity(opened.len() as usize);
+    file.take(MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            format!(
+                "read event contract portfolio report {}: {error}",
+                path.display()
+            )
+        })?;
+    if bytes.len() as u64 > MAX_BYTES {
+        return Err("event contract portfolio report read exceeds limit".to_string());
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| "event contract portfolio report must contain valid UTF-8".to_string())
+}
+
+fn parse_event_contract_portfolio_bool(value: &str, name: &str) -> Result<bool, String> {
+    match value {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        _ => Err(format!(
+            "event contract portfolio `{name}` must be canonical 0 or 1"
+        )),
+    }
+}
+
+fn parse_event_contract_portfolio_number<T: std::str::FromStr>(
+    value: &str,
+    name: &str,
+) -> Result<T, String> {
+    if value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+        || (value.len() > 1 && value.starts_with('0'))
+    {
+        return Err(format!(
+            "event contract portfolio `{name}` is not canonical decimal"
+        ));
+    }
+    value
+        .parse()
+        .map_err(|_| format!("invalid event contract portfolio `{name}`"))
+}
+
+fn parse_event_contract_portfolio_report(
+    path: &Path,
+) -> Result<EventContractPortfolioReport, String> {
+    const KEYS: [&str; 16] = [
+        "event_contract_portfolio_version",
+        "input_sha256",
+        "contract_sha256",
+        "bad_output",
+        "horizon",
+        "relevant_inputs",
+        "latches",
+        "admitted",
+        "backend",
+        "reason",
+        "result",
+        "certificate",
+        "certificate_verified",
+        "gate_ns",
+        "backend_ns",
+        "verifier_ns",
+    ];
+    let body = read_event_contract_portfolio_report(path)?;
+    if !body.ends_with('\n') || body.contains('\r') {
+        return Err(
+            "event contract portfolio report must use canonical newline-terminated LF text"
+                .to_string(),
+        );
+    }
+    let lines = body.lines().collect::<Vec<_>>();
+    if lines.len() != KEYS.len() + 1 || lines.last() != Some(&"status=ok") {
+        return Err(
+            "event contract portfolio report has invalid field count or status".to_string(),
+        );
+    }
+    let mut values = Vec::with_capacity(KEYS.len());
+    for (index, key) in KEYS.iter().enumerate() {
+        let value = lines[index]
+            .strip_prefix(&format!("{key}="))
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "event contract portfolio report expected `{key}` at line {}",
+                    index + 1
+                )
+            })?;
+        values.push(value);
+    }
+    if values[0] != EVENT_CONTRACT_PORTFOLIO_VERSION.to_string() {
+        return Err("unsupported event contract portfolio report version".to_string());
+    }
+    let parse_digest = |value: &str, label: &str| -> Result<String, String> {
+        if value.len() != 64
+            || value
+                .bytes()
+                .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+        {
+            return Err(format!(
+                "event contract portfolio {label} digest is invalid"
+            ));
+        }
+        Ok(value.to_string())
+    };
+    let admitted = parse_event_contract_portfolio_bool(values[7], "admitted")?;
+    let avoidable = match values[10] {
+        "avoidable" => true,
+        "unavoidable" => false,
+        _ => return Err("event contract portfolio result is invalid".to_string()),
+    };
+    let certificate_present = match values[11] {
+        "present" => true,
+        "-" => false,
+        _ => return Err("event contract portfolio certificate field is invalid".to_string()),
+    };
+    Ok(EventContractPortfolioReport {
+        input_sha256: parse_digest(values[1], "input")?,
+        contract_sha256: parse_digest(values[2], "contract")?,
+        bad_output: parse_event_contract_portfolio_number(values[3], "bad_output")?,
+        horizon: parse_event_contract_portfolio_number(values[4], "horizon")?,
+        relevant_inputs: parse_event_contract_portfolio_number(values[5], "relevant_inputs")?,
+        latches: parse_event_contract_portfolio_number(values[6], "latches")?,
+        admitted,
+        backend: values[8].to_string(),
+        reason: values[9].to_string(),
+        avoidable,
+        certificate_present,
+        certificate_verified: parse_event_contract_portfolio_bool(
+            values[12],
+            "certificate_verified",
+        )?,
+        gate_ns: parse_event_contract_portfolio_number(values[13], "gate_ns")?,
+        backend_ns: parse_event_contract_portfolio_number(values[14], "backend_ns")?,
+        verifier_ns: parse_event_contract_portfolio_number(values[15], "verifier_ns")?,
+    })
+}
+
+fn verify_aiger_event_contract_portfolio_report(
+    input: &Path,
+    expected_bad_output: usize,
+    contract_path: &Path,
+    report_path: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    let report = parse_event_contract_portfolio_report(report_path)?;
+    let model = parse_aag(input)?;
+    if expected_bad_output >= model.outputs.len() || report.bad_output != expected_bad_output {
+        return Err(
+            "event contract portfolio report bad output mismatch or range error".to_string(),
+        );
+    }
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let admitted = event_contract_v3_admitted(
+        relevant_inputs.len(),
+        model.latches.len(),
+        contract.horizon,
+        model.latches.iter().all(|latch| latch.initial.is_some()),
+    );
+    if report.input_sha256 != sha256_file(input)?
+        || report.contract_sha256 != sha256_file(contract_path)?
+        || report.horizon != contract.horizon
+        || report.relevant_inputs != relevant_inputs.len()
+        || report.latches != model.latches.len()
+        || report.admitted != admitted
+    {
+        return Err("event contract portfolio report identity or dimensions mismatch".to_string());
+    }
+    match (report.backend.as_str(), report.reason.as_str()) {
+        ("event-contract-certificate-v3", "static-admission") => {
+            if !admitted || !report.certificate_present || !report.certificate_verified {
+                return Err("event contract certificate report has inconsistent status".to_string());
+            }
+            verify_aiger_event_contract_certificate_v3(input, contract_path, certificate_path)?;
+            let certificate = parse_event_contract_certificate_v3(certificate_path)?;
+            if certificate.input_sha256 != report.input_sha256
+                || certificate.contract_sha256 != report.contract_sha256
+                || certificate.bad_output != report.bad_output
+                || certificate.horizon != report.horizon
+                || certificate.avoidable != report.avoidable
+            {
+                return Err("event contract report and certificate disagree".to_string());
+            }
+        }
+        ("persistent-cdcl", "static-rejection")
+        | ("persistent-cdcl", "event-contract-resource-fallback") => {
+            if report.certificate_present
+                || report.certificate_verified
+                || fs::symlink_metadata(certificate_path).is_ok()
+                || (report.reason == "static-rejection" && admitted)
+                || (report.reason == "event-contract-resource-fallback" && !admitted)
+            {
+                return Err("event contract CDCL report has inconsistent status".to_string());
+            }
+            let avoidable =
+                solve_event_contract_cdcl(&model, &relevant_inputs, report.bad_output, &contract)?;
+            if avoidable != report.avoidable {
+                return Err("event contract CDCL report answer mismatch".to_string());
+            }
+        }
+        _ => return Err("event contract portfolio backend or reason is invalid".to_string()),
+    }
+    println!(
+        "event-contract-portfolio-report status=VERIFIED result={} backend={} report={}",
+        if report.avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        report.backend,
+        report_path.display()
     );
     Ok(())
 }
@@ -24305,6 +24742,12 @@ fn predicate_cli_contract_line() -> String {
     )
 }
 
+fn event_contract_cli_contract_line() -> String {
+    format!(
+        "event_contract_cli_version={EVENT_CONTRACT_CLI_CONTRACT_VERSION} certificate_version={EVENT_CONTRACT_CERTIFICATE_VERSION} portfolio_version={EVENT_CONTRACT_PORTFOLIO_VERSION} semantics={EVENT_CONTRACT_CERTIFICATE_SEMANTICS} proof_format={PREDICATE_CERTIFICATE_V2_PROOF_FORMAT} min_relevant_inputs={PREDICATE_INTERFACE_MIN_INPUTS} max_relevant_inputs={PREDICATE_INTERFACE_MAX_INPUTS} max_latches={PREDICATE_INTERFACE_MAX_LATCHES} max_horizon={INTERFACE_QUOTIENT_MAX_HORIZON} max_contract_bytes={EVENT_CONTRACT_MAX_BYTES} max_certificate_bytes={EVENT_CONTRACT_CERTIFICATE_MAX_BYTES} max_proof_bytes={PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES} max_total_proof_bytes={PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES}"
+    )
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
@@ -24315,6 +24758,15 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker predicate-cli-version".to_string());
             }
             println!("{}", predicate_cli_contract_line());
+            Ok(true)
+        }
+        "event-contract-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker event-contract-cli-version".to_string(),
+                );
+            }
+            println!("{}", event_contract_cli_contract_line());
             Ok(true)
         }
         "explain-aiger-counterexample" => {
@@ -24532,6 +24984,38 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 Path::new(&args[2]),
                 Path::new(&args[3]),
                 Path::new(&args[4]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-event-contract-portfolio" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker verify-aiger-event-contract-portfolio INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt REPORT.txt CERTIFICATE.cert3".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract portfolio output index".to_string())?;
+            verify_aiger_event_contract_portfolio(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                Path::new(&args[4]),
+                Path::new(&args[5]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-event-contract-portfolio-report" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker verify-aiger-event-contract-portfolio-report INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt REPORT.txt CERTIFICATE.cert3".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract portfolio report output index".to_string())?;
+            verify_aiger_event_contract_portfolio_report(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                Path::new(&args[4]),
+                Path::new(&args[5]),
             )?;
             Ok(true)
         }
@@ -36300,6 +36784,210 @@ mod tests {
     }
 
     #[test]
+    fn event_contract_cli_v1_contract_is_machine_readable_and_strict() {
+        assert_eq!(
+            event_contract_cli_contract_line(),
+            "event_contract_cli_version=1 certificate_version=3 portfolio_version=1 semantics=bounded-named-cnf-terminal-bad-avoidance proof_format=varisat-native-0.2.2 min_relevant_inputs=9 max_relevant_inputs=16 max_latches=4 max_horizon=64 max_contract_bytes=1048576 max_certificate_bytes=33554432 max_proof_bytes=1048576 max_total_proof_bytes=8388608"
+        );
+        assert!(run_artifact_cli(&["event-contract-cli-version".to_string()]).unwrap());
+        assert!(
+            run_artifact_cli(&[
+                "event-contract-cli-version".to_string(),
+                "unexpected".to_string(),
+            ])
+            .unwrap_err()
+            .contains("usage:")
+        );
+    }
+
+    #[test]
+    fn event_contract_portfolio_admits_both_answers_and_verifies_reports() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let scratch = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-portfolio-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+        for (index, (model, contract, expected)) in [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/event-contracts/interrupt-priority-v1.contract",
+                true,
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-h1-unavoidable-v1.contract",
+                false,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let model = root.join(model);
+            let contract = root.join(contract);
+            let report = scratch.join(format!("report-{index}.txt"));
+            let certificate = scratch.join(format!("certificate-{index}.cert3"));
+            verify_aiger_event_contract_portfolio(&model, 0, &contract, &report, &certificate)
+                .unwrap();
+            let parsed = parse_event_contract_portfolio_report(&report).unwrap();
+            assert!(parsed.admitted);
+            assert_eq!(parsed.avoidable, expected);
+            assert_eq!(parsed.backend, "event-contract-certificate-v3");
+            assert!(parsed.certificate_verified);
+            verify_aiger_event_contract_portfolio_report(
+                &model,
+                0,
+                &contract,
+                &report,
+                &certificate,
+            )
+            .unwrap();
+        }
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn event_contract_portfolio_falls_back_exactly_on_rejection_and_resource_limit() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let scratch = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-portfolio-fallback-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+
+        let rejected_model =
+            root.join("examples/products/infusion-pump/firmware/safe-controller.aag");
+        let rejected_contract = scratch.join("rejected.contract");
+        fs::write(
+            &rejected_contract,
+            "event_contract_version=1\nhorizon=1\nphase_count=1\nphase_0=0,1\nphase_0_clause_count=0\nterminal_clause_count=0\n",
+        )
+        .unwrap();
+        let rejected_report = scratch.join("rejected.report");
+        let rejected_certificate = scratch.join("rejected.cert3");
+        verify_aiger_event_contract_portfolio(
+            &rejected_model,
+            0,
+            &rejected_contract,
+            &rejected_report,
+            &rejected_certificate,
+        )
+        .unwrap();
+        let parsed = parse_event_contract_portfolio_report(&rejected_report).unwrap();
+        assert!(!parsed.admitted);
+        assert_eq!(parsed.backend, "persistent-cdcl");
+        assert_eq!(parsed.reason, "static-rejection");
+        assert!(!rejected_certificate.exists());
+        verify_aiger_event_contract_portfolio_report(
+            &rejected_model,
+            0,
+            &rejected_contract,
+            &rejected_report,
+            &rejected_certificate,
+        )
+        .unwrap();
+
+        let admitted_model = root
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let admitted_contract =
+            root.join("examples/event-contracts/interrupt-priority-v1.contract");
+        let fallback_report = scratch.join("resource.report");
+        let fallback_certificate = scratch.join("resource.cert3");
+        verify_aiger_event_contract_portfolio_with_node_limit(
+            &admitted_model,
+            0,
+            &admitted_contract,
+            &fallback_report,
+            &fallback_certificate,
+            1,
+        )
+        .unwrap();
+        let parsed = parse_event_contract_portfolio_report(&fallback_report).unwrap();
+        assert!(parsed.admitted);
+        assert_eq!(parsed.backend, "persistent-cdcl");
+        assert_eq!(parsed.reason, "event-contract-resource-fallback");
+        assert!(!fallback_certificate.exists());
+        verify_aiger_event_contract_portfolio_report(
+            &admitted_model,
+            0,
+            &admitted_contract,
+            &fallback_report,
+            &fallback_certificate,
+        )
+        .unwrap();
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn event_contract_portfolio_report_rejects_hostile_and_tampered_inputs() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model = root
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let contract = root.join("examples/event-contracts/interrupt-priority-v1.contract");
+        let scratch = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-report-reliability-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+        let report = scratch.join("valid.report");
+        let certificate = scratch.join("valid.cert3");
+        verify_aiger_event_contract_portfolio(&model, 0, &contract, &report, &certificate).unwrap();
+        let seed = fs::read(&report).unwrap();
+        let mutated = scratch.join("mutated.report");
+        for iteration in 0..1_000 {
+            fs::write(
+                &mutated,
+                deterministic_input_mutation(&seed, iteration ^ 0xe4e4),
+            )
+            .unwrap();
+            let _ = parse_event_contract_portfolio_report(&mutated);
+        }
+        let invalid_utf8 = scratch.join("invalid-utf8.report");
+        fs::write(&invalid_utf8, [0xff, b'\n']).unwrap();
+        assert!(parse_event_contract_portfolio_report(&invalid_utf8).is_err());
+        let oversized = scratch.join("oversized.report");
+        fs::File::create(&oversized)
+            .unwrap()
+            .set_len(16 * 1024 + 1)
+            .unwrap();
+        assert!(parse_event_contract_portfolio_report(&oversized).is_err());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let linked = scratch.join("linked.report");
+            symlink(&report, &linked).unwrap();
+            assert!(parse_event_contract_portfolio_report(&linked).is_err());
+        }
+        let tampered = scratch.join("tampered.report");
+        let body = String::from_utf8(seed)
+            .unwrap()
+            .replace("result=avoidable", "result=unavoidable");
+        fs::write(&tampered, body).unwrap();
+        assert!(
+            verify_aiger_event_contract_portfolio_report(
+                &model,
+                0,
+                &contract,
+                &tampered,
+                &certificate,
+            )
+            .is_err()
+        );
+        assert!(
+            verify_aiger_event_contract_portfolio_report(
+                &model,
+                1,
+                &contract,
+                &report,
+                &certificate,
+            )
+            .unwrap_err()
+            .contains("bad output mismatch or range error")
+        );
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
     fn event_contract_parser_rejects_ambiguous_and_hostile_rules() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let model =
@@ -36461,9 +37149,27 @@ mod tests {
                 gone = true;
                 break;
             }
+            #[cfg(target_os = "linux")]
+            {
+                // A minimal container may have no init process that promptly reaps
+                // orphaned zombies. A zombie has terminated and cannot execute, so
+                // it satisfies the containment invariant even while its PID remains.
+                let stat = fs::read_to_string(format!("/proc/{descendant}/stat"));
+                if stat.is_ok_and(|body| {
+                    body.rsplit_once(')')
+                        .and_then(|(_, tail)| tail.split_whitespace().next())
+                        .is_some_and(|state| matches!(state, "Z" | "X"))
+                }) {
+                    gone = true;
+                    break;
+                }
+            }
             thread::sleep(std::time::Duration::from_millis(20));
         }
-        assert!(gone, "contained descendant survived process-group timeout");
+        assert!(
+            gone,
+            "contained descendant remained executable after timeout"
+        );
         std::fs::remove_file(pid_file).unwrap();
     }
 

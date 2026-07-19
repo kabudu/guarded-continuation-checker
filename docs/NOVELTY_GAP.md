@@ -124,3 +124,10 @@ DRAT-trim implementations. This closes proof-format and checker diversity for
 that layer. It does not establish novelty for the combined certificate,
 externally check composition or replay, or replace the remaining prior-art and
 expert-review gates.
+
+Event-contract CLI/Rust API v1 and its structural portfolio make the candidate
+combination independently usable without formula-specific calibration. This is
+productisation evidence, not a novelty result. Exact fallback, typed discovery,
+resource controls, and answer balance do not by themselves distinguish the
+underlying algorithm from established symbolic model checking, proof-carrying
+SAT, contract checking, or solver portfolios.

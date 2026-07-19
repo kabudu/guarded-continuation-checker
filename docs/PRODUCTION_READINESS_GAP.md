@@ -23,14 +23,20 @@ sufficient.
 Event-contract v1 is not a production-supported interface. It has exact
 agreement and replay evidence across three product-shaped fixtures, strict
 parser bounds, explicit negative performance data, and independently checked
-one-step/terminal proof primitives. Experimental certificate v3 now adds a
+one-step/terminal proof primitives. Certificate v3 now adds a
 deterministic format, source/contract binding, independent whole-contract
 verification, both answer classes, a 1,000-input parser mutation corpus, and
-proof swap/truncation rejection. It does not yet have a stable public API,
-portfolio fallback integration, hard per-invocation
-resource governance, compatibility commitment, public-design evidence, or
-external acceptance evidence. These gates must close before event contracts can
-change any production-readiness row above.
+proof swap/truncation rejection. Release-candidate event-contract CLI/Rust API
+v1 adds typed discovery, bounded subprocess execution, stable metrics, a
+timing-free structural portfolio, exact fallback, strict report replay, and a
+60-row answer-balanced cohort. The six-case
+[self-service acceptance run](../results/event-contract-self-service-acceptance-v1.md)
+proves the documented workflow can be completed without formula calibration,
+but it is simulated rather than independent evidence. The surface passes the
+full Rust 1.97 Linux container suite locally; hosted Linux CI must still bind
+that evidence to the reviewed commit. It does not yet have tagged compatibility
+history, public-design evidence, or external acceptance evidence. These gates
+must close before event contracts can change any production-readiness row above.
 
 V3 completeness obligations now also pass a deterministic DIMACS export and a
 maintained CaDiCaL plus DRAT-trim baseline across both answers. This removes one

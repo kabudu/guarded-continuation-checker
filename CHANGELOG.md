@@ -18,6 +18,16 @@
   source-bound DIMACS bundles. Verify all 68 individual obligations and four
   selector aggregates with pinned CaDiCaL 3.0.0 and DRAT-trim, covering both
   answer classes under explicit process and proof-file limits.
+- Add release-candidate event-contract CLI v1 and typed `EventContractTool`
+  discovery, production, checking, portfolio, report replay, execution bounds,
+  and invocation metrics without changing predicate API v1.
+- Add a timing-free structural v3 admission rule with exact persistent-CDCL
+  fallback on rejection or recognized bounded resource exhaustion. Preserve 60
+  answer-balanced product-shaped trials with exact agreement and the negative
+  2.34x to 12.73x verification overhead.
+- Add a portable six-case self-service acceptance harness and retained simulated
+  acceptance evidence. This is workflow evidence, not independent partner
+  validation.
 
 - Add experimental bounded event-contract v1 semantics: strict named CNF over
   relevant AIGER inputs, exact BDD phase composition, concrete witness recovery,

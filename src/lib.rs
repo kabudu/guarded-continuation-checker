@@ -1,8 +1,8 @@
-//! Stable client API for CQ-SAT/GCC predicate certificate workflows.
+//! Stable client APIs for GCC predicate and named event-contract workflows.
 //!
 //! The verifier implementation remains in the separately versioned executable.
 //! This library invokes it directly without a shell and validates its advertised
-//! predicate CLI contract before exposing typed certificate operations.
+//! versioned CLI contract before exposing typed certificate operations.
 
 use std::fmt;
 use std::io::Read;
@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 /// Predicate CLI contract understood by this crate release.
 pub const PREDICATE_API_VERSION: u32 = 1;
+pub const EVENT_CONTRACT_API_VERSION: u32 = 1;
 pub const DEFAULT_EXECUTION_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DEFAULT_OUTPUT_LIMIT_BYTES: usize = 1024 * 1024;
 pub const DEFAULT_FILE_LIMIT_BYTES: u64 = 32 * 1024 * 1024;
@@ -122,20 +123,30 @@ pub const INVOCATION_METRICS_SCHEMA_VERSION: u32 = 1;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OperationKind {
     Discover,
+    DiscoverEventContract,
     CertifyV1,
     CertifyV2,
+    CertifyEventContractV3,
     VerifyV1,
     VerifyV2,
+    VerifyEventContractV3,
+    EventContractPortfolio,
+    VerifyEventContractPortfolioReport,
 }
 
 impl OperationKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Discover => "discover",
+            Self::DiscoverEventContract => "discover_event_contract",
             Self::CertifyV1 => "certify_v1",
             Self::CertifyV2 => "certify_v2",
+            Self::CertifyEventContractV3 => "certify_event_contract_v3",
             Self::VerifyV1 => "verify_v1",
             Self::VerifyV2 => "verify_v2",
+            Self::VerifyEventContractV3 => "verify_event_contract_v3",
+            Self::EventContractPortfolio => "event_contract_portfolio",
+            Self::VerifyEventContractPortfolioReport => "verify_event_contract_portfolio_report",
         }
     }
 }
@@ -280,6 +291,29 @@ pub struct PredicateCapabilities {
     pub max_proof_bytes: usize,
     pub max_total_proof_bytes: usize,
 }
+
+/// Machine-discovered limits and formats for event-contract CLI v1.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventContractCapabilities {
+    pub cli_version: u32,
+    pub certificate_version: u32,
+    pub portfolio_version: u32,
+    pub semantics: String,
+    pub proof_format: String,
+    pub min_relevant_inputs: usize,
+    pub max_relevant_inputs: usize,
+    pub max_latches: usize,
+    pub max_horizon: usize,
+    pub max_contract_bytes: u64,
+    pub max_certificate_bytes: u64,
+    pub max_proof_bytes: usize,
+    pub max_total_proof_bytes: usize,
+}
+
+/// Event-contract v1 uses the same two logical outcomes as predicate checks.
+pub type EventContractResult = PredicateResult;
+pub type EventContractApiError = PredicateApiError;
+pub type EventContractOperationError = PredicateOperationError;
 
 /// A stable API error. Logical certificate results are not errors.
 #[derive(Debug)]
@@ -515,6 +549,219 @@ impl PredicateTool {
             let error = PredicateApiError::IncompatibleContract(format!(
                 "certificate version {version:?} is not advertised"
             ));
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    operation,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Typed, shell-free client for event-contract certificate v3 and portfolio v1.
+#[derive(Clone, Debug)]
+pub struct EventContractTool {
+    executable: PathBuf,
+    capabilities: EventContractCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl EventContractTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, EventContractApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, EventContractApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, EventContractOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("event-contract-cli-version");
+        let output = run_bounded(OperationKind::DiscoverEventContract, command, policy)?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_event_contract_capabilities(&stdout).map_err(|error| {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            PredicateOperationError {
+                error: Box::new(error),
+                metrics: metrics.clone(),
+            }
+        })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn executable(&self) -> &Path {
+        &self.executable
+    }
+
+    pub fn capabilities(&self) -> &EventContractCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify_v3(
+        &self,
+        model: &Path,
+        bad_output: usize,
+        contract: &Path,
+        certificate: &Path,
+    ) -> Result<EventContractResult, EventContractApiError> {
+        self.certify_v3_observed(model, bad_output, contract, certificate)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_v3_observed(
+        &self,
+        model: &Path,
+        bad_output: usize,
+        contract: &Path,
+        certificate: &Path,
+    ) -> Result<Observed<EventContractResult>, EventContractOperationError> {
+        let operation = OperationKind::CertifyEventContractV3;
+        self.require_contract(operation)?;
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("certify-aiger-event-contract-v3")
+            .arg(model)
+            .arg(bad_output.to_string())
+            .arg(contract)
+            .arg(certificate);
+        parse_observed_result(run_bounded(operation, command, self.policy)?)
+    }
+
+    pub fn verify_v3(
+        &self,
+        model: &Path,
+        contract: &Path,
+        certificate: &Path,
+    ) -> Result<EventContractResult, EventContractApiError> {
+        self.verify_v3_observed(model, contract, certificate)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_v3_observed(
+        &self,
+        model: &Path,
+        contract: &Path,
+        certificate: &Path,
+    ) -> Result<Observed<EventContractResult>, EventContractOperationError> {
+        let operation = OperationKind::VerifyEventContractV3;
+        self.require_contract(operation)?;
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-aiger-event-contract-certificate-v3")
+            .arg(model)
+            .arg(contract)
+            .arg(certificate);
+        parse_observed_result(run_bounded(operation, command, self.policy)?)
+    }
+
+    pub fn verify_portfolio(
+        &self,
+        model: &Path,
+        bad_output: usize,
+        contract: &Path,
+        report: &Path,
+        certificate: &Path,
+    ) -> Result<EventContractResult, EventContractApiError> {
+        self.verify_portfolio_observed(model, bad_output, contract, report, certificate)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_portfolio_observed(
+        &self,
+        model: &Path,
+        bad_output: usize,
+        contract: &Path,
+        report: &Path,
+        certificate: &Path,
+    ) -> Result<Observed<EventContractResult>, EventContractOperationError> {
+        let operation = OperationKind::EventContractPortfolio;
+        self.require_contract(operation)?;
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-aiger-event-contract-portfolio")
+            .arg(model)
+            .arg(bad_output.to_string())
+            .arg(contract)
+            .arg(report)
+            .arg(certificate);
+        parse_observed_result(run_bounded(operation, command, self.policy)?)
+    }
+
+    pub fn verify_portfolio_report(
+        &self,
+        model: &Path,
+        bad_output: usize,
+        contract: &Path,
+        report: &Path,
+        certificate: &Path,
+    ) -> Result<EventContractResult, EventContractApiError> {
+        self.verify_portfolio_report_observed(model, bad_output, contract, report, certificate)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_portfolio_report_observed(
+        &self,
+        model: &Path,
+        bad_output: usize,
+        contract: &Path,
+        report: &Path,
+        certificate: &Path,
+    ) -> Result<Observed<EventContractResult>, EventContractOperationError> {
+        let operation = OperationKind::VerifyEventContractPortfolioReport;
+        self.require_contract(operation)?;
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-aiger-event-contract-portfolio-report")
+            .arg(model)
+            .arg(bad_output.to_string())
+            .arg(contract)
+            .arg(report)
+            .arg(certificate);
+        parse_observed_result(run_bounded(operation, command, self.policy)?)
+    }
+
+    fn require_contract(
+        &self,
+        operation: OperationKind,
+    ) -> Result<(), EventContractOperationError> {
+        if self.capabilities.certificate_version != 3 || self.capabilities.portfolio_version != 1 {
+            let error = PredicateApiError::IncompatibleContract(
+                "event-contract certificate v3 and portfolio v1 are required".to_string(),
+            );
             return Err(PredicateOperationError {
                 metrics: empty_metrics(
                     operation,
@@ -842,10 +1089,20 @@ fn parse_observed_result(
 }
 
 fn parse_result(stdout: &str) -> Result<PredicateResult, PredicateApiError> {
-    let result = stdout
+    let results = stdout
         .split_whitespace()
-        .find_map(|field| field.strip_prefix("result="))
-        .ok_or_else(|| PredicateApiError::InvalidResponse("result field is missing".to_string()))?;
+        .filter_map(|field| field.strip_prefix("result="))
+        .collect::<Vec<_>>();
+    let Some(&result) = results.first() else {
+        return Err(PredicateApiError::InvalidResponse(
+            "result field is missing".to_string(),
+        ));
+    };
+    if results.iter().any(|candidate| *candidate != result) {
+        return Err(PredicateApiError::InvalidResponse(
+            "subprocess result fields disagree".to_string(),
+        ));
+    }
     match result {
         "avoidable" => Ok(PredicateResult::Avoidable),
         "unavoidable" => Ok(PredicateResult::Unavoidable),
@@ -924,6 +1181,99 @@ fn parse_capabilities(line: &str) -> Result<PredicateCapabilities, PredicateApiE
     })
 }
 
+fn parse_event_contract_capabilities(
+    line: &str,
+) -> Result<EventContractCapabilities, EventContractApiError> {
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    if fields.len() != 13 || line.contains('\r') || !line.ends_with('\n') {
+        return Err(PredicateApiError::InvalidResponse(
+            "event-contract capability line shape is not canonical".to_string(),
+        ));
+    }
+    let value = |index: usize, key: &str| -> Result<&str, PredicateApiError> {
+        fields[index]
+            .strip_prefix(&format!("{key}="))
+            .ok_or_else(|| {
+                PredicateApiError::InvalidResponse(format!(
+                    "expected event-contract capability `{key}`"
+                ))
+            })
+    };
+    let number = |index: usize, key: &str| -> Result<u64, PredicateApiError> {
+        let text = value(index, key)?;
+        if text.is_empty()
+            || !text.bytes().all(|byte| byte.is_ascii_digit())
+            || (text.len() > 1 && text.starts_with('0'))
+        {
+            return Err(PredicateApiError::InvalidResponse(format!(
+                "event-contract capability `{key}` is not canonical decimal"
+            )));
+        }
+        text.parse::<u64>().map_err(|_| {
+            PredicateApiError::InvalidResponse(format!(
+                "event-contract capability `{key}` is invalid"
+            ))
+        })
+    };
+    let as_usize = |index: usize, key: &str| -> Result<usize, PredicateApiError> {
+        usize::try_from(number(index, key)?).map_err(|_| {
+            PredicateApiError::InvalidResponse(format!(
+                "event-contract capability `{key}` exceeds usize"
+            ))
+        })
+    };
+    let cli_version = u32::try_from(number(0, "event_contract_cli_version")?).map_err(|_| {
+        PredicateApiError::InvalidResponse("event-contract CLI version exceeds u32".to_string())
+    })?;
+    if cli_version != EVENT_CONTRACT_API_VERSION {
+        return Err(PredicateApiError::IncompatibleContract(format!(
+            "expected event-contract CLI v{EVENT_CONTRACT_API_VERSION}, found v{cli_version}"
+        )));
+    }
+    let certificate_version = u32::try_from(number(1, "certificate_version")?).map_err(|_| {
+        PredicateApiError::InvalidResponse(
+            "event-contract certificate version exceeds u32".to_string(),
+        )
+    })?;
+    let portfolio_version = u32::try_from(number(2, "portfolio_version")?).map_err(|_| {
+        PredicateApiError::InvalidResponse(
+            "event-contract portfolio version exceeds u32".to_string(),
+        )
+    })?;
+    if certificate_version != 3 || portfolio_version != 1 {
+        return Err(PredicateApiError::IncompatibleContract(
+            "event-contract certificate v3 and portfolio v1 are required".to_string(),
+        ));
+    }
+    let semantics = value(3, "semantics")?.to_string();
+    if semantics != "bounded-named-cnf-terminal-bad-avoidance" {
+        return Err(PredicateApiError::IncompatibleContract(format!(
+            "unsupported event-contract semantics `{semantics}`"
+        )));
+    }
+    let proof_format = value(4, "proof_format")?.to_string();
+    if proof_format != "varisat-native-0.2.2" {
+        return Err(PredicateApiError::IncompatibleContract(format!(
+            "unsupported proof format `{proof_format}`"
+        )));
+    }
+    Ok(EventContractCapabilities {
+        cli_version,
+        certificate_version,
+        portfolio_version,
+        semantics,
+        proof_format,
+        min_relevant_inputs: as_usize(5, "min_relevant_inputs")?,
+        max_relevant_inputs: as_usize(6, "max_relevant_inputs")?,
+        max_latches: as_usize(7, "max_latches")?,
+        max_horizon: as_usize(8, "max_horizon")?,
+        max_contract_bytes: number(9, "max_contract_bytes")?,
+        max_certificate_bytes: number(10, "max_certificate_bytes")?,
+        max_proof_bytes: as_usize(11, "max_proof_bytes")?,
+        max_total_proof_bytes: as_usize(12, "max_total_proof_bytes")?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -943,6 +1293,40 @@ mod tests {
             Err(PredicateApiError::IncompatibleContract(_))
         ));
         assert!(parse_capabilities(&canonical.replace(" max_latches=4", "")).is_err());
+    }
+
+    #[test]
+    fn event_contract_capability_parser_accepts_v1_and_rejects_drift() {
+        let canonical = "event_contract_cli_version=1 certificate_version=3 portfolio_version=1 semantics=bounded-named-cnf-terminal-bad-avoidance proof_format=varisat-native-0.2.2 min_relevant_inputs=9 max_relevant_inputs=16 max_latches=4 max_horizon=64 max_contract_bytes=1048576 max_certificate_bytes=33554432 max_proof_bytes=1048576 max_total_proof_bytes=8388608\n";
+        let parsed = parse_event_contract_capabilities(canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.certificate_version, 3);
+        assert!(matches!(
+            parse_event_contract_capabilities(&canonical.replacen(
+                "event_contract_cli_version=1",
+                "event_contract_cli_version=2",
+                1
+            )),
+            Err(PredicateApiError::IncompatibleContract(_))
+        ));
+        assert!(
+            parse_event_contract_capabilities(&canonical.replace(" max_latches=4", "")).is_err()
+        );
+    }
+
+    #[test]
+    fn result_parser_rejects_missing_ambiguous_and_unknown_answers() {
+        assert_eq!(
+            parse_result("status=VERIFIED result=avoidable\n").unwrap(),
+            PredicateResult::Avoidable
+        );
+        assert!(parse_result("status=VERIFIED\n").is_err());
+        assert_eq!(
+            parse_result("result=avoidable result=avoidable\n").unwrap(),
+            PredicateResult::Avoidable
+        );
+        assert!(parse_result("result=avoidable result=unavoidable\n").is_err());
+        assert!(parse_result("result=maybe\n").is_err());
     }
 
     #[test]
