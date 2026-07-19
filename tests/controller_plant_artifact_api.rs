@@ -1,4 +1,5 @@
 use guarded_continuation_checker::aiger_obligation::{AigerLatch, AigerTransition};
+use guarded_continuation_checker::controller_mtbdd::produce_controller_mtbdd;
 use guarded_continuation_checker::controller_plant::{
     ControllerPlantAnswer, ControllerPlantWiring,
 };
@@ -6,11 +7,13 @@ use guarded_continuation_checker::controller_plant_artifact::{
     ControllerMtbddPlantPortfolioArtifact, ControllerMtbddPlantPortfolioBackend,
     ControllerMtbddPlantSelectionReason, ControllerPlantArtifactInput,
     decode_controller_direct_plant_artifact, decode_controller_mtbdd_plant_portfolio,
-    decode_controller_plant_artifact, encode_controller_direct_plant_artifact,
-    encode_controller_mtbdd_plant_portfolio, encode_controller_plant_artifact,
+    decode_controller_plant_artifact, decode_controller_proof_mtbdd_plant_artifact,
+    encode_controller_direct_plant_artifact, encode_controller_mtbdd_plant_portfolio,
+    encode_controller_plant_artifact, encode_controller_proof_mtbdd_plant_artifact,
     produce_controller_direct_plant_artifact, produce_controller_mtbdd_plant_portfolio,
-    produce_controller_plant_artifact, verify_controller_direct_plant_artifact,
-    verify_controller_mtbdd_plant_portfolio, verify_controller_plant_artifact,
+    produce_controller_plant_artifact, produce_controller_proof_mtbdd_plant_artifact,
+    verify_controller_direct_plant_artifact, verify_controller_mtbdd_plant_portfolio,
+    verify_controller_plant_artifact, verify_controller_proof_mtbdd_plant_artifact,
 };
 use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
 
@@ -148,6 +151,58 @@ fn portfolio_inputs<'a>(
             horizon: 8,
         },
     ]
+}
+
+#[test]
+fn proof_carrying_mtbdd_batch_is_canonical_bound_and_independently_checked() {
+    let controller = controller();
+    let plant = plant();
+    let controller_digest = [0xc0; 32];
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![0],
+        controller_action_outputs: vec![0],
+        plant_sensor_outputs: vec![0],
+        plant_action_inputs: vec![0],
+    };
+    let inputs = portfolio_inputs(&plant, &wiring);
+    let mtbdd = produce_controller_mtbdd(&controller, controller_digest, &[0], &[0]).unwrap();
+    let artifact = produce_controller_proof_mtbdd_plant_artifact(
+        &controller,
+        controller_digest,
+        &mtbdd,
+        &inputs,
+    )
+    .unwrap();
+    let encoded = encode_controller_proof_mtbdd_plant_artifact(&artifact).unwrap();
+    assert_eq!(
+        encode_controller_proof_mtbdd_plant_artifact(
+            &decode_controller_proof_mtbdd_plant_artifact(&encoded).unwrap()
+        )
+        .unwrap(),
+        encoded
+    );
+    let plants = [(&plant, [0x91; 32]), (&plant, [0x92; 32])];
+    let summary = verify_controller_proof_mtbdd_plant_artifact(
+        &controller,
+        controller_digest,
+        &plants,
+        &encoded,
+    )
+    .unwrap();
+    assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+
+    for length in 0..encoded.len() {
+        assert!(decode_controller_proof_mtbdd_plant_artifact(&encoded[..length]).is_err());
+    }
+    for index in 0..encoded.len() {
+        let mut mutated = encoded.clone();
+        mutated[index] ^= 1;
+        assert!(decode_controller_proof_mtbdd_plant_artifact(&mutated).is_err());
+    }
+    assert!(
+        verify_controller_proof_mtbdd_plant_artifact(&controller, [0; 32], &plants, &encoded,)
+            .is_err()
+    );
 }
 
 #[test]

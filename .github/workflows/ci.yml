@@ -50,7 +50,14 @@ jobs:
             scripts/run-controller-mtbdd-self-service-acceptance.sh \
             scripts/benchmark-controller-mtbdd-process-resources.sh \
             scripts/run-controller-plant-portfolio-acceptance.sh \
-            scripts/benchmark-controller-plant-portfolio-phases.sh
+            scripts/benchmark-controller-plant-portfolio-phases.sh \
+            scripts/benchmark-controller-proof-mtbdd-plant.sh
+      - name: Exercise proof-carrying MTBDD plant benchmark
+        run: |
+          scripts/benchmark-controller-proof-mtbdd-plant.sh \
+            /tmp/controller-proof-mtbdd-plant.csv
+          awk -F, 'NR == 2 { exit !($11 == "true" && $12 == "ok" && $8 > 0 && $9 > 0) }' \
+            /tmp/controller-proof-mtbdd-plant.csv
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools

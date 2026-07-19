@@ -328,6 +328,16 @@ fn validate_artifact(artifact: &ControllerMtbddArtifact) -> Result<(), Controlle
     Ok(())
 }
 
+/// Validate only the canonical MTBDD structure and return its state-bit count.
+/// Semantic equivalence to a controller model requires either exhaustive
+/// verification or a separately checked equivalence proof.
+pub fn validate_controller_mtbdd_structure(
+    artifact: &ControllerMtbddArtifact,
+) -> Result<usize, ControllerMtbddError> {
+    validate_artifact(artifact)?;
+    state_bits(artifact.state_count)
+}
+
 pub fn evaluate_controller_mtbdd(
     artifact: &ControllerMtbddArtifact,
     state: usize,

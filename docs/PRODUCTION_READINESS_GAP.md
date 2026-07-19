@@ -192,6 +192,13 @@ downgrades fail closed. This closes the local fallback-integrity mechanism gap.
 Hosted compatibility, independent acceptance, and source-to-model attestation
 remain open, so no production-readiness row changes.
 
+The proof-carrying MTBDD experiment removes exhaustive assignment replay from
+one local checker path and provides canonical, bounded, source-bound proof and
+plant-batch artifacts. Its public-controller in-process result is strong, but
+the path lacks CLI integration, hosted process measurements, compatibility
+history, and independent-tool comparison. It remains outside the production
+portfolio and changes no readiness row.
+
 ## Rules
 
 - No timing-based per-formula calibration.

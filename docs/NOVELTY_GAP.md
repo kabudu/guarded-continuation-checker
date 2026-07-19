@@ -318,3 +318,13 @@ The controller MTBDD plant portfolio adds timing-free selection and exact
 fallback with downgrade detection. This is useful integrity engineering, but
 static portfolio routing and exact fallback are established techniques. It does
 not change the novelty assessment.
+
+The proof-carrying MTBDD equivalence integration removes exhaustive controller
+assignment replay from the consumer. On the public six-property physical-plant
+batch it produces exact agreement and a 2.01x median end-to-end verification
+speed-up, at a 29.39x artifact-size cost. This is a meaningful product trade-off
+and the strongest current consumer-speed result. SAT miters, UNSAT proof
+checking, and decision diagrams are established, so the result does not by
+itself establish scholarly novelty. Hosted replication, established-tool
+comparison on identical evidence scope, and independent expert review remain
+required.

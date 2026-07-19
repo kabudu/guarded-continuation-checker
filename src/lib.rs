@@ -14,6 +14,7 @@ pub mod btor2_phase;
 pub mod btor2_region;
 pub mod btor2_search;
 pub mod controller_mtbdd;
+pub mod controller_mtbdd_proof;
 pub mod controller_plant;
 pub mod controller_plant_artifact;
 pub mod controller_transducer;

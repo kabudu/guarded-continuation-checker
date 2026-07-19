@@ -10,11 +10,16 @@ use crate::controller_mtbdd::{
     ControllerMtbddAdmissionFailure, ControllerMtbddArtifact, decode_controller_mtbdd,
     encode_controller_mtbdd, produce_controller_mtbdd,
 };
+use crate::controller_mtbdd_proof::{
+    ControllerMtbddEquivalenceProof, decode_controller_mtbdd_equivalence_proof,
+    encode_controller_mtbdd_equivalence_proof, produce_controller_mtbdd_equivalence_proof,
+};
 use crate::controller_plant::{
     ControllerPlantAnswer, ControllerPlantBatchInput, ControllerPlantBatchResult,
     ControllerPlantResult, ControllerPlantTraceStep, ControllerPlantWiring,
     MAX_COMPOSITION_HORIZON, compose_controller_plant_batch, compose_controller_plant_direct_batch,
     compose_verified_mtbdd_plant, verify_mtbdd_for_composition,
+    verify_proof_carrying_mtbdd_for_composition,
 };
 use crate::controller_transducer::{
     ControllerTransducerObligation, decode_controller_transducer, encode_controller_transducer,
@@ -26,6 +31,8 @@ pub const MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS: usize = 64;
 const MAGIC: &[u8; 8] = b"GCCCPA01";
 pub const MTBDD_PLANT_ARTIFACT_VERSION: u32 = 1;
 const MTBDD_MAGIC: &[u8; 8] = b"GCCMPA01";
+pub const PROOF_MTBDD_PLANT_ARTIFACT_VERSION: u32 = 1;
+const PROOF_MTBDD_MAGIC: &[u8; 8] = b"GCCMPF01";
 pub const DIRECT_PLANT_ARTIFACT_VERSION: u32 = 1;
 const DIRECT_MAGIC: &[u8; 8] = b"GCCDPA01";
 pub const MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
@@ -65,6 +72,13 @@ pub struct ControllerMtbddPlantBatchArtifact {
     pub version: u32,
     pub controller_mtbdd: Vec<u8>,
     pub members: Vec<ControllerPlantArtifactMember>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPlantBatchArtifact {
+    pub version: u32,
+    pub controller_mtbdd_plant: Vec<u8>,
+    pub equivalence_proof: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -691,6 +705,228 @@ pub fn verify_controller_mtbdd_plant_artifact(
         explored_transitions = explored_transitions
             .checked_add(result.explored_transitions)
             .ok_or_else(|| reject("controller MTBDD plant transition count overflow"))?;
+        members.push(result);
+    }
+    Ok(ControllerMtbddPlantBatchSummary {
+        members,
+        safe,
+        unsafe_count,
+        mtbdd_nodes: verified.summary().nodes,
+        mtbdd_terminals: verified.summary().terminals,
+        assignments_checked: verified.summary().assignments_checked,
+        reachable_product_states,
+        explored_transitions,
+    })
+}
+
+pub fn produce_controller_proof_mtbdd_plant_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller: &ControllerMtbddArtifact,
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<ControllerProofMtbddPlantBatchArtifact, ControllerPlantArtifactError> {
+    if members.is_empty() || members.len() > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant member count is outside limit",
+        ));
+    }
+    let proof = produce_controller_mtbdd_equivalence_proof(
+        controller_model,
+        controller_source_sha256,
+        controller,
+    )
+    .map_err(|error| reject(error.to_string()))?;
+    let verified = verify_proof_carrying_mtbdd_for_composition(
+        controller_model,
+        controller_source_sha256,
+        controller,
+        &proof,
+    )
+    .map_err(|error| reject(error.to_string()))?;
+    let artifact_members = members
+        .iter()
+        .map(|member| {
+            let result = compose_verified_mtbdd_plant(
+                &verified,
+                member.plant,
+                member.wiring,
+                member.initial_controller_state,
+                member.initial_plant_state,
+                member.bad_plant_output,
+                member.horizon,
+            )
+            .map_err(|error| reject(error.to_string()))?;
+            Ok(ControllerPlantArtifactMember {
+                plant_source_sha256: member.plant_source_sha256,
+                wiring: member.wiring.clone(),
+                initial_controller_state: member.initial_controller_state,
+                initial_plant_state: member.initial_plant_state,
+                bad_plant_output: member.bad_plant_output,
+                horizon: member.horizon,
+                result,
+            })
+        })
+        .collect::<Result<Vec<_>, ControllerPlantArtifactError>>()?;
+    let inner = ControllerMtbddPlantBatchArtifact {
+        version: MTBDD_PLANT_ARTIFACT_VERSION,
+        controller_mtbdd: encode_controller_mtbdd(controller)
+            .map_err(|error| reject(error.to_string()))?,
+        members: artifact_members,
+    };
+    Ok(ControllerProofMtbddPlantBatchArtifact {
+        version: PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+        controller_mtbdd_plant: encode_controller_mtbdd_plant_artifact(&inner)?,
+        equivalence_proof: encode_controller_mtbdd_equivalence_proof(&proof)
+            .map_err(|error| reject(error.to_string()))?,
+    })
+}
+
+pub fn encode_controller_proof_mtbdd_plant_artifact(
+    artifact: &ControllerProofMtbddPlantBatchArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if artifact.version != PROOF_MTBDD_PLANT_ARTIFACT_VERSION {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact version mismatch",
+        ));
+    }
+    decode_controller_mtbdd_plant_artifact(&artifact.controller_mtbdd_plant)?;
+    decode_controller_mtbdd_equivalence_proof(&artifact.equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(PROOF_MTBDD_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.extend_from_slice(
+        &narrow(
+            artifact.controller_mtbdd_plant.len(),
+            "controller MTBDD plant length",
+        )?
+        .to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.controller_mtbdd_plant);
+    bytes.extend_from_slice(
+        &narrow(
+            artifact.equivalence_proof.len(),
+            "controller MTBDD equivalence proof length",
+        )?
+        .to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.equivalence_proof);
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact exceeds byte limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_controller_proof_mtbdd_plant_artifact(
+    bytes: &[u8],
+) -> Result<ControllerProofMtbddPlantBatchArtifact, ControllerPlantArtifactError> {
+    if bytes.len() < 8 + 4 + 4 + 4 + 32 || bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact size is invalid",
+        ));
+    }
+    let payload_len = bytes.len() - 32;
+    let (payload, integrity) = bytes.split_at(payload_len);
+    if Sha256::digest(payload).as_slice() != integrity {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact integrity mismatch",
+        ));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, 8)? != PROOF_MTBDD_MAGIC {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact magic mismatch",
+        ));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != PROOF_MTBDD_PLANT_ARTIFACT_VERSION {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact version mismatch",
+        ));
+    }
+    let inner_len = read_u32(payload, &mut cursor)? as usize;
+    let controller_mtbdd_plant = take(payload, &mut cursor, inner_len)?.to_vec();
+    decode_controller_mtbdd_plant_artifact(&controller_mtbdd_plant)?;
+    let proof_len = read_u32(payload, &mut cursor)? as usize;
+    let equivalence_proof = take(payload, &mut cursor, proof_len)?.to_vec();
+    decode_controller_mtbdd_equivalence_proof(&equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    if cursor != payload.len() {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant artifact has trailing bytes",
+        ));
+    }
+    Ok(ControllerProofMtbddPlantBatchArtifact {
+        version,
+        controller_mtbdd_plant,
+        equivalence_proof,
+    })
+}
+
+pub fn verify_controller_proof_mtbdd_plant_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    plants: &[(&AigerTransition, [u8; 32])],
+    artifact_bytes: &[u8],
+) -> Result<ControllerMtbddPlantBatchSummary, ControllerPlantArtifactError> {
+    let outer = decode_controller_proof_mtbdd_plant_artifact(artifact_bytes)?;
+    let artifact = decode_controller_mtbdd_plant_artifact(&outer.controller_mtbdd_plant)?;
+    if plants.len() != artifact.members.len() {
+        return Err(reject(
+            "proof-carrying controller MTBDD plant source count mismatch",
+        ));
+    }
+    let controller = decode_controller_mtbdd(&artifact.controller_mtbdd)
+        .map_err(|error| reject(error.to_string()))?;
+    let proof: ControllerMtbddEquivalenceProof =
+        decode_controller_mtbdd_equivalence_proof(&outer.equivalence_proof)
+            .map_err(|error| reject(error.to_string()))?;
+    let verified = verify_proof_carrying_mtbdd_for_composition(
+        controller_model,
+        controller_source_sha256,
+        &controller,
+        &proof,
+    )
+    .map_err(|error| reject(error.to_string()))?;
+    let mut members = Vec::with_capacity(plants.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    let mut reachable_product_states = 0usize;
+    let mut explored_transitions = 0usize;
+    for ((plant, digest), claimed) in plants.iter().copied().zip(&artifact.members) {
+        if digest != claimed.plant_source_sha256 {
+            return Err(reject(
+                "proof-carrying controller MTBDD plant source digest mismatch",
+            ));
+        }
+        let result = compose_verified_mtbdd_plant(
+            &verified,
+            plant,
+            &claimed.wiring,
+            claimed.initial_controller_state,
+            claimed.initial_plant_state,
+            claimed.bad_plant_output,
+            claimed.horizon,
+        )
+        .map_err(|error| reject(error.to_string()))?;
+        if result != claimed.result {
+            return Err(reject(
+                "proof-carrying controller MTBDD plant member result mismatch",
+            ));
+        }
+        match result.answer {
+            ControllerPlantAnswer::Safe => safe += 1,
+            ControllerPlantAnswer::Unsafe => unsafe_count += 1,
+        }
+        reachable_product_states = reachable_product_states
+            .checked_add(result.reachable_product_states)
+            .ok_or_else(|| reject("proof-carrying reachable count overflow"))?;
+        explored_transitions = explored_transitions
+            .checked_add(result.explored_transitions)
+            .ok_or_else(|| reject("proof-carrying transition count overflow"))?;
         members.push(result);
     }
     Ok(ControllerMtbddPlantBatchSummary {

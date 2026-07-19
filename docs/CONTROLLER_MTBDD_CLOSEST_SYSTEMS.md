@@ -74,3 +74,11 @@ fresh GCC verification on the retained arm64 host. GCC uses 85.2% less peak RSS
 and transfers an 8,549-byte independently checked artifact, while the oracle
 must rerun and emits no comparable replay artifact. This demonstrates the
 predeclared evidence-delivery distinction but does not establish novelty.
+
+The first [MTBDD equivalence-proof experiment](CONTROLLER_MTBDD_EQUIVALENCE_PROOF_V1.md)
+targets that negative result. A SAT miter and independently checked UNSAT proof
+reduce in-process equivalence checking from 875.03 ms to 7.20 ms on one retained
+run, while adding 242,496 raw proof bytes. SAT-based circuit equivalence and
+proof logging are established, so the improvement is an engineering tradeoff,
+not a new verification principle. Whole-process hosted comparison against the
+maintained formal route is required before admitting it to the portfolio.

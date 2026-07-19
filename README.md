@@ -49,6 +49,14 @@ query drift, and forced downgrades fail closed.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.
+The follow-up [equivalence-proof experiment](docs/CONTROLLER_MTBDD_EQUIVALENCE_PROOF_V1.md)
+replaces exhaustive controller replay with a source-bound UNSAT miter proof.
+One retained arm64 run checks that proof about 121.6 times faster. Its
+[full plant integration](docs/PROOF_CARRYING_MTBDD_EQUIVALENCE_V1.md) reduces
+median verification for the six-member public physical-plant batch from 1.749
+seconds to 0.870 seconds with exact answer agreement. The artifact is 29.39
+times larger, so this is an explicit fast-verification profile rather than the
+compact portfolio default. Hosted and whole-process validation remain open.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

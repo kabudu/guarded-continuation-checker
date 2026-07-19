@@ -832,3 +832,17 @@ TRIALS=3 scripts/benchmark-controller-plant-portfolio-phases.sh \
 The retained host observations are
 `results/controller-plant-portfolio-phases-v1.csv`. Timing rows vary by host
 and are exercised, but not compared byte for byte, in CI.
+
+### Proof-carrying MTBDD plant verification
+
+```sh
+scripts/benchmark-controller-proof-mtbdd-plant.sh \
+  target/controller-proof-mtbdd-plant.csv
+```
+
+The benchmark compares the compact exhaustive verifier with the proof-carrying
+verifier on the same six-member public physical-plant batch. It requires exact
+member-result agreement and reports artifact size, production cost, and median
+verification time across three trials. The retained arm64 observation is
+`results/public-washing-controller-proof-mtbdd-plant-v1.csv`. Timings vary by
+host and are evidence, not an acceptance threshold.

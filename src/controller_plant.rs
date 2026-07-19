@@ -7,7 +7,10 @@ use std::fmt;
 use crate::aiger_obligation::{AigerOutcome, AigerTransition};
 use crate::controller_mtbdd::{
     ControllerMtbddArtifact, ControllerMtbddSummary, evaluate_controller_mtbdd_unchecked,
-    verify_controller_mtbdd,
+    validate_controller_mtbdd_structure, verify_controller_mtbdd,
+};
+use crate::controller_mtbdd_proof::{
+    ControllerMtbddEquivalenceProof, verify_controller_mtbdd_equivalence_proof,
 };
 use crate::controller_transducer::{
     ControllerTransducerObligation, ControllerTransducerSummary, verify_controller_transducer,
@@ -539,6 +542,36 @@ pub fn verify_mtbdd_for_composition<'a>(
 ) -> Result<VerifiedControllerMtbdd<'a>, ControllerPlantError> {
     let summary = verify_controller_mtbdd(controller_model, controller_source_sha256, artifact)
         .map_err(|error| reject(error.to_string()))?;
+    Ok(VerifiedControllerMtbdd { artifact, summary })
+}
+
+pub fn verify_proof_carrying_mtbdd_for_composition<'a>(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    artifact: &'a ControllerMtbddArtifact,
+    proof: &ControllerMtbddEquivalenceProof,
+) -> Result<VerifiedControllerMtbdd<'a>, ControllerPlantError> {
+    verify_controller_mtbdd_equivalence_proof(
+        controller_model,
+        controller_source_sha256,
+        artifact,
+        proof,
+    )
+    .map_err(|error| reject(error.to_string()))?;
+    let state_bits =
+        validate_controller_mtbdd_structure(artifact).map_err(|error| reject(error.to_string()))?;
+    let assignments_checked = artifact
+        .state_count
+        .checked_shl(artifact.relevant_inputs.len() as u32)
+        .ok_or_else(|| reject("controller MTBDD assignment count overflow"))?;
+    let summary = ControllerMtbddSummary {
+        state_bits,
+        inputs: artifact.relevant_inputs.len(),
+        outputs: artifact.observed_outputs.len(),
+        terminals: artifact.terminals.len(),
+        nodes: artifact.nodes.len(),
+        assignments_checked,
+    };
     Ok(VerifiedControllerMtbdd { artifact, summary })
 }
 

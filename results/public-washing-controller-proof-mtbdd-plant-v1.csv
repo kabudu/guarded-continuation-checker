@@ -1,0 +1,2 @@
+schema_version,members,trials,exhaustive_artifact_bytes,proof_artifact_bytes,artifact_ratio,proof_production_nanos,exhaustive_verification_nanos,proof_verification_nanos,verification_ratio,answers_agree,status
+1,6,3,8549,251221,29.386010,911991250,1749293041,869631792,0.497133,true,ok

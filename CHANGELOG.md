@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
+  plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch
+  artifacts. On the public 131,072-assignment controller, one retained arm64
+  run checks the 242,496-byte proof in 0.82% of exhaustive replay time. Keep the
+  byte tradeoff and established equivalence-checking prior art explicit; the
+  proof path is not yet the portfolio default. The integrated six-property
+  physical-plant path verifies in 49.7% of compact exhaustive time with exact
+  agreement, while its artifact is 29.39 times larger.
+
 - Add phase-level portfolio observability for model loading, artifact handling,
   semantic verification, publication, and complete elapsed time. Retain the
   finding that semantic replay, not source/model loading, dominates the public
