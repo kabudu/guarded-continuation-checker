@@ -75,5 +75,26 @@ rm -f "$certificate"
 "$gcc_binary" search-btor2 "$model" 13 3 "$certificate"
 grep -q '^result=UNSAFE$' "$certificate"
 "$gcc_binary" verify-btor2-search "$model" "$certificate"
+rm -f "$certificate"
+
+check_bounded() {
+  source=$1
+  bad=$2
+  horizon=$3
+  expected=$4
+  backend=$5
+  "$gcc_binary" check-btor2-bounded "$source" "$bad" "$horizon" "$certificate"
+  grep -q "^${backend}_certificate_version=1$" "$certificate"
+  grep -q "^result=${expected}$" "$certificate"
+  "$gcc_binary" verify-btor2-bounded "$source" "$certificate"
+  rm -f "$certificate"
+}
+
+check_bounded "$model" 13 2 SAFE region
+check_bounded "$model" 13 3 UNSAFE search
+check_bounded "$actuator" 13 200 SAFE region
+check_bounded "$actuator" 13 201 UNSAFE search
+check_bounded "$saturating" 15 254 SAFE region
+check_bounded "$saturating" 15 255 UNSAFE search
 
 echo 'btor2tools_baseline=PASS'

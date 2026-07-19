@@ -115,6 +115,14 @@ answers both bounded `SAFE` and `UNSAFE` reachability queries. It uses complete
 reachable layers as a deliberately conventional exact reference for future
 word-composition work, with explicit state-explosion limits.
 
+The experimental [BTOR2 exact word-region certificate v1](docs/BTOR2_WORD_REGION_CERTIFICATE_V1.md)
+now replaces those layers for recognised reset-add and saturating counter
+families. A timing-free portfolio retains explicit exact search for every other
+query. On the retained boundary cohort, the large SAFE artifacts shrink by
+99.94% and 99.96% while both answers remain independently source-verified. This
+is a narrow exact acceleration result with established prior art, not a novelty
+or production-readiness claim.
+
 The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
 single exact evaluation command over partial AIGER input transcripts. Its
 timing-free structural gate selects the independently checked dense predicate

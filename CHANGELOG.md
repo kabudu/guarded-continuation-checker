@@ -23,6 +23,14 @@
   word models through bound 256. Enforce per-layer, total-state, node-step, and
   certificate-size limits. Compare both watchdog answers with pinned Bitwuzla
   unrollings and exercise the non-affine saturating model at bounds 254 and 255.
+- Add exact BTOR2 word-region certificate v1 and a static bounded portfolio.
+  Independently recover reset-add and reset-saturating-add recurrences from
+  source, prove bounded SAFE regions arithmetically, and preserve every other
+  query through explicit exact search. Retain both-answer agreement and reduce
+  the 200-step actuator and 254-step saturating SAFE artifacts from 505,396 and
+  802,525 bytes to 304 and 312 bytes, respectively. Arithmetic-progression
+  reachability and acceleration remain established prior art; no novelty claim
+  follows from this result.
 
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability

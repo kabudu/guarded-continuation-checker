@@ -64,9 +64,12 @@ close either register by itself.
    [counter-phase candidate](BTOR2_COUNTER_PHASE_CERTIFICATE_V1.md) now binds
    and verifies a strict reset-or-affine recurrence. A static counter-trace
    portfolio preserves rejected supplied traces through bounded exact replay.
-   [Bounded search v1](BTOR2_BOUNDED_SEARCH_V1.md) now supplies exact both-answer
-   fallback for one-input, constraint-free models. Broader composition,
-   multi-input search, constraint semantics, and state-explosion control remain
+   [Bounded search v1](BTOR2_BOUNDED_SEARCH_V1.md) supplies exact both-answer
+   fallback for one-input, constraint-free models. The first
+   [exact word-region certificate](BTOR2_WORD_REGION_CERTIFICATE_V1.md) proves
+   complete reset-add and saturating reachable layers without enumeration, and
+   its static portfolio retains exact search elsewhere. Broader multi-state and
+   multi-input composition, constraint semantics, and product validity remain
    open. A pinned Bitwuzla 0.9.1 gate agrees on endpoint formulas and both
    watchdog reachability answers.
 
