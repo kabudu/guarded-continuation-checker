@@ -80,6 +80,38 @@ These minimal monitors exercise both answers and the real public controller
 boundary. They are not yet representative physical plant models and do not
 close the maintained-oracle or product-quality gates.
 
+## Complete-artifact reuse baseline
+
+The strong baseline independently verifies one complete source-bound MTBDD
+plant artifact per member. The shared path verifies one complete artifact with
+one MTBDD and all ordered source-bound member results. Three interleaved
+release-mode trials produce these medians:
+
+| Members | Shared/repeated bytes | Shared/repeated checking time |
+|---:|---:|---:|
+| 1 | 1.000 | 0.998 |
+| 2 | 0.523 | 0.499 |
+| 4 | 0.285 | 0.251 |
+| 8 | 0.166 | 0.126 |
+| 16 | 0.106 | 0.062 |
+
+All member answers and complete results agree. At 16 members, the shared
+artifact is 89.4% smaller and verification is 93.8% faster than independently
+checking repeated complete artifacts. Verification remains approximately 0.48
+seconds because the source equivalence check is performed once per shared
+artifact. Timings are observations, not portfolio inputs.
+
+Reproduce with:
+
+```sh
+cargo run --release --example public_washing_controller_mtbdd_reuse_benchmark
+```
+
+The canonical batch codec binds every plant digest, wiring vector, initial
+state, property, horizon, and complete result. The downstream API test rejects
+every truncation and one-bit mutation of its retained artifact and rejects
+reordered source digests.
+
 Reduced ordered decision diagrams, multi-terminal BDDs, AIGs, and equivalence
 checking are established. No novelty claim is made without a closest-system
 comparison showing a distinct reusable artifact or verification result.

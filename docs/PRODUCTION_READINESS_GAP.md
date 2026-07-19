@@ -128,6 +128,11 @@ have an external oracle, or carry release compatibility, so it does not close a
 readiness row. Two minimal appliance monitors now cover exact SAFE and UNSAFE
 composition and direct-controller agreement, but remain repository-authored
 mechanism tests.
+The public-controller complete-artifact reuse benchmark passes through 16
+members, where shared bytes are 10.6% and checking time is 6.2% of repeated
+artifacts. This closes the local strong-baseline mechanism gate only. Maintained
+external agreement, realistic physical environments, CLI integration,
+compatibility history, and independent acceptance remain open.
 
 ## Rules
 

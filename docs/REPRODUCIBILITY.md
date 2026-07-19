@@ -692,3 +692,17 @@ exact agreement for every member, and reports both median checking time and
 complete canonical artifact byte ratios. The baseline carries one independently
 verified controller-plant artifact per member. The shared path carries one
 controller transducer plus all source-bound member results.
+
+### Public controller MTBDD reuse benchmark
+
+Run the complete-artifact baseline for the pinned public washing controller:
+
+```sh
+cargo run --release --example public_washing_controller_mtbdd_reuse_benchmark
+```
+
+The benchmark uses three interleaved trials for 1, 2, 4, 8, and 16 appliance
+monitor members. It requires every complete shared result to equal the repeated
+independently verified result and reports encoded bytes plus median release-mode
+checking time. The committed reference is
+`results/public-washing-controller-mtbdd-reuse-v1.csv`.

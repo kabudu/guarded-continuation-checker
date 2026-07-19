@@ -29,3 +29,11 @@ The downstream API test exhaustively truncates the retained artifact at every
 byte and flips one bit at every byte position. Every altered artifact must fail.
 This is complete mutation coverage for that fixture, not a general cryptographic
 security proof.
+
+## MTBDD batch variant
+
+The experimental `GCCMPA01` variant replaces the embedded cube transducer with
+one canonical controller MTBDD. It retains the same ordered source-bound member
+records, result encoding, 64-member limit, 16 MiB byte limit, and whole-artifact
+integrity trailer. Its independent verifier checks MTBDD source equivalence
+once, then recomputes and compares every complete member result.

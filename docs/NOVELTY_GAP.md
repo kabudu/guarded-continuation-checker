@@ -246,3 +246,10 @@ multi-terminal BDDs and exhaustive equivalence checking are established, so the
 result is not itself novel. The candidate novelty boundary moves to reusable
 source-bound composition evidence that beats ordinary complete artifacts and
 the closest maintained compositional checker on realistic environments.
+The first complete-artifact reuse baseline now passes on the public controller
+and repository-authored appliance monitors. At 16 members, shared bytes are
+10.6% and checking time is 6.2% of repeated complete artifacts, with exact
+agreement. This is meaningful reusable-certificate evidence, but BDD sharing,
+model compilation, and amortized equivalence checking are established. A
+closest-system review and maintained external comparison remain mandatory
+before narrowing or asserting novelty.
