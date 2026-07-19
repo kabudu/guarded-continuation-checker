@@ -9,6 +9,15 @@ const CONTRACT: &[u8] =
     include_bytes!("../examples/btor2/components/braking-motion-contract-v1.txt");
 
 #[test]
+fn embedded_component_fixtures_are_canonical_lf_text() {
+    for source in [CONTROLLER, PLANT, CONTRACT] {
+        assert!(!source.contains(&b'\r'));
+        assert!(!source.contains(&0));
+        assert!(source.ends_with(b"\n"));
+    }
+}
+
+#[test]
 fn public_component_api_preserves_source_separation_and_both_answers() {
     let safe = btor2_component::produce(CONTROLLER, PLANT, CONTRACT, 255).unwrap();
     assert_eq!(
