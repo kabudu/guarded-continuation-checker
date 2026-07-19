@@ -56,7 +56,11 @@ Bitwuzla endpoint formulas. It proves only a claimed bad endpoint for a supplied
 phase trace. It does not prove safety, absence of earlier failures,
 unavoidability, or generic BTOR2 semantics. The counter-trace portfolio now
 preserves rejected supplied one-input traces through exact replay up to 100,000
-transitions, but does not provide fallback for universal or existential search.
+transitions. Separately, bounded search v1 provides exact existential bad
+reachability and its SAFE
+complement for the one-input, constraint-free subset through fixed state and
+work limits. Its explicit-layer certificate is a research reference, with no
+compatibility history, broad product corpus, or external acceptance evidence.
 It cannot change any production-readiness row until those gaps, stable release
 compatibility, full hostile-input coverage, and public product evidence close.
 

@@ -1,4 +1,4 @@
-use guarded_continuation_checker::{btor2, btor2_phase};
+use guarded_continuation_checker::{btor2, btor2_phase, btor2_search};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::env;
@@ -24824,10 +24824,11 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
+                btor2_search::SEARCH_CERTIFICATE_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
                 btor2::MAX_BTOR2_NODES,
@@ -24837,6 +24838,11 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_phase::MAX_HORIZON,
                 btor2_phase::MAX_REPLAY_HORIZON,
                 btor2_phase::MAX_REPLAY_NODE_STEPS,
+                btor2_search::MAX_SEARCH_HORIZON,
+                btor2_search::MAX_STATES_PER_LAYER,
+                btor2_search::MAX_TOTAL_STATES,
+                btor2_search::MAX_SEARCH_NODE_STEPS,
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
             );
             Ok(true)
         }
@@ -25042,6 +25048,75 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             println!(
                 "btor2-counter-trace status=VERIFIED backend={backend} horizon={} phases={} final_state={} bad_property={}",
                 summary.horizon, summary.phases, summary.final_state, summary.bad_property
+            );
+            Ok(true)
+        }
+        "search-btor2" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker search-btor2 INPUT.btor2 BAD_PROPERTY HORIZON OUTPUT.search-cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let bad_property = args[2]
+                .parse::<u64>()
+                .map_err(|_| "BAD_PROPERTY must be an unsigned node identifier".to_string())?;
+            let horizon = args[3]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let certificate = btor2_search::produce(&source, bad_property, horizon)
+                .map_err(|error| error.to_string())?;
+            let encoded = btor2_search::encode(&certificate).map_err(|error| error.to_string())?;
+            let output = Path::new(&args[4]);
+            write_new_certificate(output, encoded.as_bytes())?;
+            let result = match certificate.result {
+                btor2_search::SearchResult::Safe => "SAFE",
+                btor2_search::SearchResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = certificate
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_inputs={} output={}",
+                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                certificate.query_horizon,
+                certificate.layers.len(),
+                certificate.witness_inputs.len(),
+                output.display()
+            );
+            Ok(true)
+        }
+        "verify-btor2-search" => {
+            if args.len() != 3 {
+                return Err("usage: guarded-continuation-checker verify-btor2-search INPUT.btor2 CERTIFICATE.search-cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
+                "BTOR2 search certificate",
+            )?;
+            let certificate = btor2_search::decode(&encoded).map_err(|error| error.to_string())?;
+            let summary =
+                btor2_search::verify(&source, &certificate).map_err(|error| error.to_string())?;
+            let result = match summary.result {
+                btor2_search::SearchResult::Safe => "SAFE",
+                btor2_search::SearchResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = summary
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-search status=VERIFIED version={} result={result} horizon={} bad_frame={bad_frame} reachable_states={}",
+                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                summary.query_horizon,
+                summary.reachable_states
             );
             Ok(true)
         }
@@ -34962,7 +35037,34 @@ mod tests {
             ])
             .unwrap()
         );
-        fs::remove_file(certificate).unwrap();
+        fs::remove_file(&certificate).unwrap();
+
+        for (horizon, expected) in [(2, "SAFE"), (3, "UNSAFE")] {
+            assert!(
+                run_artifact_cli(&[
+                    "search-btor2".to_string(),
+                    fixture.display().to_string(),
+                    "13".to_string(),
+                    horizon.to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            assert!(
+                fs::read_to_string(&certificate)
+                    .unwrap()
+                    .contains(&format!("result={expected}\n"))
+            );
+            assert!(
+                run_artifact_cli(&[
+                    "verify-btor2-search".to_string(),
+                    fixture.display().to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            fs::remove_file(&certificate).unwrap();
+        }
     }
 
     #[test]

@@ -1,0 +1,8 @@
+(set-logic QF_BV)
+(declare-const k0 (_ BitVec 1))
+(declare-const k1 (_ BitVec 1))
+(define-const s0 (_ BitVec 8) #x00)
+(define-const s1 (_ BitVec 8) (ite (= k0 #b1) #x00 (bvadd s0 #x01)))
+(define-const s2 (_ BitVec 8) (ite (= k1 #b1) #x00 (bvadd s1 #x01)))
+(assert (or (bvuge s0 #x03) (bvuge s1 #x03) (bvuge s2 #x03)))
+(check-sat)

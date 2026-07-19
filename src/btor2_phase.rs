@@ -381,6 +381,7 @@ fn replay(
 fn replay_work_gate(model: &Btor2Model, horizon: u64) -> Result<(), CertificateError> {
     let work = horizon
         .checked_mul(model.nodes().len() as u64)
+        .and_then(|value| value.checked_mul(model.states().len().max(1) as u64))
         .ok_or_else(|| reject("replay node-step estimate overflowed"))?;
     if work > MAX_REPLAY_NODE_STEPS {
         return Err(reject(format!(

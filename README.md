@@ -110,6 +110,11 @@ narrow admission boundary and unresolved novelty comparison are explicit.
 The paired counter-trace command preserves rejected supplied traces through a
 bounded exact replay certificate instead of approximating unsupported shapes.
 
+The [BTOR2 bounded search certificate v1](docs/BTOR2_BOUNDED_SEARCH_V1.md)
+answers both bounded `SAFE` and `UNSAFE` reachability queries. It uses complete
+reachable layers as a deliberately conventional exact reference for future
+word-composition work, with explicit state-explosion limits.
+
 The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
 single exact evaluation command over partial AIGER input transcripts. Its
 timing-free structural gate selects the independently checked dense predicate

@@ -67,5 +67,13 @@ fi
 "$gcc_binary" certify-btor2-counter-trace "$saturating" 15 0:255 "$certificate"
 grep -q '^replay_certificate_version=1$' "$certificate"
 "$gcc_binary" verify-btor2-counter-trace "$saturating" "$certificate"
+rm -f "$certificate"
+"$gcc_binary" search-btor2 "$model" 13 2 "$certificate"
+grep -q '^result=SAFE$' "$certificate"
+"$gcc_binary" verify-btor2-search "$model" "$certificate"
+rm -f "$certificate"
+"$gcc_binary" search-btor2 "$model" 13 3 "$certificate"
+grep -q '^result=UNSAFE$' "$certificate"
+"$gcc_binary" verify-btor2-search "$model" "$certificate"
 
 echo 'btor2tools_baseline=PASS'
