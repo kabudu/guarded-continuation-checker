@@ -12,7 +12,8 @@ The package provides:
 
 - the `guarded-continuation-checker` command-line application;
 - the `guarded_continuation_checker` Rust library for bounded, resource-governed
-  production and independent checking of predicate certificates;
+  production and independent checking of predicate and event-contract
+  certificates;
 - ASCII and binary AIGER ingestion, multi-file SystemVerilog/Yosys workflows,
   named assumptions, replayable counterexamples and versioned evidence bundles;
 - a static specialised-backend gate with exact persistent-CDCL fallback; and
@@ -51,12 +52,13 @@ Confirm the versioned interfaces before integrating:
 ```sh
 guarded-continuation-checker firmware-cli-version
 guarded-continuation-checker predicate-cli-version
+guarded-continuation-checker event-contract-cli-version
 ```
 
 ## Rust API
 
 ```rust,no_run
-use guarded_continuation_checker::{ExecutionPolicy, PredicateTool};
+use guarded_continuation_checker::{EventContractTool, ExecutionPolicy, PredicateTool};
 
 # fn discover() -> Result<(), Box<dyn std::error::Error>> {
 let policy = ExecutionPolicy::default();
@@ -65,7 +67,12 @@ let tool = PredicateTool::discover_with_policy(
     policy,
 )?;
 let capabilities = tool.capabilities();
-assert_eq!(capabilities.predicate_cli_version, 1);
+assert_eq!(capabilities.cli_version, 1);
+let event_contracts = EventContractTool::discover_with_policy(
+    "guarded-continuation-checker",
+    policy,
+)?;
+assert_eq!(event_contracts.capabilities().cli_version, 1);
 # Ok(())
 # }
 ```
@@ -74,7 +81,9 @@ The typed client invokes the executable without a shell, validates its
 machine-readable capability contract, applies bounded execution policy and
 reports stable failure classes and invocation metrics. See the
 [Rust API contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/PREDICATE_RUST_API_V1.md)
-for certificate production and verification examples.
+for predicate certificate examples and the
+[event-contract API contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/EVENT_CONTRACT_CLI_V1.md)
+for certificate v3, exact portfolio fallback, and report replay.
 
 ## Self-service evaluation
 

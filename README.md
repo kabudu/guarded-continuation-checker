@@ -229,6 +229,21 @@ pinned CaDiCaL and DRAT-trim. All 68 individual obligations and four aggregates
 verified across both answer classes. This adds maintained proof-format and
 checker diversity; it does not make v3 a stable or production-admitted API.
 
+Release-candidate [event-contract CLI and Rust API v1](docs/EVENT_CONTRACT_CLI_V1.md)
+now exposes certificate v3 through typed discovery, production, independent
+checking, portfolio execution, and report replay. The timing-free structural
+gate uses v3 only inside its declared dimensions and exact persistent CDCL for
+every rejection or recognized bounded resource failure. An answer-balanced
+60-trial cohort preserves exact agreement, with v3 verification still 2.34x to
+12.73x slower than solving individual rows. Compatibility begins only after a
+tagged release passes the remaining admission gates.
+
+The portable [self-service acceptance harness](scripts/run-event-contract-self-service-acceptance.sh)
+replays three avoidable and three unavoidable product-shaped cases through the
+public portfolio and strict report verifier. Its
+[retained result](results/event-contract-self-service-acceptance-v1.md) is a
+simulation of an evaluator workflow, not independent partner acceptance.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

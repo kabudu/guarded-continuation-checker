@@ -50,9 +50,11 @@ close either register by itself.
    contract, independently checks whole-contract composition, and covers both
    answer classes, with a retained 2.26x to 7.23x verification overhead against
    exact CDCL. All 68 completeness obligations and four aggregates also pass a
-   maintained CaDiCaL plus DRAT-trim baseline. Stable API, timing-free portfolio
-   admission, watchdog/DMA/shared-peripheral semantics, and public design
-   evidence remain open.
+   maintained CaDiCaL plus DRAT-trim baseline. Release-candidate CLI/Rust API v1,
+   timing-free portfolio admission, exact fallback, and a 60-row answer-balanced
+   cohort are now implemented and pass the supported Rust 1.97 Linux path.
+   Tagged compatibility, watchdog/DMA/shared-peripheral semantics, and public
+   design evidence remain open.
 
 5. **Word-level BTOR2 interfaces.** Preserve bit-vector arithmetic, counters,
    timers, memory indices, and saturating control laws before bit blasting.
