@@ -16,15 +16,19 @@ verify both signed GitHub attestations before running any bundled executable:
 gh attestation verify guarded-continuation-checker-*.tar.gz \
   --repo kabudu/guarded-continuation-checker \
   --source-ref refs/heads/master \
+  --source-digest REVIEWED_COMMIT \
   --signer-workflow \
     kabudu/guarded-continuation-checker/.github/workflows/release-candidate-bundle.yml \
+  --signer-digest REVIEWED_COMMIT \
   --deny-self-hosted-runners
 
 gh attestation verify guarded-continuation-checker-*.tar.gz \
   --repo kabudu/guarded-continuation-checker \
   --source-ref refs/heads/master \
+  --source-digest REVIEWED_COMMIT \
   --signer-workflow \
     kabudu/guarded-continuation-checker/.github/workflows/release-candidate-bundle.yml \
+  --signer-digest REVIEWED_COMMIT \
   --deny-self-hosted-runners \
   --predicate-type https://spdx.dev/Document/v2.3
 ```
@@ -33,6 +37,9 @@ The unsigned local in-toto provenance file records deterministic build inputs;
 it does not replace the GitHub signature. Offline verification detects
 corruption and rejects invalid ELF structure, but cannot establish who built
 the archive.
+
+Replace `REVIEWED_COMMIT` with the full source and signer commit recorded in the
+candidate evidence. Do not verify only against the movable `master` ref.
 
 Run all evaluation commands on a dedicated, ephemeral Linux worker. Follow
 `OPERATIONS.md` and `ISOLATION_PROFILE_V1.md`, keep proprietary inputs outside

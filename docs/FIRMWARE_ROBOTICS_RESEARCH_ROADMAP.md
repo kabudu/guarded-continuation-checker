@@ -82,8 +82,10 @@ Release-path work now includes candidate
 [reproducible Linux evaluation bundle v1](LINUX_EVALUATION_BUNDLE_V1.md): static
 x86_64 musl, SPDX, deterministic provenance, offline replay, and a protected
 attestation workflow. It is production hardening rather than an algorithmic
-research result. Hosted reproducibility, a retained signed candidate, the macOS
-distribution decision, and independent evaluation remain open until evidenced.
+research result. The first [hosted signed candidate](../results/linux-evaluation-candidate-v1.md)
+passes exact source, workflow, runner, SLSA, and SPDX verification. The macOS
+distribution decision, tagged-release evidence, and independent evaluation
+remain open.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
