@@ -128,8 +128,10 @@ mv "$scratch/hostile-stage/$base/BUILD-INFO.tmp" \
     cd "$scratch/hostile-stage/$base"
     find . -type f ! -name SHA256SUMS -print0 |
         sort -z |
-        xargs -0 sha256sum >SHA256SUMS
+        xargs -0 sha256sum >"$scratch/hostile-SHA256SUMS"
 )
+mv "$scratch/hostile-SHA256SUMS" \
+    "$scratch/hostile-stage/$base/SHA256SUMS"
 tar -czf "$scratch/hostile-executable/$base.tar.gz" \
     -C "$scratch/hostile-stage" "$base"
 rewrite_outer_evidence "$scratch/hostile-executable"
