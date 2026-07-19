@@ -8689,6 +8689,10 @@ const EVENT_CONTRACT_MAX_BYTES: u64 = 1024 * 1024;
 const EVENT_CONTRACT_MAX_PHASES: usize = INTERFACE_QUOTIENT_MAX_HORIZON;
 const EVENT_CONTRACT_MAX_CLAUSES: usize = 64;
 const EVENT_CONTRACT_MAX_LITERALS: usize = 16;
+const EVENT_CONTRACT_CERTIFICATE_VERSION: usize = 3;
+const EVENT_CONTRACT_CERTIFICATE_MAX_BYTES: u64 = 32 * 1024 * 1024;
+const EVENT_CONTRACT_CERTIFICATE_SEMANTICS: &str = "bounded-named-cnf-terminal-bad-avoidance";
+const EVENT_CONTRACT_CERTIFICATE_COST_SCHEMA_VERSION: usize = 1;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct InputPredicate {
@@ -8717,6 +8721,37 @@ struct EventContract {
     horizon: usize,
     phases: Vec<EventContractPhase>,
     terminal: InputPredicate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EventContractCertificatePhaseV3 {
+    start: usize,
+    length: usize,
+    predicate: InputPredicate,
+    base_rows: Vec<u16>,
+    powered_rows: Vec<u16>,
+    edges: Vec<PredicateCertificateV2Edge>,
+    proofs: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EventContractCertificateV3 {
+    input_sha256: String,
+    contract_sha256: String,
+    declared_inputs: usize,
+    relevant_inputs: Vec<usize>,
+    latches: usize,
+    horizon: usize,
+    bad_output: usize,
+    initial_state: usize,
+    avoidable: bool,
+    phases: Vec<EventContractCertificatePhaseV3>,
+    terminal: InputPredicate,
+    terminal_safe_states: u16,
+    terminal_witnesses: Vec<(usize, u64)>,
+    terminal_proof: Vec<u8>,
+    states: Vec<usize>,
+    inputs: Vec<u64>,
 }
 
 fn predicate_quotient_admitted(
@@ -9654,7 +9689,37 @@ fn predicate_relation_completeness_clauses(
     constraints: &[Option<bool>],
     claimed_targets: u16,
 ) -> Result<Vec<Clause>, String> {
-    if constraints.len() != relevant_inputs.len()
+    if constraints.len() != relevant_inputs.len() {
+        return Err("predicate proof obligation dimensions mismatch".to_string());
+    }
+    let predicate = InputPredicate {
+        clauses: constraints
+            .iter()
+            .enumerate()
+            .filter_map(|(input, required)| required.map(|value| vec![(input, value)]))
+            .collect(),
+    };
+    predicate_relation_completeness_clauses_for_predicate(
+        model,
+        relevant_inputs,
+        source,
+        &predicate,
+        claimed_targets,
+    )
+}
+
+fn predicate_relation_completeness_clauses_for_predicate(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    source: usize,
+    predicate: &InputPredicate,
+    claimed_targets: u16,
+) -> Result<Vec<Clause>, String> {
+    if predicate
+        .clauses
+        .iter()
+        .flatten()
+        .any(|(input, _)| *input >= relevant_inputs.len())
         || model.latches.len() > u16::BITS as usize
         || source >= 1usize << model.latches.len()
     {
@@ -9663,7 +9728,7 @@ fn predicate_relation_completeness_clauses(
     let mut clauses = Vec::with_capacity(
         model.ands.len() * 3
             + model.latches.len()
-            + constraints.len()
+            + predicate.clauses.len()
             + claimed_targets.count_ones() as usize,
     );
     for (bit, latch) in model.latches.iter().enumerate() {
@@ -9675,17 +9740,17 @@ fn predicate_relation_completeness_clauses(
             ))],
         );
     }
-    for (projected, required) in constraints.iter().enumerate() {
-        if let Some(value) = required {
-            let input = relevant_inputs[projected];
-            push_simplified_clause(
-                &mut clauses,
-                &[AagCnfLiteral::Variable((
-                    model.inputs[input] / 2 - 1,
-                    *value,
-                ))],
-            );
-        }
+    for clause in &predicate.clauses {
+        let mapped = clause
+            .iter()
+            .map(|(projected, positive)| {
+                AagCnfLiteral::Variable((
+                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
+                    *positive,
+                ))
+            })
+            .collect::<Vec<_>>();
+        push_simplified_clause(&mut clauses, &mapped);
     }
     for gate in &model.ands {
         let output = aag_cnf_literal(model, 0, gate.output);
@@ -9724,26 +9789,59 @@ fn predicate_terminal_completeness_clauses(
     bad_output: usize,
     claimed_safe_states: u16,
 ) -> Result<Vec<Clause>, String> {
-    if constraints.len() != relevant_inputs.len()
+    if constraints.len() != relevant_inputs.len() {
+        return Err("predicate terminal proof obligation dimensions mismatch".to_string());
+    }
+    let predicate = InputPredicate {
+        clauses: constraints
+            .iter()
+            .enumerate()
+            .filter_map(|(input, required)| required.map(|value| vec![(input, value)]))
+            .collect(),
+    };
+    predicate_terminal_completeness_clauses_for_predicate(
+        model,
+        relevant_inputs,
+        &predicate,
+        bad_output,
+        claimed_safe_states,
+    )
+}
+
+fn predicate_terminal_completeness_clauses_for_predicate(
+    model: &AagModel,
+    relevant_inputs: &[usize],
+    predicate: &InputPredicate,
+    bad_output: usize,
+    claimed_safe_states: u16,
+) -> Result<Vec<Clause>, String> {
+    if predicate
+        .clauses
+        .iter()
+        .flatten()
+        .any(|(input, _)| *input >= relevant_inputs.len())
         || model.latches.len() > u16::BITS as usize
         || bad_output >= model.outputs.len()
     {
         return Err("predicate terminal proof obligation dimensions mismatch".to_string());
     }
     let mut clauses = Vec::with_capacity(
-        model.ands.len() * 3 + constraints.len() + claimed_safe_states.count_ones() as usize + 1,
+        model.ands.len() * 3
+            + predicate.clauses.len()
+            + claimed_safe_states.count_ones() as usize
+            + 1,
     );
-    for (projected, required) in constraints.iter().enumerate() {
-        if let Some(value) = required {
-            let input = relevant_inputs[projected];
-            push_simplified_clause(
-                &mut clauses,
-                &[AagCnfLiteral::Variable((
-                    model.inputs[input] / 2 - 1,
-                    *value,
-                ))],
-            );
-        }
+    for clause in &predicate.clauses {
+        let mapped = clause
+            .iter()
+            .map(|(projected, positive)| {
+                AagCnfLiteral::Variable((
+                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
+                    *positive,
+                ))
+            })
+            .collect::<Vec<_>>();
+        push_simplified_clause(&mut clauses, &mapped);
     }
     for gate in &model.ands {
         let output = aag_cnf_literal(model, 0, gate.output);
@@ -10426,6 +10524,133 @@ fn predicate_certificate_v2_body(certificate: &PredicateCertificateV2) -> String
     lines.join("\n") + "\n"
 }
 
+fn event_certificate_clause_text(clause: &[(usize, bool)]) -> String {
+    clause
+        .iter()
+        .map(|(input, positive)| {
+            if *positive {
+                input.to_string()
+            } else {
+                format!("!{input}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+fn push_event_certificate_predicate(
+    lines: &mut Vec<String>,
+    prefix: &str,
+    predicate: &InputPredicate,
+) {
+    lines.push(format!("{prefix}_clause_count={}", predicate.clauses.len()));
+    for (index, clause) in predicate.clauses.iter().enumerate() {
+        lines.push(format!(
+            "{prefix}_clause_{index}={}",
+            event_certificate_clause_text(clause)
+        ));
+    }
+}
+
+fn event_contract_certificate_v3_body(certificate: &EventContractCertificateV3) -> String {
+    let mut lines = vec![
+        format!("event_contract_certificate_version={EVENT_CONTRACT_CERTIFICATE_VERSION}"),
+        format!("semantics={EVENT_CONTRACT_CERTIFICATE_SEMANTICS}"),
+        format!("proof_format={PREDICATE_CERTIFICATE_V2_PROOF_FORMAT}"),
+        format!("input_sha256={}", certificate.input_sha256),
+        format!("contract_sha256={}", certificate.contract_sha256),
+        format!("declared_inputs={}", certificate.declared_inputs),
+        format!("relevant_inputs={}", certificate.relevant_inputs.len()),
+        format!("latches={}", certificate.latches),
+        format!("horizon={}", certificate.horizon),
+        format!("bad_output={}", certificate.bad_output),
+        format!("initial_state={}", certificate.initial_state),
+        format!(
+            "result={}",
+            if certificate.avoidable {
+                "avoidable"
+            } else {
+                "unavoidable"
+            }
+        ),
+        format!("phase_count={}", certificate.phases.len()),
+    ];
+    for (index, input) in certificate.relevant_inputs.iter().enumerate() {
+        lines.push(format!("relevant_{index}={input}"));
+    }
+    for (index, phase) in certificate.phases.iter().enumerate() {
+        lines.push(format!("phase_{index}={},{}", phase.start, phase.length));
+        push_event_certificate_predicate(&mut lines, &format!("phase_{index}"), &phase.predicate);
+        lines.push(format!(
+            "phase_{index}_base_rows={}",
+            predicate_rows_text(&phase.base_rows)
+        ));
+        lines.push(format!(
+            "phase_{index}_powered_rows={}",
+            predicate_rows_text(&phase.powered_rows)
+        ));
+        lines.push(format!("phase_{index}_edge_count={}", phase.edges.len()));
+        for (edge_index, edge) in phase.edges.iter().enumerate() {
+            lines.push(format!(
+                "phase_{index}_edge_{edge_index}={},{},{}",
+                edge.source, edge.target, edge.input
+            ));
+        }
+        lines.push(format!("phase_{index}_proof_count={}", phase.proofs.len()));
+        for (source, proof) in phase.proofs.iter().enumerate() {
+            lines.push(format!(
+                "phase_{index}_proof_{source}={}",
+                predicate_bytes_hex(proof)
+            ));
+        }
+    }
+    push_event_certificate_predicate(&mut lines, "terminal", &certificate.terminal);
+    lines.push(format!(
+        "terminal_safe_states={:x}",
+        certificate.terminal_safe_states
+    ));
+    lines.push(format!(
+        "terminal_witness_count={}",
+        certificate.terminal_witnesses.len()
+    ));
+    for (index, (state, input)) in certificate.terminal_witnesses.iter().enumerate() {
+        lines.push(format!("terminal_witness_{index}={state},{input}"));
+    }
+    lines.push(format!(
+        "terminal_proof={}",
+        predicate_bytes_hex(&certificate.terminal_proof)
+    ));
+    lines.push(format!("state_count={}", certificate.states.len()));
+    lines.push(format!(
+        "states={}",
+        if certificate.states.is_empty() {
+            "-".to_string()
+        } else {
+            certificate
+                .states
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        }
+    ));
+    lines.push(format!("input_count={}", certificate.inputs.len()));
+    lines.push(format!(
+        "inputs={}",
+        if certificate.inputs.is_empty() {
+            "-".to_string()
+        } else {
+            certificate
+                .inputs
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        }
+    ));
+    lines.join("\n") + "\n"
+}
+
 fn parse_predicate_number<T: std::str::FromStr>(text: &str, name: &str) -> Result<T, String> {
     if text.is_empty()
         || !text.bytes().all(|byte| byte.is_ascii_digit())
@@ -10721,8 +10946,8 @@ fn parse_predicate_certificate_v2(path: &Path) -> Result<PredicateCertificateV2,
         if parts.len() != 3 {
             return Err(format!("predicate certificate v2 phase {index} is invalid"));
         }
-        let start = parse_predicate_number(parts[0], "phase start")?;
-        let length = parse_predicate_number(parts[1], "phase length")?;
+        let start = parse_predicate_number::<usize>(parts[0], "phase start")?;
+        let length = parse_predicate_number::<usize>(parts[1], "phase length")?;
         let constraints = parse_predicate_constraints(parts[2], relevant_count)?;
         let base_rows =
             parse_predicate_rows(reader.take(&format!("phase_{index}_base_rows"))?, states)?;
@@ -10839,6 +11064,396 @@ fn parse_predicate_certificate_v2(path: &Path) -> Result<PredicateCertificateV2,
         terminal_witnesses,
         terminal_proof,
         states: state_values,
+        inputs,
+    })
+}
+
+struct EventContractCertificateV3Reader<'a> {
+    lines: Vec<&'a str>,
+    index: usize,
+}
+
+impl<'a> EventContractCertificateV3Reader<'a> {
+    fn take(&mut self, key: &str) -> Result<&'a str, String> {
+        let line = self.lines.get(self.index).ok_or_else(|| {
+            format!("event contract certificate v3 is missing ordered field `{key}`")
+        })?;
+        self.index += 1;
+        let (actual, value) = line
+            .split_once('=')
+            .ok_or_else(|| format!("invalid event contract certificate v3 line {}", self.index))?;
+        if actual != key || value.is_empty() || value.contains('=') {
+            return Err(format!(
+                "event contract certificate v3 expected `{key}` at line {}",
+                self.index
+            ));
+        }
+        Ok(value)
+    }
+
+    fn finish(self) -> Result<(), String> {
+        if self.index != self.lines.len() {
+            return Err(format!(
+                "event contract certificate v3 has unexpected field at line {}",
+                self.index + 1
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn parse_event_certificate_predicate(
+    reader: &mut EventContractCertificateV3Reader<'_>,
+    prefix: &str,
+    relevant_inputs: usize,
+) -> Result<InputPredicate, String> {
+    let clause_count = parse_predicate_number::<usize>(
+        reader.take(&format!("{prefix}_clause_count"))?,
+        "event clause count",
+    )?;
+    if clause_count > EVENT_CONTRACT_MAX_CLAUSES {
+        return Err("event contract certificate v3 clause count exceeds limit".to_string());
+    }
+    let mut clauses = Vec::with_capacity(clause_count);
+    for index in 0..clause_count {
+        let text = reader.take(&format!("{prefix}_clause_{index}"))?;
+        let parts = text.split('|').collect::<Vec<_>>();
+        if parts.is_empty()
+            || parts.len() > EVENT_CONTRACT_MAX_LITERALS
+            || parts.iter().any(|part| part.is_empty())
+        {
+            return Err("event contract certificate v3 clause is out of bounds".to_string());
+        }
+        let mut clause = Vec::with_capacity(parts.len());
+        for part in parts {
+            let (positive, number) = part
+                .strip_prefix('!')
+                .map_or((true, part), |number| (false, number));
+            let input = parse_predicate_number::<usize>(number, "event clause input")?;
+            if input >= relevant_inputs {
+                return Err(
+                    "event contract certificate v3 clause input is out of range".to_string()
+                );
+            }
+            if clause.iter().any(|(existing, _)| *existing == input) {
+                return Err("event contract certificate v3 clause repeats an input".to_string());
+            }
+            clause.push((input, positive));
+        }
+        clause.sort_unstable();
+        if event_certificate_clause_text(&clause) != text
+            || clauses.last().is_some_and(|previous| previous >= &clause)
+        {
+            return Err("event contract certificate v3 clauses are not canonical".to_string());
+        }
+        clauses.push(clause);
+    }
+    Ok(InputPredicate { clauses })
+}
+
+fn read_event_contract_certificate_v3(path: &Path) -> Result<String, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "inspect event contract certificate v3 {}: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.len() > EVENT_CONTRACT_CERTIFICATE_MAX_BYTES {
+        return Err(format!(
+            "event contract certificate v3 must be a regular file no larger than {EVENT_CONTRACT_CERTIFICATE_MAX_BYTES} bytes"
+        ));
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    options.custom_flags(libc::O_NOFOLLOW);
+    let file = options.open(path).map_err(|error| {
+        format!(
+            "open event contract certificate v3 {}: {error}",
+            path.display()
+        )
+    })?;
+    let opened = file.metadata().map_err(|error| {
+        format!(
+            "inspect open event contract certificate v3 {}: {error}",
+            path.display()
+        )
+    })?;
+    if !opened.is_file() || opened.len() > EVENT_CONTRACT_CERTIFICATE_MAX_BYTES {
+        return Err("event contract certificate v3 opened file exceeds limit".to_string());
+    }
+    let mut bytes = Vec::with_capacity(opened.len() as usize);
+    file.take(EVENT_CONTRACT_CERTIFICATE_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            format!(
+                "read event contract certificate v3 {}: {error}",
+                path.display()
+            )
+        })?;
+    if bytes.len() as u64 > EVENT_CONTRACT_CERTIFICATE_MAX_BYTES {
+        return Err("event contract certificate v3 read exceeds limit".to_string());
+    }
+    let body = String::from_utf8(bytes)
+        .map_err(|_| "event contract certificate v3 must contain valid UTF-8".to_string())?;
+    if !body.ends_with('\n') || body.contains('\r') {
+        return Err(
+            "event contract certificate v3 must use canonical newline-terminated LF text"
+                .to_string(),
+        );
+    }
+    Ok(body)
+}
+
+fn parse_event_contract_certificate_v3(path: &Path) -> Result<EventContractCertificateV3, String> {
+    let body = read_event_contract_certificate_v3(path)?;
+    let mut reader = EventContractCertificateV3Reader {
+        lines: body.lines().collect(),
+        index: 0,
+    };
+    if parse_predicate_number::<usize>(
+        reader.take("event_contract_certificate_version")?,
+        "event_contract_certificate_version",
+    )? != EVENT_CONTRACT_CERTIFICATE_VERSION
+        || reader.take("semantics")? != EVENT_CONTRACT_CERTIFICATE_SEMANTICS
+        || reader.take("proof_format")? != PREDICATE_CERTIFICATE_V2_PROOF_FORMAT
+    {
+        return Err("unsupported event contract certificate v3 contract".to_string());
+    }
+    let parse_digest = |text: &str, label: &str| -> Result<String, String> {
+        if text.len() != 64
+            || text
+                .bytes()
+                .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+        {
+            return Err(format!("event contract certificate v3 {label} is invalid"));
+        }
+        Ok(text.to_string())
+    };
+    let input_sha256 = parse_digest(reader.take("input_sha256")?, "input digest")?;
+    let contract_sha256 = parse_digest(reader.take("contract_sha256")?, "contract digest")?;
+    let declared_inputs =
+        parse_predicate_number(reader.take("declared_inputs")?, "declared inputs")?;
+    if !(1..=INTERFACE_QUOTIENT_MAX_DECLARED_INPUTS).contains(&declared_inputs) {
+        return Err("event contract certificate v3 declared inputs are out of bounds".to_string());
+    }
+    let relevant_count =
+        parse_predicate_number::<usize>(reader.take("relevant_inputs")?, "relevant inputs")?;
+    if !(PREDICATE_INTERFACE_MIN_INPUTS..=PREDICATE_INTERFACE_MAX_INPUTS).contains(&relevant_count)
+    {
+        return Err("event contract certificate v3 relevant inputs are out of bounds".to_string());
+    }
+    let latches = parse_predicate_number::<usize>(reader.take("latches")?, "latches")?;
+    if !(1..=PREDICATE_INTERFACE_MAX_LATCHES).contains(&latches) {
+        return Err("event contract certificate v3 latches are out of bounds".to_string());
+    }
+    let state_total = 1usize << latches;
+    let horizon = parse_predicate_number::<usize>(reader.take("horizon")?, "horizon")?;
+    if horizon == 0 || horizon > INTERFACE_QUOTIENT_MAX_HORIZON {
+        return Err("event contract certificate v3 horizon is out of bounds".to_string());
+    }
+    let bad_output = parse_predicate_number(reader.take("bad_output")?, "bad output")?;
+    let initial_state = parse_predicate_number(reader.take("initial_state")?, "initial state")?;
+    if initial_state >= state_total {
+        return Err("event contract certificate v3 initial state is out of bounds".to_string());
+    }
+    let avoidable = match reader.take("result")? {
+        "avoidable" => true,
+        "unavoidable" => false,
+        _ => return Err("event contract certificate v3 result is invalid".to_string()),
+    };
+    let phase_count = parse_predicate_number::<usize>(reader.take("phase_count")?, "phase count")?;
+    if phase_count == 0 || phase_count > horizon.min(EVENT_CONTRACT_MAX_PHASES) {
+        return Err("event contract certificate v3 phase count is out of bounds".to_string());
+    }
+    let mut relevant_inputs = Vec::with_capacity(relevant_count);
+    for index in 0..relevant_count {
+        let input =
+            parse_predicate_number(reader.take(&format!("relevant_{index}"))?, "relevant input")?;
+        if input >= declared_inputs
+            || relevant_inputs
+                .last()
+                .is_some_and(|previous| *previous >= input)
+        {
+            return Err(
+                "event contract certificate v3 relevant inputs are not canonical".to_string(),
+            );
+        }
+        relevant_inputs.push(input);
+    }
+    let mut total_proof_bytes = 0usize;
+    let mut phases = Vec::with_capacity(phase_count);
+    let mut expected_start = 0usize;
+    for index in 0..phase_count {
+        let phase_text = reader.take(&format!("phase_{index}"))?;
+        let parts = phase_text.split(',').collect::<Vec<_>>();
+        if parts.len() != 2 {
+            return Err("event contract certificate v3 phase is invalid".to_string());
+        }
+        let start: usize = parse_predicate_number(parts[0], "phase start")?;
+        let length: usize = parse_predicate_number(parts[1], "phase length")?;
+        let phase_end = start
+            .checked_add(length)
+            .ok_or_else(|| "event contract certificate v3 phase range overflow".to_string())?;
+        if start != expected_start || length == 0 || phase_end > horizon {
+            return Err(
+                "event contract certificate v3 phases are not a bounded partition".to_string(),
+            );
+        }
+        expected_start = phase_end;
+        let predicate = parse_event_certificate_predicate(
+            &mut reader,
+            &format!("phase_{index}"),
+            relevant_count,
+        )?;
+        let base_rows = parse_predicate_rows(
+            reader.take(&format!("phase_{index}_base_rows"))?,
+            state_total,
+        )?;
+        let powered_rows = parse_predicate_rows(
+            reader.take(&format!("phase_{index}_powered_rows"))?,
+            state_total,
+        )?;
+        let edge_count = parse_predicate_number::<usize>(
+            reader.take(&format!("phase_{index}_edge_count"))?,
+            "edge count",
+        )?;
+        if edge_count > state_total * state_total {
+            return Err("event contract certificate v3 edge count exceeds limit".to_string());
+        }
+        let mut edges = Vec::with_capacity(edge_count);
+        for edge_index in 0..edge_count {
+            let edge = reader.take(&format!("phase_{index}_edge_{edge_index}"))?;
+            let parts = edge.split(',').collect::<Vec<_>>();
+            if parts.len() != 3 {
+                return Err("event contract certificate v3 edge is invalid".to_string());
+            }
+            let source = parse_predicate_number(parts[0], "edge source")?;
+            let target = parse_predicate_number(parts[1], "edge target")?;
+            let input = parse_predicate_number(parts[2], "edge input")?;
+            if source >= state_total
+                || target >= state_total
+                || (declared_inputs < u64::BITS as usize && input >> declared_inputs != 0)
+            {
+                return Err("event contract certificate v3 edge value is out of bounds".to_string());
+            }
+            edges.push(PredicateCertificateV2Edge {
+                source,
+                target,
+                input,
+            });
+        }
+        let proof_count = parse_predicate_number::<usize>(
+            reader.take(&format!("phase_{index}_proof_count"))?,
+            "proof count",
+        )?;
+        if proof_count != state_total {
+            return Err("event contract certificate v3 proof count mismatch".to_string());
+        }
+        let mut proofs = Vec::with_capacity(proof_count);
+        for source in 0..proof_count {
+            let proof = parse_predicate_bytes_hex(
+                reader.take(&format!("phase_{index}_proof_{source}"))?,
+                "event phase proof",
+            )?;
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof.len())
+                .ok_or_else(|| "event contract certificate v3 proof size overflow".to_string())?;
+            if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+                return Err(
+                    "event contract certificate v3 proofs exceed aggregate limit".to_string(),
+                );
+            }
+            proofs.push(proof);
+        }
+        phases.push(EventContractCertificatePhaseV3 {
+            start,
+            length,
+            predicate,
+            base_rows,
+            powered_rows,
+            edges,
+            proofs,
+        });
+    }
+    if expected_start != horizon {
+        return Err("event contract certificate v3 phases do not cover horizon".to_string());
+    }
+    let terminal = parse_event_certificate_predicate(&mut reader, "terminal", relevant_count)?;
+    let terminal_safe_states = parse_predicate_hex(
+        reader.take("terminal_safe_states")?,
+        state_total,
+        "terminal safe states",
+    )?;
+    let terminal_witness_count = parse_predicate_number::<usize>(
+        reader.take("terminal_witness_count")?,
+        "terminal witness count",
+    )?;
+    if terminal_witness_count > state_total {
+        return Err("event contract certificate v3 terminal witnesses exceed limit".to_string());
+    }
+    let mut terminal_witnesses = Vec::with_capacity(terminal_witness_count);
+    for index in 0..terminal_witness_count {
+        let witness = reader.take(&format!("terminal_witness_{index}"))?;
+        let parts = witness.split(',').collect::<Vec<_>>();
+        if parts.len() != 2 {
+            return Err("event contract certificate v3 terminal witness is invalid".to_string());
+        }
+        let state = parse_predicate_number(parts[0], "terminal witness state")?;
+        let input = parse_predicate_number(parts[1], "terminal witness input")?;
+        if state >= state_total
+            || (declared_inputs < u64::BITS as usize && input >> declared_inputs != 0)
+        {
+            return Err(
+                "event contract certificate v3 terminal witness is out of bounds".to_string(),
+            );
+        }
+        terminal_witnesses.push((state, input));
+    }
+    let terminal_proof =
+        parse_predicate_bytes_hex(reader.take("terminal_proof")?, "event terminal proof")?;
+    total_proof_bytes = total_proof_bytes
+        .checked_add(terminal_proof.len())
+        .ok_or_else(|| "event contract certificate v3 proof size overflow".to_string())?;
+    if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+        return Err("event contract certificate v3 proofs exceed aggregate limit".to_string());
+    }
+    let state_count = parse_predicate_number::<usize>(reader.take("state_count")?, "state count")?;
+    if state_count > horizon + 1 {
+        return Err("event contract certificate v3 state count exceeds limit".to_string());
+    }
+    let states = parse_predicate_number_list(reader.take("states")?, state_count, "states")?;
+    let input_count = parse_predicate_number::<usize>(reader.take("input_count")?, "input count")?;
+    if input_count > horizon + 1 {
+        return Err("event contract certificate v3 input count exceeds limit".to_string());
+    }
+    let inputs = parse_predicate_number_list(reader.take("inputs")?, input_count, "inputs")?;
+    if states.iter().any(|state| *state >= state_total)
+        || inputs
+            .iter()
+            .any(|input| declared_inputs < u64::BITS as usize && *input >> declared_inputs != 0)
+        || (avoidable && (state_count != horizon + 1 || input_count != horizon + 1))
+        || (!avoidable && (state_count != 0 || input_count != 0))
+    {
+        return Err("event contract certificate v3 trace values are out of bounds".to_string());
+    }
+    reader.finish()?;
+    Ok(EventContractCertificateV3 {
+        input_sha256,
+        contract_sha256,
+        declared_inputs,
+        relevant_inputs,
+        latches,
+        horizon,
+        bad_output,
+        initial_state,
+        avoidable,
+        phases,
+        terminal,
+        terminal_safe_states,
+        terminal_witnesses,
+        terminal_proof,
+        states,
         inputs,
     })
 }
@@ -11249,6 +11864,685 @@ fn benchmark_aiger_event_contract(
     publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
     println!(
         "event-contract-benchmark status=VALID trials={repeats} output={}",
+        output.display()
+    );
+    Ok(())
+}
+
+#[derive(Debug)]
+struct EventContractProofMetrics {
+    producer_ns: u128,
+    proof_generation_ns: u128,
+    proof_verification_ns: u128,
+    obligations: usize,
+    witnesses: usize,
+    proof_bytes: usize,
+}
+
+fn declared_input_satisfies_predicate(
+    declared_input_count: usize,
+    relevant_inputs: &[usize],
+    predicate: &InputPredicate,
+    declared: u64,
+) -> bool {
+    if declared_input_count < u64::BITS as usize && declared >> declared_input_count != 0 {
+        return false;
+    }
+    let projected = relevant_inputs
+        .iter()
+        .enumerate()
+        .fold(0usize, |input, (bit, declared_index)| {
+            input | (((declared >> declared_index) & 1) as usize) << bit
+        });
+    predicate.allows(projected)
+}
+
+fn event_contract_proof_experiment(
+    model: &AagModel,
+    bad_output: usize,
+    contract: &EventContract,
+) -> Result<EventContractProofMetrics, String> {
+    if bad_output >= model.outputs.len() {
+        return Err("event contract proof output is out of range".to_string());
+    }
+    let producer_start = Instant::now();
+    let mut quotient = PredicateQuotient::new(model)?;
+    let relevant_inputs = quotient.interface.projected_inputs.clone();
+    let states_count = 1usize << model.latches.len();
+    let mut phase_rows = Vec::with_capacity(contract.phases.len());
+    let mut edge_witnesses = Vec::new();
+    for (phase_index, phase) in contract.phases.iter().enumerate() {
+        let relation = quotient.interface.relation_predicate(&phase.predicate)?;
+        let rows = relation
+            .rows
+            .iter()
+            .map(|row| row[0] as u16)
+            .collect::<Vec<_>>();
+        for (source, &targets) in rows.iter().enumerate() {
+            for target in 0..states_count {
+                if targets & (1u16 << target) != 0 {
+                    let input = quotient
+                        .interface
+                        .witness_input_predicate(source, Some(target), None, &phase.predicate)?
+                        .ok_or_else(|| {
+                            "event contract proof relation edge lacks witness".to_string()
+                        })?;
+                    edge_witnesses.push((source, target, input, phase_index));
+                }
+            }
+        }
+        phase_rows.push((phase.predicate.clone(), rows));
+    }
+    let mut terminal_safe_states = 0u16;
+    let mut terminal_witnesses = Vec::new();
+    for state in 0..states_count {
+        if let Some(input) = quotient.interface.witness_input_predicate(
+            state,
+            None,
+            Some(bad_output),
+            &contract.terminal,
+        )? {
+            terminal_safe_states |= 1u16 << state;
+            terminal_witnesses.push((state, input));
+        }
+    }
+    let producer_ns = producer_start.elapsed().as_nanos();
+
+    let generation_start = Instant::now();
+    let mut obligations = Vec::with_capacity(phase_rows.len() * states_count + 1);
+    let mut total_proof_bytes = 0usize;
+    for (predicate, rows) in &phase_rows {
+        for (source, &targets) in rows.iter().enumerate() {
+            let clauses = predicate_relation_completeness_clauses_for_predicate(
+                model,
+                &relevant_inputs,
+                source,
+                predicate,
+                targets,
+            )?;
+            let proof = generate_varisat_unsat_proof(&clauses)?;
+            if proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+                return Err("event contract proof exceeds the individual limit".to_string());
+            }
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof.len())
+                .ok_or_else(|| "event contract aggregate proof size overflow".to_string())?;
+            if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+                return Err("event contract proofs exceed the aggregate limit".to_string());
+            }
+            obligations.push((clauses, proof));
+        }
+    }
+    let terminal_clauses = predicate_terminal_completeness_clauses_for_predicate(
+        model,
+        &relevant_inputs,
+        &contract.terminal,
+        bad_output,
+        terminal_safe_states,
+    )?;
+    let terminal_proof = generate_varisat_unsat_proof(&terminal_clauses)?;
+    if terminal_proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+        return Err("event contract terminal proof exceeds the individual limit".to_string());
+    }
+    total_proof_bytes = total_proof_bytes
+        .checked_add(terminal_proof.len())
+        .ok_or_else(|| "event contract aggregate proof size overflow".to_string())?;
+    if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+        return Err("event contract proofs exceed the aggregate limit".to_string());
+    }
+    obligations.push((terminal_clauses, terminal_proof));
+    let proof_generation_ns = generation_start.elapsed().as_nanos();
+
+    let verification_start = Instant::now();
+    let mut checker = IndependentPredicateChecker::new(model)?;
+    for (source, target, input, phase_index) in &edge_witnesses {
+        let predicate = &contract.phases[*phase_index].predicate;
+        if !declared_input_satisfies_predicate(
+            model.inputs.len(),
+            &relevant_inputs,
+            predicate,
+            *input,
+        ) || checker.evaluate(*source, *input)?.0 != *target
+        {
+            return Err("event contract proof relation witness is invalid".to_string());
+        }
+    }
+    for &(state, input) in &terminal_witnesses {
+        if !declared_input_satisfies_predicate(
+            model.inputs.len(),
+            &relevant_inputs,
+            &contract.terminal,
+            input,
+        ) || checker.evaluate(state, input)?.1 & (1u128 << bad_output) != 0
+        {
+            return Err("event contract proof terminal witness is invalid".to_string());
+        }
+    }
+    for (clauses, proof) in &obligations {
+        verify_varisat_unsat_proof(clauses, proof)?;
+    }
+    let proof_verification_ns = verification_start.elapsed().as_nanos();
+    Ok(EventContractProofMetrics {
+        producer_ns,
+        proof_generation_ns,
+        proof_verification_ns,
+        obligations: obligations.len(),
+        witnesses: edge_witnesses.len() + terminal_witnesses.len(),
+        proof_bytes: total_proof_bytes,
+    })
+}
+
+fn benchmark_aiger_event_contract_proofs(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=100).contains(&repeats) {
+        return Err("event contract proof benchmark repeats must be in 1..=100".to_string());
+    }
+    if output.exists() {
+        return Err("event contract proof benchmark refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let input_sha256 = sha256_file(input)?;
+    let contract_sha256 = sha256_file(contract_path)?;
+    let mut lines = vec!["schema_version,input_sha256,contract_sha256,bad_output,horizon,relevant_inputs,latches,phases,trial,producer_ns,proof_generation_ns,proof_verification_ns,obligations,witnesses,proof_bytes,status".to_string()];
+    for trial in 0..repeats {
+        let metrics = event_contract_proof_experiment(&model, bad_output, &contract)?;
+        lines.push(format!(
+            "1,{input_sha256},{contract_sha256},{bad_output},{},{},{},{},{trial},{},{},{},{},{},{},ok",
+            contract.horizon,
+            relevant_inputs.len(),
+            model.latches.len(),
+            contract.phases.len(),
+            metrics.producer_ns,
+            metrics.proof_generation_ns,
+            metrics.proof_verification_ns,
+            metrics.obligations,
+            metrics.witnesses,
+            metrics.proof_bytes,
+        ));
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "event-contract-proof-benchmark status=VALID trials={repeats} output={}",
+        output.display()
+    );
+    Ok(())
+}
+
+fn certify_aiger_event_contract_v3(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    if fs::symlink_metadata(certificate_path).is_ok() {
+        return Err("event contract certificate v3 refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    if model.latches.iter().any(|latch| latch.initial.is_none()) {
+        return Err("event contract certificate v3 requires declared initial latches".to_string());
+    }
+    if bad_output >= model.outputs.len() {
+        return Err("event contract certificate v3 bad output is out of range".to_string());
+    }
+    let mut quotient = PredicateQuotient::new(&model)?;
+    let relevant_inputs = quotient.interface.projected_inputs.clone();
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let initial_state = model
+        .latches
+        .iter()
+        .enumerate()
+        .fold(0usize, |state, (bit, latch)| {
+            state | (usize::from(latch.initial == Some(true)) << bit)
+        });
+    let witness = quotient.query_event_contract(initial_state, bad_output, &contract)?;
+    let states_count = 1usize << model.latches.len();
+    let mut total_proof_bytes = 0usize;
+    let mut phases = Vec::with_capacity(contract.phases.len());
+    for phase in &contract.phases {
+        let base = quotient.interface.relation_predicate(&phase.predicate)?;
+        let base_rows = base
+            .rows
+            .iter()
+            .map(|row| row[0] as u16)
+            .collect::<Vec<_>>();
+        let powered = InterfaceRelation::power(&base, phase.length)?;
+        let powered_rows = powered
+            .rows
+            .iter()
+            .map(|row| row[0] as u16)
+            .collect::<Vec<_>>();
+        let mut edges = Vec::new();
+        let mut proofs = Vec::with_capacity(states_count);
+        for (source, &targets) in base_rows.iter().enumerate() {
+            for target in 0..states_count {
+                if targets & (1u16 << target) != 0 {
+                    let edge_input = quotient
+                        .interface
+                        .witness_input_predicate(source, Some(target), None, &phase.predicate)?
+                        .ok_or_else(|| {
+                            "event contract certificate v3 relation edge lacks witness".to_string()
+                        })?;
+                    edges.push(PredicateCertificateV2Edge {
+                        source,
+                        target,
+                        input: edge_input,
+                    });
+                }
+            }
+            let clauses = predicate_relation_completeness_clauses_for_predicate(
+                &model,
+                &relevant_inputs,
+                source,
+                &phase.predicate,
+                targets,
+            )?;
+            let proof = generate_varisat_unsat_proof(&clauses)?;
+            if proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+                return Err("event contract certificate v3 phase proof exceeds limit".to_string());
+            }
+            total_proof_bytes = total_proof_bytes
+                .checked_add(proof.len())
+                .ok_or_else(|| "event contract certificate v3 proof size overflow".to_string())?;
+            if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+                return Err(
+                    "event contract certificate v3 proofs exceed aggregate limit".to_string(),
+                );
+            }
+            proofs.push(proof);
+        }
+        phases.push(EventContractCertificatePhaseV3 {
+            start: phase.start,
+            length: phase.length,
+            predicate: phase.predicate.clone(),
+            base_rows,
+            powered_rows,
+            edges,
+            proofs,
+        });
+    }
+    let mut terminal_safe_states = 0u16;
+    let mut terminal_witnesses = Vec::new();
+    for state in 0..states_count {
+        if let Some(terminal_input) = quotient.interface.witness_input_predicate(
+            state,
+            None,
+            Some(bad_output),
+            &contract.terminal,
+        )? {
+            terminal_safe_states |= 1u16 << state;
+            terminal_witnesses.push((state, terminal_input));
+        }
+    }
+    let terminal_clauses = predicate_terminal_completeness_clauses_for_predicate(
+        &model,
+        &relevant_inputs,
+        &contract.terminal,
+        bad_output,
+        terminal_safe_states,
+    )?;
+    let terminal_proof = generate_varisat_unsat_proof(&terminal_clauses)?;
+    if terminal_proof.len() > PREDICATE_CERTIFICATE_V2_MAX_PROOF_BYTES {
+        return Err("event contract certificate v3 terminal proof exceeds limit".to_string());
+    }
+    total_proof_bytes = total_proof_bytes
+        .checked_add(terminal_proof.len())
+        .ok_or_else(|| "event contract certificate v3 proof size overflow".to_string())?;
+    if total_proof_bytes > PREDICATE_CERTIFICATE_V2_MAX_TOTAL_PROOF_BYTES {
+        return Err("event contract certificate v3 proofs exceed aggregate limit".to_string());
+    }
+    let (states, inputs) = witness
+        .map(|witness| (witness.states, witness.declared_inputs))
+        .unwrap_or_default();
+    let certificate = EventContractCertificateV3 {
+        input_sha256: sha256_file(input)?,
+        contract_sha256: sha256_file(contract_path)?,
+        declared_inputs: model.inputs.len(),
+        relevant_inputs,
+        latches: model.latches.len(),
+        horizon: contract.horizon,
+        bad_output,
+        initial_state,
+        avoidable: !states.is_empty(),
+        phases,
+        terminal: contract.terminal,
+        terminal_safe_states,
+        terminal_witnesses,
+        terminal_proof,
+        states,
+        inputs,
+    };
+    let body = event_contract_certificate_v3_body(&certificate);
+    if body.len() as u64 > EVENT_CONTRACT_CERTIFICATE_MAX_BYTES {
+        return Err("event contract certificate v3 serialized artifact exceeds limit".to_string());
+    }
+    publish_causal_comparison(certificate_path, body.as_bytes())?;
+    println!(
+        "event-contract-certificate-v3 status=CREATED result={} proofs={} proof_bytes={} output={}",
+        if certificate.avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        certificate
+            .phases
+            .iter()
+            .map(|phase| phase.proofs.len())
+            .sum::<usize>()
+            + 1,
+        total_proof_bytes,
+        certificate_path.display()
+    );
+    Ok(())
+}
+
+fn verify_aiger_event_contract_certificate_v3(
+    input: &Path,
+    contract_path: &Path,
+    certificate_path: &Path,
+) -> Result<(), String> {
+    let model = parse_aag(input)?;
+    let certificate = parse_event_contract_certificate_v3(certificate_path)?;
+    if sha256_file(input)? != certificate.input_sha256
+        || sha256_file(contract_path)? != certificate.contract_sha256
+    {
+        return Err("event contract certificate v3 source binding mismatch".to_string());
+    }
+    let mut checker = IndependentPredicateChecker::new(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &checker.relevant_inputs)?;
+    if certificate.declared_inputs != model.inputs.len()
+        || certificate.relevant_inputs != checker.relevant_inputs
+        || certificate.latches != model.latches.len()
+        || certificate.horizon != contract.horizon
+        || certificate.bad_output >= model.outputs.len()
+        || certificate.phases.len() != contract.phases.len()
+        || certificate.terminal != contract.terminal
+    {
+        return Err("event contract certificate v3 source dimensions mismatch".to_string());
+    }
+    let expected_initial =
+        model
+            .latches
+            .iter()
+            .enumerate()
+            .try_fold(0usize, |state, (bit, latch)| {
+                latch
+                    .initial
+                    .map(|value| state | (usize::from(value) << bit))
+                    .ok_or_else(|| {
+                        "event contract certificate v3 source has undeclared initial latch"
+                            .to_string()
+                    })
+            })?;
+    if certificate.initial_state != expected_initial {
+        return Err("event contract certificate v3 initial state mismatch".to_string());
+    }
+    let mut composed = (0..checker.states)
+        .map(|state| 1u16 << state)
+        .collect::<Vec<_>>();
+    let mut frame_predicates = Vec::with_capacity(certificate.horizon + 1);
+    let mut expected_start = 0usize;
+    let mut checked_proofs = 0usize;
+    for (phase_index, (phase, source_phase)) in
+        certificate.phases.iter().zip(&contract.phases).enumerate()
+    {
+        if phase.start != expected_start
+            || phase.start != source_phase.start
+            || phase.length == 0
+            || phase.length != source_phase.length
+            || phase.predicate != source_phase.predicate
+        {
+            return Err("event contract certificate v3 phase binding mismatch".to_string());
+        }
+        expected_start = expected_start
+            .checked_add(phase.length)
+            .ok_or_else(|| "event contract certificate v3 phase length overflow".to_string())?;
+        if expected_start > certificate.horizon
+            || phase.base_rows.len() != checker.states
+            || phase.powered_rows.len() != checker.states
+            || phase.proofs.len() != checker.states
+        {
+            return Err("event contract certificate v3 phase dimensions mismatch".to_string());
+        }
+        let mut expected_edges = Vec::new();
+        for (source, &targets) in phase.base_rows.iter().enumerate() {
+            for target in 0..checker.states {
+                if targets & (1u16 << target) != 0 {
+                    expected_edges.push((source, target));
+                }
+            }
+            let clauses = predicate_relation_completeness_clauses_for_predicate(
+                &model,
+                &checker.relevant_inputs,
+                source,
+                &phase.predicate,
+                targets,
+            )?;
+            verify_varisat_unsat_proof(&clauses, &phase.proofs[source]).map_err(|error| {
+                format!(
+                    "event contract certificate v3 phase {phase_index} source {source}: {error}"
+                )
+            })?;
+            checked_proofs += 1;
+        }
+        if phase.edges.len() != expected_edges.len() {
+            return Err("event contract certificate v3 edge count mismatch".to_string());
+        }
+        for (edge, &(source, target)) in phase.edges.iter().zip(&expected_edges) {
+            if (edge.source, edge.target) != (source, target)
+                || !declared_input_satisfies_predicate(
+                    model.inputs.len(),
+                    &checker.relevant_inputs,
+                    &phase.predicate,
+                    edge.input,
+                )
+                || checker.evaluate(source, edge.input)?.0 != target
+            {
+                return Err("event contract certificate v3 edge witness is invalid".to_string());
+            }
+        }
+        let expected_power = IndependentPredicateChecker::power(&phase.base_rows, phase.length)?;
+        if expected_power != phase.powered_rows {
+            return Err("event contract certificate v3 powered relation mismatch".to_string());
+        }
+        composed = IndependentPredicateChecker::compose(&composed, &phase.powered_rows)?;
+        frame_predicates.extend(std::iter::repeat_n(phase.predicate.clone(), phase.length));
+    }
+    if expected_start != certificate.horizon {
+        return Err("event contract certificate v3 phases do not cover horizon".to_string());
+    }
+    frame_predicates.push(certificate.terminal.clone());
+    let expected_terminal_states = (0..checker.states)
+        .filter(|state| certificate.terminal_safe_states & (1u16 << state) != 0)
+        .collect::<Vec<_>>();
+    if certificate.terminal_witnesses.len() != expected_terminal_states.len() {
+        return Err("event contract certificate v3 terminal witness count mismatch".to_string());
+    }
+    for (&expected_state, &(state, terminal_input)) in expected_terminal_states
+        .iter()
+        .zip(&certificate.terminal_witnesses)
+    {
+        if state != expected_state
+            || !declared_input_satisfies_predicate(
+                model.inputs.len(),
+                &checker.relevant_inputs,
+                &certificate.terminal,
+                terminal_input,
+            )
+            || checker.evaluate(state, terminal_input)?.1 & (1u128 << certificate.bad_output) != 0
+        {
+            return Err("event contract certificate v3 terminal witness is invalid".to_string());
+        }
+    }
+    let terminal_clauses = predicate_terminal_completeness_clauses_for_predicate(
+        &model,
+        &checker.relevant_inputs,
+        &certificate.terminal,
+        certificate.bad_output,
+        certificate.terminal_safe_states,
+    )?;
+    verify_varisat_unsat_proof(&terminal_clauses, &certificate.terminal_proof)
+        .map_err(|error| format!("event contract certificate v3 terminal: {error}"))?;
+    checked_proofs += 1;
+    if certificate.avoidable {
+        if certificate.states.len() != certificate.horizon + 1
+            || certificate.inputs.len() != certificate.horizon + 1
+            || certificate.states[0] != certificate.initial_state
+        {
+            return Err("event contract certificate v3 trace dimensions mismatch".to_string());
+        }
+        for (frame, predicate) in frame_predicates.iter().enumerate() {
+            let state = certificate.states[frame];
+            let trace_input = certificate.inputs[frame];
+            if state >= checker.states
+                || !declared_input_satisfies_predicate(
+                    model.inputs.len(),
+                    &checker.relevant_inputs,
+                    predicate,
+                    trace_input,
+                )
+            {
+                return Err(format!(
+                    "event contract certificate v3 trace is invalid at frame {frame}"
+                ));
+            }
+            let (next, bad) = checker.evaluate(state, trace_input)?;
+            if frame < certificate.horizon {
+                if next != certificate.states[frame + 1] {
+                    return Err(format!(
+                        "event contract certificate v3 transition mismatch at frame {frame}"
+                    ));
+                }
+            } else if bad & (1u128 << certificate.bad_output) != 0 {
+                return Err("event contract certificate v3 terminal trace is bad".to_string());
+            }
+        }
+        let terminal_state = *certificate.states.last().unwrap();
+        if composed[certificate.initial_state] & (1u16 << terminal_state) == 0
+            || certificate.terminal_safe_states & (1u16 << terminal_state) == 0
+        {
+            return Err("event contract certificate v3 trace is absent from evidence".to_string());
+        }
+    } else {
+        if !certificate.states.is_empty() || !certificate.inputs.is_empty() {
+            return Err(
+                "event contract certificate v3 unavoidable result contains trace".to_string(),
+            );
+        }
+        if composed[certificate.initial_state] & certificate.terminal_safe_states != 0 {
+            return Err(
+                "event contract certificate v3 unavoidable claim has safe terminal".to_string(),
+            );
+        }
+    }
+    println!(
+        "event-contract-certificate-v3 status=VERIFIED result={} proofs={} direct_evaluations={}",
+        if certificate.avoidable {
+            "avoidable"
+        } else {
+            "unavoidable"
+        },
+        checked_proofs,
+        checker.evaluations
+    );
+    Ok(())
+}
+
+fn benchmark_aiger_event_contract_certificate_v3_cost(
+    input: &Path,
+    bad_output: usize,
+    contract_path: &Path,
+    repeats: usize,
+    output: &Path,
+) -> Result<(), String> {
+    if !(1..=100).contains(&repeats) {
+        return Err("event contract certificate v3 cost repeats must be in 1..=100".to_string());
+    }
+    if output.exists() {
+        return Err("event contract certificate v3 cost refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    let relevant_inputs = IndependentPredicateChecker::support(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &relevant_inputs)?;
+    let input_sha256 = sha256_file(input)?;
+    let contract_sha256 = sha256_file(contract_path)?;
+    let mut lines = vec!["schema_version,input_sha256,contract_sha256,bad_output,horizon,relevant_inputs,latches,phases,trial,result,certificate_generate_ns,certificate_verify_ns,cdcl_query_ns,certificate_bytes,raw_proof_bytes,proof_count,direct_evaluations,answers_agree,status".to_string()];
+    for trial in 0..repeats {
+        let certificate_path = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-v3-cost-{}-{trial}.cert3",
+            std::process::id()
+        ));
+        if fs::symlink_metadata(&certificate_path).is_ok() {
+            return Err(format!(
+                "event contract certificate v3 cost temporary path already exists: {}",
+                certificate_path.display()
+            ));
+        }
+        let run = (|| {
+            let generation_start = Instant::now();
+            certify_aiger_event_contract_v3(input, bad_output, contract_path, &certificate_path)?;
+            let certificate_generate_ns = generation_start.elapsed().as_nanos();
+            let certificate_bytes = fs::symlink_metadata(&certificate_path)
+                .map_err(|error| format!("inspect benchmark v3 certificate: {error}"))?
+                .len();
+            let certificate = parse_event_contract_certificate_v3(&certificate_path)?;
+            let raw_proof_bytes = certificate
+                .phases
+                .iter()
+                .flat_map(|phase| &phase.proofs)
+                .map(Vec::len)
+                .sum::<usize>()
+                + certificate.terminal_proof.len();
+            let proof_count = certificate
+                .phases
+                .iter()
+                .map(|phase| phase.proofs.len())
+                .sum::<usize>()
+                + 1;
+            let direct_evaluations = certificate
+                .phases
+                .iter()
+                .map(|phase| phase.edges.len())
+                .sum::<usize>()
+                + certificate.terminal_witnesses.len()
+                + certificate.states.len();
+
+            let verification_start = Instant::now();
+            verify_aiger_event_contract_certificate_v3(input, contract_path, &certificate_path)?;
+            let certificate_verify_ns = verification_start.elapsed().as_nanos();
+
+            let cdcl_start = Instant::now();
+            let cdcl_result =
+                solve_event_contract_cdcl(&model, &relevant_inputs, bad_output, &contract)?;
+            let cdcl_query_ns = cdcl_start.elapsed().as_nanos();
+            if certificate.avoidable != cdcl_result {
+                return Err("event contract certificate v3 cost backends disagree".to_string());
+            }
+            lines.push(format!(
+                "{EVENT_CONTRACT_CERTIFICATE_COST_SCHEMA_VERSION},{input_sha256},{contract_sha256},{bad_output},{},{},{},{},{trial},{},{certificate_generate_ns},{certificate_verify_ns},{cdcl_query_ns},{certificate_bytes},{raw_proof_bytes},{proof_count},{direct_evaluations},true,ok",
+                contract.horizon,
+                relevant_inputs.len(),
+                model.latches.len(),
+                contract.phases.len(),
+                if cdcl_result { "avoidable" } else { "unavoidable" },
+            ));
+            Ok(())
+        })();
+        let cleanup = fs::remove_file(&certificate_path);
+        if let Err(error) = run {
+            return Err(error);
+        }
+        cleanup.map_err(|error| format!("remove benchmark v3 certificate: {error}"))?;
+    }
+    publish_causal_comparison(output, (lines.join("\n") + "\n").as_bytes())?;
+    println!(
+        "event-contract-certificate-v3-cost status=VALID trials={repeats} output={}",
         output.display()
     );
     Ok(())
@@ -23039,6 +24333,70 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             Ok(true)
         }
+        "benchmark-aiger-event-contract-proofs" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker benchmark-aiger-event-contract-proofs INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt REPEATS OUTPUT.csv".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract proof output index".to_string())?;
+            let repeats = args[4]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract proof repeat count".to_string())?;
+            benchmark_aiger_event_contract_proofs(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                repeats,
+                Path::new(&args[5]),
+            )?;
+            Ok(true)
+        }
+        "certify-aiger-event-contract-v3" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker certify-aiger-event-contract-v3 INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt CERTIFICATE.cert3".to_string());
+            }
+            let bad_output = args[2]
+                .parse::<usize>()
+                .map_err(|_| "invalid event contract certificate v3 output index".to_string())?;
+            certify_aiger_event_contract_v3(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                Path::new(&args[4]),
+            )?;
+            Ok(true)
+        }
+        "verify-aiger-event-contract-certificate-v3" => {
+            if args.len() != 4 {
+                return Err("usage: guarded-continuation-checker verify-aiger-event-contract-certificate-v3 INPUT.aag|INPUT.aig CONTRACT.txt CERTIFICATE.cert3".to_string());
+            }
+            verify_aiger_event_contract_certificate_v3(
+                Path::new(&args[1]),
+                Path::new(&args[2]),
+                Path::new(&args[3]),
+            )?;
+            Ok(true)
+        }
+        "benchmark-aiger-event-contract-certificate-v3-cost" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker benchmark-aiger-event-contract-certificate-v3-cost INPUT.aag|INPUT.aig OUTPUT_INDEX CONTRACT.txt REPEATS OUTPUT.csv".to_string());
+            }
+            let bad_output = args[2].parse::<usize>().map_err(|_| {
+                "invalid event contract certificate v3 cost output index".to_string()
+            })?;
+            let repeats = args[4].parse::<usize>().map_err(|_| {
+                "invalid event contract certificate v3 cost repeat count".to_string()
+            })?;
+            benchmark_aiger_event_contract_certificate_v3_cost(
+                Path::new(&args[1]),
+                bad_output,
+                Path::new(&args[3]),
+                repeats,
+                Path::new(&args[5]),
+            )?;
+            Ok(true)
+        }
         "query-aiger-predicate-quotient" => {
             if args.len() != 4 {
                 return Err("usage: guarded-continuation-checker query-aiger-predicate-quotient INPUT.aag|INPUT.aig HORIZON OUTPUT_INDEX".to_string());
@@ -29436,12 +30794,11 @@ fn main() {
                 );
             }
             println!(
-                "{},{},{},{},{},{:.2},{},{},{},{},{},{},{:.6},{},{},{:.6},{}",
+                "{},{},{},{},oracle,{:.2},{},{},{},{},{},{},{:.6},{},{},{:.6},{}",
                 family,
                 vars,
                 mapped.len(),
                 test_seed,
-                "oracle",
                 learned_alpha,
                 oracle_variable,
                 order[oracle_variable],
@@ -34414,6 +35771,257 @@ mod tests {
             assert!(body.lines().nth(1).unwrap().ends_with(",true,true,ok"));
             fs::remove_file(output).unwrap();
         }
+    }
+
+    #[test]
+    fn event_contract_cnf_relations_have_independently_checked_proof_primitives() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for (model_path, contract_path) in [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/event-contracts/interrupt-priority-v1.contract",
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-interlock-v1.contract",
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                "examples/event-contracts/robot-recovery-v1.contract",
+            ),
+        ] {
+            let model = parse_aag(&root.join(model_path)).unwrap();
+            let relevant = IndependentPredicateChecker::support(&model).unwrap();
+            let contract =
+                parse_event_contract(&root.join(contract_path), &model, &relevant).unwrap();
+            let metrics = event_contract_proof_experiment(&model, 0, &contract).unwrap();
+            assert_eq!(
+                metrics.obligations,
+                contract.phases.len() * (1usize << model.latches.len()) + 1
+            );
+            assert!(metrics.witnesses > 0);
+            assert!(metrics.proof_bytes > 0);
+        }
+    }
+
+    #[test]
+    fn event_contract_proof_rejects_an_omitted_relation_target() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model =
+            parse_aag(&root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ))
+            .unwrap();
+        let relevant = IndependentPredicateChecker::support(&model).unwrap();
+        let contract = parse_event_contract(
+            &root.join("examples/event-contracts/interrupt-priority-v1.contract"),
+            &model,
+            &relevant,
+        )
+        .unwrap();
+        let mut quotient = PredicateQuotient::new(&model).unwrap();
+        let relation = quotient
+            .interface
+            .relation_predicate(&contract.phases[0].predicate)
+            .unwrap();
+        let targets = relation.rows[0][0] as u16;
+        let omitted = targets & !(1u16 << targets.trailing_zeros());
+        let clauses = predicate_relation_completeness_clauses_for_predicate(
+            &model,
+            &relevant,
+            0,
+            &contract.phases[0].predicate,
+            omitted,
+        )
+        .unwrap();
+        assert!(generate_varisat_unsat_proof(&clauses).is_err());
+    }
+
+    #[test]
+    fn event_contract_certificate_v3_is_deterministic_and_exact_across_products() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for (index, (model, contract, expected_avoidable)) in [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/event-contracts/interrupt-priority-v1.contract",
+                true,
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-interlock-v1.contract",
+                true,
+            ),
+            (
+                "examples/products/mobile-robot/firmware/dense-sensor-fusion.aag",
+                "examples/event-contracts/robot-recovery-v1.contract",
+                true,
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-h1-unavoidable-v1.contract",
+                false,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let first = std::env::temp_dir().join(format!(
+                "guarded-continuation-event-v3-{}-{index}-a.cert3",
+                std::process::id()
+            ));
+            let second = std::env::temp_dir().join(format!(
+                "guarded-continuation-event-v3-{}-{index}-b.cert3",
+                std::process::id()
+            ));
+            let _ = fs::remove_file(&first);
+            let _ = fs::remove_file(&second);
+            let model = root.join(model);
+            let contract = root.join(contract);
+            certify_aiger_event_contract_v3(&model, 0, &contract, &first).unwrap();
+            certify_aiger_event_contract_v3(&model, 0, &contract, &second).unwrap();
+            assert_eq!(fs::read(&first).unwrap(), fs::read(&second).unwrap());
+            verify_aiger_event_contract_certificate_v3(&model, &contract, &first).unwrap();
+            assert_eq!(
+                parse_event_contract_certificate_v3(&first)
+                    .unwrap()
+                    .avoidable,
+                expected_avoidable
+            );
+            fs::remove_file(first).unwrap();
+            fs::remove_file(second).unwrap();
+        }
+    }
+
+    #[test]
+    fn event_contract_certificate_v3_proves_unavoidable_and_rejects_tampering() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let model = root
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let stem = format!(
+            "guarded-continuation-event-v3-tamper-{}",
+            std::process::id()
+        );
+        let contract = std::env::temp_dir().join(format!("{stem}.contract"));
+        let certificate = std::env::temp_dir().join(format!("{stem}.cert3"));
+        let tampered = std::env::temp_dir().join(format!("{stem}-tampered.cert3"));
+        let _ = fs::remove_file(&contract);
+        let _ = fs::remove_file(&certificate);
+        let _ = fs::remove_file(&tampered);
+        fs::write(
+            &contract,
+            "event_contract_version=1\nhorizon=1\nphase_count=1\nphase_0=0,1\nphase_0_clause_count=0\nterminal_clause_count=2\nterminal_clause_0=irq[0]\nterminal_clause_1=!irq[0]\n",
+        )
+        .unwrap();
+        certify_aiger_event_contract_v3(&model, 0, &contract, &certificate).unwrap();
+        verify_aiger_event_contract_certificate_v3(&model, &contract, &certificate).unwrap();
+        let parsed = parse_event_contract_certificate_v3(&certificate).unwrap();
+        assert!(!parsed.avoidable);
+        assert!(parsed.states.is_empty());
+        let mut changed = parsed.clone();
+        changed.phases[0].powered_rows[0] ^= 1;
+        fs::write(&tampered, event_contract_certificate_v3_body(&changed)).unwrap();
+        assert!(verify_aiger_event_contract_certificate_v3(&model, &contract, &tampered).is_err());
+        fs::remove_file(&tampered).unwrap();
+        let mut changed = parsed;
+        changed.contract_sha256 = "0".repeat(64);
+        fs::write(&tampered, event_contract_certificate_v3_body(&changed)).unwrap();
+        assert!(verify_aiger_event_contract_certificate_v3(&model, &contract, &tampered).is_err());
+        fs::remove_file(contract).unwrap();
+        fs::remove_file(certificate).unwrap();
+        fs::remove_file(&tampered).unwrap();
+    }
+
+    #[test]
+    fn event_contract_certificate_v3_corrupt_inputs_are_bounded_and_fail_closed() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let input = root
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let contract = root.join("examples/event-contracts/interrupt-priority-v1.contract");
+        let scratch = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-v3-reliability-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+        let valid = scratch.join("valid.cert3");
+        certify_aiger_event_contract_v3(&input, 0, &contract, &valid).unwrap();
+        let seed = fs::read(&valid).unwrap();
+
+        let mutated = scratch.join("mutated.cert3");
+        for iteration in 0..1_000 {
+            fs::write(
+                &mutated,
+                deterministic_input_mutation(&seed, iteration ^ 0xe3e3),
+            )
+            .unwrap();
+            let _ = parse_event_contract_certificate_v3(&mutated);
+        }
+
+        let invalid_utf8 = scratch.join("invalid-utf8.cert3");
+        fs::write(&invalid_utf8, [0xff, b'\n']).unwrap();
+        assert!(parse_event_contract_certificate_v3(&invalid_utf8).is_err());
+
+        let oversized = scratch.join("oversized.cert3");
+        fs::File::create(&oversized)
+            .unwrap()
+            .set_len(EVENT_CONTRACT_CERTIFICATE_MAX_BYTES + 1)
+            .unwrap();
+        assert!(
+            parse_event_contract_certificate_v3(&oversized)
+                .unwrap_err()
+                .contains("no larger")
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let symlink_path = scratch.join("symlink.cert3");
+            symlink(&valid, &symlink_path).unwrap();
+            assert!(parse_event_contract_certificate_v3(&symlink_path).is_err());
+        }
+
+        let parsed = parse_event_contract_certificate_v3(&valid).unwrap();
+        let swapped = scratch.join("swapped-proof.cert3");
+        let mut swapped_body = parsed.clone();
+        swapped_body.phases[0].proofs.swap(0, 1);
+        fs::write(&swapped, event_contract_certificate_v3_body(&swapped_body)).unwrap();
+        assert!(verify_aiger_event_contract_certificate_v3(&input, &contract, &swapped).is_err());
+
+        let truncated = scratch.join("truncated-proof.cert3");
+        let mut truncated_body = parsed.clone();
+        truncated_body.phases[0].proofs[0].pop();
+        fs::write(
+            &truncated,
+            event_contract_certificate_v3_body(&truncated_body),
+        )
+        .unwrap();
+        assert!(verify_aiger_event_contract_certificate_v3(&input, &contract, &truncated).is_err());
+
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn event_contract_certificate_v3_cost_preserves_exact_agreement() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let output = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-v3-cost-test-{}.csv",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&output);
+        benchmark_aiger_event_contract_certificate_v3_cost(
+            &root.join(
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+            ),
+            0,
+            &root.join("examples/event-contracts/interrupt-priority-v1.contract"),
+            1,
+            &output,
+        )
+        .unwrap();
+        let body = fs::read_to_string(&output).unwrap();
+        let row = body.lines().nth(1).unwrap();
+        assert!(row.ends_with(",true,ok"));
+        assert_eq!(row.split(',').count(), 19);
+        fs::remove_file(output).unwrap();
     }
 
     #[test]

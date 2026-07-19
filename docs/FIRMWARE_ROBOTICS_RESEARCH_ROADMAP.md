@@ -44,9 +44,14 @@ close either register by itself.
    implemented experimentally).** Strict named CNF now preserves non-cube
    interrupt, interlock, and recovery rules through bounded phase composition,
    CDCL agreement, and direct-AIG witness replay. The three-product performance
-   result is negative at 1.09x to 36.20x slower than CDCL. Certificate v3,
-   timing-free portfolio admission, watchdog/DMA/shared-peripheral semantics,
-   and public design evidence remain open.
+   result is negative at 1.09x to 36.20x slower than CDCL. Independently checked
+   CNF relation/terminal proof primitives now verify in 0.261 to 1.051 ms, making
+   certificate v3 feasible. A deterministic v3 artifact now binds source and
+   contract, independently checks whole-contract composition, and covers both
+   answer classes, with a retained 2.26x to 7.23x verification overhead against
+   exact CDCL. Stable API, external proof diversity, timing-free portfolio
+   admission, watchdog/DMA/shared-peripheral semantics, and public design
+   evidence remain open.
 
 5. **Word-level BTOR2 interfaces.** Preserve bit-vector arithmetic, counters,
    timers, memory indices, and saturating control laws before bit blasting.

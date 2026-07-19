@@ -101,3 +101,19 @@ and witness replay all have established prior art. The experiment emits no new
 certificate and has no portfolio integration, so it does not establish novelty.
 Its candidate value is only as one component of the narrower combined artifact
 described above. The retained three-product timing result is entirely negative.
+
+The [proof-carrying event-contract primitive](EVENT_CONTRACT_PROOF_EXPERIMENT.md)
+shows that CNF-constrained relation and terminal obligations can be checked
+without trusting the producer BDD. SAT proof carrying and witness-backed
+completeness are established techniques, so the measured checker result is not
+itself novel. It lowers implementation risk for the candidate combined artifact
+but does not close prior-art search, whole-certificate comparison, or review.
+
+Experimental [event-contract certificate v3](EVENT_CONTRACT_CERTIFICATE_V3.md)
+now binds the original named contract to independently checked CNF relations,
+powered composition, terminal evidence, answer, and trace. This is the most
+complete implementation of the candidate combination in this repository, but
+combining known methods is not enough to establish novelty. External standard
+proof checking, search for the complete combination, and expert review remain
+open claim gates. Repository language must continue to say candidate
+contribution or research prototype.
