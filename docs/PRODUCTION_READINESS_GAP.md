@@ -173,6 +173,11 @@ multi-job metrics aggregation, hosted cross-platform replication, tagged
 compatibility, source-to-model attestation, calibrated plant validity, and
 independent acceptance remain open.
 
+A three-trial process baseline now records wall time and peak RSS against the
+maintained formal oracle. This closes the missing local process-memory
+measurement only. It rejects a small-batch speed claim, is not scope-equivalent,
+and does not close hosted replication or workload-representativeness gates.
+
 ## Rules
 
 - No timing-based per-formula calibration.

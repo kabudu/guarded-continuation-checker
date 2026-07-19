@@ -787,3 +787,17 @@ cargo test --locked --test controller_mtbdd_tool_api
 This test discovers capabilities, produces and verifies a two-member artifact,
 checks ordered SAFE and UNSAFE results, and records the operation and success
 status exposed by invocation metrics schema v1.
+
+Measure process wall time and peak RSS for production, verification, and the
+maintained formal oracle:
+
+```sh
+cargo build --release --locked
+TRIALS=3 scripts/benchmark-controller-mtbdd-process-resources.sh \
+  target/release/guarded-continuation-checker \
+  /path/to/pinned/sbysrc/sby.py \
+  target/controller-mtbdd-process-resources.csv
+```
+
+See `docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md` for scope differences and
+the retained observation. Timing rows are not byte-stable CI fixtures.

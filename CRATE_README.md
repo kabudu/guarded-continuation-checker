@@ -118,6 +118,10 @@ for predicate certificate examples and the
 for certificate v3, exact portfolio fallback, and report replay. The
 [controller MTBDD CLI contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_CLI_V1.md)
 covers source-bound controller-plus-plant batch production and verification.
+The retained
+[process-resource baseline](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
+records a negative small-batch speed result and lower peak-memory observations
+without equating the different GCC and formal-oracle scopes.
 
 ## Self-service evaluation
 

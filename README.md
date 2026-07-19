@@ -40,6 +40,10 @@ tagged compatibility and source-to-model attestation remain open.
 Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
 shell-free production and verification, typed batch and member results, and
 invocation metrics without parsing command output.
+The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
+rejects a speed-win claim on the small public physical-plant batch. It records
+lower peak RSS for GCC production and verification while explicitly separating
+their stronger evidence scope from the bounded SymbiYosys property oracle.
 
 The experimental [BTOR2 braking-phase certificate](docs/BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md)
 now composes exact accelerate, brake, and stopped regions for a resettable

@@ -1,0 +1,10 @@
+schema_version,case,trial,elapsed_seconds,peak_rss_bytes,time_backend
+1,gcc_produce,1,2.48,17317888,bsd
+1,gcc_verify,1,0.97,4276224,bsd
+1,symbiyosys_oracle,1,0.37,29278208,bsd
+1,gcc_produce,2,2.46,17285120,bsd
+1,gcc_verify,2,0.97,4292608,bsd
+1,symbiyosys_oracle,2,0.36,29278208,bsd
+1,gcc_produce,3,2.45,17268736,bsd
+1,gcc_verify,3,0.98,4292608,bsd
+1,symbiyosys_oracle,3,0.36,29245440,bsd

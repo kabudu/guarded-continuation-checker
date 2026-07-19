@@ -306,3 +306,8 @@ Strict manifests, source-bound artifacts, hostile-input rejection, and
 per-member reports are productisation properties, not novelty. They enable a
 fair process-level cost and memory comparison but do not change the prior-art
 conclusion.
+
+The first process-level comparison now rejects a speed advantage on the small
+public batch. GCC production and independent verification have lower measured
+peak RSS than the formal oracle, but check a stronger reusable-evidence scope.
+This is a useful engineering trade-off, not evidence of a novel algorithm.
