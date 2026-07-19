@@ -24924,7 +24924,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} controller_obligation_version={} reusable_component_batch_version={} component_batch_manifest_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_controller_obligation_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} max_component_batch_members={} max_reusable_component_batch_bytes={} max_component_batch_manifest_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} controller_obligation_version={} reusable_component_batch_version={} component_batch_portfolio_version={} component_batch_manifest_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_controller_obligation_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} max_component_batch_members={} max_reusable_component_batch_bytes={} max_component_batch_portfolio_bytes={} max_component_batch_manifest_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
@@ -24936,6 +24936,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_component::COMPONENT_CERTIFICATE_VERSION,
                 btor2_component::CONTROLLER_OBLIGATION_VERSION,
                 btor2_component::REUSABLE_COMPONENT_BATCH_VERSION,
+                btor2_component::COMPONENT_BATCH_PORTFOLIO_VERSION,
                 BTOR2_COMPONENT_BATCH_MANIFEST_VERSION,
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 btor2::MAX_BTOR2_BYTES,
@@ -24965,6 +24966,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_component::MAX_COMPONENT_CERTIFICATE_BYTES,
                 btor2_component::MAX_COMPONENT_BATCH_MEMBERS,
                 btor2_component::MAX_REUSABLE_COMPONENT_BATCH_BYTES,
+                btor2_component::MAX_COMPONENT_BATCH_PORTFOLIO_BYTES,
                 BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES,
             );
             Ok(true)
@@ -25178,49 +25180,71 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 })
                 .collect::<Vec<_>>();
             let started = Instant::now();
-            let (certificate, encoded, action) = if command == "check-btor2-component-batch" {
-                let certificate =
-                    btor2_component::produce_reusable_component_batch(&controller, &inputs)
+            let (certificate, encoded, action, reason) = if command == "check-btor2-component-batch"
+            {
+                let production =
+                    btor2_component::produce_component_batch_portfolio(&controller, &inputs)
                         .map_err(|error| error.to_string())?;
-                let encoded = btor2_component::encode_reusable_component_batch(&certificate)
-                    .map_err(|error| error.to_string())?;
-                (certificate, encoded, "CREATED")
+                let reason = production.selection_reason.as_str();
+                let encoded =
+                    btor2_component::encode_component_batch_portfolio(&production.certificate)
+                        .map_err(|error| error.to_string())?;
+                (production.certificate, encoded, "CREATED", reason)
             } else {
                 let encoded = read_bounded_regular_file(
                     Path::new(&args[3]),
-                    btor2_component::MAX_REUSABLE_COMPONENT_BATCH_BYTES,
-                    "reusable component batch",
+                    btor2_component::MAX_COMPONENT_BATCH_PORTFOLIO_BYTES,
+                    "component batch portfolio",
                 )?;
-                let certificate = btor2_component::decode_reusable_component_batch(&encoded)
+                let certificate = btor2_component::decode_component_batch_portfolio(&encoded)
                     .map_err(|error| error.to_string())?;
+                let reason = match &certificate {
+                    btor2_component::ComponentBatchPortfolioCertificate::Reusable(_) => {
+                        "fully-admitted-reuse"
+                    }
+                    btor2_component::ComponentBatchPortfolioCertificate::Ordinary(_) => {
+                        "singleton-or-exact-fallback"
+                    }
+                };
                 (
                     certificate,
                     String::from_utf8(encoded)
-                        .map_err(|_| "reusable component batch is not UTF-8".to_string())?,
+                        .map_err(|_| "component batch portfolio is not UTF-8".to_string())?,
                     "VERIFIED",
+                    reason,
                 )
             };
-            let summary = btor2_component::verify_reusable_component_batch(
+            let summary = btor2_component::verify_component_batch_portfolio(
                 &controller,
                 &inputs,
                 &certificate,
             )
             .map_err(|error| error.to_string())?;
-            let reused = certificate
-                .members
-                .iter()
-                .filter(|member| {
-                    matches!(member, btor2_component::ReusableBatchMember::ReusedPhase(_))
-                })
-                .count();
-            let fallback = certificate.members.len() - reused;
+            let (route, members, reused, fallback) = match &certificate {
+                btor2_component::ComponentBatchPortfolioCertificate::Reusable(certificate) => (
+                    "reusable",
+                    certificate.members.len(),
+                    certificate.members.len(),
+                    0,
+                ),
+                btor2_component::ComponentBatchPortfolioCertificate::Ordinary(certificate) => {
+                    let fallback = certificate
+                        .members
+                        .iter()
+                        .filter(|member| {
+                            matches!(member, btor2_component::ComponentCertificate::Search(_))
+                        })
+                        .count();
+                    ("ordinary", certificate.members.len(), 0, fallback)
+                }
+            };
             if command == "check-btor2-component-batch" {
                 write_new_certificate(Path::new(&args[3]), encoded.as_bytes())?;
             }
             println!(
-                "btor2-component-batch status={action} batch_version={} members={} reused_phase={} exact_fallback={} safe={} unsafe={} certificate_bytes={} elapsed_micros={}{}",
-                btor2_component::REUSABLE_COMPONENT_BATCH_VERSION,
-                certificate.members.len(),
+                "btor2-component-batch status={action} portfolio_version={} route={route} reason={reason} members={} reused_phase={} exact_fallback={} safe={} unsafe={} certificate_bytes={} elapsed_micros={}{}",
+                btor2_component::COMPONENT_BATCH_PORTFOLIO_VERSION,
+                members,
                 reused,
                 fallback,
                 summary.safe,
@@ -35749,9 +35773,11 @@ mod tests {
             .unwrap()
         );
         let encoded = fs::read_to_string(&certificate).unwrap();
-        assert!(encoded.starts_with("reusable_component_batch_version=1\n"));
-        assert!(encoded.contains("member=reused-phase\n"));
-        assert!(encoded.contains("member=exact-fallback\n"));
+        assert!(encoded.starts_with("component_batch_portfolio_version=1\n"));
+        assert!(matches!(
+            btor2_component::decode_component_batch_portfolio(encoded.as_bytes()).unwrap(),
+            btor2_component::ComponentBatchPortfolioCertificate::Ordinary(_)
+        ));
         assert!(
             run_artifact_cli(&[
                 "verify-btor2-component-batch".to_string(),

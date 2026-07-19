@@ -95,3 +95,53 @@ fn public_reusable_batch_api_round_trips_and_preserves_exact_answers() {
         btor2_component::verify_reusable_component_batch(CONTROLLER, &inputs, &decoded).unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
 }
+
+#[test]
+fn public_batch_portfolio_routes_without_timing_calibration() {
+    let admitted = [
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 254,
+        },
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 255,
+        },
+    ];
+    let production =
+        btor2_component::produce_component_batch_portfolio(CONTROLLER, &admitted).unwrap();
+    assert_eq!(
+        production.selection_reason,
+        btor2_component::ComponentBatchSelectionReason::FullyAdmittedReuse
+    );
+    let encoded =
+        btor2_component::encode_component_batch_portfolio(&production.certificate).unwrap();
+    let decoded = btor2_component::decode_component_batch_portfolio(encoded.as_bytes()).unwrap();
+    assert_eq!(
+        btor2_component::verify_component_batch_portfolio(CONTROLLER, &admitted, &decoded)
+            .unwrap()
+            .safe,
+        2
+    );
+
+    let mixed = [
+        admitted[0],
+        btor2_component::ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 256,
+        },
+    ];
+    let production =
+        btor2_component::produce_component_batch_portfolio(CONTROLLER, &mixed).unwrap();
+    assert_eq!(
+        production.selection_reason,
+        btor2_component::ComponentBatchSelectionReason::SingletonOrExactFallback
+    );
+    assert!(matches!(
+        production.certificate,
+        btor2_component::ComponentBatchPortfolioCertificate::Ordinary(_)
+    ));
+}

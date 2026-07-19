@@ -46,7 +46,15 @@ building a monolithic BTOR2 product, while exact composed search preserves both
 answers for rejected shapes. The first cohort proves modular correctness but
 falsifies a single-pair performance claim: component checking is 35% to 38%
 slower and about 108 bytes larger than the equivalent monolithic specialised
-proof. Reusable controller-local obligations remain the open candidate.
+proof. The follow-up
+[controller-obligation reuse experiment](docs/BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md)
+now verifies one controller obligation across a bounded plant batch. Against a
+parse-once shared-model baseline, fully admitted 64-member batches produce a
+34.0% smaller artifact and check 11.5% to 13.4% faster across five local runs.
+A static portfolio keeps ordinary exact certificates for singleton or mixed
+fallback batches, where the reuse hypothesis did not win. Public-product,
+external-tool, and cross-platform evidence remain open, so this is not yet a
+novelty or production-readiness claim.
 
 Validated findings:
 

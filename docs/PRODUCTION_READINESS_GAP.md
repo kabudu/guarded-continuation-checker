@@ -88,9 +88,10 @@ reachability and its SAFE
   drives a bounded exact mixed-answer batch with canonical artifacts and a
   normalized manifest workflow. Fully admitted local batches pass the strong
   artifact and checking baselines, while the 25% fallback control correctly
-  records no efficiency claim. A static top-level portfolio artifact,
-  cross-platform packaging, maintained external controls, public-product
-  evidence, and independent acceptance remain open.
+  records no efficiency claim. A static top-level portfolio now selects reuse
+  only for at least two fully admitted members and retains ordinary exact
+  certificates otherwise. Cross-platform packaging, maintained external
+  controls, public-product evidence, and independent acceptance remain open.
   A six-case self-service acceptance harness proves the bundled workflow can be
   repeated without formula calibration, but it is simulated rather than
   independent evidence. Portfolio v3 exposes a stable typed selection reason

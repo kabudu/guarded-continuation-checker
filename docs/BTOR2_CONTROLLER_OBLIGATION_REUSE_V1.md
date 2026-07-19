@@ -95,9 +95,40 @@ verifications in every retained run.
 The hostile control replaces 25 percent of members with exact UNSAFE fallback
 certificates. It fails the artifact gate by 20.5 to 28.4 percent and shows no
 stable verification improvement. Therefore, v1 must not be selected universally.
-The evidence supports a static portfolio rule that selects reusable encoding
-only when every member is admitted. Mixed batches retain exact answers but do
-not support the efficiency claim.
+The implemented portfolio selects reusable encoding only when at least two
+members are present and every member is admitted. Singleton and mixed batches
+are converted back to ordinary component certificates without re-solving.
+Verification rejects a reusable route that violates this static gate. The rule
+uses certificate structure only and performs no timing calibration.
+
+The public APIs are `produce_component_batch_portfolio`,
+`verify_component_batch_portfolio`, `encode_component_batch_portfolio`, and
+`decode_component_batch_portfolio`. The portfolio artifact is versioned,
+canonical, bounded to 65 MiB, and retains the nested certificate limits.
+
+The self-service CLI accepts a canonical manifest containing normalized
+relative paths:
+
+```text
+component_batch_manifest_version=1
+member_count=2
+plant_path=motion-plant-v1.btor2
+contract_path=braking-motion-contract-v1.txt
+horizon=254
+plant_path=motion-plant-v1.btor2
+contract_path=braking-motion-contract-v1.txt
+horizon=255
+status=complete
+```
+
+Create and independently verify an artifact with:
+
+```sh
+guarded-continuation-checker check-btor2-component-batch \
+  braking-controller-v1.btor2 batch.txt batch.component-batch
+guarded-continuation-checker verify-btor2-component-batch \
+  braking-controller-v1.btor2 batch.txt batch.component-batch
+```
 
 The retained data is in
 [`results/btor2-component-reuse-v1.csv`](../results/btor2-component-reuse-v1.csv).
