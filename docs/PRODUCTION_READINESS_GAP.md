@@ -83,6 +83,10 @@ reachability and its SAFE
   run. It has only one feedback word, one control bit, and one shared reset. It
   lacks tagged compatibility, proof reuse, contract refinement, public-product
   evidence, independent acceptance, and operational deployment guidance.
+  The controller-obligation v1 prototype is canonical, bounded, source-bound,
+  independently checked, and exposed through Rust and CLI interfaces. It is not
+  yet integrated into an exact mixed-answer batch, resource-governed cache, or
+  packaged self-service workflow.
   A six-case self-service acceptance harness proves the bundled workflow can be
   repeated without formula calibration, but it is simulated rather than
   independent evidence. Portfolio v3 exposes a stable typed selection reason

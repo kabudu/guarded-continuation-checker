@@ -80,7 +80,9 @@ close either register by itself.
    binds controller, plant, and wiring independently and preserves exact
    composed fallback. It closes the source-separation primitive but falsifies
    single-pair performance novelty. Cross-certificate controller-proof reuse
-   remains open. A pinned Bitwuzla
+   now has a source-bound
+   [controller-obligation format and predeclared strong baselines](BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md),
+   but batch composition and measured reuse remain open. A pinned Bitwuzla
    0.9.1 gate agrees on counter, motion, and braking boundaries.
 
 6. **Assume/guarantee component quotients.** Compose independently checked

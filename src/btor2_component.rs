@@ -8,7 +8,9 @@ use std::fmt;
 
 pub const COMPONENT_CONTRACT_VERSION: u32 = 1;
 pub const COMPONENT_CERTIFICATE_VERSION: u32 = 1;
+pub const CONTROLLER_OBLIGATION_VERSION: u32 = 1;
 pub const MAX_COMPONENT_CONTRACT_BYTES: usize = 4096;
+pub const MAX_CONTROLLER_OBLIGATION_BYTES: usize = 2048;
 pub const MAX_COMPONENT_PHASE_HORIZON: u32 = 1_000_000_000;
 pub const MAX_COMPONENT_SEARCH_HORIZON: u32 = 256;
 pub const MAX_COMPONENT_STATES_PER_LAYER: usize = 65_536;
@@ -27,6 +29,17 @@ pub struct ComponentContract {
     pub plant_velocity_state: NodeId,
     pub plant_position_state: NodeId,
     pub plant_bad_property: NodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerObligation {
+    pub controller_sha256: String,
+    pub reset_input: NodeId,
+    pub velocity_input: NodeId,
+    pub braking_state: NodeId,
+    pub brake_output: NodeId,
+    pub velocity_width: u32,
+    pub brake_velocity: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -737,6 +750,195 @@ fn reset_advance(model: &Btor2Model, state: NodeId, reset: NodeId) -> Option<Nod
         }
         _ => None,
     }
+}
+
+fn controller_obligation_shape(
+    controller: &Btor2Model,
+    contract: &ComponentContract,
+) -> Result<(u32, u64), ComponentError> {
+    if controller.inputs()
+        != [
+            contract.controller_reset_input,
+            contract.controller_velocity_input,
+        ]
+        || controller.states() != [contract.controller_braking_state]
+        || !controller.constraints().is_empty()
+        || controller
+            .bad_properties()
+            .iter()
+            .any(|(_, expression, _)| !zero(controller, *expression))
+    {
+        return Err(reject(
+            "controller vectors or properties are outside obligation language",
+        ));
+    }
+    let velocity_width = node_width(controller, contract.controller_velocity_input)
+        .ok_or_else(|| reject("controller velocity input is absent"))?;
+    if velocity_width == 0
+        || velocity_width > 64
+        || node_width(controller, contract.controller_reset_input) != Some(1)
+        || node_width(controller, contract.controller_braking_state) != Some(1)
+        || node_width(controller, contract.controller_brake_output) != Some(1)
+    {
+        return Err(reject("controller obligation widths are invalid"));
+    }
+    let initialiser = controller
+        .initialiser(contract.controller_braking_state)
+        .ok_or_else(|| reject("controller braking initialiser is absent"))?;
+    if !zero(controller, initialiser) {
+        return Err(reject(
+            "controller braking state does not initialise to zero",
+        ));
+    }
+    let advance = reset_advance(
+        controller,
+        contract.controller_braking_state,
+        contract.controller_reset_input,
+    )
+    .ok_or_else(|| reject("controller reset transition is outside obligation language"))?;
+    if advance != contract.controller_brake_output {
+        return Err(reject("controller output is not its latched next control"));
+    }
+    let guard = match controller
+        .nodes()
+        .get(&contract.controller_brake_output)
+        .map(|node| &node.kind)
+    {
+        Some(NodeKind::Binary(BinaryOp::Or, left, right))
+            if *left == contract.controller_braking_state =>
+        {
+            *right
+        }
+        Some(NodeKind::Binary(BinaryOp::Or, left, right))
+            if *right == contract.controller_braking_state =>
+        {
+            *left
+        }
+        _ => {
+            return Err(reject(
+                "controller brake output is outside obligation language",
+            ));
+        }
+    };
+    let brake_velocity = match controller.nodes().get(&guard).map(|node| &node.kind) {
+        Some(NodeKind::Binary(BinaryOp::Ugte, velocity, threshold))
+            if *velocity == contract.controller_velocity_input =>
+        {
+            constant(controller, *threshold)
+                .filter(|value| *value != 0)
+                .ok_or_else(|| reject("controller threshold is not a nonzero literal"))?
+        }
+        _ => return Err(reject("controller guard is outside obligation language")),
+    };
+    Ok((velocity_width, brake_velocity))
+}
+
+pub fn produce_controller_obligation(
+    controller_source: &[u8],
+    contract_source: &[u8],
+) -> Result<ControllerObligation, ComponentError> {
+    let contract = parse_contract(contract_source)?;
+    let controller =
+        btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?;
+    let (velocity_width, brake_velocity) = controller_obligation_shape(&controller, &contract)?;
+    Ok(ControllerObligation {
+        controller_sha256: digest(controller_source),
+        reset_input: contract.controller_reset_input,
+        velocity_input: contract.controller_velocity_input,
+        braking_state: contract.controller_braking_state,
+        brake_output: contract.controller_brake_output,
+        velocity_width,
+        brake_velocity,
+    })
+}
+
+pub fn verify_controller_obligation(
+    controller_source: &[u8],
+    obligation: &ControllerObligation,
+) -> Result<(), ComponentError> {
+    if obligation.controller_sha256 != digest(controller_source) {
+        return Err(reject("controller obligation source binding is invalid"));
+    }
+    let controller =
+        btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?;
+    let projection = ComponentContract {
+        controller_reset_input: obligation.reset_input,
+        controller_velocity_input: obligation.velocity_input,
+        controller_braking_state: obligation.braking_state,
+        controller_brake_output: obligation.brake_output,
+        plant_reset_input: 0,
+        plant_brake_input: 0,
+        plant_velocity_state: 0,
+        plant_position_state: 0,
+        plant_bad_property: 0,
+    };
+    let (velocity_width, brake_velocity) = controller_obligation_shape(&controller, &projection)?;
+    if velocity_width != obligation.velocity_width || brake_velocity != obligation.brake_velocity {
+        return Err(reject("controller obligation claim does not match source"));
+    }
+    Ok(())
+}
+
+pub fn encode_controller_obligation(
+    obligation: &ControllerObligation,
+) -> Result<String, ComponentError> {
+    if !valid_digest(&obligation.controller_sha256) {
+        return Err(reject("controller obligation digest is not canonical"));
+    }
+    let text = format!(
+        "controller_obligation_version={CONTROLLER_OBLIGATION_VERSION}\ncontroller_sha256={}\nreset_input={}\nvelocity_input={}\nbraking_state={}\nbrake_output={}\nvelocity_width={}\nbrake_velocity={}\nstatus=complete\n",
+        obligation.controller_sha256,
+        obligation.reset_input,
+        obligation.velocity_input,
+        obligation.braking_state,
+        obligation.brake_output,
+        obligation.velocity_width,
+        obligation.brake_velocity,
+    );
+    if text.len() > MAX_CONTROLLER_OBLIGATION_BYTES {
+        return Err(reject("controller obligation exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+pub fn decode_controller_obligation(bytes: &[u8]) -> Result<ControllerObligation, ComponentError> {
+    let text = canonical_text(
+        bytes,
+        "controller obligation",
+        MAX_CONTROLLER_OBLIGATION_BYTES,
+    )?;
+    let mut lines = text.lines();
+    fn take<'a>(lines: &mut std::str::Lines<'a>, key: &str) -> Result<&'a str, ComponentError> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| reject(format!("expected {key}")))
+    }
+    let version = parse_number::<u32>(
+        take(&mut lines, "controller_obligation_version")?,
+        "controller obligation version",
+    )?;
+    if version != CONTROLLER_OBLIGATION_VERSION {
+        return Err(reject("unsupported controller obligation version"));
+    }
+    let obligation = ControllerObligation {
+        controller_sha256: take(&mut lines, "controller_sha256")?.to_string(),
+        reset_input: parse_number(take(&mut lines, "reset_input")?, "reset input")?,
+        velocity_input: parse_number(take(&mut lines, "velocity_input")?, "velocity input")?,
+        braking_state: parse_number(take(&mut lines, "braking_state")?, "braking state")?,
+        brake_output: parse_number(take(&mut lines, "brake_output")?, "brake output")?,
+        velocity_width: parse_number(take(&mut lines, "velocity_width")?, "velocity width")?,
+        brake_velocity: parse_number(take(&mut lines, "brake_velocity")?, "brake velocity")?,
+    };
+    if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
+        return Err(reject(
+            "controller obligation is incomplete or has trailing fields",
+        ));
+    }
+    if encode_controller_obligation(&obligation)? != text {
+        return Err(reject("controller obligation is not canonical"));
+    }
+    Ok(obligation)
 }
 
 fn add_literal(model: &Btor2Model, expression: NodeId, state: NodeId) -> Option<u64> {
@@ -1546,6 +1748,48 @@ mod tests {
         assert_eq!(summary.backend, ComponentBackend::PhaseContract);
         assert_eq!(summary.result, ComponentResult::Safe);
         assert_eq!(summary.logical_reachable_states, 32_896);
+    }
+
+    #[test]
+    fn controller_obligation_is_source_bound_canonical_and_reusable() {
+        let obligation = produce_controller_obligation(CONTROLLER, CONTRACT).unwrap();
+        assert_eq!(obligation.velocity_width, 16);
+        assert_eq!(obligation.brake_velocity, 256);
+        let encoded = encode_controller_obligation(&obligation).unwrap();
+        assert!(encoded.len() < 350);
+        let decoded = decode_controller_obligation(encoded.as_bytes()).unwrap();
+        verify_controller_obligation(CONTROLLER, &decoded).unwrap();
+
+        let mut changed_source = CONTROLLER.to_vec();
+        let position = changed_source
+            .iter()
+            .position(|byte| *byte == b'8')
+            .unwrap();
+        changed_source[position] = b'9';
+        assert!(verify_controller_obligation(&changed_source, &decoded).is_err());
+
+        let mut changed_claim = decoded;
+        changed_claim.brake_velocity += 1;
+        assert!(verify_controller_obligation(CONTROLLER, &changed_claim).is_err());
+    }
+
+    #[test]
+    fn every_controller_obligation_mutation_and_truncation_fails_closed() {
+        let encoded = encode_controller_obligation(
+            &produce_controller_obligation(CONTROLLER, CONTRACT).unwrap(),
+        )
+        .unwrap()
+        .into_bytes();
+        for end in 0..encoded.len() {
+            assert!(decode_controller_obligation(&encoded[..end]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.clone();
+            mutated[index] = if mutated[index] == b'!' { b'?' } else { b'!' };
+            if let Ok(obligation) = decode_controller_obligation(&mutated) {
+                assert!(verify_controller_obligation(CONTROLLER, &obligation).is_err());
+            }
+        }
     }
 
     #[test]

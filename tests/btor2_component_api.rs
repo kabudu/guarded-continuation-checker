@@ -34,3 +34,13 @@ fn public_component_api_preserves_source_separation_and_both_answers() {
     assert_eq!(summary.result, ComponentResult::Unsafe);
     assert_eq!(summary.bad_frame, Some(256));
 }
+
+#[test]
+fn public_controller_obligation_api_round_trips_and_verifies() {
+    let obligation = btor2_component::produce_controller_obligation(CONTROLLER, CONTRACT).unwrap();
+    let encoded = btor2_component::encode_controller_obligation(&obligation).unwrap();
+    let decoded = btor2_component::decode_controller_obligation(encoded.as_bytes()).unwrap();
+    btor2_component::verify_controller_obligation(CONTROLLER, &decoded).unwrap();
+    assert_eq!(decoded.velocity_width, 16);
+    assert_eq!(decoded.brake_velocity, 256);
+}

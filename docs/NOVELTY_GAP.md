@@ -193,4 +193,8 @@ specialisation. Assume-guarantee contracts, simulation relations, compositional
 invariance, witness circuits, and BTOR2 certificates are established prior art.
 No novelty claim is made. The candidate now requires independently reusable
 controller-local obligations that materially beat repeated monolithic checking
-and straightforward certificate bundling.
+and straightforward certificate bundling. The first
+[controller-obligation reuse specification](BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md)
+now fixes a stronger parse-once, in-process baseline and implements the
+standalone source-bound obligation. Batch reuse, break-even evidence, and a
+public unmodified product family remain unproven, so no novelty claim is made.
