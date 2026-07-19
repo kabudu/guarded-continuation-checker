@@ -213,3 +213,14 @@ several environments. Finite relations, relational composition, reusable
 assumptions, and proof-carrying model checking are prior art. Only a measured
 win on revision-pinned, unmodified embedded RTL with strong ordinary baselines
 could narrow the novelty gap. No such result exists yet.
+
+The first [proof-carrying controller transducer v1](PROOF_CARRYING_CONTROLLER_TRANSDUCER_V1.md)
+implementation now retains sensed-input to next-state and actuator-output
+correlation, proves every symbolic cell complete, checks a source-bound
+canonical artifact independently, composes it with sampled plants, and agrees
+with an independent direct-controller baseline across the retained small query
+grid. Symbolic transducers, cube partitions, SAT proof logging, and synchronous
+product exploration are established. This closes an implementation-integrity
+gap, not the novelty gap. Strong reuse baselines, an unmodified public embedded
+controller, maintained external-tool agreement, and expert review remain open.
+No novelty claim is made.

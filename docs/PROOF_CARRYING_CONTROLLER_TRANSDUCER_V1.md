@@ -12,8 +12,12 @@ mutation in the retained artifact test. Broader hostile corpora, composition
 portfolio, and product gates do not yet exist. An exact sampled-control
 composition API now verifies the controller obligation once, rejects
 same-step sensor dependencies, explores bounded external plant inputs, and
-reconstructs unsafe traces. Static portfolio fallback and strong baselines
-remain incomplete. This is not a novelty or production-readiness claim.
+reconstructs unsafe traces with the actual sensed controller input. An
+independent direct-controller baseline agrees on every retained small query. A
+timing-free portfolio selects a supplied verified artifact or direct exact
+fallback when no artifact is available; invalid supplied evidence fails closed
+instead of falling back. Strong performance and public-product baselines remain
+incomplete. This is not a novelty or production-readiness claim.
 
 ## Hypothesis
 

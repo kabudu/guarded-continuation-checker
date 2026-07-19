@@ -1,6 +1,7 @@
 use guarded_continuation_checker::aiger_obligation::{AigerLatch, AigerTransition};
 use guarded_continuation_checker::controller_plant::{
-    ControllerPlantAnswer, ControllerPlantWiring, compose_controller_plant,
+    ControllerPlantAnswer, ControllerPlantBackend, ControllerPlantWiring, compose_controller_plant,
+    compose_controller_plant_portfolio,
 };
 use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
 
@@ -29,6 +30,8 @@ fn downstream_api_composes_a_verified_controller_and_sampled_plant() {
     let digest = [0x71; 32];
     let obligation = produce_controller_transducer(&controller, digest, &[0], &[0]).unwrap();
     let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![0],
+        controller_action_outputs: vec![0],
         plant_sensor_outputs: vec![0],
         plant_action_inputs: vec![0],
     };
@@ -46,4 +49,10 @@ fn downstream_api_composes_a_verified_controller_and_sampled_plant() {
     .unwrap();
     assert_eq!(result.answer, ControllerPlantAnswer::Safe);
     assert_eq!(result.bad_frame, None);
+
+    let fallback =
+        compose_controller_plant_portfolio(&controller, digest, None, &plant, &wiring, 0, 0, 1, 16)
+            .unwrap();
+    assert_eq!(fallback.backend, ControllerPlantBackend::DirectExact);
+    assert_eq!(fallback.result, result);
 }

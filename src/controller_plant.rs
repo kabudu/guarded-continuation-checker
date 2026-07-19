@@ -4,8 +4,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-use crate::aiger_obligation::AigerTransition;
-use crate::controller_transducer::{ControllerTransducerObligation, verify_controller_transducer};
+use crate::aiger_obligation::{AigerOutcome, AigerTransition};
+use crate::controller_transducer::{
+    CONTROLLER_TRANSDUCER_VERSION, ControllerTransducerCell, ControllerTransducerObligation,
+    ControllerTransducerRow, verify_controller_transducer,
+};
 
 pub const CONTROLLER_PLANT_VERSION: u32 = 1;
 pub const MAX_PLANT_INPUTS: usize = 12;
@@ -13,9 +16,12 @@ pub const MAX_EXTERNAL_PLANT_INPUTS: usize = 8;
 pub const MAX_PLANT_LATCHES: usize = 8;
 pub const MAX_PRODUCT_STATES: usize = 4_096;
 pub const MAX_COMPOSITION_HORIZON: usize = 1_024;
+pub const MAX_DIRECT_CONTROLLER_INPUTS: usize = 12;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerPlantWiring {
+    pub controller_sensor_inputs: Vec<usize>,
+    pub controller_action_outputs: Vec<usize>,
     pub plant_sensor_outputs: Vec<usize>,
     pub plant_action_inputs: Vec<usize>,
 }
@@ -33,6 +39,7 @@ pub struct ControllerPlantTraceStep {
     pub plant_state: usize,
     pub sensor_pattern: usize,
     pub action_pattern: usize,
+    pub controller_input: u64,
     pub plant_input: u64,
     pub bad: bool,
 }
@@ -46,6 +53,25 @@ pub struct ControllerPlantResult {
     pub reachable_product_states: usize,
     pub explored_transitions: usize,
     pub trace: Vec<ControllerPlantTraceStep>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerPlantBackend {
+    ProofCarryingTransducer,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerPlantSelectionReason {
+    VerifiedArtifact,
+    ArtifactUnavailable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantPortfolioResult {
+    pub backend: ControllerPlantBackend,
+    pub selection_reason: ControllerPlantSelectionReason,
+    pub result: ControllerPlantResult,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -74,6 +100,7 @@ struct Predecessor {
     previous: ProductState,
     sensor_pattern: usize,
     action_pattern: usize,
+    controller_input: u64,
     plant_input: u64,
 }
 
@@ -90,6 +117,17 @@ fn cell_for_pattern(
     obligation: &ControllerTransducerObligation,
     pattern: usize,
 ) -> Result<usize, ControllerPlantError> {
+    let pattern_count = 1usize << obligation.relevant_inputs.len();
+    if obligation.cells.len() == pattern_count
+        && obligation.cells.get(pattern).is_some_and(|cell| {
+            cell.cube
+                .iter()
+                .enumerate()
+                .all(|(bit, required)| *required == Some(pattern >> bit & 1 == 1))
+        })
+    {
+        return Ok(pattern);
+    }
     let mut found = None;
     for (index, cell) in obligation.cells.iter().enumerate() {
         let allowed =
@@ -125,6 +163,15 @@ fn declared_plant_input(
         })
 }
 
+fn declared_controller_input(sensor_inputs: &[usize], sensor_pattern: usize) -> u64 {
+    sensor_inputs
+        .iter()
+        .enumerate()
+        .fold(0u64, |input, (bit, &declared)| {
+            input | (u64::from(sensor_pattern >> bit & 1 == 1) << declared)
+        })
+}
+
 fn validate_wiring(
     controller: &ControllerTransducerObligation,
     plant: &AigerTransition,
@@ -133,7 +180,9 @@ fn validate_wiring(
     plant
         .validate()
         .map_err(|error| reject(error.to_string()))?;
-    if plant.inputs.len() > MAX_PLANT_INPUTS
+    if wiring.controller_sensor_inputs != controller.relevant_inputs
+        || wiring.controller_action_outputs != controller.observed_outputs
+        || plant.inputs.len() > MAX_PLANT_INPUTS
         || plant.latches.len() > MAX_PLANT_LATCHES
         || wiring.plant_sensor_outputs.len() != controller.relevant_inputs.len()
         || wiring.plant_action_inputs.len() != controller.observed_outputs.len()
@@ -212,6 +261,7 @@ fn rebuild_trace(
             plant_state: predecessor.previous.plant,
             sensor_pattern: predecessor.sensor_pattern,
             action_pattern: predecessor.action_pattern,
+            controller_input: predecessor.controller_input,
             plant_input: predecessor.plant_input,
             bad: false,
         });
@@ -223,9 +273,7 @@ fn rebuild_trace(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn compose_controller_plant(
-    controller_model: &AigerTransition,
-    controller_source_sha256: [u8; 32],
+fn explore_controller_plant(
     controller: &ControllerTransducerObligation,
     plant: &AigerTransition,
     wiring: &ControllerPlantWiring,
@@ -234,8 +282,6 @@ pub fn compose_controller_plant(
     bad_plant_output: usize,
     horizon: usize,
 ) -> Result<ControllerPlantResult, ControllerPlantError> {
-    verify_controller_transducer(controller_model, controller_source_sha256, controller)
-        .map_err(|error| reject(error.to_string()))?;
     let external_inputs = validate_wiring(controller, plant, wiring)?;
     if horizon > MAX_COMPOSITION_HORIZON
         || initial_controller_state >= controller.state_count
@@ -274,6 +320,8 @@ pub fn compose_controller_plant(
                 .ok_or_else(|| reject("controller transducer state row is missing"))?;
             let action = usize::try_from(row.outcome.outputs)
                 .map_err(|_| reject("controller action pattern exceeds usize"))?;
+            let controller_input =
+                declared_controller_input(&wiring.controller_sensor_inputs, sensors);
             for external in 0..(1usize << external_inputs.len()) {
                 let plant_input = declared_plant_input(
                     &wiring.plant_action_inputs,
@@ -295,6 +343,7 @@ pub fn compose_controller_plant(
                         plant_state: state.plant,
                         sensor_pattern: sensors,
                         action_pattern: action,
+                        controller_input,
                         plant_input,
                         bad: true,
                     };
@@ -317,6 +366,7 @@ pub fn compose_controller_plant(
                         previous: state,
                         sensor_pattern: sensors,
                         action_pattern: action,
+                        controller_input,
                         plant_input,
                     }));
                 }
@@ -338,6 +388,161 @@ pub fn compose_controller_plant(
         explored_transitions,
         trace: Vec::new(),
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compose_controller_plant(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller: &ControllerTransducerObligation,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantResult, ControllerPlantError> {
+    verify_controller_transducer(controller_model, controller_source_sha256, controller)
+        .map_err(|error| reject(error.to_string()))?;
+    explore_controller_plant(
+        controller,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+    )
+}
+
+fn direct_controller_table(
+    controller_model: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+) -> Result<ControllerTransducerObligation, ControllerPlantError> {
+    controller_model
+        .validate()
+        .map_err(|error| reject(error.to_string()))?;
+    let sensor_set = wiring
+        .controller_sensor_inputs
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if controller_model.inputs.len() > MAX_DIRECT_CONTROLLER_INPUTS
+        || wiring.controller_sensor_inputs.len() != controller_model.inputs.len()
+        || sensor_set != (0..controller_model.inputs.len()).collect::<BTreeSet<_>>()
+        || wiring.controller_action_outputs.len() != wiring.plant_action_inputs.len()
+        || wiring
+            .controller_action_outputs
+            .iter()
+            .any(|&output| output >= controller_model.outputs.len())
+        || wiring
+            .controller_action_outputs
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(reject("direct controller boundary is outside exact limits"));
+    }
+    let pattern_count = 1usize << wiring.controller_sensor_inputs.len();
+    let mut cells = Vec::with_capacity(pattern_count);
+    for pattern in 0..pattern_count {
+        let controller_input = declared_controller_input(&wiring.controller_sensor_inputs, pattern);
+        let rows = (0..controller_model.state_count())
+            .map(|source| {
+                let (target, outputs) = controller_model
+                    .evaluate(source, controller_input)
+                    .map_err(|error| reject(error.to_string()))?;
+                Ok(ControllerTransducerRow {
+                    outcome: AigerOutcome {
+                        target,
+                        outputs: projected_bits(outputs, &wiring.controller_action_outputs) as u128,
+                    },
+                    witness_input: controller_input,
+                    proof: Vec::new(),
+                })
+            })
+            .collect::<Result<Vec<_>, ControllerPlantError>>()?;
+        cells.push(ControllerTransducerCell {
+            cube: (0..wiring.controller_sensor_inputs.len())
+                .map(|bit| Some(pattern >> bit & 1 == 1))
+                .collect(),
+            rows,
+        });
+    }
+    Ok(ControllerTransducerObligation {
+        version: CONTROLLER_TRANSDUCER_VERSION,
+        source_sha256: [0; 32],
+        relevant_inputs: wiring.controller_sensor_inputs.clone(),
+        observed_outputs: wiring.controller_action_outputs.clone(),
+        state_count: controller_model.state_count(),
+        cells,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compose_controller_plant_direct(
+    controller_model: &AigerTransition,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantResult, ControllerPlantError> {
+    let controller = direct_controller_table(controller_model, wiring)?;
+    explore_controller_plant(
+        &controller,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compose_controller_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller: Option<&ControllerTransducerObligation>,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantPortfolioResult, ControllerPlantError> {
+    if let Some(controller) = controller {
+        Ok(ControllerPlantPortfolioResult {
+            backend: ControllerPlantBackend::ProofCarryingTransducer,
+            selection_reason: ControllerPlantSelectionReason::VerifiedArtifact,
+            result: compose_controller_plant(
+                controller_model,
+                controller_source_sha256,
+                controller,
+                plant,
+                wiring,
+                initial_controller_state,
+                initial_plant_state,
+                bad_plant_output,
+                horizon,
+            )?,
+        })
+    } else {
+        Ok(ControllerPlantPortfolioResult {
+            backend: ControllerPlantBackend::DirectExact,
+            selection_reason: ControllerPlantSelectionReason::ArtifactUnavailable,
+            result: compose_controller_plant_direct(
+                controller_model,
+                plant,
+                wiring,
+                initial_controller_state,
+                initial_plant_state,
+                bad_plant_output,
+                horizon,
+            )?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -379,6 +584,8 @@ mod tests {
         let obligation =
             produce_controller_transducer(&controller_model, digest, &[0], &[0]).unwrap();
         let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: vec![0],
+            controller_action_outputs: vec![0],
             plant_sensor_outputs: vec![0],
             plant_action_inputs: vec![0],
         };
@@ -424,6 +631,8 @@ mod tests {
             ..plant()
         };
         let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: vec![0],
+            controller_action_outputs: vec![0],
             plant_sensor_outputs: vec![0],
             plant_action_inputs: vec![0],
         };
@@ -460,6 +669,8 @@ mod tests {
             ands: vec![],
         };
         let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: vec![0],
+            controller_action_outputs: vec![0],
             plant_sensor_outputs: vec![0],
             plant_action_inputs: vec![0],
         };
@@ -478,8 +689,113 @@ mod tests {
         assert_eq!(result.answer, ControllerPlantAnswer::Unsafe);
         assert_eq!(result.bad_frame, Some(1));
         assert_eq!(result.trace.len(), 2);
+        assert_eq!(result.trace[0].controller_input, 0);
         assert_eq!(result.trace[0].plant_input, 2);
         assert!(!result.trace[0].bad);
         assert!(result.trace[1].bad);
+    }
+
+    #[test]
+    fn transducer_and_independent_direct_baseline_agree_on_every_small_query() {
+        let controller_model = controller();
+        let digest = [10; 32];
+        let obligation =
+            produce_controller_transducer(&controller_model, digest, &[0], &[0]).unwrap();
+        let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: vec![0],
+            controller_action_outputs: vec![0],
+            plant_sensor_outputs: vec![0],
+            plant_action_inputs: vec![0],
+        };
+        for initial_controller in 0..2 {
+            for initial_plant in 0..2 {
+                for horizon in 0..=8 {
+                    let accelerated = compose_controller_plant(
+                        &controller_model,
+                        digest,
+                        &obligation,
+                        &plant(),
+                        &wiring,
+                        initial_controller,
+                        initial_plant,
+                        1,
+                        horizon,
+                    )
+                    .unwrap();
+                    let direct = compose_controller_plant_direct(
+                        &controller_model,
+                        &plant(),
+                        &wiring,
+                        initial_controller,
+                        initial_plant,
+                        1,
+                        horizon,
+                    )
+                    .unwrap();
+                    assert_eq!(accelerated, direct);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn portfolio_routes_statically_and_never_masks_invalid_evidence() {
+        let controller_model = controller();
+        let digest = [11; 32];
+        let obligation =
+            produce_controller_transducer(&controller_model, digest, &[0], &[0]).unwrap();
+        let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: vec![0],
+            controller_action_outputs: vec![0],
+            plant_sensor_outputs: vec![0],
+            plant_action_inputs: vec![0],
+        };
+        let admitted = compose_controller_plant_portfolio(
+            &controller_model,
+            digest,
+            Some(&obligation),
+            &plant(),
+            &wiring,
+            0,
+            0,
+            1,
+            8,
+        )
+        .unwrap();
+        assert_eq!(
+            admitted.backend,
+            ControllerPlantBackend::ProofCarryingTransducer
+        );
+        let fallback = compose_controller_plant_portfolio(
+            &controller_model,
+            digest,
+            None,
+            &plant(),
+            &wiring,
+            0,
+            0,
+            1,
+            8,
+        )
+        .unwrap();
+        assert_eq!(fallback.backend, ControllerPlantBackend::DirectExact);
+        assert_eq!(admitted.result, fallback.result);
+
+        let mut tampered = obligation;
+        tampered.cells[0].rows[0].proof.pop();
+        assert!(
+            compose_controller_plant_portfolio(
+                &controller_model,
+                digest,
+                Some(&tampered),
+                &plant(),
+                &wiring,
+                0,
+                0,
+                1,
+                8,
+            )
+            .is_err()
+        );
     }
 }

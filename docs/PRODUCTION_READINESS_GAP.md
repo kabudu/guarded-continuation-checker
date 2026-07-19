@@ -100,6 +100,22 @@ reachability and its SAFE
   It cannot change any production-readiness row until those gaps, stable release
 compatibility, full hostile-input coverage, and public product evidence close.
 
+## Proof-carrying controller transducer experimental boundary
+
+Controller transducer v1 is not a production-supported interface. Its public
+Rust API has bounded exact AIGER evaluation, complete next-state and selected
+output obligations, independently checked UNSAT proofs, deterministic symbolic
+partitioning, source binding, a canonical bounded codec, retained truncation and
+single-byte mutation rejection, sampled plant composition, external-input
+exploration, unsafe trace reconstruction, and a timing-free direct exact
+fallback. Supplied invalid evidence fails closed. Current evidence is limited to
+small repository-authored controllers and plants. Canonical file workflow and
+CLI integration, broad hostile corpora, strong artifact and checking baselines,
+unmodified public-product designs, maintained model-checker agreement,
+cross-platform replication, release compatibility, and independent acceptance
+remain open. This capability cannot change any production-readiness row until
+those gates close.
+
 ## Rules
 
 - No timing-based per-formula calibration.
