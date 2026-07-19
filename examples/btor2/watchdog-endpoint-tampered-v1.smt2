@@ -1,0 +1,7 @@
+(set-logic QF_BV)
+(define-const r (_ BitVec 8) #x00)
+(define-const d (_ BitVec 8) #x01)
+(define-const n (_ BitVec 8) #x03)
+(define-const e (_ BitVec 8) (bvadd r (bvmul n d)))
+(assert (= e #x04))
+(check-sat)

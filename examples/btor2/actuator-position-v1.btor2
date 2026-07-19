@@ -1,0 +1,13 @@
+1 sort bitvec 1
+2 sort bitvec 16
+3 input 1 home
+4 zero 2
+5 state 2 position
+6 init 2 5 4
+7 constd 2 5
+8 add 2 5 7
+9 ite 2 3 4 8
+10 next 2 5 9
+11 constd 2 1005
+12 eq 1 5 11
+13 bad 12 travel_limit

@@ -149,6 +149,14 @@ impl Btor2Model {
         &self.constraints
     }
 
+    pub fn initialiser(&self, state: NodeId) -> Option<NodeId> {
+        self.initialisers.get(&state).copied()
+    }
+
+    pub fn next_value(&self, state: NodeId) -> Option<NodeId> {
+        self.next_values.get(&state).copied()
+    }
+
     pub fn max_width(&self) -> u32 {
         self.nodes
             .values()

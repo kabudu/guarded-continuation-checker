@@ -20,13 +20,18 @@ jobs:
       - name: Install formal RTL tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes yosys z3
+          sudo apt-get install --yes yosys z3 shellcheck
       - name: Format
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Check BTOR2 baseline scripts
+        run: |
+          shellcheck -s sh \
+            scripts/test-btor2tools-baseline.sh \
+            scripts/test-bitwuzla-phase-baseline.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -160,6 +165,29 @@ jobs:
         run: cargo install cargo-audit --version 0.22.1 --locked
       - name: Audit locked dependencies
         run: cargo audit
+
+  bitwuzla-phase-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install maintained Bitwuzla build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes meson ninja-build pkg-config libgmp-dev libmpfr-dev
+      - name: Build pinned Bitwuzla 0.9.1 and check phase endpoints
+        run: |
+          git init /tmp/bitwuzla
+          git -C /tmp/bitwuzla remote add origin https://github.com/bitwuzla/bitwuzla.git
+          git -C /tmp/bitwuzla fetch --depth 1 origin 8d1eb01093ae54d9b4586456b69c3bf31000a4c2
+          git -C /tmp/bitwuzla checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/bitwuzla rev-parse HEAD)" = \
+            8d1eb01093ae54d9b4586456b69c3bf31000a4c2
+          cd /tmp/bitwuzla
+          ./configure.py
+          ninja -C build
+          cd "$GITHUB_WORKSPACE"
+          scripts/test-bitwuzla-phase-baseline.sh \
+            /tmp/bitwuzla/build/src/main/bitwuzla
 
   reproducible-linux-bundle:
     runs-on: ubuntu-latest

@@ -73,14 +73,15 @@ certificate that binds exact word-level phase composition to a source model,
 resource gate, fail-closed exact fallback, and reconstructed firmware trace. No
 such contribution is claimed by this core.
 
-## Next predeclared gate
+## Progress against the predeclared gate
 
-The next cycle must not add a favourable custom solver benchmark alone. It must:
+Counter-phase certificate v1 now provides a deterministic, source-bound format,
+re-recognizes the admitted recurrence during verification, and checks its fixed
+endpoint formulas with maintained Bitwuzla. BTOR2Tools parses the three-model
+cohort and checks the watchdog witness. The remaining requirements are:
 
-1. differentially parse and simulate a fixed watchdog, saturating timer, and
-   bounded actuator-position cohort with BTOR2Tools;
-2. compare exact bounded answers with historical BtorMC or a maintained
-   Bitwuzla unrolling;
-3. define a deterministic source-bound word-composition certificate;
-4. verify the certificate without trusting the producer or lowering cache; and
-5. preserve unsupported models through an exact fail-closed baseline path.
+1. complete differential sequential simulation for the actuator and saturating
+   models rather than parser agreement alone;
+2. compare full bounded answers, not endpoint equations alone, with historical
+   BtorMC or a maintained Bitwuzla unrolling; and
+3. preserve unsupported models through an exact fail-closed portfolio path.

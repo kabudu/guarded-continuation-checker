@@ -138,3 +138,10 @@ bit-vector evaluation, bounded model checking, and word-level SMT solving are
 established prior art. The core does not change any novelty gate. A future claim
 would require proof-carrying word-level composition beyond BTOR2Tools, BtorMC,
 Bitwuzla, and straightforward combinations of existing certificate methods.
+
+The experimental [counter-phase certificate v1](BTOR2_COUNTER_PHASE_CERTIFICATE_V1.md)
+adds exact source binding and closed-form verification for a strict
+reset-or-affine counter shape. Its ingredients are established and its current
+combination has not been shown novel. The open novelty test is whether a wider
+source-bound composition certificate can provide independently measured
+assurance or scaling beyond straightforward recurrence acceleration plus SMT.

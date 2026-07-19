@@ -1,0 +1,7 @@
+(set-logic QF_BV)
+(define-const i (_ BitVec 16) #x0000)
+(define-const d (_ BitVec 16) #x0005)
+(define-const n (_ BitVec 16) #x00c9)
+(define-const e (_ BitVec 16) (bvadd i (bvmul n d)))
+(assert (= e #x03ed))
+(check-sat)
