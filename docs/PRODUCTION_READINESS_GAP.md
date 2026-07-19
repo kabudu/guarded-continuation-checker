@@ -108,13 +108,15 @@ output obligations, independently checked UNSAT proofs, deterministic symbolic
 partitioning, source binding, a canonical bounded codec, retained truncation and
 single-byte mutation rejection, sampled plant composition, external-input
 exploration, unsafe trace reconstruction, and a timing-free direct exact
-fallback. Supplied invalid evidence fails closed. Current evidence is limited to
-small repository-authored controllers and plants. Canonical file workflow and
-CLI integration, broad hostile corpora, strong artifact and checking baselines,
-unmodified public-product designs, maintained model-checker agreement,
-cross-platform replication, release compatibility, and independent acceptance
-remain open. This capability cannot change any production-readiness row until
-those gates close.
+fallback. Its complete canonical batch artifact binds plant sources and wiring,
+recomputes all claimed results, and rejects every truncation and single-bit
+mutation of the retained fixture. The local synthetic strong artifact and
+checking baselines now pass. Supplied invalid evidence fails closed. Current
+evidence is limited to small repository-authored controllers and plants. CLI
+file integration, a broad generated hostile corpus, unmodified public-product
+designs, maintained model-checker agreement, cross-platform replication,
+release compatibility, and independent acceptance remain open. This capability
+cannot change any production-readiness row until those gates close.
 
 ## Rules
 

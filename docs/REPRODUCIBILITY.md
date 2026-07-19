@@ -689,6 +689,6 @@ cargo run --release --example controller_plant_batch_benchmark
 
 The benchmark uses 101 interleaved trials at batch sizes 1 through 64, requires
 exact agreement for every member, and reports both median checking time and
-controller-evidence byte ratios. The comparison deliberately excludes member
-result serialization because a canonical member-result artifact has not yet
-been specified.
+complete canonical artifact byte ratios. The baseline carries one independently
+verified controller-plant artifact per member. The shared path carries one
+controller transducer plus all source-bound member results.

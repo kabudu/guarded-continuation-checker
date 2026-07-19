@@ -96,28 +96,27 @@ Run the predeclared parse-once comparison in an optimised build:
 cargo run --release --example controller_plant_batch_benchmark
 ```
 
-The baseline calls the public proof-carrying composition API independently for
-every member, so it rechecks the same source-bound controller proofs each time.
-The shared path uses the public batch API and checks those proofs once. Across
-101 interleaved trials, the retained one-bit controller fixture produced these
-median ratios:
+The baseline independently verifies one complete canonical artifact per member,
+so each artifact carries and checks the same source-bound controller proofs.
+The shared path verifies one complete canonical batch artifact and checks those
+proofs once. Across 101 interleaved trials, the retained one-bit controller
+fixture produced these median ratios:
 
-| Members | Shared/repeated checking time | Shared/repeated controller evidence |
+| Members | Shared/repeated checking time | Shared/repeated complete artifact |
 |---:|---:|---:|
 | 1 | 1.000 | 1.000 |
-| 2 | 0.621 | 0.500 |
-| 4 | 0.438 | 0.250 |
-| 8 | 0.361 | 0.125 |
-| 16 | 0.307 | 0.062 |
-| 32 | 0.288 | 0.031 |
-| 64 | 0.276 | 0.016 |
+| 2 | 0.608 | 0.637 |
+| 4 | 0.419 | 0.455 |
+| 8 | 0.345 | 0.364 |
+| 16 | 0.294 | 0.319 |
+| 32 | 0.270 | 0.296 |
+| 64 | 0.255 | 0.285 |
 
 Every shared result exactly matched its independently checked counterpart. This
-passes the mechanism-level checking gate on the synthetic fixture. It does not
-yet pass the public-product gate, and the evidence byte comparison covers only
-the repeated controller evidence rather than complete canonical member result
-artifacts. Those two limitations prevent treating this as the final strong
-artifact or product result.
+passes both mechanism-level reuse gates on the synthetic fixture, including
+complete member results and source digests. It does not yet pass the
+public-product gate. A repository-authored one-bit fixture cannot establish the
+practical or novelty claim.
 
 ## Falsification conditions
 

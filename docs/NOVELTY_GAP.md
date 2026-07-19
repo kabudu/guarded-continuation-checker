@@ -219,8 +219,11 @@ implementation now retains sensed-input to next-state and actuator-output
 correlation, proves every symbolic cell complete, checks a source-bound
 canonical artifact independently, composes it with sampled plants, and agrees
 with an independent direct-controller baseline across the retained small query
-grid. Symbolic transducers, cube partitions, SAT proof logging, and synchronous
-product exploration are established. This closes an implementation-integrity
-gap, not the novelty gap. Strong reuse baselines, an unmodified public embedded
-controller, maintained external-tool agreement, and expert review remain open.
-No novelty claim is made.
+grid. Its first complete canonical batch artifact passes the local strong reuse
+baselines: at 64 members it is 71.5% smaller and checks 74.5% faster than one
+complete independently verified artifact per member. Symbolic transducers, cube
+partitions, SAT proof logging, and synchronous product exploration are
+established. A synthetic one-bit win closes an implementation and baseline gap,
+not the novelty gap. An unmodified public embedded controller, maintained
+external-tool agreement, closest-system comparison, and expert review remain
+open. No novelty claim is made.

@@ -1,11 +1,10 @@
 use guarded_continuation_checker::aiger_obligation::{AigerLatch, AigerTransition};
-use guarded_continuation_checker::controller_plant::{
-    ControllerPlantBatchInput, ControllerPlantWiring, compose_controller_plant,
-    compose_controller_plant_batch,
+use guarded_continuation_checker::controller_plant::ControllerPlantWiring;
+use guarded_continuation_checker::controller_plant_artifact::{
+    ControllerPlantArtifactInput, encode_controller_plant_artifact,
+    produce_controller_plant_artifact, verify_controller_plant_artifact,
 };
-use guarded_continuation_checker::controller_transducer::{
-    encode_controller_transducer, produce_controller_transducer,
-};
+use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -47,7 +46,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let plant = plant();
     let digest = [19; 32];
     let obligation = produce_controller_transducer(&controller, digest, &[0], &[0])?;
-    let controller_evidence_bytes = encode_controller_transducer(&obligation)?.len();
     let wiring = ControllerPlantWiring {
         controller_sensor_inputs: vec![0],
         controller_action_outputs: vec![0],
@@ -56,39 +54,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!(
-        "schema_version,members,trials,repeated_controller_evidence_bytes,shared_controller_evidence_bytes,evidence_ratio,repeated_check_median_nanos,shared_check_median_nanos,check_ratio,answers_agree,status"
+        "schema_version,members,trials,repeated_complete_artifact_bytes,shared_complete_artifact_bytes,artifact_ratio,repeated_check_median_nanos,shared_check_median_nanos,check_ratio,answers_agree,status"
     );
     for count in [1usize, 2, 4, 8, 16, 32, 64] {
         let members = (0..count)
-            .map(|index| ControllerPlantBatchInput {
-                plant: &plant,
-                wiring: &wiring,
-                initial_controller_state: 0,
-                initial_plant_state: index & 1,
-                bad_plant_output: 1,
-                horizon: 8 + index % 8,
+            .map(|index| {
+                let mut plant_digest = [23; 32];
+                plant_digest[0] = index as u8;
+                ControllerPlantArtifactInput {
+                    plant: &plant,
+                    plant_source_sha256: plant_digest,
+                    wiring: &wiring,
+                    initial_controller_state: 0,
+                    initial_plant_state: index & 1,
+                    bad_plant_output: 1,
+                    horizon: 8 + index % 8,
+                }
             })
+            .collect::<Vec<_>>();
+        let shared_artifact = encode_controller_plant_artifact(
+            &produce_controller_plant_artifact(&controller, digest, &obligation, &members)?,
+        )?;
+        let repeated_artifacts = members
+            .iter()
+            .map(|member| {
+                encode_controller_plant_artifact(&produce_controller_plant_artifact(
+                    &controller,
+                    digest,
+                    &obligation,
+                    std::slice::from_ref(member),
+                )?)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let plants = members
+            .iter()
+            .map(|member| (member.plant, member.plant_source_sha256))
             .collect::<Vec<_>>();
         let mut repeated_times = Vec::with_capacity(TRIALS);
         let mut shared_times = Vec::with_capacity(TRIALS);
         let mut answers_agree = true;
         for trial in 0..TRIALS {
             let run_repeated = || -> Result<_, Box<dyn std::error::Error>> {
-                members
+                repeated_artifacts
                     .iter()
-                    .map(|member| {
-                        compose_controller_plant(
+                    .zip(&plants)
+                    .map(|(artifact, plant_source)| {
+                        verify_controller_plant_artifact(
                             &controller,
                             digest,
-                            &obligation,
-                            member.plant,
-                            member.wiring,
-                            member.initial_controller_state,
-                            member.initial_plant_state,
-                            member.bad_plant_output,
-                            member.horizon,
+                            std::slice::from_ref(plant_source),
+                            artifact,
                         )
                     })
+                    .map(|result| result.map(|batch| batch.members[0].clone()))
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(Into::into)
             };
@@ -97,21 +115,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let repeated = black_box(run_repeated()?);
                 repeated_times.push(started.elapsed().as_nanos());
                 let started = Instant::now();
-                let shared = black_box(compose_controller_plant_batch(
+                let shared = black_box(verify_controller_plant_artifact(
                     &controller,
                     digest,
-                    &obligation,
-                    &members,
+                    &plants,
+                    &shared_artifact,
                 )?);
                 shared_times.push(started.elapsed().as_nanos());
                 answers_agree &= repeated == shared.members;
             } else {
                 let started = Instant::now();
-                let shared = black_box(compose_controller_plant_batch(
+                let shared = black_box(verify_controller_plant_artifact(
                     &controller,
                     digest,
-                    &obligation,
-                    &members,
+                    &plants,
+                    &shared_artifact,
                 )?);
                 shared_times.push(started.elapsed().as_nanos());
                 let started = Instant::now();
@@ -122,10 +140,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let repeated_median = median(repeated_times);
         let shared_median = median(shared_times);
-        let repeated_bytes = controller_evidence_bytes * count;
+        let repeated_bytes = repeated_artifacts.iter().map(Vec::len).sum::<usize>();
         println!(
-            "1,{count},{TRIALS},{repeated_bytes},{controller_evidence_bytes},{:.3},{repeated_median},{shared_median},{:.3},{answers_agree},{}",
-            controller_evidence_bytes as f64 / repeated_bytes as f64,
+            "2,{count},{TRIALS},{repeated_bytes},{},{:.3},{repeated_median},{shared_median},{:.3},{answers_agree},{}",
+            shared_artifact.len(),
+            shared_artifact.len() as f64 / repeated_bytes as f64,
             shared_median as f64 / repeated_median as f64,
             if answers_agree { "ok" } else { "mismatch" },
         );
