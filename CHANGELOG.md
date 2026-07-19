@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Make the washing-controller oracle portable across Yosys versions. Require
+  byte-identical regeneration only with the recorded Yosys 0.67 build; other
+  hosts still verify pinned source and model digests plus formal properties and
+  explicitly report source-to-model regeneration as skipped.
+
 - Add a timing-free controller MTBDD plant portfolio through public Rust and
   self-service file interfaces. Select the
   reusable MTBDD artifact when admitted and preserve the identical ordered

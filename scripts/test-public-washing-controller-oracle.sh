@@ -29,10 +29,18 @@ check_digests() {
 }
 
 check_digests
-cp generated/controller.aag "$work/controller.before.aag"
-yosys -Q -q -s synthesize.ys
-check_digests
-cmp "$work/controller.before.aag" generated/controller.aag
+case "$(yosys -V)" in
+  "Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159,"*)
+    cp generated/controller.aag "$work/controller.before.aag"
+    yosys -Q -q -s synthesize.ys
+    check_digests
+    cmp "$work/controller.before.aag" generated/controller.aag
+    echo "controller-aiger-regeneration=PASS yosys=0.67+post-b8e7da6f40ae"
+    ;;
+  *)
+    echo "controller-aiger-regeneration=SKIPPED reason=yosys-version-mismatch"
+    ;;
+esac
 
 python3 "$sby" -f -d "$work/safe" safe-monitor.sby
 test -f "$work/safe/PASS"

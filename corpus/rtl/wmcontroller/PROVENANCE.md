@@ -18,9 +18,12 @@ Yosys 0.67+post with git revision `b8e7da6f40ae8f552c116bf6c359b07c6533e159`.
 The generated model is experimental evidence derived from the GPL-2.0 source
 and is distributed with the same upstream licence notice.
 
-Verify the source and licence bytes with `shasum -a 256 -c SHA256SUMS`. The
-experiment must additionally regenerate the AIGER model and compare it before
-publishing a result.
+Verify the source, licence, and pinned generated-model bytes with
+`shasum -a 256 -c SHA256SUMS`. Release preparation must additionally regenerate
+the AIGER model with the recorded Yosys build and compare it byte for byte.
+Oracle environments with a different Yosys version check the pinned bytes and
+formal properties but report regeneration as skipped. They do not provide
+source-to-model attestation.
 
 The maintained oracle reads that generated AIGER model without overriding its
 latch initialisation. This makes the synthesis recipe, GCC, and SymbiYosys use
