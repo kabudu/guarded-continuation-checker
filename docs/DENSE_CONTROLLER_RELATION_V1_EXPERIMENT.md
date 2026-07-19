@@ -140,7 +140,10 @@ That claim is currently unproven.
 2. Prove byte-for-byte and answer compatibility for predicate certificate v2.
 3. Add a source-bound controller boundary manifest and canonical obligation.
    Its core proof vocabulary now covers complete next-state and selected-output
-   outcomes; canonical encoding and source binding remain incomplete.
+   outcomes. The end-to-end experiment and its falsification gates are
+   predeclared in
+   [proof-carrying controller transducer v1](PROOF_CARRYING_CONTROLLER_TRANSDUCER_V1.md);
+   canonical encoding and source binding remain incomplete.
 4. Add environment-member composition with exact trace reconstruction.
 5. Add a static portfolio with unchanged exact fallback.
 6. Run hostile-input and three-platform gates.
