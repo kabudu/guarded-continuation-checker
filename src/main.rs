@@ -13326,6 +13326,151 @@ fn export_aiger_predicate_v2_obligations(
     Ok(())
 }
 
+fn export_aiger_event_contract_v3_obligations(
+    input: &Path,
+    contract_path: &Path,
+    certificate_path: &Path,
+    output: &Path,
+) -> Result<(), String> {
+    if fs::symlink_metadata(output).is_ok() {
+        return Err("event contract obligation export refuses to overwrite output".to_string());
+    }
+    let model = parse_aag(input)?;
+    let certificate = parse_event_contract_certificate_v3(certificate_path)?;
+    if sha256_file(input)? != certificate.input_sha256
+        || sha256_file(contract_path)? != certificate.contract_sha256
+    {
+        return Err("event contract obligation export source binding mismatch".to_string());
+    }
+    let checker = IndependentPredicateChecker::new(&model)?;
+    let contract = parse_event_contract(contract_path, &model, &checker.relevant_inputs)?;
+    if certificate.declared_inputs != model.inputs.len()
+        || certificate.relevant_inputs != checker.relevant_inputs
+        || certificate.latches != model.latches.len()
+        || certificate.bad_output >= model.outputs.len()
+        || certificate.horizon != contract.horizon
+        || certificate.phases.len() != contract.phases.len()
+        || certificate.terminal != contract.terminal
+    {
+        return Err("event contract obligation export dimensions mismatch".to_string());
+    }
+
+    let parent = causal_output_parent(output);
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("create event contract obligation parent: {error}"))?;
+    let name = output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            "event contract obligation output requires a valid final component".to_string()
+        })?;
+    let staging = parent.join(format!(".{name}.stage-{}", std::process::id()));
+    fs::create_dir(&staging)
+        .map_err(|error| format!("create event contract obligation staging directory: {error}"))?;
+
+    let publish = (|| {
+        let mut manifest = vec![
+            "event_contract_obligation_bundle_version=1".to_string(),
+            format!("input_sha256={}", certificate.input_sha256),
+            format!("contract_sha256={}", certificate.contract_sha256),
+            format!("certificate_sha256={}", sha256_file(certificate_path)?),
+            format!("cnf_variables={}", model.max_variable),
+            format!(
+                "result={}",
+                if certificate.avoidable {
+                    "avoidable"
+                } else {
+                    "unavoidable"
+                }
+            ),
+        ];
+        let mut obligation_count = 0usize;
+        let mut obligation_clauses = Vec::new();
+        for (phase_index, (phase, source_phase)) in
+            certificate.phases.iter().zip(&contract.phases).enumerate()
+        {
+            if phase.start != source_phase.start
+                || phase.length != source_phase.length
+                || phase.predicate != source_phase.predicate
+                || phase.base_rows.len() != checker.states
+            {
+                return Err("event contract obligation export phase mismatch".to_string());
+            }
+            for (source, &targets) in phase.base_rows.iter().enumerate() {
+                let clauses = predicate_relation_completeness_clauses_for_predicate(
+                    &model,
+                    &checker.relevant_inputs,
+                    source,
+                    &phase.predicate,
+                    targets,
+                )?;
+                let filename = format!("phase-{phase_index:04}-source-{source:04}.cnf");
+                let path = staging.join(&filename);
+                write_causal_file(
+                    &path,
+                    &predicate_obligation_dimacs(model.max_variable, &clauses),
+                )?;
+                manifest.push(format!(
+                    "obligation_{obligation_count}={filename},relation-completeness,{phase_index},{source},{}",
+                    sha256_file(&path)?
+                ));
+                obligation_clauses.push(clauses);
+                obligation_count += 1;
+            }
+        }
+        let clauses = predicate_terminal_completeness_clauses_for_predicate(
+            &model,
+            &checker.relevant_inputs,
+            &certificate.terminal,
+            certificate.bad_output,
+            certificate.terminal_safe_states,
+        )?;
+        let filename = "terminal.cnf";
+        let path = staging.join(filename);
+        write_causal_file(
+            &path,
+            &predicate_obligation_dimacs(model.max_variable, &clauses),
+        )?;
+        manifest.push(format!(
+            "obligation_{obligation_count}={filename},terminal-completeness,-,-,{}",
+            sha256_file(&path)?
+        ));
+        obligation_clauses.push(clauses);
+        obligation_count += 1;
+        let (aggregate_variables, aggregate_clauses) =
+            aggregate_predicate_obligations(model.max_variable, &obligation_clauses)?;
+        let aggregate_path = staging.join("aggregate.cnf");
+        write_causal_file(
+            &aggregate_path,
+            &predicate_obligation_dimacs(aggregate_variables, &aggregate_clauses),
+        )?;
+        manifest.insert(6, format!("obligation_count={obligation_count}"));
+        manifest.insert(7, "aggregate_cnf=aggregate.cnf".to_string());
+        manifest.insert(8, format!("aggregate_variables={aggregate_variables}"));
+        manifest.insert(
+            9,
+            format!("aggregate_sha256={}", sha256_file(&aggregate_path)?),
+        );
+        write_causal_file(
+            &staging.join("manifest.txt"),
+            (manifest.join("\n") + "\n").as_bytes(),
+        )?;
+        sync_causal_directory(&staging)?;
+        rename_causal_bundle_noreplace(&staging, output)?;
+        sync_causal_directory(parent)
+    })();
+    if publish.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    publish?;
+    println!(
+        "event-contract-obligations status=EXPORTED output={}",
+        output.display()
+    );
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn verify_aiger_counterfactual_portfolio(
     input: &Path,
@@ -24375,6 +24520,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 Path::new(&args[1]),
                 Path::new(&args[2]),
                 Path::new(&args[3]),
+            )?;
+            Ok(true)
+        }
+        "export-aiger-event-contract-v3-obligations" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker export-aiger-event-contract-v3-obligations INPUT.aag|INPUT.aig CONTRACT.txt CERTIFICATE.cert3 OUTPUT_DIR".to_string());
+            }
+            export_aiger_event_contract_v3_obligations(
+                Path::new(&args[1]),
+                Path::new(&args[2]),
+                Path::new(&args[3]),
+                Path::new(&args[4]),
             )?;
             Ok(true)
         }
@@ -36022,6 +36179,124 @@ mod tests {
         assert!(row.ends_with(",true,ok"));
         assert_eq!(row.split(',').count(), 19);
         fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn event_contract_v3_obligation_export_is_deterministic_complete_and_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let scratch = std::env::temp_dir().join(format!(
+            "guarded-continuation-event-v3-obligations-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&scratch).unwrap();
+        for (index, (model, contract)) in [
+            (
+                "examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag",
+                "examples/event-contracts/interrupt-priority-v1.contract",
+            ),
+            (
+                "examples/products/actuator-controller/firmware/dense-actuator-interlock.aag",
+                "examples/event-contracts/actuator-h1-unavoidable-v1.contract",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let model = root.join(model);
+            let contract = root.join(contract);
+            let certificate = scratch.join(format!("input-{index}.cert3"));
+            certify_aiger_event_contract_v3(&model, 0, &contract, &certificate).unwrap();
+            let first = scratch.join(format!("first-{index}"));
+            let second = scratch.join(format!("second-{index}"));
+            export_aiger_event_contract_v3_obligations(&model, &contract, &certificate, &first)
+                .unwrap();
+            export_aiger_event_contract_v3_obligations(&model, &contract, &certificate, &second)
+                .unwrap();
+
+            let first_manifest = fs::read(first.join("manifest.txt")).unwrap();
+            assert_eq!(
+                first_manifest,
+                fs::read(second.join("manifest.txt")).unwrap()
+            );
+            let manifest = String::from_utf8(first_manifest).unwrap();
+            assert!(manifest.starts_with("event_contract_obligation_bundle_version=1\n"));
+            assert!(manifest.contains(&format!(
+                "contract_sha256={}\n",
+                sha256_file(&contract).unwrap()
+            )));
+            let count = manifest
+                .lines()
+                .find_map(|line| line.strip_prefix("obligation_count="))
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+            let parsed = parse_event_contract_certificate_v3(&certificate).unwrap();
+            assert_eq!(
+                count,
+                parsed
+                    .phases
+                    .iter()
+                    .map(|phase| phase.base_rows.len())
+                    .sum::<usize>()
+                    + 1
+            );
+            for line in manifest.lines().filter(|line| {
+                line.starts_with("obligation_") && !line.starts_with("obligation_count=")
+            }) {
+                let filename = line.split_once('=').unwrap().1.split(',').next().unwrap();
+                assert_eq!(
+                    fs::read(first.join(filename)).unwrap(),
+                    fs::read(second.join(filename)).unwrap()
+                );
+                let (variables, clauses) = parse_dimacs(&first.join(filename)).unwrap();
+                assert!(solve_with_varisat(variables, &clauses).is_none());
+            }
+            assert_eq!(
+                fs::read(first.join("aggregate.cnf")).unwrap(),
+                fs::read(second.join("aggregate.cnf")).unwrap()
+            );
+            let (variables, clauses) = parse_dimacs(&first.join("aggregate.cnf")).unwrap();
+            assert!(solve_with_varisat(variables, &clauses).is_none());
+            assert!(
+                export_aiger_event_contract_v3_obligations(
+                    &model,
+                    &contract,
+                    &certificate,
+                    &first,
+                )
+                .unwrap_err()
+                .contains("refuses to overwrite")
+            );
+        }
+
+        let model = root
+            .join("examples/products/interrupt-controller/firmware/dense-interrupt-arbiter.aag");
+        let wrong_contract =
+            root.join("examples/event-contracts/actuator-h1-unavoidable-v1.contract");
+        let certificate = scratch.join("input-0.cert3");
+        assert!(
+            export_aiger_event_contract_v3_obligations(
+                &model,
+                &wrong_contract,
+                &certificate,
+                &scratch.join("wrong-source"),
+            )
+            .unwrap_err()
+            .contains("source binding mismatch")
+        );
+        let substituted_model = root
+            .join("examples/products/actuator-controller/firmware/dense-actuator-interlock.aag");
+        assert!(
+            export_aiger_event_contract_v3_obligations(
+                &substituted_model,
+                &root.join("examples/event-contracts/interrupt-priority-v1.contract"),
+                &certificate,
+                &scratch.join("wrong-model"),
+            )
+            .unwrap_err()
+            .contains("source binding mismatch")
+        );
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]

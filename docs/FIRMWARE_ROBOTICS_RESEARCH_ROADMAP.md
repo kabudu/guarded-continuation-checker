@@ -49,7 +49,8 @@ close either register by itself.
    certificate v3 feasible. A deterministic v3 artifact now binds source and
    contract, independently checks whole-contract composition, and covers both
    answer classes, with a retained 2.26x to 7.23x verification overhead against
-   exact CDCL. Stable API, external proof diversity, timing-free portfolio
+   exact CDCL. All 72 completeness obligations and four aggregates also pass a
+   maintained CaDiCaL plus DRAT-trim baseline. Stable API, timing-free portfolio
    admission, watchdog/DMA/shared-peripheral semantics, and public design
    evidence remain open.
 

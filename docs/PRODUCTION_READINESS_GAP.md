@@ -32,6 +32,12 @@ resource governance, compatibility commitment, public-design evidence, or
 external acceptance evidence. These gates must close before event contracts can
 change any production-readiness row above.
 
+V3 completeness obligations now also pass a deterministic DIMACS export and a
+maintained CaDiCaL plus DRAT-trim baseline across both answers. This removes one
+checker-diversity gap, but the external tools are an evaluation harness rather
+than a shipped runtime dependency and do not close the resource, compatibility,
+portfolio, or acceptance gaps above.
+
 ## Rules
 
 - No timing-based per-formula calibration.

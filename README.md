@@ -223,6 +223,12 @@ across 40 cost trials. Verification takes 0.288 to 1.419 ms and is 2.26x to
 7.23x slower than exact CDCL on these individual queries, so v3 is an assurance
 artifact, not a speed claim or portfolio default.
 
+The [external event-contract proof baseline](docs/EXTERNAL_EVENT_CONTRACT_PROOF_BASELINE.md)
+exports v3 completeness claims to source-bound DIMACS and checks them with
+pinned CaDiCaL and DRAT-trim. All 72 individual obligations and four aggregates
+verified across both answer classes. This adds maintained proof-format and
+checker diversity; it does not make v3 a stable or production-admitted API.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

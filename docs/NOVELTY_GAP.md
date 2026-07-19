@@ -117,3 +117,10 @@ combining known methods is not enough to establish novelty. External standard
 proof checking, search for the complete combination, and expert review remain
 open claim gates. Repository language must continue to say candidate
 contribution or research prototype.
+
+The [external event-contract proof baseline](EXTERNAL_EVENT_CONTRACT_PROOF_BASELINE.md)
+now verifies every v3 completeness obligation with maintained CaDiCaL and
+DRAT-trim implementations. This closes proof-format and checker diversity for
+that layer. It does not establish novelty for the combined certificate,
+externally check composition or replay, or replace the remaining prior-art and
+expert-review gates.
