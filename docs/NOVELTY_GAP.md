@@ -236,3 +236,13 @@ leaves. It is rejected by the frozen 256-cell gate before proof production.
 This falsifies straightforward state-limit expansion for that candidate and
 points toward non-cube equivalence predicates or a cleaner public controller.
 It supplies no novelty evidence.
+
+The fixed state-first
+[controller MTBDD v1](PROOF_CARRYING_MTBDD_V1.md) then represents the identical
+public relation with 254 shared decision nodes and 153 terminals, and verifies
+all 131,072 assignments independently. This is a substantial internal
+representation improvement over the failed cube vocabularies. Reduced ordered
+multi-terminal BDDs and exhaustive equivalence checking are established, so the
+result is not itself novel. The candidate novelty boundary moves to reusable
+source-bound composition evidence that beats ordinary complete artifacts and
+the closest maintained compositional checker on realistic environments.

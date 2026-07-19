@@ -121,6 +121,10 @@ cannot change any production-readiness row until those gates close.
 The first pinned public washing-controller candidate fails the controller
 transducer admission gate with 1,028 canonical cells. It is retained as a
 negative product-scale regression, not counted as public-product support.
+The separate fixed-order MTBDD backend admits the same exact relation in 6,217
+bytes and independently checks all 131,072 assignments. It does not yet compose
+with public product environments, expose a CLI file workflow, have an external
+oracle, or carry release compatibility, so it does not close a readiness row.
 
 ## Rules
 

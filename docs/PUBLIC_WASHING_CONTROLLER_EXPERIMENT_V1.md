@@ -76,3 +76,10 @@ Raising the cell or proof limits would violate the predeclared experiment. The
 next admissible directions are a public controller with cleaner synchronous
 state semantics or a new proof vocabulary that represents non-cube input
 equivalence without enumerating 1,028 leaves.
+
+The follow-up fixed-order MTBDD experiment takes the second route without
+changing the failed cube gate. It represents the same 131,072 exact assignments
+with 153 outcome terminals and 254 decision nodes in 6,217 bytes. Independent
+exhaustive source checking passes. See
+[proof-carrying controller MTBDD v1](PROOF_CARRYING_MTBDD_V1.md). The cube result
+remains rejected; the MTBDD is a separate experimental backend.

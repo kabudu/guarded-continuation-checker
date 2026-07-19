@@ -1,0 +1,2 @@
+schema_version,assignments,terminals,nodes,artifact_bytes,production_nanos,verification_nanos,status
+1,131072,153,254,6217,479660375,475873750,ok
