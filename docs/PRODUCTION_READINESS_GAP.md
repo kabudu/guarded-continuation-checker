@@ -123,8 +123,11 @@ transducer admission gate with 1,028 canonical cells. It is retained as a
 negative product-scale regression, not counted as public-product support.
 The separate fixed-order MTBDD backend admits the same exact relation in 6,217
 bytes and independently checks all 131,072 assignments. It does not yet compose
-with public product environments, expose a CLI file workflow, have an external
-oracle, or carry release compatibility, so it does not close a readiness row.
+with representative physical product environments, expose a CLI file workflow,
+have an external oracle, or carry release compatibility, so it does not close a
+readiness row. Two minimal appliance monitors now cover exact SAFE and UNSAFE
+composition and direct-controller agreement, but remain repository-authored
+mechanism tests.
 
 ## Rules
 

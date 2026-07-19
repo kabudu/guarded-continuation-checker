@@ -5,9 +5,12 @@ use std::error::Error;
 use std::fmt;
 
 use crate::aiger_obligation::{AigerOutcome, AigerTransition};
+use crate::controller_mtbdd::{
+    ControllerMtbddArtifact, ControllerMtbddSummary, evaluate_controller_mtbdd_unchecked,
+    verify_controller_mtbdd,
+};
 use crate::controller_transducer::{
-    CONTROLLER_TRANSDUCER_VERSION, ControllerTransducerCell, ControllerTransducerObligation,
-    ControllerTransducerRow, ControllerTransducerSummary, verify_controller_transducer,
+    ControllerTransducerObligation, ControllerTransducerSummary, verify_controller_transducer,
 };
 
 pub const CONTROLLER_PLANT_VERSION: u32 = 1;
@@ -78,6 +81,18 @@ pub struct ControllerPlantPortfolioResult {
 pub struct VerifiedControllerTransducer<'a> {
     obligation: &'a ControllerTransducerObligation,
     summary: ControllerTransducerSummary,
+}
+
+#[derive(Debug)]
+pub struct VerifiedControllerMtbdd<'a> {
+    artifact: &'a ControllerMtbddArtifact,
+    summary: ControllerMtbddSummary,
+}
+
+impl VerifiedControllerMtbdd<'_> {
+    pub fn summary(&self) -> &ControllerMtbddSummary {
+        &self.summary
+    }
 }
 
 impl VerifiedControllerTransducer<'_> {
@@ -205,20 +220,21 @@ fn declared_controller_input(sensor_inputs: &[usize], sensor_pattern: usize) -> 
         })
 }
 
-fn validate_wiring(
-    controller: &ControllerTransducerObligation,
+fn validate_wiring_boundary(
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
     plant: &AigerTransition,
     wiring: &ControllerPlantWiring,
 ) -> Result<Vec<usize>, ControllerPlantError> {
     plant
         .validate()
         .map_err(|error| reject(error.to_string()))?;
-    if wiring.controller_sensor_inputs != controller.relevant_inputs
-        || wiring.controller_action_outputs != controller.observed_outputs
+    if wiring.controller_sensor_inputs != relevant_inputs
+        || wiring.controller_action_outputs != observed_outputs
         || plant.inputs.len() > MAX_PLANT_INPUTS
         || plant.latches.len() > MAX_PLANT_LATCHES
-        || wiring.plant_sensor_outputs.len() != controller.relevant_inputs.len()
-        || wiring.plant_action_inputs.len() != controller.observed_outputs.len()
+        || wiring.plant_sensor_outputs.len() != relevant_inputs.len()
+        || wiring.plant_action_inputs.len() != observed_outputs.len()
         || wiring
             .plant_sensor_outputs
             .iter()
@@ -315,13 +331,50 @@ fn explore_controller_plant(
     bad_plant_output: usize,
     horizon: usize,
 ) -> Result<ControllerPlantResult, ControllerPlantError> {
-    let external_inputs = validate_wiring(controller, plant, wiring)?;
+    explore_controller_plant_function(
+        controller.state_count,
+        &controller.relevant_inputs,
+        &controller.observed_outputs,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+        |state, sensors| {
+            let cell_index = cell_for_pattern(controller, sensors)?;
+            controller.cells[cell_index]
+                .rows
+                .get(state)
+                .map(|row| row.outcome)
+                .ok_or_else(|| reject("controller transducer state row is missing"))
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn explore_controller_plant_function<F>(
+    controller_state_count: usize,
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+    outcome: F,
+) -> Result<ControllerPlantResult, ControllerPlantError>
+where
+    F: Fn(usize, usize) -> Result<AigerOutcome, ControllerPlantError>,
+{
+    let external_inputs =
+        validate_wiring_boundary(relevant_inputs, observed_outputs, plant, wiring)?;
     if horizon > MAX_COMPOSITION_HORIZON
-        || initial_controller_state >= controller.state_count
+        || initial_controller_state >= controller_state_count
         || initial_plant_state >= plant.state_count()
         || bad_plant_output >= plant.outputs.len()
-        || controller
-            .state_count
+        || controller_state_count
             .checked_mul(plant.state_count())
             .is_none_or(|states| states > MAX_PRODUCT_STATES)
     {
@@ -346,12 +399,8 @@ fn explore_controller_plant(
                 sensor_cache.insert(state.plant, sensors);
                 sensors
             };
-            let cell_index = cell_for_pattern(controller, sensors)?;
-            let row = controller.cells[cell_index]
-                .rows
-                .get(state.controller)
-                .ok_or_else(|| reject("controller transducer state row is missing"))?;
-            let action = usize::try_from(row.outcome.outputs)
+            let controller_outcome = outcome(state.controller, sensors)?;
+            let action = usize::try_from(controller_outcome.outputs)
                 .map_err(|_| reject("controller action pattern exceeds usize"))?;
             let controller_input =
                 declared_controller_input(&wiring.controller_sensor_inputs, sensors);
@@ -392,7 +441,7 @@ fn explore_controller_plant(
                 }
                 if frame < horizon {
                     let target = ProductState {
-                        controller: row.outcome.target,
+                        controller: controller_outcome.target,
                         plant: next_plant,
                     };
                     next.entry(target).or_insert(Some(Predecessor {
@@ -483,6 +532,73 @@ pub fn compose_verified_controller_plant(
     )
 }
 
+pub fn verify_mtbdd_for_composition<'a>(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    artifact: &'a ControllerMtbddArtifact,
+) -> Result<VerifiedControllerMtbdd<'a>, ControllerPlantError> {
+    let summary = verify_controller_mtbdd(controller_model, controller_source_sha256, artifact)
+        .map_err(|error| reject(error.to_string()))?;
+    Ok(VerifiedControllerMtbdd { artifact, summary })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compose_verified_mtbdd_plant(
+    controller: &VerifiedControllerMtbdd<'_>,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantResult, ControllerPlantError> {
+    explore_controller_plant_function(
+        controller.artifact.state_count,
+        &controller.artifact.relevant_inputs,
+        &controller.artifact.observed_outputs,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+        |state, sensors| {
+            evaluate_controller_mtbdd_unchecked(
+                controller.artifact,
+                controller.summary.state_bits,
+                state,
+                sensors,
+            )
+            .map_err(|error| reject(error.to_string()))
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compose_controller_mtbdd_plant(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    artifact: &ControllerMtbddArtifact,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantResult, ControllerPlantError> {
+    let verified =
+        verify_mtbdd_for_composition(controller_model, controller_source_sha256, artifact)?;
+    compose_verified_mtbdd_plant(
+        &verified,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+    )
+}
+
 pub fn compose_controller_plant_batch(
     controller_model: &AigerTransition,
     controller_source_sha256: [u8; 32],
@@ -534,10 +650,10 @@ pub fn compose_controller_plant_batch(
     })
 }
 
-fn direct_controller_table(
+fn validate_direct_controller_boundary(
     controller_model: &AigerTransition,
     wiring: &ControllerPlantWiring,
-) -> Result<ControllerTransducerObligation, ControllerPlantError> {
+) -> Result<Vec<usize>, ControllerPlantError> {
     controller_model
         .validate()
         .map_err(|error| reject(error.to_string()))?;
@@ -547,8 +663,15 @@ fn direct_controller_table(
         .copied()
         .collect::<BTreeSet<_>>();
     if controller_model.inputs.len() > MAX_DIRECT_CONTROLLER_INPUTS
-        || wiring.controller_sensor_inputs.len() != controller_model.inputs.len()
-        || sensor_set != (0..controller_model.inputs.len()).collect::<BTreeSet<_>>()
+        || wiring.controller_sensor_inputs.len() > controller_model.inputs.len()
+        || sensor_set.len() != wiring.controller_sensor_inputs.len()
+        || sensor_set
+            .iter()
+            .any(|&input| input >= controller_model.inputs.len())
+        || wiring
+            .controller_sensor_inputs
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
         || wiring.controller_action_outputs.len() != wiring.plant_action_inputs.len()
         || wiring
             .controller_action_outputs
@@ -561,40 +684,9 @@ fn direct_controller_table(
     {
         return Err(reject("direct controller boundary is outside exact limits"));
     }
-    let pattern_count = 1usize << wiring.controller_sensor_inputs.len();
-    let mut cells = Vec::with_capacity(pattern_count);
-    for pattern in 0..pattern_count {
-        let controller_input = declared_controller_input(&wiring.controller_sensor_inputs, pattern);
-        let rows = (0..controller_model.state_count())
-            .map(|source| {
-                let (target, outputs) = controller_model
-                    .evaluate(source, controller_input)
-                    .map_err(|error| reject(error.to_string()))?;
-                Ok(ControllerTransducerRow {
-                    outcome: AigerOutcome {
-                        target,
-                        outputs: projected_bits(outputs, &wiring.controller_action_outputs) as u128,
-                    },
-                    witness_input: controller_input,
-                    proof: Vec::new(),
-                })
-            })
-            .collect::<Result<Vec<_>, ControllerPlantError>>()?;
-        cells.push(ControllerTransducerCell {
-            cube: (0..wiring.controller_sensor_inputs.len())
-                .map(|bit| Some(pattern >> bit & 1 == 1))
-                .collect(),
-            rows,
-        });
-    }
-    Ok(ControllerTransducerObligation {
-        version: CONTROLLER_TRANSDUCER_VERSION,
-        source_sha256: [0; 32],
-        relevant_inputs: wiring.controller_sensor_inputs.clone(),
-        observed_outputs: wiring.controller_action_outputs.clone(),
-        state_count: controller_model.state_count(),
-        cells,
-    })
+    Ok((0..controller_model.inputs.len())
+        .filter(|input| !sensor_set.contains(input))
+        .collect())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -607,15 +699,40 @@ pub fn compose_controller_plant_direct(
     bad_plant_output: usize,
     horizon: usize,
 ) -> Result<ControllerPlantResult, ControllerPlantError> {
-    let controller = direct_controller_table(controller_model, wiring)?;
-    explore_controller_plant(
-        &controller,
+    let omitted_inputs = validate_direct_controller_boundary(controller_model, wiring)?;
+    explore_controller_plant_function(
+        controller_model.state_count(),
+        &wiring.controller_sensor_inputs,
+        &wiring.controller_action_outputs,
         plant,
         wiring,
         initial_controller_state,
         initial_plant_state,
         bad_plant_output,
         horizon,
+        |source, pattern| {
+            let controller_input =
+                declared_controller_input(&wiring.controller_sensor_inputs, pattern);
+            let mut expected = None;
+            for omitted_pattern in 0..(1usize << omitted_inputs.len()) {
+                let complete_input =
+                    controller_input | declared_controller_input(&omitted_inputs, omitted_pattern);
+                let (target, outputs) = controller_model
+                    .evaluate(source, complete_input)
+                    .map_err(|error| reject(error.to_string()))?;
+                let outcome = AigerOutcome {
+                    target,
+                    outputs: projected_bits(outputs, &wiring.controller_action_outputs) as u128,
+                };
+                if expected.is_some_and(|value| value != outcome) {
+                    return Err(reject(
+                        "omitted direct controller inputs affect the exact outcome",
+                    ));
+                }
+                expected = Some(outcome);
+            }
+            expected.ok_or_else(|| reject("direct controller outcome is missing"))
+        },
     )
 }
 

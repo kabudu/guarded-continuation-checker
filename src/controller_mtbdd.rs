@@ -311,10 +311,10 @@ pub fn evaluate_controller_mtbdd(
     {
         return Err(reject("controller MTBDD query is outside dimensions"));
     }
-    evaluate_unchecked(artifact, bits, state, input_pattern)
+    evaluate_controller_mtbdd_unchecked(artifact, bits, state, input_pattern)
 }
 
-fn evaluate_unchecked(
+pub(crate) fn evaluate_controller_mtbdd_unchecked(
     artifact: &ControllerMtbddArtifact,
     bits: usize,
     state: usize,
@@ -358,7 +358,7 @@ pub fn verify_controller_mtbdd(
                 target,
                 outputs: projected_outputs(outputs, &artifact.observed_outputs),
             };
-            if evaluate_unchecked(artifact, bits, state, pattern)? != expected {
+            if evaluate_controller_mtbdd_unchecked(artifact, bits, state, pattern)? != expected {
                 return Err(reject("controller MTBDD outcome mismatch"));
             }
         }
