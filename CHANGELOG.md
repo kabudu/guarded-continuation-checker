@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
+  canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability
+  snapshots, and internal SHA-256 manifests; independently verify structure,
+  static linkage, identity bindings, and corruption rejection. Add a two-clone
+  byte-reproducibility gate and a master-only GitHub Sigstore attestation
+  workflow without publishing a release or crate.
+
 - Add the proof-carrying event-contract feasibility primitive. Rebuild named-CNF
   relation and terminal completeness obligations independently of the BDD,
   replay every concrete edge and terminal witness against the source AIG, and

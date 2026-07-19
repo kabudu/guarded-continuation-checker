@@ -76,7 +76,14 @@ close either register by itself.
 
 10. **External validation and novelty review.** Compare against maintained
     model checkers and explanation tools on public and confidential partner
-    designs; commission independent technical, security, and scholarly review.
+   designs; commission independent technical, security, and scholarly review.
+
+Release-path work now includes candidate
+[reproducible Linux evaluation bundle v1](LINUX_EVALUATION_BUNDLE_V1.md): static
+x86_64 musl, SPDX, deterministic provenance, offline replay, and a protected
+attestation workflow. It is production hardening rather than an algorithmic
+research result. Hosted reproducibility, a retained signed candidate, the macOS
+distribution decision, and independent evaluation remain open until evidenced.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.

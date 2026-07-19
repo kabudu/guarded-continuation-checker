@@ -47,6 +47,12 @@ cargo install --git https://github.com/kabudu/guarded-continuation-checker \
   --rev <reviewed-commit> --locked
 ```
 
+For self-service Linux evaluation, prefer the repository's reproducible static
+bundle contract. It includes an SPDX SBOM, deterministic provenance, internal
+checksums, and optional GitHub Sigstore attestations. The first crate has not yet
+been published, and no binary should be treated as an authenticated release
+without verifying its attestation policy.
+
 Confirm the versioned interfaces before integrating:
 
 ```sh
