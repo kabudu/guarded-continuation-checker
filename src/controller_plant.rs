@@ -7,7 +7,7 @@ use std::fmt;
 use crate::aiger_obligation::{AigerOutcome, AigerTransition};
 use crate::controller_transducer::{
     CONTROLLER_TRANSDUCER_VERSION, ControllerTransducerCell, ControllerTransducerObligation,
-    ControllerTransducerRow, verify_controller_transducer,
+    ControllerTransducerRow, ControllerTransducerSummary, verify_controller_transducer,
 };
 
 pub const CONTROLLER_PLANT_VERSION: u32 = 1;
@@ -72,6 +72,39 @@ pub struct ControllerPlantPortfolioResult {
     pub backend: ControllerPlantBackend,
     pub selection_reason: ControllerPlantSelectionReason,
     pub result: ControllerPlantResult,
+}
+
+#[derive(Debug)]
+pub struct VerifiedControllerTransducer<'a> {
+    obligation: &'a ControllerTransducerObligation,
+    summary: ControllerTransducerSummary,
+}
+
+impl VerifiedControllerTransducer<'_> {
+    pub fn summary(&self) -> &ControllerTransducerSummary {
+        &self.summary
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ControllerPlantBatchInput<'a> {
+    pub plant: &'a AigerTransition,
+    pub wiring: &'a ControllerPlantWiring,
+    pub initial_controller_state: usize,
+    pub initial_plant_state: usize,
+    pub bad_plant_output: usize,
+    pub horizon: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantBatchResult {
+    pub members: Vec<ControllerPlantResult>,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub controller_cells: usize,
+    pub controller_proof_bytes: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -402,10 +435,10 @@ pub fn compose_controller_plant(
     bad_plant_output: usize,
     horizon: usize,
 ) -> Result<ControllerPlantResult, ControllerPlantError> {
-    verify_controller_transducer(controller_model, controller_source_sha256, controller)
-        .map_err(|error| reject(error.to_string()))?;
-    explore_controller_plant(
-        controller,
+    let verified =
+        verify_controller_for_composition(controller_model, controller_source_sha256, controller)?;
+    compose_verified_controller_plant(
+        &verified,
         plant,
         wiring,
         initial_controller_state,
@@ -413,6 +446,92 @@ pub fn compose_controller_plant(
         bad_plant_output,
         horizon,
     )
+}
+
+pub fn verify_controller_for_composition<'a>(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller: &'a ControllerTransducerObligation,
+) -> Result<VerifiedControllerTransducer<'a>, ControllerPlantError> {
+    let summary =
+        verify_controller_transducer(controller_model, controller_source_sha256, controller)
+            .map_err(|error| reject(error.to_string()))?;
+    Ok(VerifiedControllerTransducer {
+        obligation: controller,
+        summary,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compose_verified_controller_plant(
+    controller: &VerifiedControllerTransducer<'_>,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantResult, ControllerPlantError> {
+    explore_controller_plant(
+        controller.obligation,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+    )
+}
+
+pub fn compose_controller_plant_batch(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller: &ControllerTransducerObligation,
+    members: &[ControllerPlantBatchInput<'_>],
+) -> Result<ControllerPlantBatchResult, ControllerPlantError> {
+    if members.is_empty() || members.len() > 64 {
+        return Err(reject(
+            "controller-plant batch member count is outside limit",
+        ));
+    }
+    let verified =
+        verify_controller_for_composition(controller_model, controller_source_sha256, controller)?;
+    let mut results = Vec::with_capacity(members.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    let mut reachable_product_states = 0usize;
+    let mut explored_transitions = 0usize;
+    for member in members {
+        let result = compose_verified_controller_plant(
+            &verified,
+            member.plant,
+            member.wiring,
+            member.initial_controller_state,
+            member.initial_plant_state,
+            member.bad_plant_output,
+            member.horizon,
+        )?;
+        match result.answer {
+            ControllerPlantAnswer::Safe => safe += 1,
+            ControllerPlantAnswer::Unsafe => unsafe_count += 1,
+        }
+        reachable_product_states = reachable_product_states
+            .checked_add(result.reachable_product_states)
+            .ok_or_else(|| reject("controller-plant batch reachable count overflow"))?;
+        explored_transitions = explored_transitions
+            .checked_add(result.explored_transitions)
+            .ok_or_else(|| reject("controller-plant batch transition count overflow"))?;
+        results.push(result);
+    }
+    Ok(ControllerPlantBatchResult {
+        members: results,
+        safe,
+        unsafe_count,
+        controller_cells: verified.summary.cells,
+        controller_proof_bytes: verified.summary.proof_bytes,
+        reachable_product_states,
+        explored_transitions,
+    })
 }
 
 fn direct_controller_table(
@@ -796,6 +915,63 @@ mod tests {
                 8,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn batch_verifies_controller_once_and_preserves_every_member_result() {
+        let controller_model = controller();
+        let plant_model = plant();
+        let digest = [12; 32];
+        let obligation =
+            produce_controller_transducer(&controller_model, digest, &[0], &[0]).unwrap();
+        let wiring = ControllerPlantWiring {
+            controller_sensor_inputs: vec![0],
+            controller_action_outputs: vec![0],
+            plant_sensor_outputs: vec![0],
+            plant_action_inputs: vec![0],
+        };
+        let members = [
+            ControllerPlantBatchInput {
+                plant: &plant_model,
+                wiring: &wiring,
+                initial_controller_state: 0,
+                initial_plant_state: 0,
+                bad_plant_output: 1,
+                horizon: 8,
+            },
+            ControllerPlantBatchInput {
+                plant: &plant_model,
+                wiring: &wiring,
+                initial_controller_state: 0,
+                initial_plant_state: 1,
+                bad_plant_output: 1,
+                horizon: 8,
+            },
+        ];
+        let batch =
+            compose_controller_plant_batch(&controller_model, digest, &obligation, &members)
+                .unwrap();
+        assert_eq!((batch.safe, batch.unsafe_count), (1, 1));
+        for (member, result) in members.iter().zip(&batch.members) {
+            assert_eq!(
+                *result,
+                compose_controller_plant(
+                    &controller_model,
+                    digest,
+                    &obligation,
+                    member.plant,
+                    member.wiring,
+                    member.initial_controller_state,
+                    member.initial_plant_state,
+                    member.bad_plant_output,
+                    member.horizon,
+                )
+                .unwrap()
+            );
+        }
+        assert!(
+            compose_controller_plant_batch(&controller_model, digest, &obligation, &[]).is_err()
         );
     }
 }

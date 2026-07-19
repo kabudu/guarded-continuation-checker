@@ -1,6 +1,7 @@
 use guarded_continuation_checker::aiger_obligation::{AigerLatch, AigerTransition};
 use guarded_continuation_checker::controller_plant::{
-    ControllerPlantAnswer, ControllerPlantBackend, ControllerPlantWiring, compose_controller_plant,
+    ControllerPlantAnswer, ControllerPlantBackend, ControllerPlantBatchInput,
+    ControllerPlantWiring, compose_controller_plant, compose_controller_plant_batch,
     compose_controller_plant_portfolio,
 };
 use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
@@ -55,4 +56,21 @@ fn downstream_api_composes_a_verified_controller_and_sampled_plant() {
             .unwrap();
     assert_eq!(fallback.backend, ControllerPlantBackend::DirectExact);
     assert_eq!(fallback.result, result);
+
+    let batch = compose_controller_plant_batch(
+        &controller,
+        digest,
+        &obligation,
+        &[ControllerPlantBatchInput {
+            plant: &plant,
+            wiring: &wiring,
+            initial_controller_state: 0,
+            initial_plant_state: 0,
+            bad_plant_output: 1,
+            horizon: 16,
+        }],
+    )
+    .unwrap();
+    assert_eq!((batch.safe, batch.unsafe_count), (1, 0));
+    assert_eq!(batch.members[0], result);
 }

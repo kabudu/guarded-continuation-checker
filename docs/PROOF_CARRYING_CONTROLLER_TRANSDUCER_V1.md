@@ -16,8 +16,11 @@ reconstructs unsafe traces with the actual sensed controller input. An
 independent direct-controller baseline agrees on every retained small query. A
 timing-free portfolio selects a supplied verified artifact or direct exact
 fallback when no artifact is available; invalid supplied evidence fails closed
-instead of falling back. Strong performance and public-product baselines remain
-incomplete. This is not a novelty or production-readiness claim.
+instead of falling back. An opaque verified-controller handle and batch API now
+verify the shared controller proofs once and expose aggregate member, answer,
+proof-byte, reachable-state, and transition observations. Strong performance
+and public-product baselines remain incomplete. This is not a novelty or
+production-readiness claim.
 
 ## Hypothesis
 
