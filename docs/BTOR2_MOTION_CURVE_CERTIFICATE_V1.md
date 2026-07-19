@@ -75,6 +75,9 @@ one-state region and explicit-search artifact. The individual certificate
 formats remain self-identifying and unchanged; only new production can select
 the motion format.
 
+Portfolio v3 later prepends the braking-phase backend while retaining these
+version 1 artifacts and the motion backend's selection semantics.
+
 ## Limits and observability
 
 - certificate version: 1;

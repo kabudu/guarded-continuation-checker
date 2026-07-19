@@ -39,6 +39,13 @@
   intersecting and semi-implicit near-neighbour models. Reduce two SAFE
   artifacts from 624,272 and 253,928 bytes to 358 bytes while explicitly
   retaining the established affine-acceleration prior-art boundary.
+- Add exact BTOR2 braking-phase certificate v1 and bounded portfolio v3.
+  Compose accelerate, brake, and stopped regions under every reset schedule,
+  independently reconstruct phase boundaries and reachable-prefix
+  completeness, and retain exact fallback for unsafe and semi-implicit
+  near-neighbour cases. Reduce two SAFE artifacts from 1,180,313 and 453,342
+  bytes to 386 bytes. Piecewise-affine reachability and braking invariants are
+  established prior art; this is not a novelty or production-readiness claim.
 
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability

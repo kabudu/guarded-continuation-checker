@@ -174,3 +174,12 @@ prior art. This is useful engineering evidence, not a novel algorithm. The
 remaining candidate boundary requires phase-composable relations across
 multiple control inputs or components, plus a complete closest-system search
 and external expert review.
+
+[BTOR2 braking-phase certificate v1](BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md)
+composes accelerate, brake, and stopped regions under arbitrary reset schedules
+and compresses two complete SAFE artifacts by more than 99.9%. Piecewise-affine
+reachability, braking invariants, recurrence acceleration, arithmetic-series
+summaries, and independently checked safety certificates are established prior
+art. This result is not claimed as novel. The candidate boundary now requires
+composition across separately sourced controller and plant contracts, with a
+non-Cartesian interface relation and maintained product or SMT baselines.

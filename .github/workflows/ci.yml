@@ -36,7 +36,10 @@ jobs:
             scripts/run-btor2-region-cohort.sh \
             scripts/run-btor2-motion-cohort.sh \
             scripts/run-btor2-motion-self-service-acceptance.sh \
-            scripts/run-btor2-motion-cost.sh
+            scripts/run-btor2-motion-cost.sh \
+            scripts/run-btor2-braking-cohort.sh \
+            scripts/run-btor2-braking-self-service-acceptance.sh \
+            scripts/run-btor2-braking-cost.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -70,6 +73,17 @@ jobs:
             target/debug/guarded-continuation-checker /tmp/btor2-motion-acceptance.csv
           diff -u results/btor2-motion-self-service-acceptance-v1.csv \
             /tmp/btor2-motion-acceptance.csv
+      - name: Reproduce exact BTOR2 braking-phase cohort
+        run: |
+          scripts/run-btor2-braking-cohort.sh \
+            target/debug/guarded-continuation-checker /tmp/btor2-braking.csv
+          diff -u results/btor2-braking-cohort-v1.csv /tmp/btor2-braking.csv
+      - name: Reproduce BTOR2 braking self-service acceptance
+        run: |
+          scripts/run-btor2-braking-self-service-acceptance.sh \
+            target/debug/guarded-continuation-checker /tmp/btor2-braking-acceptance.csv
+          diff -u results/btor2-braking-self-service-acceptance-v1.csv \
+            /tmp/btor2-braking-acceptance.csv
       - name: Test external production evidence gate
         run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test

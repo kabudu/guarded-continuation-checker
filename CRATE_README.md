@@ -20,7 +20,8 @@ The package provides:
 - deterministic certificate formats with independent source-bound verification;
   and
 - experimental BTOR2 word semantics, counter-phase certificates, exact trace
-  replay, proof-carrying exact word regions and coupled-motion curves, and
+  replay, proof-carrying exact word regions, coupled-motion curves and
+  resettable braking phases, and
   both-answer bounded reachability with a static exact-search fallback and
   fixed resource limits.
 
@@ -36,6 +37,11 @@ The project publishes negative measurements and tracks the remaining
 and
 [novelty](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/NOVELTY_GAP.md)
 gaps explicitly.
+
+Bounded portfolio v3 source-binds and independently checks the exact
+accelerate, brake, and stopped relation, with unchanged exact-search fallback
+for every unsupported or intersecting query. This remains a narrow experimental
+result, not a production or novelty claim.
 
 ## Installation
 
