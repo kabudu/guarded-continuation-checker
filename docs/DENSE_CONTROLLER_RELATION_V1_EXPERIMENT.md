@@ -8,9 +8,11 @@ resource-bounded dense relation module supplies exact edge insertion,
 membership, target enumeration, composition, and binary exponentiation. A
 second public module generates and independently checks bounded Varisat UNSAT
 proofs, including structural preflight before the checker sees hostile bytes.
-The existing predicate engine uses both modules without changing its certificate
-format or answers. This remains an experiment and falsification plan, not a
-novelty or production-readiness claim.
+A third public module validates and evaluates a bounded AIGER transition model,
+then constructs exact relation-row and terminal-completeness CNF obligations.
+The existing predicate engine uses these modules without changing its
+certificate format or answers. This remains an experiment and falsification
+plan, not a novelty or production-readiness claim.
 
 The braking obligation proves that one independently checked controller summary
 can reduce artifact size and checking time across several plants. Its vocabulary
@@ -129,8 +131,9 @@ That claim is currently unproven.
 
 1. Extract the relation, witness, CNF obligation, and independent proof-checking
    primitives from the executable into stable library modules. The relation and
-   generic proof primitives are complete; witness and AIGER-to-CNF obligation
-   construction remain private.
+   generic proof and AIGER-to-CNF obligation primitives are complete. Public
+   parsing, projected witness search, and the source-bound controller artifact
+   remain incomplete.
 2. Prove byte-for-byte and answer compatibility for predicate certificate v2.
 3. Add a source-bound controller boundary manifest and canonical obligation.
 4. Add environment-member composition with exact trace reconstruction.

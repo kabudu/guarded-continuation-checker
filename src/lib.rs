@@ -4,6 +4,7 @@
 //! This library invokes it directly without a shell and validates its advertised
 //! versioned CLI contract before exposing typed certificate operations.
 
+pub mod aiger_obligation;
 pub mod btor2;
 pub mod btor2_bounded;
 pub mod btor2_braking;

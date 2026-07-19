@@ -1,4 +1,5 @@
 use guarded_continuation_checker::{
+    aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
     btor2_search,
     dense_relation::DenseRelation,
@@ -9707,6 +9708,31 @@ impl<'a> IndependentPredicateChecker<'a> {
     }
 }
 
+fn aiger_obligation_transition(model: &AagModel) -> AigerTransition {
+    AigerTransition {
+        max_variable: model.max_variable,
+        inputs: model.inputs.clone(),
+        latches: model
+            .latches
+            .iter()
+            .map(|latch| AigerLatch {
+                current: latch.current,
+                next: latch.next,
+            })
+            .collect(),
+        outputs: model.outputs.clone(),
+        ands: model
+            .ands
+            .iter()
+            .map(|gate| AigerAnd {
+                output: gate.output,
+                left: gate.left,
+                right: gate.right,
+            })
+            .collect(),
+    }
+}
+
 fn predicate_relation_completeness_clauses(
     model: &AagModel,
     relevant_inputs: &[usize],
@@ -9740,71 +9766,21 @@ fn predicate_relation_completeness_clauses_for_predicate(
     predicate: &InputPredicate,
     claimed_targets: u16,
 ) -> Result<Vec<Clause>, String> {
-    if predicate
-        .clauses
-        .iter()
-        .flatten()
-        .any(|(input, _)| *input >= relevant_inputs.len())
-        || model.latches.len() > u16::BITS as usize
-        || source >= 1usize << model.latches.len()
-    {
-        return Err("predicate proof obligation dimensions mismatch".to_string());
-    }
-    let mut clauses = Vec::with_capacity(
-        model.ands.len() * 3
-            + model.latches.len()
-            + predicate.clauses.len()
-            + claimed_targets.count_ones() as usize,
-    );
-    for (bit, latch) in model.latches.iter().enumerate() {
-        push_simplified_clause(
-            &mut clauses,
-            &[AagCnfLiteral::Variable((
-                latch.current / 2 - 1,
-                source >> bit & 1 == 1,
-            ))],
-        );
-    }
-    for clause in &predicate.clauses {
-        let mapped = clause
-            .iter()
-            .map(|(projected, positive)| {
-                AagCnfLiteral::Variable((
-                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
-                    *positive,
-                ))
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &mapped);
-    }
-    for gate in &model.ands {
-        let output = aag_cnf_literal(model, 0, gate.output);
-        let left = aag_cnf_literal(model, 0, gate.left);
-        let right = aag_cnf_literal(model, 0, gate.right);
-        push_simplified_clause(&mut clauses, &[output.negate(), left]);
-        push_simplified_clause(&mut clauses, &[output.negate(), right]);
-        push_simplified_clause(&mut clauses, &[output, left.negate(), right.negate()]);
-    }
-    for target in 0..(1usize << model.latches.len()) {
-        if claimed_targets & (1u16 << target) == 0 {
-            continue;
-        }
-        let differs = model
-            .latches
-            .iter()
-            .enumerate()
-            .map(|(bit, latch)| {
-                let next = aag_cnf_literal(model, 0, latch.next);
-                if target >> bit & 1 == 1 {
-                    next.negate()
-                } else {
-                    next
-                }
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &differs);
-    }
-    Ok(clauses)
+    let transition = aiger_obligation_transition(model);
+    let predicate = AigerInputPredicate {
+        clauses: predicate.clauses.clone(),
+    };
+    let targets = (0..(1usize << model.latches.len()))
+        .filter(|target| claimed_targets & (1u16 << target) != 0)
+        .collect::<Vec<_>>();
+    aiger_obligation::relation_row_completeness_cnf(
+        &transition,
+        relevant_inputs,
+        source,
+        &predicate,
+        &targets,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn predicate_terminal_completeness_clauses(
@@ -9840,66 +9816,21 @@ fn predicate_terminal_completeness_clauses_for_predicate(
     bad_output: usize,
     claimed_safe_states: u16,
 ) -> Result<Vec<Clause>, String> {
-    if predicate
-        .clauses
-        .iter()
-        .flatten()
-        .any(|(input, _)| *input >= relevant_inputs.len())
-        || model.latches.len() > u16::BITS as usize
-        || bad_output >= model.outputs.len()
-    {
-        return Err("predicate terminal proof obligation dimensions mismatch".to_string());
-    }
-    let mut clauses = Vec::with_capacity(
-        model.ands.len() * 3
-            + predicate.clauses.len()
-            + claimed_safe_states.count_ones() as usize
-            + 1,
-    );
-    for clause in &predicate.clauses {
-        let mapped = clause
-            .iter()
-            .map(|(projected, positive)| {
-                AagCnfLiteral::Variable((
-                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
-                    *positive,
-                ))
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &mapped);
-    }
-    for gate in &model.ands {
-        let output = aag_cnf_literal(model, 0, gate.output);
-        let left = aag_cnf_literal(model, 0, gate.left);
-        let right = aag_cnf_literal(model, 0, gate.right);
-        push_simplified_clause(&mut clauses, &[output.negate(), left]);
-        push_simplified_clause(&mut clauses, &[output.negate(), right]);
-        push_simplified_clause(&mut clauses, &[output, left.negate(), right.negate()]);
-    }
-    for state in 0..(1usize << model.latches.len()) {
-        if claimed_safe_states & (1u16 << state) == 0 {
-            continue;
-        }
-        let differs = model
-            .latches
-            .iter()
-            .enumerate()
-            .map(|(bit, latch)| {
-                let current = aag_cnf_literal(model, 0, latch.current);
-                if state >> bit & 1 == 1 {
-                    current.negate()
-                } else {
-                    current
-                }
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &differs);
-    }
-    push_simplified_clause(
-        &mut clauses,
-        &[aag_cnf_literal(model, 0, model.outputs[bad_output]).negate()],
-    );
-    Ok(clauses)
+    let transition = aiger_obligation_transition(model);
+    let predicate = AigerInputPredicate {
+        clauses: predicate.clauses.clone(),
+    };
+    let safe_states = (0..(1usize << model.latches.len()))
+        .filter(|state| claimed_safe_states & (1u16 << state) != 0)
+        .collect::<Vec<_>>();
+    aiger_obligation::terminal_completeness_cnf(
+        &transition,
+        relevant_inputs,
+        &predicate,
+        bad_output,
+        &safe_states,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn generate_varisat_unsat_proof(clauses: &[Clause]) -> Result<Vec<u8>, String> {
