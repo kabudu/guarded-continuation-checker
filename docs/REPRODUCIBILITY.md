@@ -741,6 +741,27 @@ cargo run --release --locked \
 Every run must report two SAFE and four UNSAFE answers, exact agreement, and
 `status=ok`. Timing values are observations and are expected to vary.
 
+Cross-check all six properties in one compiled SymbiYosys and Z3 session:
+
+```sh
+scripts/test-public-washing-controller-physical-oracle.sh /path/to/sby.py
+```
+
+The script regenerates both generated AIGER inputs byte for byte, requires the
+four exact bad frames, and checks that both expected-SAFE assertions survive
+through frame 32. The committed reference is
+`results/public-washing-controller-physical-oracle-v1.csv`.
+
+Run the maintained single-session formal oracle for the same six properties:
+
+```sh
+scripts/test-public-washing-controller-physical-oracle.sh /path/to/sby.py
+```
+
+It must report four failing assertions at steps 4, 7, 15, and 15, no failures
+for the two expected-SAFE assertions, and completion through step 32. The
+retained rows are `results/public-washing-controller-physical-oracle-v1.csv`.
+
 Regenerate and check the seven-action complete-cycle plant, then run its exact
 composition regression:
 

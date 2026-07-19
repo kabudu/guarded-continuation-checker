@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a maintained single-session SymbiYosys, Yosys, and Z3 baseline for the
+  six-property stateful plant. Reuse one compiled closed-loop model, reproduce
+  all four shortest bad frames, prove the other two properties through frame
+  32, retain machine-readable agreement, and gate the batch in CI.
+
 - Expand the controller MTBDD static boundary from four to eight observed
   actions without relaxing assignment, node, terminal, or artifact limits. Add
   a seven-action fill-to-spin process whose 254-node, 189-terminal MTBDD checks

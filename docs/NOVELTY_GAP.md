@@ -211,6 +211,17 @@ agreement on three horizon-64 process properties. It strengthens product-shaped
 coverage but does not alter the closest-system conclusion: MTBDD compilation
 and reuse are established, and the physical plant is repository-authored.
 
+The maintained single-session SymbiYosys/Yosys/Z3 oracle now exactly reproduces
+all six disturbance-aware answers and four shortest bad frames. This removes
+the external semantic agreement gap for the fixture, but it is validation
+evidence rather than novelty evidence. Comparable memory measurement and a
+non-repository-authored physical environment remain open.
+
+The seven-action complete-cycle follow-up retains a 254-node MTBDD and exact
+agreement on three horizon-64 process properties. It strengthens product-shaped
+coverage but does not alter the closest-system conclusion: MTBDD compilation
+and reuse are established, and the physical plant is repository-authored.
+
 The next [dense controller relation v1 experiment](DENSE_CONTROLLER_RELATION_V1_EXPERIMENT.md)
 tests a broader candidate boundary: reuse the existing witnessed-edge and UNSAT
 row-completeness proof primitives as one source-bound controller relation across
@@ -279,6 +290,12 @@ shared evidence advantage: 78.6% fewer boundary bytes and 70.8% less checking
 time than repeated complete evidence. Shared checking is at practical parity
 with GCC's checked in-process reuse in the retained run. This isolates a useful
 portable-evidence result, but the in-process control uses the same GCC MTBDD
-implementation. A maintained external symbolic-session baseline, peak-memory
-measurement, and a non-repository-authored physical environment remain open.
-No novelty claim is made.
+implementation. A maintained external symbolic-session cost baseline,
+peak-memory measurement, and a non-repository-authored physical environment
+remain open. No novelty claim is made.
+
+Pinned SymbiYosys with maintained Yosys and Z3 now checks the six disturbance
+properties in one compiled closed-loop session. It reproduces all four shortest
+bad frames and preserves both bounded SAFE results. This closes external answer
+agreement for the fixture, not the missing external cost comparison. Peak
+memory, a non-repository-authored environment, and expert review remain open.

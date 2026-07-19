@@ -1,8 +1,8 @@
 # Public controller with stateful physical plant v1
 
 Status: experimental mechanism evidence. The fixed experiment passes its exact
-answer, evidence-transfer, and checked in-process comparison gates. Maintained
-external symbolic-session and peak-memory comparisons remain open.
+answer, evidence-transfer, checked in-process comparison, and maintained
+external symbolic-session gates. Peak-memory comparison remains open.
 
 ## Predeclared question
 
@@ -79,10 +79,32 @@ real appliance. It therefore does not count as a second public product or an
 independent acceptance result.
 
 Checked in-process reuse is a stronger runtime control than repeated evidence,
-but it is still GCC's MTBDD implementation. A maintained external symbolic
-model checker must run the same six-query batch in one compiled session before
-any comparative claim. Peak resident memory must also be measured with a
-cross-platform method. No novelty claim is made.
+but it is still GCC's MTBDD implementation. A pinned SymbiYosys session with
+maintained Yosys and Z3 now compiles the same closed loop once, checks all six
+assertions together, reproduces bad frames 4, 7, 15, and 15, and reaches frame
+32 without either expected-SAFE assertion failing. Reproduce with:
+
+```sh
+scripts/test-public-washing-controller-physical-oracle.sh /path/to/sby.py
+```
+
+The retained agreement rows are in
+`results/public-washing-controller-physical-oracle-v1.csv`. This closes the
+maintained external answer-agreement gate for this fixture, but not a cost
+comparison against a production symbolic model checker. Peak resident memory
+must also be measured with a cross-platform method. No novelty claim is made.
+
+## Maintained single-session oracle
+
+Pinned SymbiYosys, maintained Yosys, and Z3 now compile the exact controller,
+plant, wiring, initial state, and six assertions once. One incremental
+`yosys-smtbmc --keep-going` session reproduces the four UNSAFE shortest frames
+at 4, 7, 15, and 15, while the fault-actuation and conflicting-action
+assertions remain valid through frame 32. These results exactly match GCC.
+
+This closes the maintained external batch-answer gate for this fixture. It does
+not yet provide a comparable external runtime or peak-memory measurement because
+the tools expose different compilation and reporting boundaries.
 
 ## Seven-action complete-cycle follow-up
 

@@ -1,0 +1,17 @@
+[options]
+mode bmc
+depth 33
+
+[engines]
+smtbmc --keep-going z3
+
+[script]
+read_aiger -module_name Controller -wideports controller.aag
+read_aiger -module_name WashingPlant -wideports physical-plant.aag
+read -formal physical-plant-monitor.sv
+prep -top washing_controller_physical_plant_oracle
+
+[files]
+generated/controller.aag
+plant/physical-plant.aag
+oracle/physical-plant-monitor.sv

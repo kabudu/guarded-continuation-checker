@@ -49,20 +49,24 @@ fn public_controller_mtbdd_composes_with_stateful_physical_plant_family() {
         plant_action_inputs: vec![1, 2, 3, 4],
     };
     let expected = [
-        ControllerPlantAnswer::Unsafe,
-        ControllerPlantAnswer::Unsafe,
-        ControllerPlantAnswer::Unsafe,
-        ControllerPlantAnswer::Unsafe,
-        ControllerPlantAnswer::Safe,
-        ControllerPlantAnswer::Safe,
+        (ControllerPlantAnswer::Unsafe, Some(4)),
+        (ControllerPlantAnswer::Unsafe, Some(7)),
+        (ControllerPlantAnswer::Unsafe, Some(15)),
+        (ControllerPlantAnswer::Unsafe, Some(15)),
+        (ControllerPlantAnswer::Safe, None),
+        (ControllerPlantAnswer::Safe, None),
     ];
-    for (property, expected) in (11..17).zip(expected) {
+    for (property, (expected_answer, expected_frame)) in (11..17).zip(expected) {
         let mtbdd =
             compose_verified_mtbdd_plant(&verified, &plant, &wiring, 0, 0, property, 32).unwrap();
         let direct =
             compose_controller_plant_direct(&controller, &plant, &wiring, 0, 0, property, 32)
                 .unwrap();
-        assert_eq!(mtbdd.answer, expected, "property output {property}");
+        assert_eq!(mtbdd.answer, expected_answer, "property output {property}");
+        assert_eq!(
+            mtbdd.bad_frame, expected_frame,
+            "property output {property}"
+        );
         assert_eq!(mtbdd, direct, "property output {property}");
     }
 }

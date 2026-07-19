@@ -45,7 +45,8 @@ jobs:
             scripts/run-btor2-component-cost.sh \
             scripts/run-btor2-component-batch-acceptance.sh \
             scripts/run-btor2-component-reuse-benchmark.sh \
-            scripts/test-public-washing-controller-oracle.sh
+            scripts/test-public-washing-controller-oracle.sh \
+            scripts/test-public-washing-controller-physical-oracle.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -199,6 +200,8 @@ jobs:
           cat /tmp/corpus-current/results.csv
       - name: Cross-check public controller compositions with SymbiYosys
         run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Cross-check stateful physical-plant batch with SymbiYosys
+        run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Run pinned historical Yosys 0.36
         run: |
           docker run --rm \

@@ -145,6 +145,16 @@ run. This closes a representative mechanism and stronger local-baseline gate.
 It does not close real-product validity because the plant is not independently
 sourced or physically calibrated. Maintained external batch comparison, peak
 memory, CLI integration, compatibility history, and acceptance remain open.
+Pinned SymbiYosys with maintained Yosys and Z3 now reproduces the four exact bad
+frames and two bounded SAFE results in one compiled formal session. This closes
+maintained answer agreement for the disturbance fixture only. External cost and
+memory comparison, independent plant provenance, and acceptance remain open.
+
+A single compiled SymbiYosys/Yosys model and one incremental Z3 session now
+reproduce all six stateful-plant answers and all four shortest bad frames. This
+closes maintained external semantic agreement for the repository-authored plant.
+Comparable peak memory, CLI integration, compatibility history, calibrated
+plant validity, and independent acceptance remain open.
 An additional five-state-bit full-action plant checks all seven physical
 controller actions against three expected-SAFE process properties through
 horizon 64. It validates the expanded eight-output MTBDD boundary but remains a
