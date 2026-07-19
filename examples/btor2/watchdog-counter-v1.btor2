@@ -1,0 +1,13 @@
+1 sort bitvec 1
+2 sort bitvec 8
+3 input 1 kick
+4 zero 2
+5 state 2 timer
+6 init 2 5 4
+7 one 2
+8 add 2 5 7
+9 ite 2 3 4 8
+10 next 2 5 9
+11 constd 2 3
+12 ugte 1 5 11
+13 bad 12 expired

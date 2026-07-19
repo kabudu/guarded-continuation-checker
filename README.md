@@ -98,6 +98,11 @@ and persistent CDCL. Results are published as an atomic, SHA-256-bound
 bounded experiment, not a claim that counterexample minimisation or causal
 explanation is new.
 
+The experimental [BTOR2 word semantic core v1](docs/BTOR2_WORD_CORE_V1.md)
+preserves bounded firmware counter and timer expressions before bit blasting,
+with strict resource and unsupported-operation rejection. It is a foundation
+for future proof-carrying word composition, not yet a solver or novelty result.
+
 The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
 single exact evaluation command over partial AIGER input transcripts. Its
 timing-free structural gate selects the independently checked dense predicate

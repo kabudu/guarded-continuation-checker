@@ -4,6 +4,8 @@
 //! This library invokes it directly without a shell and validates its advertised
 //! versioned CLI contract before exposing typed certificate operations.
 
+pub mod btor2;
+
 use std::fmt;
 use std::io::Read;
 #[cfg(unix)]

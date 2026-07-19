@@ -1,0 +1,86 @@
+# BTOR2 word semantic core v1
+
+This experimental core preserves bounded firmware counters and timers as
+word-level BTOR2 expressions before any future SAT lowering. It is a semantic
+and hostile-input trust boundary, not a solver, certificate, production API, or
+novelty result.
+
+## Supported boundary
+
+Version 1 accepts canonical newline-terminated BTOR2 text containing:
+
+- bit-vector sorts of width 1 to 64;
+- input and state nodes;
+- `zero`, `one`, `ones`, binary, decimal, and hexadecimal constants;
+- word-level Boolean operations, modular add, subtract, and multiply;
+- unsigned equality and order comparisons;
+- `ite`, `slice`, and zero extension;
+- exactly one constant initialiser and next expression per state;
+- Boolean constraints; and
+- one or more bad properties.
+
+The parser requires unique strictly increasing identifiers, prior definitions,
+exact operand and result widths, canonical constants, at most 8 MiB, 100,000
+lines, 100,000 expression nodes, and valid UTF-8 without NUL or carriage-return
+bytes. The CLI opens a regular file once, rejects symbolic links on Unix, bounds
+the open file, and parses only the bytes read from that descriptor.
+
+Arrays, signed operations, division, reduction, overflow predicates, fairness,
+justice, liveness, and every unlisted operation are rejected. They are never
+silently bit-blasted, approximated, or ignored.
+
+## Semantics and example
+
+All arithmetic wraps at the declared width. Comparisons return a one-bit word.
+Constraints are checked before transitions and property observations. Missing
+inputs, states, initialisers, or next expressions are errors.
+
+Inspect the included eight-bit watchdog timer:
+
+```sh
+cargo run --release -- btor2-cli-version
+cargo run --release -- \
+  inspect-btor2 examples/btor2/watchdog-counter-v1.btor2
+```
+
+The model increments `timer` modulo 256 while `kick` is false, resets it to zero
+when `kick` is true, and declares `expired` once the timer is at least three.
+Library tests independently step this model, check reset and expiry, and verify
+declared-width wraparound. CI also checks the model and its fixed expiry witness
+with BTOR2Tools commit `d33c73ff1d173f1bfac8ba6b1c6d68ba62c55f8e`.
+
+## Baselines and novelty boundary
+
+BTOR2 is an established word-level model-checking format with official parser,
+simulation, witness-checking, and historical BtorMC support. Boolector and
+BtorMC are now archived; Boolector's repository identifies Bitwuzla as its
+maintained successor. The required baselines are therefore:
+
+- BTOR2Tools for syntax, parser, simulation, and witness agreement;
+- historical BtorMC for bounded model-checking semantics; and
+- maintained Bitwuzla for word-level bit-vector solving.
+
+Primary references:
+
+- [BTOR2, BtorMC and Boolector 3.0](https://fmv.jku.at/papers/NiemetzPreinerWolfBiere-CAV18.pdf)
+- [BTOR2Tools](https://github.com/Boolector/btor2tools)
+- [archived Boolector and BtorMC](https://github.com/Boolector/boolector)
+- [maintained Bitwuzla](https://github.com/bitwuzla/bitwuzla)
+
+Parsing BTOR2 and evaluating bit-vectors are established techniques. A possible
+GCC candidate contribution would require a deterministic, independently checked
+certificate that binds exact word-level phase composition to a source model,
+resource gate, fail-closed exact fallback, and reconstructed firmware trace. No
+such contribution is claimed by this core.
+
+## Next predeclared gate
+
+The next cycle must not add a favourable custom solver benchmark alone. It must:
+
+1. differentially parse and simulate a fixed watchdog, saturating timer, and
+   bounded actuator-position cohort with BTOR2Tools;
+2. compare exact bounded answers with historical BtorMC or a maintained
+   Bitwuzla unrolling;
+3. define a deterministic source-bound word-composition certificate;
+4. verify the certificate without trusting the producer or lowering cache; and
+5. preserve unsupported models through an exact fail-closed baseline path.
