@@ -52,9 +52,9 @@ close either register by itself.
    exact CDCL. All 68 completeness obligations and four aggregates also pass a
    maintained CaDiCaL plus DRAT-trim baseline. Release-candidate CLI/Rust API v1,
    timing-free portfolio admission, exact fallback, and a 60-row answer-balanced
-   cohort are now implemented. Supported-Linux admission, tagged compatibility,
-   watchdog/DMA/shared-peripheral semantics, and public design evidence remain
-   open.
+   cohort are now implemented and pass the supported Rust 1.97 Linux path.
+   Tagged compatibility, watchdog/DMA/shared-peripheral semantics, and public
+   design evidence remain open.
 
 5. **Word-level BTOR2 interfaces.** Preserve bit-vector arithmetic, counters,
    timers, memory indices, and saturating control laws before bit blasting.

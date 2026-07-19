@@ -33,10 +33,12 @@ timing-free structural portfolio, exact fallback, strict report replay, and a
 [self-service acceptance run](../results/event-contract-self-service-acceptance-v1.md)
 proves the documented workflow can be completed without formula calibration,
 but it is simulated rather than independent evidence. The surface passes the
-full Rust 1.97 Linux container suite locally; hosted Linux CI must still bind
-that evidence to the reviewed commit. It does not yet have tagged compatibility
-history, public-design evidence, or external acceptance evidence. These gates
-must close before event contracts can change any production-readiness row above.
+full Rust 1.97 Linux container suite locally and in
+[hosted run 29667786512](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29667786512),
+which also passes the public RTL corpus and dependency audit on the reviewed
+commit. It does not yet have tagged compatibility history, public-design
+evidence, or external acceptance evidence. These gates must close before event
+contracts can change any production-readiness row above.
 
 V3 completeness obligations now also pass a deterministic DIMACS export and a
 maintained CaDiCaL plus DRAT-trim baseline across both answers. This removes one

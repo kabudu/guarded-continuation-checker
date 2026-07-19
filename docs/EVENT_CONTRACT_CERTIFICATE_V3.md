@@ -201,3 +201,6 @@ release-candidate API gates are closed by
 [`EVENT_CONTRACT_CLI_V1.md`](EVENT_CONTRACT_CLI_V1.md) and the retained
 [`event-contract-certificate-v3-balanced-v1`](../results/event-contract-certificate-v3-balanced-v1/README.md)
 cohort. Compatibility history does not begin until the first tagged release.
+The release-candidate surface also passes the full Rust 1.97 Linux test job,
+public RTL corpus, and dependency audit in
+[hosted run 29667786512](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29667786512).
