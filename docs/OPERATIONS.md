@@ -44,6 +44,13 @@ a validated bundle by itself is not an assurance case or release approval.
 
 ## Install and qualify
 
+For a reviewed binary candidate, follow
+[reproducible Linux evaluation bundle v1](LINUX_EVALUATION_BUNDLE_V1.md), verify
+all four files offline, then enforce the GitHub source-ref, signer-workflow, and
+hosted-runner attestation policy before unpacking. An offline checksum alone
+does not authenticate the builder. Retain the archive digest and verified source
+revision in the deployment record.
+
 Build from a reviewed release tag; replace `VERSION` with the intended version:
 
 ```sh

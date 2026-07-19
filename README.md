@@ -80,6 +80,14 @@ Partners operate the evaluation independently using repository resources and
 return only the final non-confidential
 [outcome and suitability report](docs/OUTCOME_REPORT_TEMPLATE.md).
 
+The [reproducible Linux evaluation bundle v1](docs/LINUX_EVALUATION_BUNDLE_V1.md)
+builds a static x86_64 musl executable twice from distinct source paths and
+requires byte-identical archives, SPDX SBOMs, provenance, and checksums. Its
+offline verifier rejects corruption and inconsistent metadata. A master-only
+GitHub workflow can add Sigstore-backed build and SBOM attestations without
+publishing a release. This is release-path hardening, not a production or
+novelty claim.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

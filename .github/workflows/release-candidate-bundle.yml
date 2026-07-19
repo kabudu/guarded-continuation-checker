@@ -1,0 +1,52 @@
+name: Attested Linux evaluation bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build-attest:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install deterministic packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools jq binutils
+      - name: Build and prove byte reproducibility
+        run: |
+          scripts/test-linux-evaluation-bundle.sh \
+            /tmp/gcc-linux-bundle-repro dist
+      - name: Resolve canonical artifact paths
+        id: bundle
+        run: |
+          archive=$(find dist -maxdepth 1 -type f -name '*.tar.gz')
+          sbom=$(find dist -maxdepth 1 -type f -name '*.spdx.json')
+          test -n "$archive"
+          test -n "$sbom"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "sbom=$sbom" >> "$GITHUB_OUTPUT"
+      - name: Sign build provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.bundle.outputs.archive }}
+      - name: Sign SPDX SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.bundle.outputs.archive }}
+          sbom-path: ${{ steps.bundle.outputs.sbom }}
+      - name: Retain evaluation bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: guarded-continuation-checker-linux-evaluation-bundle
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
