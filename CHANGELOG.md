@@ -6,6 +6,9 @@
   discovery, a strict canonical source and query manifest, create-new batch
   production, independent file verification, exact per-member reports, hostile
   input regressions, and a six-member self-service acceptance harness.
+  Add the typed, shell-free `ControllerMtbddTool` Rust client with strict
+  capability and result parsing, bounded subprocess execution, ordered member
+  results, aggregate consistency checks, and invocation metrics.
 
 - Add a maintained single-session SymbiYosys, Yosys, and Z3 baseline for the
   six-property stateful plant. Reuse one compiled closed-loop model, reproduce

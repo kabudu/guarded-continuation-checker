@@ -777,3 +777,13 @@ diff -u results/controller-mtbdd-self-service-acceptance-v1.csv \
 
 The harness requires exact answers and bad frames in a fresh verifier process,
 then rejects manifest drift and artifact mutation.
+
+Exercise the same contract through the typed, shell-free Rust API:
+
+```sh
+cargo test --locked --test controller_mtbdd_tool_api
+```
+
+This test discovers capabilities, produces and verifies a two-member artifact,
+checks ordered SAFE and UNSAFE results, and records the operation and success
+status exposed by invocation metrics schema v1.

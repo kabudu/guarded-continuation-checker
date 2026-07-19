@@ -47,6 +47,20 @@ digests, initial states, properties, horizons, and member order to equal the
 manifest. Each member reports its answer, bad frame, trace length, reachable
 states, and explored transitions.
 
+## Rust API
+
+Rust integrations can use `ControllerMtbddTool` instead of parsing subprocess
+output or invoking a shell. Discovery validates the complete capability line.
+`certify_observed` and `verify_observed` return a typed batch summary, ordered
+typed member results, and invocation metrics. The client rejects noncanonical
+numbers, changed versions, malformed member ordering, inconsistent SAFE and
+UNSAFE counts, and inconsistent aggregate state or transition totals.
+
+The API retains the process boundary and applies the same configurable timeout,
+output, file, process-group, and supported memory limits as `PredicateTool`.
+`tests/controller_mtbdd_tool_api.rs` is the minimal end-to-end integration
+example.
+
 ## Acceptance
 
 ```sh

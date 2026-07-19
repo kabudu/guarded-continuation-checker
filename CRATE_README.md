@@ -77,12 +77,15 @@ guarded-continuation-checker firmware-cli-version
 guarded-continuation-checker predicate-cli-version
 guarded-continuation-checker event-contract-cli-version
 guarded-continuation-checker btor2-cli-version
+guarded-continuation-checker controller-mtbdd-cli-version
 ```
 
 ## Rust API
 
 ```rust,no_run
-use guarded_continuation_checker::{EventContractTool, ExecutionPolicy, PredicateTool};
+use guarded_continuation_checker::{
+    ControllerMtbddTool, EventContractTool, ExecutionPolicy, PredicateTool,
+};
 
 # fn discover() -> Result<(), Box<dyn std::error::Error>> {
 let policy = ExecutionPolicy::default();
@@ -97,6 +100,11 @@ let event_contracts = EventContractTool::discover_with_policy(
     policy,
 )?;
 assert_eq!(event_contracts.capabilities().cli_version, 1);
+let controller_mtbdd = ControllerMtbddTool::discover_with_policy(
+    "guarded-continuation-checker",
+    policy,
+)?;
+assert_eq!(controller_mtbdd.capabilities().cli_version, 1);
 # Ok(())
 # }
 ```
@@ -107,7 +115,9 @@ reports stable failure classes and invocation metrics. See the
 [Rust API contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/PREDICATE_RUST_API_V1.md)
 for predicate certificate examples and the
 [event-contract API contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/EVENT_CONTRACT_CLI_V1.md)
-for certificate v3, exact portfolio fallback, and report replay.
+for certificate v3, exact portfolio fallback, and report replay. The
+[controller MTBDD CLI contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_CLI_V1.md)
+covers source-bound controller-plus-plant batch production and verification.
 
 ## Self-service evaluation
 

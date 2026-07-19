@@ -37,6 +37,9 @@ controller composed with an ordered plant-property batch. Its canonical
 manifest, exact query binding, stable per-member results, no-clobber output and
 hostile-input controls close a local integration gap. Independent acceptance,
 tagged compatibility and source-to-model attestation remain open.
+Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
+shell-free production and verification, typed batch and member results, and
+invocation metrics without parsing command output.
 
 The experimental [BTOR2 braking-phase certificate](docs/BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md)
 now composes exact accelerate, brake, and stopped regions for a resettable

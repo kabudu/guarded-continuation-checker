@@ -166,10 +166,12 @@ exact per-member results, normalized paths, bounded no-follow file reads, and
 hostile manifest, source-drift, artifact-mutation, and no-clobber regressions.
 A six-member simulated self-service acceptance run reproduces all answers and
 bad frames using only repository instructions. This closes local file
-integration and simulated acceptance mechanism gates. Typed subprocess API,
-portfolio fallback, resource metrics, hosted cross-platform replication,
-tagged compatibility, source-to-model attestation, calibrated plant validity,
-and independent acceptance remain open.
+integration and simulated acceptance mechanism gates. The typed subprocess API
+now applies existing execution controls, validates discovered limits and exact
+result aggregates, and reports per-operation metrics. Portfolio fallback,
+multi-job metrics aggregation, hosted cross-platform replication, tagged
+compatibility, source-to-model attestation, calibrated plant validity, and
+independent acceptance remain open.
 
 ## Rules
 
