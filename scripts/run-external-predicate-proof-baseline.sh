@@ -24,6 +24,17 @@ if [[ -e "$output" ]]; then
   exit 2
 fi
 
+if command -v timeout >/dev/null 2>&1; then
+  deadline=(timeout 300s)
+elif command -v gtimeout >/dev/null 2>&1; then
+  deadline=(gtimeout 300s)
+elif command -v perl >/dev/null 2>&1; then
+  deadline=(perl -e '$seconds = shift; alarm $seconds; exec @ARGV or die "exec: $!\n"' 300)
+else
+  echo "GNU timeout, gtimeout or Perl is required for the process deadline" >&2
+  exit 2
+fi
+
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-external-proof.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 
@@ -64,7 +75,7 @@ while IFS= read -r line; do
     ulimit -v 2097152
     # DRAT-trim v05.22.2023 misreads some CaDiCaL 3.0 binary traces, while the
     # semantically identical canonical text DRAT stream verifies reliably.
-    timeout 300s "$cadical" --no-binary "$cnf" "$proof"
+    "${deadline[@]}" "$cadical" --no-binary "$cnf" "$proof"
   ) >"$scratch/cadical.log" 2>&1
   producer_status=$?
   set -e
@@ -79,7 +90,7 @@ while IFS= read -r line; do
   (
     ulimit -f 1048576
     ulimit -v 2097152
-    timeout 300s "$drat_trim" "$cnf" "$proof"
+    "${deadline[@]}" "$drat_trim" "$cnf" "$proof"
   ) >"$scratch/drat-trim.log" 2>&1
   checker_status=$?
   set -e
@@ -122,7 +133,7 @@ set +e
 (
   ulimit -f 1048576
   ulimit -v 2097152
-  timeout 300s "$cadical" --no-binary "$aggregate_cnf" "$aggregate_proof"
+  "${deadline[@]}" "$cadical" --no-binary "$aggregate_cnf" "$aggregate_proof"
 ) >"$scratch/cadical-aggregate.log" 2>&1
 producer_status=$?
 set -e
@@ -136,7 +147,7 @@ set +e
 (
   ulimit -f 1048576
   ulimit -v 2097152
-  timeout 300s "$drat_trim" "$aggregate_cnf" "$aggregate_proof"
+  "${deadline[@]}" "$drat_trim" "$aggregate_cnf" "$aggregate_proof"
 ) >"$scratch/drat-trim-aggregate.log" 2>&1
 checker_status=$?
 set -e

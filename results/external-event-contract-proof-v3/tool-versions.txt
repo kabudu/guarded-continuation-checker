@@ -1,0 +1,3 @@
+external_proof_tools_version=1
+cadical_revision=7b99c07f0bcab5824a5a3ce62c7066554017f641
+drat_trim_revision=2e5e29cb0019d5cfd547d4208dca1b3ec290349f

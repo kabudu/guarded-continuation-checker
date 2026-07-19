@@ -191,9 +191,10 @@ Before v3 can enter a stable portfolio:
 
 1. complete deterministic mutation, truncation, source-substitution, proof-swap,
    resource, and process-isolation testing;
-2. export every v3 obligation to a standard proof format and verify it with a
-   separately maintained checker;
-3. publish answer-balanced generation and verification costs;
-4. freeze CLI/Rust API capability discovery and migration semantics;
-5. add a timing-free static admission rule evaluated on unseen contracts; and
-6. prove exact fail-closed CDCL fallback for every rejection and bounded failure.
+2. publish answer-balanced generation and verification costs;
+3. freeze CLI/Rust API capability discovery and migration semantics;
+4. add a timing-free static admission rule evaluated on unseen contracts; and
+5. prove exact fail-closed CDCL fallback for every rejection and bounded failure.
+
+The maintained external proof-checker gate is now closed by the
+[CaDiCaL and DRAT-trim baseline](EXTERNAL_EVENT_CONTRACT_PROOF_BASELINE.md).
