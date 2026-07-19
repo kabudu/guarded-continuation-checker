@@ -88,3 +88,8 @@ shrink by more than 99.9%.
 
 The next gate must extend exact composition across interacting states or
 multiple inputs without turning the proof back into explicit state enumeration.
+
+The [coupled-motion curve certificate v1](BTOR2_MOTION_CURVE_CERTIFICATE_V1.md)
+closes the first two-state subcase by preserving a velocity-position polynomial
+relation under shared reset. Multi-input control, braking phases, signed words,
+and broader interacting-state composition remain open.

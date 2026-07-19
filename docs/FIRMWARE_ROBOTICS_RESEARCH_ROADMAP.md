@@ -68,18 +68,21 @@ close either register by itself.
    fallback for one-input, constraint-free models. The first
    [exact word-region certificate](BTOR2_WORD_REGION_CERTIFICATE_V1.md) proves
    complete reset-add and saturating reachable layers without enumeration, and
-   its static portfolio retains exact search elsewhere. Broader multi-state and
+   its static portfolio retains exact search elsewhere. The first
+   [coupled-motion curve](BTOR2_MOTION_CURVE_CERTIFICATE_V1.md) preserves an
+   exact velocity-position relation without a Cartesian state product. Broader
    multi-input composition, constraint semantics, and product validity remain
-   open. A pinned Bitwuzla 0.9.1 gate agrees on endpoint formulas and both
-   watchdog reachability answers.
+   open. A pinned Bitwuzla 0.9.1 gate agrees on counter and motion boundaries.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
    monitors; identify which component invalidates a system guarantee.
 
-7. **Robotics controller verification.** Apply word-level component quotients to
-   sensor fusion modes, actuator interlocks, emergency stops, motion envelopes,
-   and bounded mission controllers.
+7. **Robotics controller verification.** The first exact coupled-motion
+   envelope primitive is implemented. Extend it to braking phases, bounded
+   control inputs, signed coordinates, actuator interlocks, emergency stops,
+   motion envelopes, and bounded mission controllers using unmodified public
+   designs.
 
 8. **Counterfactual repair synthesis.** Go beyond explaining a failure: compute
    minimal input-contract, guard, or state-machine changes that eliminate it,

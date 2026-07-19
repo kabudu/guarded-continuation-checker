@@ -1,0 +1,21 @@
+1 sort bitvec 1
+2 sort bitvec 8
+3 input 1 stop
+4 zero 2
+5 state 2 velocity
+6 state 2 position
+7 init 2 5 4
+8 init 2 6 4
+9 one 2
+10 add 2 5 9
+11 add 2 6 10
+12 ite 2 3 4 10
+13 ite 2 3 4 11
+14 next 2 5 12
+15 next 2 6 13
+16 constd 2 4
+17 ugte 1 5 16
+18 constd 2 10
+19 ugte 1 6 18
+20 and 1 17 19
+21 bad 20 semi_implicit_envelope

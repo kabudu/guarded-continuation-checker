@@ -33,7 +33,10 @@ jobs:
             scripts/test-btor2tools-baseline.sh \
             scripts/test-bitwuzla-phase-baseline.sh \
             scripts/run-btor2-search-cohort.sh \
-            scripts/run-btor2-region-cohort.sh
+            scripts/run-btor2-region-cohort.sh \
+            scripts/run-btor2-motion-cohort.sh \
+            scripts/run-btor2-motion-self-service-acceptance.sh \
+            scripts/run-btor2-motion-cost.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -56,6 +59,17 @@ jobs:
           scripts/run-btor2-region-cohort.sh \
             target/debug/guarded-continuation-checker /tmp/btor2-region.csv
           diff -u results/btor2-region-cohort-v1.csv /tmp/btor2-region.csv
+      - name: Reproduce exact BTOR2 coupled-motion cohort
+        run: |
+          scripts/run-btor2-motion-cohort.sh \
+            target/debug/guarded-continuation-checker /tmp/btor2-motion.csv
+          diff -u results/btor2-motion-cohort-v1.csv /tmp/btor2-motion.csv
+      - name: Reproduce BTOR2 motion self-service acceptance
+        run: |
+          scripts/run-btor2-motion-self-service-acceptance.sh \
+            target/debug/guarded-continuation-checker /tmp/btor2-motion-acceptance.csv
+          diff -u results/btor2-motion-self-service-acceptance-v1.csv \
+            /tmp/btor2-motion-acceptance.csv
       - name: Test external production evidence gate
         run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test

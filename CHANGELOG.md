@@ -31,6 +31,14 @@
   802,525 bytes to 304 and 312 bytes, respectively. Arithmetic-progression
   reachability and acceleration remain established prior art; no novelty claim
   follows from this result.
+- Add exact BTOR2 coupled-motion curve certificate v1 and bounded portfolio v2.
+  Recognise simultaneous
+  velocity and position recurrences under a shared reset, derive the complete
+  bounded polynomial curve, and independently reject conjunctive motion
+  envelopes without enumerating state pairs. Retain exact-search fallback for
+  intersecting and semi-implicit near-neighbour models. Reduce two SAFE
+  artifacts from 624,272 and 253,928 bytes to 358 bytes while explicitly
+  retaining the established affine-acceleration prior-art boundary.
 
 - Add reproducible Linux evaluation bundle v1 for static x86_64 musl. Generate
   canonical archives, SPDX 2.3 SBOMs, source and lockfile provenance, capability

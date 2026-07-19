@@ -1,22 +1,49 @@
 //! Static exact portfolio for bounded BTOR2 reachability.
 
 use crate::btor2::NodeId;
-use crate::{btor2_region, btor2_search};
+use crate::{btor2_motion, btor2_region, btor2_search};
 use std::error::Error;
 use std::fmt;
 
-pub const BOUNDED_PORTFOLIO_VERSION: u32 = 1;
+pub const BOUNDED_PORTFOLIO_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BoundedBackend {
+    MotionCurve,
     WordRegion,
     ExplicitSearch,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BoundedCertificate {
+    MotionCurve(btor2_motion::MotionCertificate),
     WordRegion(btor2_region::RegionCertificate),
     ExplicitSearch(btor2_search::SearchCertificate),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BoundedSelectionReason {
+    MotionCurveExactSafe,
+    WordRegionExactSafe,
+    SpecialisedInapplicableOrIntersecting,
+}
+
+impl BoundedSelectionReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MotionCurveExactSafe => "motion-curve-exact-safe",
+            Self::WordRegionExactSafe => "word-region-exact-safe",
+            Self::SpecialisedInapplicableOrIntersecting => {
+                "specialised-inapplicable-or-intersecting"
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundedProduction {
+    pub certificate: BoundedCertificate,
+    pub selection_reason: BoundedSelectionReason,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,22 +70,44 @@ fn reject(message: impl Into<String>) -> BoundedError {
     BoundedError(message.into())
 }
 
-/// Applies one source-structural rule with no timing or per-formula training:
-/// an exact word-region SAFE proof is preferred, otherwise the unchanged query
-/// is sent to the explicit exact backend.
+/// Applies the versioned source-structural portfolio with no timing or
+/// per-formula training: coupled motion, then one-state word region, then the
+/// unchanged explicit exact query.
 pub fn produce(
     source: &[u8],
     bad_property: NodeId,
     horizon: u32,
 ) -> Result<BoundedCertificate, BoundedError> {
-    if let Some(certificate) = btor2_region::try_produce_safe(source, bad_property, horizon)
-        .map_err(|error| reject(error.to_string()))?
+    produce_with_observation(source, bad_property, horizon).map(|production| production.certificate)
+}
+
+pub fn produce_with_observation(
+    source: &[u8],
+    bad_property: NodeId,
+    horizon: u32,
+) -> Result<BoundedProduction, BoundedError> {
+    if let Some(certificate) = btor2_motion::try_produce_safe(source, bad_property, horizon)
+        .map_err(|error| reject(format!("motion backend error: {error}")))?
     {
-        return Ok(BoundedCertificate::WordRegion(certificate));
+        return Ok(BoundedProduction {
+            certificate: BoundedCertificate::MotionCurve(certificate),
+            selection_reason: BoundedSelectionReason::MotionCurveExactSafe,
+        });
+    }
+    if let Some(certificate) = btor2_region::try_produce_safe(source, bad_property, horizon)
+        .map_err(|error| reject(format!("word-region backend error: {error}")))?
+    {
+        return Ok(BoundedProduction {
+            certificate: BoundedCertificate::WordRegion(certificate),
+            selection_reason: BoundedSelectionReason::WordRegionExactSafe,
+        });
     }
     btor2_search::produce(source, bad_property, horizon)
-        .map(BoundedCertificate::ExplicitSearch)
-        .map_err(|error| reject(error.to_string()))
+        .map(|certificate| BoundedProduction {
+            certificate: BoundedCertificate::ExplicitSearch(certificate),
+            selection_reason: BoundedSelectionReason::SpecialisedInapplicableOrIntersecting,
+        })
+        .map_err(|error| reject(format!("explicit search fallback error: {error}")))
 }
 
 pub fn verify(
@@ -66,6 +115,17 @@ pub fn verify(
     certificate: &BoundedCertificate,
 ) -> Result<BoundedSummary, BoundedError> {
     match certificate {
+        BoundedCertificate::MotionCurve(certificate) => {
+            let summary = btor2_motion::verify(source, certificate)
+                .map_err(|error| reject(error.to_string()))?;
+            Ok(BoundedSummary {
+                backend: BoundedBackend::MotionCurve,
+                result: btor2_search::SearchResult::Safe,
+                query_horizon: summary.query_horizon,
+                bad_frame: None,
+                logical_reachable_states: summary.logical_reachable_states,
+            })
+        }
         BoundedCertificate::WordRegion(certificate) => {
             let summary = btor2_region::verify(source, certificate)
                 .map_err(|error| reject(error.to_string()))?;
@@ -93,6 +153,9 @@ pub fn verify(
 
 pub fn encode(certificate: &BoundedCertificate) -> Result<String, BoundedError> {
     match certificate {
+        BoundedCertificate::MotionCurve(certificate) => {
+            btor2_motion::encode(certificate).map_err(|error| reject(error.to_string()))
+        }
         BoundedCertificate::WordRegion(certificate) => {
             btor2_region::encode(certificate).map_err(|error| reject(error.to_string()))
         }
@@ -103,6 +166,11 @@ pub fn encode(certificate: &BoundedCertificate) -> Result<String, BoundedError> 
 }
 
 pub fn decode(bytes: &[u8]) -> Result<BoundedCertificate, BoundedError> {
+    if bytes.starts_with(b"motion_certificate_version=") {
+        return btor2_motion::decode(bytes)
+            .map(BoundedCertificate::MotionCurve)
+            .map_err(|error| reject(error.to_string()));
+    }
     if bytes.starts_with(b"region_certificate_version=") {
         return btor2_region::decode(bytes)
             .map(BoundedCertificate::WordRegion)
@@ -121,10 +189,18 @@ mod tests {
     use super::*;
 
     const WATCHDOG: &[u8] = include_bytes!("../examples/btor2/watchdog-counter-v1.btor2");
+    const MOTION: &[u8] = include_bytes!("../examples/btor2/motion-envelope-v1.btor2");
+    const SEMI_IMPLICIT: &[u8] =
+        include_bytes!("../examples/btor2/semi-implicit-motion-rejected-v1.btor2");
 
     #[test]
     fn statically_selects_region_for_safe_and_exact_search_for_unsafe() {
-        let safe = produce(WATCHDOG, 13, 2).unwrap();
+        let production = produce_with_observation(WATCHDOG, 13, 2).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            BoundedSelectionReason::WordRegionExactSafe
+        );
+        let safe = production.certificate;
         assert!(matches!(safe, BoundedCertificate::WordRegion(_)));
         assert_eq!(
             verify(WATCHDOG, &safe).unwrap().result,
@@ -158,5 +234,47 @@ mod tests {
         let summary = verify(source, &certificate).unwrap();
         assert_eq!(summary.result, btor2_search::SearchResult::Unsafe);
         assert_eq!(summary.bad_frame, Some(3));
+    }
+
+    #[test]
+    fn selects_coupled_motion_without_changing_unsafe_fallback() {
+        let production = produce_with_observation(MOTION, 21, 200).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            BoundedSelectionReason::MotionCurveExactSafe
+        );
+        let safe = production.certificate;
+        assert!(matches!(safe, BoundedCertificate::MotionCurve(_)));
+        assert_eq!(
+            verify(MOTION, &safe).unwrap().result,
+            btor2_search::SearchResult::Safe
+        );
+
+        let production = produce_with_observation(MOTION, 21, 201).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            BoundedSelectionReason::SpecialisedInapplicableOrIntersecting
+        );
+        let unsafe_certificate = production.certificate;
+        assert!(matches!(
+            unsafe_certificate,
+            BoundedCertificate::ExplicitSearch(_)
+        ));
+        assert_eq!(
+            verify(MOTION, &unsafe_certificate).unwrap().bad_frame,
+            Some(201)
+        );
+    }
+
+    #[test]
+    fn semi_implicit_near_neighbour_uses_exact_search_for_both_answers() {
+        for (horizon, result) in [
+            (3, btor2_search::SearchResult::Safe),
+            (4, btor2_search::SearchResult::Unsafe),
+        ] {
+            let certificate = produce(SEMI_IMPLICIT, 21, horizon).unwrap();
+            assert!(matches!(certificate, BoundedCertificate::ExplicitSearch(_)));
+            assert_eq!(verify(SEMI_IMPLICIT, &certificate).unwrap().result, result);
+        }
     }
 }

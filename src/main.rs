@@ -1,4 +1,6 @@
-use guarded_continuation_checker::{btor2, btor2_bounded, btor2_phase, btor2_region, btor2_search};
+use guarded_continuation_checker::{
+    btor2, btor2_bounded, btor2_motion, btor2_phase, btor2_region, btor2_search,
+};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::env;
@@ -24824,12 +24826,13 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
                 btor2_search::SEARCH_CERTIFICATE_VERSION,
                 btor2_region::REGION_CERTIFICATE_VERSION,
+                btor2_motion::MOTION_CERTIFICATE_VERSION,
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
@@ -24847,6 +24850,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
                 btor2_region::MAX_REGION_HORIZON,
                 btor2_region::MAX_REGION_CERTIFICATE_BYTES,
+                btor2_motion::MAX_MOTION_HORIZON,
+                btor2_motion::MAX_MOTION_CERTIFICATE_BYTES,
             );
             Ok(true)
         }
@@ -25107,6 +25112,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "BTOR2 search certificate",
             )?;
             let certificate = btor2_search::decode(&encoded).map_err(|error| error.to_string())?;
+            let started = Instant::now();
             let summary =
                 btor2_search::verify(&source, &certificate).map_err(|error| error.to_string())?;
             let result = match summary.result {
@@ -25117,10 +25123,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .bad_frame
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
             println!(
-                "btor2-search status=VERIFIED version={} result={result} horizon={} bad_frame={bad_frame} reachable_states={}",
+                "btor2-search status=VERIFIED version={} result={result} horizon={} bad_frame={bad_frame} reachable_states={} certificate_bytes={} elapsed_micros={}",
                 btor2_search::SEARCH_CERTIFICATE_VERSION,
                 summary.query_horizon,
-                summary.reachable_states
+                summary.reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros()
             );
             Ok(true)
         }
@@ -25140,14 +25148,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .parse::<u32>()
                 .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
             let started = Instant::now();
-            let certificate = btor2_bounded::produce(&source, bad_property, horizon)
-                .map_err(|error| error.to_string())?;
+            let production =
+                btor2_bounded::produce_with_observation(&source, bad_property, horizon)
+                    .map_err(|error| error.to_string())?;
+            let selection_reason = production.selection_reason;
+            let certificate = production.certificate;
             let encoded = btor2_bounded::encode(&certificate).map_err(|error| error.to_string())?;
             let summary =
                 btor2_bounded::verify(&source, &certificate).map_err(|error| error.to_string())?;
             let output = Path::new(&args[4]);
             write_new_certificate(output, encoded.as_bytes())?;
             let backend = match summary.backend {
+                btor2_bounded::BoundedBackend::MotionCurve => "motion-curve",
                 btor2_bounded::BoundedBackend::WordRegion => "word-region",
                 btor2_bounded::BoundedBackend::ExplicitSearch => "explicit-search",
             };
@@ -25159,8 +25171,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .bad_frame
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
             println!(
-                "btor2-bounded status=CREATED portfolio_version={} backend={backend} result={result} horizon={} bad_frame={bad_frame} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
+                "btor2-bounded status=CREATED portfolio_version={} backend={backend} reason={} result={result} horizon={} bad_frame={bad_frame} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
+                selection_reason.as_str(),
                 summary.query_horizon,
                 summary.logical_reachable_states,
                 encoded.len(),
@@ -25188,6 +25201,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let summary =
                 btor2_bounded::verify(&source, &certificate).map_err(|error| error.to_string())?;
             let backend = match summary.backend {
+                btor2_bounded::BoundedBackend::MotionCurve => "motion-curve",
                 btor2_bounded::BoundedBackend::WordRegion => "word-region",
                 btor2_bounded::BoundedBackend::ExplicitSearch => "explicit-search",
             };
@@ -35177,6 +35191,38 @@ mod tests {
                 run_artifact_cli(&[
                     "verify-btor2-bounded".to_string(),
                     fixture.display().to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            fs::remove_file(&certificate).unwrap();
+        }
+
+        let motion =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/btor2/motion-envelope-v1.btor2");
+        for (horizon, header) in [
+            (200, "motion_certificate_version=1\n"),
+            (201, "search_certificate_version=1\n"),
+        ] {
+            assert!(
+                run_artifact_cli(&[
+                    "check-btor2-bounded".to_string(),
+                    motion.display().to_string(),
+                    "21".to_string(),
+                    horizon.to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            assert!(
+                fs::read_to_string(&certificate)
+                    .unwrap()
+                    .starts_with(header)
+            );
+            assert!(
+                run_artifact_cli(&[
+                    "verify-btor2-bounded".to_string(),
+                    motion.display().to_string(),
                     certificate.display().to_string(),
                 ])
                 .unwrap()

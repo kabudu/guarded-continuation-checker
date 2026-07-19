@@ -163,3 +163,14 @@ useful proof-carrying integration primitive, not a novel algorithm. The open
 candidate question moves to exact composition of interacting word regions with
 a certificate materially different from straightforward products of known
 counter accelerations.
+
+[BTOR2 coupled-motion curve certificate v1](BTOR2_MOTION_CURVE_CERTIFICATE_V1.md)
+implements the first interacting-state case. It preserves the exact polynomial
+relation between velocity and position, reduces two large SAFE artifacts by
+more than 99.8%, and rejects a recurrence near-neighbour through exact fallback.
+Triangular affine recurrences, discrete kinematics, counter and affine-system
+acceleration, relational invariants, and safety certificates are established
+prior art. This is useful engineering evidence, not a novel algorithm. The
+remaining candidate boundary requires phase-composable relations across
+multiple control inputs or components, plus a complete closest-system search
+and external expert review.

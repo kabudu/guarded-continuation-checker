@@ -123,6 +123,16 @@ query. On the retained boundary cohort, the large SAFE artifacts shrink by
 is a narrow exact acceleration result with established prior art, not a novelty
 or production-readiness claim.
 
+The [coupled-motion curve certificate v1](docs/BTOR2_MOTION_CURVE_CERTIFICATE_V1.md)
+extends exact compression to interacting velocity and position words under a
+shared brake or reset. It preserves the one-parameter polynomial relation
+instead of forming a Cartesian state product, cuts the retained SAFE artifacts
+by 99.94% and 99.86%, and rejects a semi-implicit near-neighbour to explicit
+search. Discrete kinematics and affine recurrence acceleration are established;
+the result is not presented as a novel algorithm or public robot validation.
+The retained release-mode run also measures 333.48x and 805.73x faster
+certificate checking than explicit SAFE layers on one arm64 development host.
+
 The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
 single exact evaluation command over partial AIGER input transcripts. Its
 timing-free structural gate selects the independently checked dense predicate

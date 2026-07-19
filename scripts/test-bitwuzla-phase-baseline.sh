@@ -28,6 +28,10 @@ check_result unsat examples/btor2/actuator-region-h200-safe-v1.smt2
 check_result sat examples/btor2/actuator-region-h201-unsafe-v1.smt2
 check_result unsat examples/btor2/saturating-region-h254-safe-v1.smt2
 check_result sat examples/btor2/saturating-region-h255-unsafe-v1.smt2
+check_result unsat examples/btor2/motion-curve-h200-safe-v1.smt2
+check_result sat examples/btor2/motion-curve-h201-unsafe-v1.smt2
+check_result unsat examples/btor2/servo-curve-h128-safe-v1.smt2
+check_result sat examples/btor2/servo-curve-h129-unsafe-v1.smt2
 
 version=$($bitwuzla --version)
 printf 'bitwuzla_phase_baseline=PASS version=%s\n' "$version"
