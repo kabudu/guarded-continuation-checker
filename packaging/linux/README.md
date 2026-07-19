@@ -8,8 +8,9 @@ It is an evaluation-ready research prototype. It is not certified,
 production-qualified, or evidence that an entire device is safe.
 
 Before execution, verify the archive and its external provenance file with the
-repository's `scripts/verify-linux-evaluation-bundle.sh` script. For a bundle
-created by GitHub Actions, also verify its signed GitHub attestations:
+repository's `scripts/verify-linux-evaluation-bundle.sh` script. That verifier
+does not execute the candidate binary. For a bundle created by GitHub Actions,
+verify both signed GitHub attestations before running any bundled executable:
 
 ```sh
 gh attestation verify guarded-continuation-checker-*.tar.gz \
@@ -29,8 +30,9 @@ gh attestation verify guarded-continuation-checker-*.tar.gz \
 ```
 
 The unsigned local in-toto provenance file records deterministic build inputs;
-it does not replace the GitHub signature. Offline checksum verification detects
-corruption but cannot establish who built the archive.
+it does not replace the GitHub signature. Offline verification detects
+corruption and rejects invalid ELF structure, but cannot establish who built
+the archive.
 
 Run all evaluation commands on a dedicated, ephemeral Linux worker. Follow
 `OPERATIONS.md` and `ISOLATION_PROFILE_V1.md`, keep proprietary inputs outside

@@ -34,7 +34,8 @@ The archive contains:
 - Apache-2.0 licence and evaluation warning;
 - operations and isolation guidance;
 - firmware, predicate, and event-contract API contracts;
-- an exact capability snapshot replayed from the packaged executable;
+- an exact capability snapshot generated during the controlled build and bound
+  by the internal manifest;
 - deterministic build information with source, toolchain, lockfile, and binary
   digests;
 - an SPDX 2.3 JSON dependency SBOM; and
@@ -75,9 +76,8 @@ scripts/test-linux-evaluation-bundle.sh /tmp/gcc-bundle-repro
 
 ## Verify
 
-Offline structural, checksum, static-link, provenance-subject, SBOM, and
-capability verification requires only the four output files and standard Linux
-tools:
+Offline structural, checksum, static-link, provenance-subject, and SBOM
+verification requires only the four output files and standard Linux tools:
 
 ```sh
 scripts/verify-linux-evaluation-bundle.sh \
@@ -88,8 +88,9 @@ scripts/verify-linux-evaluation-bundle.sh \
 ```
 
 Offline verification detects corruption and internal disagreement but does not
-authenticate an unsigned local builder. For a GitHub-built candidate, also use
-`gh attestation verify` with all of:
+authenticate an unsigned local builder. It deliberately does not execute the
+candidate binary. For a GitHub-built candidate, use `gh attestation verify`
+before any execution, with all of:
 
 - repository `kabudu/guarded-continuation-checker`;
 - source ref `refs/heads/master`;
@@ -97,6 +98,10 @@ authenticate an unsigned local builder. For a GitHub-built candidate, also use
   `kabudu/guarded-continuation-checker/.github/workflows/release-candidate-bundle.yml`;
 - `--deny-self-hosted-runners`; and
 - SPDX predicate type `https://spdx.dev/Document/v2.3` for the SBOM attestation.
+
+Only after both attestations pass should the binary be executed, and then only
+inside the dedicated ephemeral worker described by the isolation profile. The
+capability commands may be replayed there against `CAPABILITIES.txt`.
 
 ## Claim boundary
 

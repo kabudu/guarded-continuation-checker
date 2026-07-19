@@ -109,6 +109,41 @@ if verify "$scratch/hostile-traversal" >/dev/null 2>&1; then
     exit 1
 fi
 
+cp -R "$scratch/first" "$scratch/hostile-executable"
+hostile_binary="$scratch/hostile-stage/$base/bin/guarded-continuation-checker"
+execution_sentinel="$scratch/candidate-was-executed"
+cat >"$hostile_binary" <<'EOF'
+#!/bin/sh
+touch "$GCC_EXECUTION_SENTINEL"
+exit 0
+EOF
+chmod 0755 "$hostile_binary"
+hostile_binary_digest=$(sha256sum "$hostile_binary" | awk '{print $1}')
+jq --arg digest "$hostile_binary_digest" '.outputs.binarySha256 = $digest' \
+    "$scratch/hostile-stage/$base/BUILD-INFO.json" \
+    >"$scratch/hostile-stage/$base/BUILD-INFO.tmp"
+mv "$scratch/hostile-stage/$base/BUILD-INFO.tmp" \
+    "$scratch/hostile-stage/$base/BUILD-INFO.json"
+(
+    cd "$scratch/hostile-stage/$base"
+    find . -type f ! -name SHA256SUMS -print0 |
+        sort -z |
+        xargs -0 sha256sum >SHA256SUMS
+)
+tar -czf "$scratch/hostile-executable/$base.tar.gz" \
+    -C "$scratch/hostile-stage" "$base"
+rewrite_outer_evidence "$scratch/hostile-executable"
+export GCC_EXECUTION_SENTINEL="$execution_sentinel"
+if verify "$scratch/hostile-executable" >/dev/null 2>&1; then
+    echo "non-ELF candidate binary was accepted" >&2
+    exit 1
+fi
+unset GCC_EXECUTION_SENTINEL
+if [ -e "$execution_sentinel" ]; then
+    echo "offline verification executed the candidate binary" >&2
+    exit 1
+fi
+
 if "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/first" >/dev/null 2>&1; then
     echo "bundle builder overwrote an existing output directory" >&2
     exit 1

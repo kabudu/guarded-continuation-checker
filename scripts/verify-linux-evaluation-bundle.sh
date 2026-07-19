@@ -10,6 +10,8 @@ archive=$1
 checksum=$2
 provenance=$3
 external_sbom=$4
+export LC_ALL=C
+export TZ=UTC
 
 for command in jq sha256sum tar gzip sort uniq cmp readelf stat awk grep cat wc; do
     command -v "$command" >/dev/null 2>&1 || {
@@ -179,21 +181,27 @@ if ! jq -e --arg revision "$revision" --arg lock "$lock_digest" '
     exit 2
 fi
 
-if readelf -l "$bundle/bin/guarded-continuation-checker" |
-   grep -q 'Requesting program interpreter'; then
+elf_header="$scratch/elf-header.txt"
+elf_program_headers="$scratch/elf-program-headers.txt"
+if ! readelf -h "$bundle/bin/guarded-continuation-checker" >"$elf_header" 2>/dev/null ||
+   ! readelf -l "$bundle/bin/guarded-continuation-checker" >"$elf_program_headers" 2>/dev/null; then
+    echo "evaluation binary is not a valid ELF executable" >&2
+    exit 2
+fi
+if ! grep -Eq '^[[:space:]]*Class:[[:space:]]+ELF64$' "$elf_header" ||
+   ! grep -Eq "^[[:space:]]*Data:[[:space:]]+2's complement, little endian$" "$elf_header" ||
+   ! grep -Eq '^[[:space:]]*Machine:[[:space:]]+Advanced Micro Devices X86-64$' "$elf_header"; then
+    echo "evaluation binary architecture disagrees with the bundle target" >&2
+    exit 2
+fi
+if grep -q 'Requesting program interpreter' "$elf_program_headers"; then
     echo "evaluation binary is dynamically linked" >&2
     exit 2
 fi
-actual_capabilities="$scratch/capabilities.txt"
-{
-    "$bundle/bin/guarded-continuation-checker" firmware-cli-version
-    "$bundle/bin/guarded-continuation-checker" predicate-cli-version
-    "$bundle/bin/guarded-continuation-checker" event-contract-cli-version
-} >"$actual_capabilities"
-cmp "$actual_capabilities" "$bundle/CAPABILITIES.txt" >/dev/null || {
-    echo "binary capabilities disagree with the bundle snapshot" >&2
-    exit 2
-}
+
+# Do not execute the candidate binary here. Offline verification establishes
+# integrity and structure, not publisher identity. Execution belongs after
+# signature verification and inside the documented isolation boundary.
 
 printf 'linux-evaluation-bundle status=VERIFIED archive=%s sha256=%s revision=%s\n' \
     "$archive_name" "$actual_digest" "$revision"
