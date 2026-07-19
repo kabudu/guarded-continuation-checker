@@ -215,6 +215,14 @@ witness. Across the same 9, 12, and 16-input cohort, median evidence checking is
 0.261 to 1.051 ms with 7.8 to 33.9 KiB of proofs. This establishes certificate-v3
 feasibility, not a frozen artifact, portfolio admission, or novelty claim.
 
+Experimental [event-contract certificate v3](docs/EVENT_CONTRACT_CERTIFICATE_V3.md)
+now binds the source AIG and original named contract to edge witnesses, checked
+completeness proofs, independently recomputed phase powers, the final answer,
+and an optional replayed trace. It deterministically covers both answer classes
+across 40 cost trials. Verification takes 0.288 to 1.419 ms and is 2.26x to
+7.23x slower than exact CDCL on these individual queries, so v3 is an assurance
+artifact, not a speed claim or portfolio default.
+
 The first public RTL compatibility corpus is under
 [`corpus/rtl/yosys-simple`](corpus/rtl/yosys-simple/README.md). It pins five
 unmodified upstream Yosys sources and exercises twelve separately authored

@@ -23,9 +23,11 @@ sufficient.
 Event-contract v1 is not a production-supported interface. It has exact
 agreement and replay evidence across three product-shaped fixtures, strict
 parser bounds, explicit negative performance data, and independently checked
-one-step/terminal proof primitives. It does not yet have a
-stable public API, certificate format, independent whole-contract verifier,
-portfolio fallback integration, parser mutation corpus, hard per-invocation
+one-step/terminal proof primitives. Experimental certificate v3 now adds a
+deterministic format, source/contract binding, independent whole-contract
+verification, both answer classes, a 1,000-input parser mutation corpus, and
+proof swap/truncation rejection. It does not yet have a stable public API,
+portfolio fallback integration, hard per-invocation
 resource governance, compatibility commitment, public-design evidence, or
 external acceptance evidence. These gates must close before event contracts can
 change any production-readiness row above.

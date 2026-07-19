@@ -108,3 +108,12 @@ without trusting the producer BDD. SAT proof carrying and witness-backed
 completeness are established techniques, so the measured checker result is not
 itself novel. It lowers implementation risk for the candidate combined artifact
 but does not close prior-art search, whole-certificate comparison, or review.
+
+Experimental [event-contract certificate v3](EVENT_CONTRACT_CERTIFICATE_V3.md)
+now binds the original named contract to independently checked CNF relations,
+powered composition, terminal evidence, answer, and trace. This is the most
+complete implementation of the candidate combination in this repository, but
+combining known methods is not enough to establish novelty. External standard
+proof checking, search for the complete combination, and expert review remain
+open claim gates. Repository language must continue to say candidate
+contribution or research prototype.

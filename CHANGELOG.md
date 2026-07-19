@@ -8,6 +8,12 @@
   check native UNSAT proofs. Preserve 30 release-mode trials across the 9, 12,
   and 16-input product cohort, including 0.261 to 1.051 ms median verification,
   plus an omitted-target rejection regression. Certificate v3 remains open.
+- Freeze and implement experimental event-contract certificate v3. Bind the AIG
+  and original named contract, carry edge witnesses and checked completeness
+  proofs, independently recompute powered phases and final composition, replay
+  positive traces, and prove negative answers. Preserve 40 cost trials spanning
+  both answer classes, including the negative 2.26x to 7.23x verification
+  overhead against exact CDCL, plus bounded parser and tamper rejection evidence.
 
 - Add experimental bounded event-contract v1 semantics: strict named CNF over
   relevant AIGER inputs, exact BDD phase composition, concrete witness recovery,
