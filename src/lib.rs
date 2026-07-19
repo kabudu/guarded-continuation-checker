@@ -12,6 +12,7 @@ pub mod btor2_motion;
 pub mod btor2_phase;
 pub mod btor2_region;
 pub mod btor2_search;
+pub mod dense_relation;
 
 use std::fmt;
 use std::io::Read;

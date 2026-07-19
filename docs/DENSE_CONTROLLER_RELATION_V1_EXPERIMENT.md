@@ -3,8 +3,11 @@
 ## Status
 
 This document predeclares the next experiment after controller-obligation reuse.
-It is a design and falsification plan, not an implementation, novelty claim, or
-production-readiness claim.
+The first extraction step is now implemented: a public, resource-bounded dense
+relation module supplies exact edge insertion, membership, target enumeration,
+composition, and binary exponentiation. The existing predicate engine uses that
+module without changing its certificate format or answers. This remains an
+experiment and falsification plan, not a novelty or production-readiness claim.
 
 The braking obligation proves that one independently checked controller summary
 can reduce artifact size and checking time across several plants. Its vocabulary
@@ -122,7 +125,8 @@ That claim is currently unproven.
 ## Implementation sequence
 
 1. Extract the relation, witness, CNF obligation, and independent proof-checking
-   primitives from the executable into a stable library module.
+   primitives from the executable into stable library modules. The relation
+   primitive is complete; witness and proof primitives remain private.
 2. Prove byte-for-byte and answer compatibility for predicate certificate v2.
 3. Add a source-bound controller boundary manifest and canonical obligation.
 4. Add environment-member composition with exact trace reconstruction.

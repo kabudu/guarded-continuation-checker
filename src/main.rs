@@ -1,6 +1,6 @@
 use guarded_continuation_checker::{
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search,
+    btor2_search, dense_relation::DenseRelation,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -9359,12 +9359,12 @@ impl PredicateQuotient {
             return Ok(None);
         };
 
-        let mut reachable = vec![vec![false; relation.states]; horizon + 1];
-        let mut predecessor = vec![vec![None; relation.states]; horizon + 1];
+        let mut reachable = vec![vec![false; relation.states()]; horizon + 1];
+        let mut predecessor = vec![vec![None; relation.states()]; horizon + 1];
         reachable[0][initial_state] = true;
         for frame in 0..horizon {
             let step = self.relation(&constraints[frame])?;
-            for source in 0..step.states {
+            for source in 0..step.states() {
                 if !reachable[frame][source] {
                     continue;
                 }
@@ -10077,7 +10077,7 @@ fn predicate_proof_relation_experiment(
     let mut quotient = PredicateQuotient::new(model)?;
     let relation = quotient.relation(constraints)?;
     let rows = relation
-        .rows
+        .rows()
         .iter()
         .map(|row| row[0] as u16)
         .collect::<Vec<_>>();
@@ -11941,7 +11941,7 @@ fn event_contract_proof_experiment(
     for (phase_index, phase) in contract.phases.iter().enumerate() {
         let relation = quotient.interface.relation_predicate(&phase.predicate)?;
         let rows = relation
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
@@ -12151,13 +12151,13 @@ fn certify_aiger_event_contract_v3_with_node_limit(
     for phase in &contract.phases {
         let base = quotient.interface.relation_predicate(&phase.predicate)?;
         let base_rows = base
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
         let powered = InterfaceRelation::power(&base, phase.length)?;
         let powered_rows = powered
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
@@ -13035,7 +13035,7 @@ fn certify_aiger_predicate(
             start,
             length: end - start,
             constraints: constraints[start].clone(),
-            rows: relation.rows.iter().map(|row| row[0] as u16).collect(),
+            rows: relation.rows().iter().map(|row| row[0] as u16).collect(),
         });
         start = end;
     }
@@ -13250,13 +13250,13 @@ fn certify_aiger_predicate_v2(
         }
         let base = quotient.relation(&constraints[start])?;
         let base_rows = base
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
         let powered = quotient.relation_power(&constraints[start], end - start)?;
         let powered_rows = powered
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
@@ -14643,94 +14643,60 @@ fn benchmark_aiger_predicate_proof_terminal(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct InterfaceRelation {
-    states: usize,
-    words: usize,
-    rows: Vec<Vec<u64>>,
-}
+struct InterfaceRelation(DenseRelation);
 
 impl InterfaceRelation {
+    fn states(&self) -> usize {
+        self.0.states()
+    }
+
     fn empty(states: usize) -> Self {
-        let words = states.div_ceil(u64::BITS as usize);
-        Self {
-            states,
-            words,
-            rows: vec![vec![0; words]; states],
-        }
+        Self(DenseRelation::empty(states).expect("validated interface state count"))
     }
 
     fn identity(states: usize) -> Self {
-        let mut relation = Self::empty(states);
-        for state in 0..states {
-            relation.insert(state, state);
-        }
-        relation
+        Self(DenseRelation::identity(states).expect("validated interface state count"))
     }
 
     fn insert(&mut self, source: usize, target: usize) {
-        self.rows[source][target / u64::BITS as usize] |= 1u64 << (target % u64::BITS as usize);
+        self.0
+            .insert(source, target)
+            .expect("validated interface edge");
     }
 
     fn contains(&self, source: usize, target: usize) -> bool {
-        self.rows[source][target / u64::BITS as usize] & (1u64 << (target % u64::BITS as usize))
-            != 0
+        self.0
+            .contains(source, target)
+            .expect("validated interface query")
     }
 
     fn targets(&self, source: usize) -> impl Iterator<Item = usize> + '_ {
-        let states = self.states;
-        self.rows[source]
-            .iter()
-            .enumerate()
-            .flat_map(move |(word_index, word)| {
-                let mut remaining = *word;
-                std::iter::from_fn(move || {
-                    if remaining == 0 {
-                        return None;
-                    }
-                    let bit = remaining.trailing_zeros() as usize;
-                    remaining &= remaining - 1;
-                    let target = word_index * u64::BITS as usize + bit;
-                    (target < states).then_some(target)
-                })
-            })
+        self.0
+            .targets(source)
+            .expect("validated interface source")
+            .into_iter()
     }
 
     fn compose(left: &Self, right: &Self) -> Result<Self, String> {
-        if left.states != right.states {
-            return Err("interface relation state-space mismatch".to_string());
-        }
-        let mut result = Self::empty(left.states);
-        for source in 0..left.states {
-            for middle in left.targets(source) {
-                for word in 0..result.words {
-                    result.rows[source][word] |= right.rows[middle][word];
-                }
-            }
-        }
-        Ok(result)
+        DenseRelation::compose(&left.0, &right.0)
+            .map(Self)
+            .map_err(|error| error.to_string())
     }
 
-    fn power(base: &Self, mut exponent: usize) -> Result<Self, String> {
-        let mut result = Self::identity(base.states);
-        let mut factor = base.clone();
-        while exponent != 0 {
-            if exponent & 1 == 1 {
-                result = Self::compose(&result, &factor)?;
-            }
-            exponent >>= 1;
-            if exponent != 0 {
-                factor = Self::compose(&factor, &factor)?;
-            }
-        }
-        Ok(result)
+    fn power(base: &Self, exponent: usize) -> Result<Self, String> {
+        let exponent = u64::try_from(exponent)
+            .map_err(|_| "interface relation exponent exceeds u64".to_string())?;
+        DenseRelation::power(&base.0, exponent)
+            .map(Self)
+            .map_err(|error| error.to_string())
     }
 
     fn pairs(&self) -> usize {
-        self.rows
-            .iter()
-            .flat_map(|row| row.iter())
-            .map(|word| word.count_ones() as usize)
-            .sum()
+        self.0.pair_count()
+    }
+
+    fn rows(&self) -> &[Vec<u64>] {
+        self.0.row_words()
     }
 }
 
@@ -35034,7 +35000,7 @@ mod tests {
                 assert_eq!(
                     actual,
                     expected
-                        .rows
+                        .rows()
                         .iter()
                         .map(|row| row[0] as u16)
                         .collect::<Vec<_>>()
@@ -35045,7 +35011,7 @@ mod tests {
                     assert_eq!(
                         actual,
                         expected
-                            .rows
+                            .rows()
                             .iter()
                             .map(|row| row[0] as u16)
                             .collect::<Vec<_>>()
@@ -35097,7 +35063,7 @@ mod tests {
         let relevant = IndependentPredicateChecker::support(&model).unwrap();
         let constraints = vec![None; relevant.len()];
         let mut quotient = PredicateQuotient::new(&model).unwrap();
-        let row = quotient.relation(&constraints).unwrap().rows[0][0] as u16;
+        let row = quotient.relation(&constraints).unwrap().rows()[0][0] as u16;
         let clauses =
             predicate_relation_completeness_clauses(&model, &relevant, 0, &constraints, row)
                 .unwrap();
@@ -37697,7 +37663,7 @@ mod tests {
             .interface
             .relation_predicate(&contract.phases[0].predicate)
             .unwrap();
-        let targets = relation.rows[0][0] as u16;
+        let targets = relation.rows()[0][0] as u16;
         let omitted = targets & !(1u16 << targets.trailing_zeros());
         let clauses = predicate_relation_completeness_clauses_for_predicate(
             &model,
