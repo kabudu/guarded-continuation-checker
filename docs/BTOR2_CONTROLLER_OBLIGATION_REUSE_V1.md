@@ -136,6 +136,23 @@ mutation. All five cases behave as predeclared in
 [`results/btor2-component-batch-acceptance-v1.csv`](../results/btor2-component-batch-acceptance-v1.csv).
 This is repository-controlled evidence, not independent partner acceptance.
 
+## Compatibility and migration
+
+The contract, ordinary component certificate, controller obligation, reusable
+batch, portfolio, and manifest carry independent format versions. Version 1
+field order, number spelling, LF termination, route semantics, and digest
+bindings are frozen. A producer change that alters canonical bytes or semantics
+must introduce a new format version rather than reinterpret version 1.
+
+The portfolio decoder is self-identifying. A reusable route remains the exact
+`reusable_component_batch_version=1` artifact, so portfolio wrapping does not
+erase the measured size benefit. An ordinary route starts with
+`component_batch_portfolio_version=1`. Version 1 fingerprints for the admitted
+and mixed public fixtures are retained as unit-test gates. When a successor is
+introduced, its decoder must coexist with version 1 for at least two subsequent
+minor releases, and the migration notes must state whether re-encoding preserves
+the verified result, source bindings, and member order.
+
 The retained data is in
 [`results/btor2-component-reuse-v1.csv`](../results/btor2-component-reuse-v1.csv).
 Reproduce it with:

@@ -2954,6 +2954,59 @@ mod tests {
     }
 
     #[test]
+    fn component_batch_v1_compatibility_fingerprints_are_frozen() {
+        let admitted = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 254,
+            },
+            ComponentBatchInput {
+                plant_source: include_bytes!(
+                    "../examples/btor2/components/fast-motion-plant-v1.btor2"
+                ),
+                contract_source: CONTRACT,
+                horizon: 127,
+            },
+        ];
+        let admitted = encode_component_batch_portfolio(
+            &produce_component_batch_portfolio(CONTROLLER, &admitted)
+                .unwrap()
+                .certificate,
+        )
+        .unwrap();
+        assert_eq!(admitted.len(), 1_194);
+        assert_eq!(
+            digest(admitted.as_bytes()),
+            "1d7ea348ee0c9f91ccdaa28a96894330ca7ca6e3ce36be41f55728f96095759f"
+        );
+
+        let mixed = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 256,
+            },
+        ];
+        let mixed = encode_component_batch_portfolio(
+            &produce_component_batch_portfolio(CONTROLLER, &mixed)
+                .unwrap()
+                .certificate,
+        )
+        .unwrap();
+        assert_eq!(mixed.len(), 2_989);
+        assert_eq!(
+            digest(mixed.as_bytes()),
+            "adeca56001a004a3d3b2860ec79587576783150d09b47de96d0ff5fbc69af763"
+        );
+    }
+
+    #[test]
     fn rejects_source_contract_and_claim_tampering() {
         let certificate = produce(CONTROLLER, PLANT, CONTRACT, 255)
             .unwrap()
