@@ -728,7 +728,7 @@ impl ControllerMtbddTool {
             command,
             self.policy,
         )?;
-        parse_controller_mtbdd_summary(output, "CREATED", &self.capabilities)
+        parse_controller_mtbdd_summary(output, "CREATED", Some(artifact), &self.capabilities)
     }
 
     pub fn verify(
@@ -756,7 +756,7 @@ impl ControllerMtbddTool {
             command,
             self.policy,
         )?;
-        parse_controller_mtbdd_summary(output, "VERIFIED", &self.capabilities)
+        parse_controller_mtbdd_summary(output, "VERIFIED", None, &self.capabilities)
     }
 }
 
@@ -1418,6 +1418,7 @@ fn parse_controller_mtbdd_capabilities(
 fn parse_controller_mtbdd_summary(
     output: ManagedOutput,
     expected_action: &str,
+    expected_output: Option<&Path>,
     capabilities: &ControllerMtbddCapabilities,
 ) -> Result<Observed<ControllerMtbddBatchSummary>, PredicateOperationError> {
     let (stdout, mut metrics) = successful_stdout(output)?;
@@ -1433,15 +1434,15 @@ fn parse_controller_mtbdd_summary(
                 "controller MTBDD summary line is missing".to_string(),
             )
         })?;
-        let summary_text = if expected_action == "CREATED" {
+        let summary_text = if let Some(expected_output) = expected_output {
             first
                 .split_once(" output=")
                 .and_then(|(summary, output)| {
-                    (!output.is_empty() && !output.contains(" output=")).then_some(summary)
+                    (output == expected_output.to_string_lossy()).then_some(summary)
                 })
                 .ok_or_else(|| {
                     PredicateApiError::InvalidResponse(
-                        "controller MTBDD created response has invalid output".to_string(),
+                        "controller MTBDD created response output disagrees".to_string(),
                     )
                 })?
         } else if first.contains(" output=") {
