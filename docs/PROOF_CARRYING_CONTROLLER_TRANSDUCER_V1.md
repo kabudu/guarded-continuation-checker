@@ -4,9 +4,11 @@
 
 This document predeclares the first end-to-end dense controller obligation. The
 underlying exact AIGER evaluation, outcome-completeness CNF, and independent
-UNSAT proof checking exist as public library primitives. The source-bound
-artifact, partition producer, verifier, composition portfolio, and product gates
-do not yet exist. This is not a novelty or production-readiness claim.
+UNSAT proof checking exist as public library primitives. An in-memory
+source-bound obligation, deterministic partition producer, and independent
+verifier now exist behind a public Rust API. Canonical byte encoding, hostile
+decoder testing, composition portfolio, and product gates do not yet exist.
+This is not a novelty or production-readiness claim.
 
 ## Hypothesis
 
