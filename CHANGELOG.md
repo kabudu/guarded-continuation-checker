@@ -15,7 +15,7 @@
   both answer classes, including the negative 2.26x to 7.23x verification
   overhead against exact CDCL, plus bounded parser and tamper rejection evidence.
 - Export every v3 relation and terminal completeness claim to deterministic,
-  source-bound DIMACS bundles. Verify all 72 individual obligations and four
+  source-bound DIMACS bundles. Verify all 68 individual obligations and four
   selector aggregates with pinned CaDiCaL 3.0.0 and DRAT-trim, covering both
   answer classes under explicit process and proof-file limits.
 

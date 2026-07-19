@@ -38,7 +38,7 @@ checker status must be zero, and DRAT-trim must emit `s VERIFIED`.
 
 ## Result
 
-All 72 individual obligations and four selector aggregates verified across the
+All 68 individual obligations and four selector aggregates verified across the
 three product-shaped avoidable cases and one satisfiable unavoidable case.
 Aggregate production plus checking took 39.460 to 45.619 ms on the measured
 Apple Silicon host. This is much slower than the native v3 checker, but it adds

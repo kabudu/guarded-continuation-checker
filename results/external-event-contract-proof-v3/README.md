@@ -12,7 +12,7 @@ v05.22.2023 checked every individual proof and the selector aggregate.
 | Robot recovery | avoidable | 33 | 91,223 B | 111,411 B | 12.670 ms | 32.949 ms | 45.619 ms |
 | Actuator fixed-input | unavoidable | 9 | 15,980 B | 18,427 B | 9.017 ms | 30.443 ms | 39.460 ms |
 
-All 72 individual obligations and all four aggregates verified. Each CSV row
+All 68 individual obligations and all four aggregates verified. Each CSV row
 binds the exported manifest and both external tool binaries by SHA-256. The
 measurements were taken on 19 July 2026 on Apple Silicon. They demonstrate
 proof-format and checker diversity, not portable performance.
