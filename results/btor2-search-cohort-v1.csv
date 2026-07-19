@@ -1,0 +1,7 @@
+schema_version,model,bad_property,horizon,expected,actual,certificate_bytes,verified,status
+1,watchdog,13,2,SAFE,SAFE,382,true,ok
+1,watchdog,13,3,UNSAFE,UNSAFE,216,true,ok
+1,actuator,13,200,SAFE,SAFE,505396,true,ok
+1,actuator,13,201,UNSAFE,UNSAFE,418,true,ok
+1,saturating-timer,15,254,SAFE,SAFE,802525,true,ok
+1,saturating-timer,15,255,UNSAFE,UNSAFE,472,true,ok

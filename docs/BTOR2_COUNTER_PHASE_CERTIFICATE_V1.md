@@ -96,7 +96,8 @@ cargo run --release -- \
 The closed-form backend is attempted first. If its structural admission fails,
 the unchanged source and phase trace pass to exact step-by-step replay. Replay
 has its own certificate format, a 100,000-transition limit, and a combined
-10,000,000 normalized-node-step limit. It supports the
+10,000,000 node-root-step limit that includes the number of state expressions.
+It supports the
 one-bit-input BTOR2 core rather than pretending a rejected recurrence was
 affine. If either backend cannot prove the claimed bad endpoint, the command
 returns an error and publishes no answer.

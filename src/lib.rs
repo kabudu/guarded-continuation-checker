@@ -6,6 +6,7 @@
 
 pub mod btor2;
 pub mod btor2_phase;
+pub mod btor2_search;
 
 use std::fmt;
 use std::io::Read;

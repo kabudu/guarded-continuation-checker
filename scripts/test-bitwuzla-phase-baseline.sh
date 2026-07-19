@@ -22,6 +22,8 @@ check_result() {
 check_result sat examples/btor2/watchdog-endpoint-v1.smt2
 check_result unsat examples/btor2/watchdog-endpoint-tampered-v1.smt2
 check_result sat examples/btor2/actuator-endpoint-v1.smt2
+check_result unsat examples/btor2/watchdog-search-h2-safe-v1.smt2
+check_result sat examples/btor2/watchdog-search-h3-unsafe-v1.smt2
 
 version=$($bitwuzla --version)
 printf 'bitwuzla_phase_baseline=PASS version=%s\n' "$version"

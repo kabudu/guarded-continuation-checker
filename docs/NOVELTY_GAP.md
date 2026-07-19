@@ -145,3 +145,10 @@ reset-or-affine counter shape. Its ingredients are established and its current
 combination has not been shown novel. The open novelty test is whether a wider
 source-bound composition certificate can provide independently measured
 assurance or scaling beyond straightforward recurrence acceleration plus SMT.
+
+[BTOR2 bounded search v1](BTOR2_BOUNDED_SEARCH_V1.md) adds proof-carrying exact
+reachability for both answers, but does so with established explicit reachable
+layers and witness replay. It is an exact reference backend and integration
+boundary, not a novelty result. Novelty remains open until a compressed
+word-composition certificate proves the same successor completeness obligation
+without enumerating the measured state layers.

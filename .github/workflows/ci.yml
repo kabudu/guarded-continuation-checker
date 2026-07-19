@@ -31,7 +31,8 @@ jobs:
         run: |
           shellcheck -s sh \
             scripts/test-btor2tools-baseline.sh \
-            scripts/test-bitwuzla-phase-baseline.sh
+            scripts/test-bitwuzla-phase-baseline.sh \
+            scripts/run-btor2-search-cohort.sh
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -44,6 +45,11 @@ jobs:
           scripts/test-btor2tools-baseline.sh \
             target/debug/guarded-continuation-checker \
             /tmp/btor2tools/build/bin
+      - name: Reproduce both-answer BTOR2 search cohort
+        run: |
+          scripts/run-btor2-search-cohort.sh \
+            target/debug/guarded-continuation-checker /tmp/btor2-search.csv
+          diff -u results/btor2-search-cohort-v1.csv /tmp/btor2-search.csv
       - name: Test external production evidence gate
         run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test

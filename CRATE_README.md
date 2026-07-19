@@ -16,8 +16,12 @@ The package provides:
   certificates;
 - ASCII and binary AIGER ingestion, multi-file SystemVerilog/Yosys workflows,
   named assumptions, replayable counterexamples and versioned evidence bundles;
-- a static specialised-backend gate with exact persistent-CDCL fallback; and
-- deterministic certificate formats with independent source-bound verification.
+- a static specialised-backend gate with exact persistent-CDCL fallback;
+- deterministic certificate formats with independent source-bound verification;
+  and
+- experimental BTOR2 word semantics, counter-phase certificates, exact trace
+  replay, and both-answer bounded reachability certificates with fixed resource
+  limits.
 
 ## Status and claim boundary
 
@@ -59,6 +63,7 @@ Confirm the versioned interfaces before integrating:
 guarded-continuation-checker firmware-cli-version
 guarded-continuation-checker predicate-cli-version
 guarded-continuation-checker event-contract-cli-version
+guarded-continuation-checker btor2-cli-version
 ```
 
 ## Rust API
