@@ -1,0 +1,4 @@
+schema_version,case,horizon,trials,explicit_bytes,monolithic_bytes,component_bytes,explicit_verify_median_micros,monolithic_verify_median_micros,component_verify_median_micros,component_vs_explicit_speedup,component_vs_monolithic_ratio,status
+1,braking-base,255,21,1180313,386,494,38129,26,35,1089.40,1.35,ok
+1,braking-fast-plant,127,21,287786,385,493,9122,26,36,253.39,1.38,ok
+1,motor-stop,159,21,453342,386,494,14677,26,35,419.34,1.35,ok

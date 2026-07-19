@@ -1,5 +1,6 @@
 use guarded_continuation_checker::{
-    btor2, btor2_bounded, btor2_braking, btor2_motion, btor2_phase, btor2_region, btor2_search,
+    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
+    btor2_search,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -24826,7 +24827,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
@@ -24834,6 +24835,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_region::REGION_CERTIFICATE_VERSION,
                 btor2_motion::MOTION_CERTIFICATE_VERSION,
                 btor2_braking::BRAKING_CERTIFICATE_VERSION,
+                btor2_component::COMPONENT_CONTRACT_VERSION,
+                btor2_component::COMPONENT_CERTIFICATE_VERSION,
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
@@ -24855,6 +24858,115 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_motion::MAX_MOTION_CERTIFICATE_BYTES,
                 btor2_braking::MAX_BRAKING_HORIZON,
                 btor2_braking::MAX_BRAKING_CERTIFICATE_BYTES,
+                btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                btor2_component::MAX_COMPONENT_PHASE_HORIZON,
+                btor2_component::MAX_COMPONENT_SEARCH_HORIZON,
+                btor2_component::MAX_COMPONENT_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
+        "check-btor2-components" => {
+            if args.len() != 6 {
+                return Err("usage: guarded-continuation-checker check-btor2-components CONTROLLER.btor2 PLANT.btor2 CONTRACT.txt HORIZON OUTPUT.component-cert".to_string());
+            }
+            let controller = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "controller BTOR2 input",
+            )?;
+            let plant = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2::MAX_BTOR2_BYTES,
+                "plant BTOR2 input",
+            )?;
+            let contract = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                "component contract",
+            )?;
+            let horizon = args[4]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let started = Instant::now();
+            let production = btor2_component::produce(&controller, &plant, &contract, horizon)
+                .map_err(|error| error.to_string())?;
+            let reason = production.selection_reason;
+            let encoded = btor2_component::encode(&production.certificate)
+                .map_err(|error| error.to_string())?;
+            let summary =
+                btor2_component::verify(&controller, &plant, &contract, &production.certificate)
+                    .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[5]), encoded.as_bytes())?;
+            let backend = match summary.backend {
+                btor2_component::ComponentBackend::PhaseContract => "phase-contract",
+                btor2_component::ComponentBackend::ComposedSearch => "composed-search",
+            };
+            let result = match summary.result {
+                btor2_component::ComponentResult::Safe => "SAFE",
+                btor2_component::ComponentResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = summary
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-components status=CREATED certificate_version={} backend={backend} reason={} result={result} horizon={} bad_frame={bad_frame} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
+                btor2_component::COMPONENT_CERTIFICATE_VERSION,
+                reason.as_str(),
+                summary.query_horizon,
+                summary.logical_reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                args[5]
+            );
+            Ok(true)
+        }
+        "verify-btor2-components" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker verify-btor2-components CONTROLLER.btor2 PLANT.btor2 CONTRACT.txt CERTIFICATE.component-cert".to_string());
+            }
+            let controller = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "controller BTOR2 input",
+            )?;
+            let plant = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2::MAX_BTOR2_BYTES,
+                "plant BTOR2 input",
+            )?;
+            let contract = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                "component contract",
+            )?;
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[4]),
+                btor2_component::MAX_COMPONENT_CERTIFICATE_BYTES,
+                "component certificate",
+            )?;
+            let certificate =
+                btor2_component::decode(&encoded).map_err(|error| error.to_string())?;
+            let started = Instant::now();
+            let summary = btor2_component::verify(&controller, &plant, &contract, &certificate)
+                .map_err(|error| error.to_string())?;
+            let backend = match summary.backend {
+                btor2_component::ComponentBackend::PhaseContract => "phase-contract",
+                btor2_component::ComponentBackend::ComposedSearch => "composed-search",
+            };
+            let result = match summary.result {
+                btor2_component::ComponentResult::Safe => "SAFE",
+                btor2_component::ComponentResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = summary
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-components status=VERIFIED certificate_version={} backend={backend} result={result} horizon={} bad_frame={bad_frame} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
+                btor2_component::COMPONENT_CERTIFICATE_VERSION,
+                summary.query_horizon,
+                summary.logical_reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros()
             );
             Ok(true)
         }
@@ -35260,6 +35372,46 @@ mod tests {
                 run_artifact_cli(&[
                     "verify-btor2-bounded".to_string(),
                     braking.display().to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            fs::remove_file(&certificate).unwrap();
+        }
+    }
+
+    #[test]
+    fn btor2_component_cli_preserves_sources_and_exact_fallback() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let controller = root.join("examples/btor2/components/braking-controller-v1.btor2");
+        let plant = root.join("examples/btor2/components/motion-plant-v1.btor2");
+        let contract = root.join("examples/btor2/components/braking-motion-contract-v1.txt");
+        let certificate =
+            std::env::temp_dir().join(format!("gcc-btor2-components-{}.cert", std::process::id()));
+        for (horizon, backend) in [
+            (255, "backend=phase-contract"),
+            (256, "backend=composed-search"),
+        ] {
+            assert!(
+                run_artifact_cli(&[
+                    "check-btor2-components".to_string(),
+                    controller.display().to_string(),
+                    plant.display().to_string(),
+                    contract.display().to_string(),
+                    horizon.to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            let text = fs::read_to_string(&certificate).unwrap();
+            assert!(text.starts_with("component_certificate_version=1\n"));
+            assert!(text.contains(backend));
+            assert!(
+                run_artifact_cli(&[
+                    "verify-btor2-components".to_string(),
+                    controller.display().to_string(),
+                    plant.display().to_string(),
+                    contract.display().to_string(),
                     certificate.display().to_string(),
                 ])
                 .unwrap()

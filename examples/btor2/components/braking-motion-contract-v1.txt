@@ -1,0 +1,10 @@
+component_contract_version=1
+controller_reset_input=3
+controller_velocity_input=4
+controller_braking_state=6
+controller_brake_output=10
+plant_reset_input=3
+plant_brake_input=4
+plant_velocity_state=6
+plant_position_state=7
+plant_bad_property=24

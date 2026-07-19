@@ -183,3 +183,14 @@ summaries, and independently checked safety certificates are established prior
 art. This result is not claimed as novel. The candidate boundary now requires
 composition across separately sourced controller and plant contracts, with a
 non-Cartesian interface relation and maintained product or SMT baselines.
+
+[BTOR2 source-separated component contract v1](BTOR2_COMPONENT_CONTRACT_V1.md)
+implements that source boundary, binds the wiring relation, preserves exact
+both-answer fallback, and reuses one controller source with two plants. The
+single-pair novelty hypothesis is falsified: its specialised artifact is 107 to
+108 bytes larger and checks 1.35x to 1.38x slower than the equivalent monolithic
+specialisation. Assume-guarantee contracts, simulation relations, compositional
+invariance, witness circuits, and BTOR2 certificates are established prior art.
+No novelty claim is made. The candidate now requires independently reusable
+controller-local obligations that materially beat repeated monolithic checking
+and straightforward certificate bundling.

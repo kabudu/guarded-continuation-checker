@@ -1,0 +1,9 @@
+schema_version,case,horizon,expected,component_result,component_backend,reason,monolithic_result,monolithic_backend,explicit_bytes,component_bytes,monolithic_portfolio_bytes,component_vs_explicit_reduction_percent,component_verified,monolithic_verified,status
+1,braking-base,255,SAFE,SAFE,phase-contract,exact-phase-contract-safe,SAFE,braking-phases,1180313,494,386,99.96,true,true,ok
+1,braking-base,256,UNSAFE,UNSAFE,composed-search,specialised-inapplicable-or-intersecting,UNSAFE,explicit-search,473,901,473,-90.49,true,true,ok
+1,braking-fast-plant,127,SAFE,SAFE,phase-contract,exact-phase-contract-safe,SAFE,braking-phases,287786,493,385,99.83,true,true,ok
+1,braking-fast-plant,128,UNSAFE,UNSAFE,composed-search,specialised-inapplicable-or-intersecting,UNSAFE,explicit-search,345,645,345,-86.96,true,true,ok
+1,motor-stop,159,SAFE,SAFE,phase-contract,exact-phase-contract-safe,SAFE,braking-phases,453342,494,386,99.89,true,true,ok
+1,motor-stop,160,UNSAFE,UNSAFE,composed-search,specialised-inapplicable-or-intersecting,UNSAFE,explicit-search,377,709,377,-88.06,true,true,ok
+1,semi-implicit-control,127,SAFE,SAFE,composed-search,specialised-inapplicable-or-intersecting,SAFE,explicit-search,283227,181238,283227,36.01,true,true,ok
+1,semi-implicit-control,128,UNSAFE,UNSAFE,composed-search,specialised-inapplicable-or-intersecting,UNSAFE,explicit-search,345,645,345,-86.96,true,true,ok
