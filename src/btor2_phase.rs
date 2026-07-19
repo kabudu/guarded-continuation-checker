@@ -10,6 +10,9 @@ pub const PHASE_CERTIFICATE_VERSION: u32 = 1;
 pub const MAX_PHASES: usize = 4_096;
 pub const MAX_HORIZON: u64 = 1_000_000_000_000;
 pub const MAX_CERTIFICATE_BYTES: usize = 512 * 1024;
+pub const REPLAY_CERTIFICATE_VERSION: u32 = 1;
+pub const MAX_REPLAY_HORIZON: u64 = 100_000;
+pub const MAX_REPLAY_NODE_STEPS: u64 = 10_000_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Phase {
@@ -46,6 +49,16 @@ pub struct VerifySummary {
     pub phases: usize,
     pub final_state: u64,
     pub bad_property: NodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReplayCertificate {
+    pub source_sha256: String,
+    pub input: NodeId,
+    pub horizon: u64,
+    pub bad_property: NodeId,
+    pub phases: Vec<PhaseSpec>,
+    pub final_states: Vec<(NodeId, u64)>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -329,6 +342,134 @@ pub fn verify(
     })
 }
 
+fn validate_specs(specs: &[PhaseSpec], horizon_limit: u64) -> Result<u64, CertificateError> {
+    if specs.is_empty() || specs.len() > MAX_PHASES {
+        return Err(reject(format!("phase count must be in 1..={MAX_PHASES}")));
+    }
+    let mut horizon = 0u64;
+    for (index, phase) in specs.iter().enumerate() {
+        if phase.length == 0 || (index > 0 && specs[index - 1].input == phase.input) {
+            return Err(reject(format!("phase {index} is noncanonical")));
+        }
+        horizon = horizon
+            .checked_add(phase.length)
+            .filter(|value| *value <= horizon_limit)
+            .ok_or_else(|| reject("certificate horizon exceeds limit"))?;
+    }
+    Ok(horizon)
+}
+
+fn replay(
+    model: &Btor2Model,
+    input: NodeId,
+    specs: &[PhaseSpec],
+) -> Result<WordValues, CertificateError> {
+    let mut state = model
+        .initial_state()
+        .map_err(|error| reject(error.to_string()))?;
+    for phase in specs {
+        let inputs = WordValues::from([(input, u64::from(phase.input))]);
+        for _ in 0..phase.length {
+            state = model
+                .step(&state, &inputs)
+                .map_err(|error| reject(error.to_string()))?;
+        }
+    }
+    Ok(state)
+}
+
+fn replay_work_gate(model: &Btor2Model, horizon: u64) -> Result<(), CertificateError> {
+    let work = horizon
+        .checked_mul(model.nodes().len() as u64)
+        .ok_or_else(|| reject("replay node-step estimate overflowed"))?;
+    if work > MAX_REPLAY_NODE_STEPS {
+        return Err(reject(format!(
+            "replay exceeds the {MAX_REPLAY_NODE_STEPS} node-step limit"
+        )));
+    }
+    Ok(())
+}
+
+pub fn produce_replay(
+    source: &[u8],
+    specs: &[PhaseSpec],
+    bad_property: NodeId,
+) -> Result<ReplayCertificate, CertificateError> {
+    let horizon = validate_specs(specs, MAX_REPLAY_HORIZON)?;
+    let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
+    replay_work_gate(&model, horizon)?;
+    if model.inputs().len() != 1 || model.nodes()[&model.inputs()[0]].width != 1 {
+        return Err(reject(
+            "replay certificates require exactly one one-bit input",
+        ));
+    }
+    bad_expression(&model, bad_property)?;
+    let input = model.inputs()[0];
+    let state = replay(&model, input, specs)?;
+    let final_inputs = WordValues::from([(input, 0)]);
+    if !model
+        .active_bad(&state, &final_inputs)
+        .map_err(|error| reject(error.to_string()))?
+        .contains(&bad_property)
+    {
+        return Err(reject(
+            "replay endpoint does not activate the claimed bad property",
+        ));
+    }
+    Ok(ReplayCertificate {
+        source_sha256: digest(source),
+        input,
+        horizon,
+        bad_property,
+        phases: specs.to_vec(),
+        final_states: state.into_iter().collect(),
+    })
+}
+
+pub fn verify_replay(
+    source: &[u8],
+    certificate: &ReplayCertificate,
+) -> Result<VerifySummary, CertificateError> {
+    if certificate.source_sha256 != digest(source) {
+        return Err(reject("source digest does not match replay certificate"));
+    }
+    let horizon = validate_specs(&certificate.phases, MAX_REPLAY_HORIZON)?;
+    if horizon != certificate.horizon {
+        return Err(reject("replay horizon does not match phases"));
+    }
+    let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
+    replay_work_gate(&model, horizon)?;
+    if model.inputs() != [certificate.input] || model.nodes()[&certificate.input].width != 1 {
+        return Err(reject("replay input does not match source"));
+    }
+    bad_expression(&model, certificate.bad_property)?;
+    let state = replay(&model, certificate.input, &certificate.phases)?;
+    let expected_states = state
+        .iter()
+        .map(|(id, value)| (*id, *value))
+        .collect::<Vec<_>>();
+    if certificate.final_states != expected_states {
+        return Err(reject("replay final states do not match exact execution"));
+    }
+    let final_inputs = WordValues::from([(certificate.input, 0)]);
+    if !model
+        .active_bad(&state, &final_inputs)
+        .map_err(|error| reject(error.to_string()))?
+        .contains(&certificate.bad_property)
+    {
+        return Err(reject("replay bad property is inactive at final state"));
+    }
+    Ok(VerifySummary {
+        horizon,
+        phases: certificate.phases.len(),
+        final_state: certificate
+            .final_states
+            .first()
+            .map_or(0, |(_, value)| *value),
+        bad_property: certificate.bad_property,
+    })
+}
+
 pub fn encode(certificate: &PhaseCertificate) -> Result<String, CertificateError> {
     verify_digest(&certificate.source_sha256)?;
     let mut lines = vec![
@@ -444,6 +585,115 @@ pub fn decode(bytes: &[u8]) -> Result<PhaseCertificate, CertificateError> {
         bad_property,
         final_state,
         phases,
+    })
+}
+
+pub fn encode_replay(certificate: &ReplayCertificate) -> Result<String, CertificateError> {
+    verify_digest(&certificate.source_sha256)?;
+    let mut lines = vec![
+        format!("replay_certificate_version={REPLAY_CERTIFICATE_VERSION}"),
+        format!("source_sha256={}", certificate.source_sha256),
+        format!("input={}", certificate.input),
+        format!("horizon={}", certificate.horizon),
+        format!("bad_property={}", certificate.bad_property),
+        format!("phase_count={}", certificate.phases.len()),
+    ];
+    for (index, phase) in certificate.phases.iter().enumerate() {
+        lines.push(format!(
+            "phase_{index}={},{}",
+            u8::from(phase.input),
+            phase.length
+        ));
+    }
+    lines.push(format!("state_count={}", certificate.final_states.len()));
+    for (index, (id, value)) in certificate.final_states.iter().enumerate() {
+        lines.push(format!("state_{index}={id},{value}"));
+    }
+    lines.push("status=complete".to_string());
+    let text = format!("{}\n", lines.join("\n"));
+    if text.len() > MAX_CERTIFICATE_BYTES {
+        return Err(reject("encoded replay certificate exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+pub fn decode_replay(bytes: &[u8]) -> Result<ReplayCertificate, CertificateError> {
+    if bytes.len() > MAX_CERTIFICATE_BYTES {
+        return Err(reject("replay certificate exceeds byte limit"));
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| reject("replay certificate is not UTF-8"))?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(reject(
+            "replay certificate must be canonical LF text without NUL",
+        ));
+    }
+    let mut lines = text.lines();
+    fn take(lines: &mut std::str::Lines<'_>, key: &str) -> Result<String, CertificateError> {
+        let line = lines
+            .next()
+            .ok_or_else(|| reject(format!("missing {key}")))?;
+        line.strip_prefix(&format!("{key}="))
+            .map(str::to_string)
+            .ok_or_else(|| reject(format!("expected {key}")))
+    }
+    fn number<T: std::str::FromStr>(value: String, key: &str) -> Result<T, CertificateError> {
+        value.parse().map_err(|_| reject(format!("invalid {key}")))
+    }
+    let version: u32 = number(take(&mut lines, "replay_certificate_version")?, "version")?;
+    if version != REPLAY_CERTIFICATE_VERSION {
+        return Err(reject("unsupported replay certificate version"));
+    }
+    let source_sha256 = take(&mut lines, "source_sha256")?;
+    verify_digest(&source_sha256)?;
+    let input = number(take(&mut lines, "input")?, "input")?;
+    let horizon = number(take(&mut lines, "horizon")?, "horizon")?;
+    let bad_property = number(take(&mut lines, "bad_property")?, "bad property")?;
+    let phase_count: usize = number(take(&mut lines, "phase_count")?, "phase count")?;
+    if phase_count == 0 || phase_count > MAX_PHASES {
+        return Err(reject("replay phase count is outside limits"));
+    }
+    let mut phases = Vec::with_capacity(phase_count);
+    for index in 0..phase_count {
+        let value = take(&mut lines, &format!("phase_{index}"))?;
+        let fields = value.split(',').collect::<Vec<_>>();
+        if fields.len() != 2 || !matches!(fields[0], "0" | "1") {
+            return Err(reject(format!("invalid replay phase {index}")));
+        }
+        phases.push(PhaseSpec {
+            input: fields[0] == "1",
+            length: number(fields[1].to_string(), "phase length")?,
+        });
+    }
+    let state_count: usize = number(take(&mut lines, "state_count")?, "state count")?;
+    if state_count == 0 || state_count > btor2::MAX_BTOR2_NODES {
+        return Err(reject("replay state count is outside limits"));
+    }
+    let mut final_states = Vec::with_capacity(state_count);
+    for index in 0..state_count {
+        let value = take(&mut lines, &format!("state_{index}"))?;
+        let fields = value.split(',').collect::<Vec<_>>();
+        if fields.len() != 2 {
+            return Err(reject(format!("invalid replay state {index}")));
+        }
+        let id = number(fields[0].to_string(), "state identifier")?;
+        let value = number(fields[1].to_string(), "state value")?;
+        if final_states.last().is_some_and(|(prior, _)| *prior >= id) {
+            return Err(reject("replay states are not strictly ordered"));
+        }
+        final_states.push((id, value));
+    }
+    if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
+        return Err(reject(
+            "replay certificate is incomplete or has trailing fields",
+        ));
+    }
+    Ok(ReplayCertificate {
+        source_sha256,
+        input,
+        horizon,
+        bad_property,
+        phases,
+        final_states,
     })
 }
 
@@ -576,6 +826,49 @@ mod tests {
                 13
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn exact_replay_covers_the_rejected_saturating_neighbour() {
+        let source = include_bytes!("../examples/btor2/saturating-timer-rejected-v1.btor2");
+        let specs = [PhaseSpec {
+            input: false,
+            length: 255,
+        }];
+        assert!(produce(source, &specs, 15).is_err());
+        let produced = produce_replay(source, &specs, 15).unwrap();
+        let encoded = encode_replay(&produced).unwrap();
+        let mut certificate = decode_replay(encoded.as_bytes()).unwrap();
+        let summary = verify_replay(source, &certificate).unwrap();
+        assert_eq!(summary.horizon, 255);
+        assert_eq!(summary.final_state, 255);
+        certificate.final_states[0].1 = 254;
+        assert!(verify_replay(source, &certificate).is_err());
+    }
+
+    #[test]
+    fn exact_replay_rejects_accelerated_scale_horizons() {
+        let specs = [PhaseSpec {
+            input: false,
+            length: MAX_REPLAY_HORIZON + 1,
+        }];
+        assert!(produce_replay(WATCHDOG, &specs, 13).is_err());
+
+        let mut source = "1 sort bitvec 1\n2 sort bitvec 8\n3 input 1 kick\n4 zero 2\n5 state 2 timer\n6 init 2 5 4\n7 one 2\n8 add 2 5 7\n9 ite 2 3 4 8\n10 next 2 5 9\n".to_string();
+        for id in 11..=200 {
+            source.push_str(&format!("{id} zero 2\n"));
+        }
+        source.push_str("201 eq 1 5 200\n202 bad 201 zero\n");
+        let workload = [PhaseSpec {
+            input: false,
+            length: MAX_REPLAY_HORIZON,
+        }];
+        assert!(
+            produce_replay(source.as_bytes(), &workload, 202)
+                .unwrap_err()
+                .0
+                .contains("node-step")
         );
     }
 }

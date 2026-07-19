@@ -81,3 +81,28 @@ combination has not yet been shown to be novel. A credible contribution would
 need a broader composition rule, independent comparative evidence, and proof
 that the source-bound certificate provides a capability or assurance not
 already available through straightforward acceleration and SMT encodings.
+
+## Exact replay portfolio
+
+The counter-trace commands apply a static two-backend rule:
+
+```sh
+cargo run --release -- \
+  certify-btor2-counter-trace INPUT.btor2 BAD_PROPERTY PHASES OUTPUT.cert
+cargo run --release -- \
+  verify-btor2-counter-trace INPUT.btor2 OUTPUT.cert
+```
+
+The closed-form backend is attempted first. If its structural admission fails,
+the unchanged source and phase trace pass to exact step-by-step replay. Replay
+has its own certificate format, a 100,000-transition limit, and a combined
+10,000,000 normalized-node-step limit. It supports the
+one-bit-input BTOR2 core rather than pretending a rejected recurrence was
+affine. If either backend cannot prove the claimed bad endpoint, the command
+returns an error and publishes no answer.
+
+The saturating timer near-neighbour demonstrates this path: closed-form
+admission rejects its nested saturation condition, while exact replay reaches
+and verifies state 255 after 255 transitions. This closes fallback integrity for
+supplied one-input bad-endpoint traces only, not for safety or reachability
+queries over all possible traces.

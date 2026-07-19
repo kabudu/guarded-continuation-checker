@@ -24776,6 +24776,44 @@ fn read_bounded_regular_file(path: &Path, limit: usize, label: &str) -> Result<V
     Ok(bytes)
 }
 
+fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, String> {
+    let raw_phases = raw.split(',').collect::<Vec<_>>();
+    if raw_phases.is_empty() || raw_phases.len() > btor2_phase::MAX_PHASES {
+        return Err("PHASES count is outside the supported limit".to_string());
+    }
+    raw_phases
+        .iter()
+        .enumerate()
+        .map(|(index, raw)| {
+            let (input, length) = raw
+                .split_once(':')
+                .ok_or_else(|| format!("phase {index} must use INPUT:LENGTH syntax"))?;
+            let input = match input {
+                "0" => false,
+                "1" => true,
+                _ => return Err(format!("phase {index} input must be 0 or 1")),
+            };
+            let length = length
+                .parse::<u64>()
+                .map_err(|_| format!("phase {index} length is invalid"))?;
+            Ok(btor2_phase::PhaseSpec { input, length })
+        })
+        .collect()
+}
+
+fn write_new_certificate(output: &Path, encoded: &[u8]) -> Result<(), String> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
+        .open(output)
+        .map_err(|error| format!("create certificate {}: {error}", output.display()))?;
+    file.write_all(encoded)
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("write certificate {}: {error}", output.display()))
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
@@ -24786,9 +24824,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
+                btor2_phase::REPLAY_CERTIFICATE_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
                 btor2::MAX_BTOR2_NODES,
@@ -24796,6 +24835,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_phase::MAX_CERTIFICATE_BYTES,
                 btor2_phase::MAX_PHASES,
                 btor2_phase::MAX_HORIZON,
+                btor2_phase::MAX_REPLAY_HORIZON,
+                btor2_phase::MAX_REPLAY_NODE_STEPS,
             );
             Ok(true)
         }
@@ -24864,45 +24905,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let bad_property = args[2]
                 .parse::<u64>()
                 .map_err(|_| "BAD_PROPERTY must be an unsigned node identifier".to_string())?;
-            let raw_phases = args[3].split(',').collect::<Vec<_>>();
-            if raw_phases.is_empty() || raw_phases.len() > btor2_phase::MAX_PHASES {
-                return Err("PHASES count is outside the supported limit".to_string());
-            }
-            let phases = raw_phases
-                .iter()
-                .enumerate()
-                .map(|(index, raw)| {
-                    let (input, length) = raw
-                        .split_once(':')
-                        .ok_or_else(|| format!("phase {index} must use INPUT:LENGTH syntax"))?;
-                    let input = match input {
-                        "0" => false,
-                        "1" => true,
-                        _ => return Err(format!("phase {index} input must be 0 or 1")),
-                    };
-                    let length = length
-                        .parse::<u64>()
-                        .map_err(|_| format!("phase {index} length is invalid"))?;
-                    Ok(btor2_phase::PhaseSpec { input, length })
-                })
-                .collect::<Result<Vec<_>, String>>()?;
+            let phases = parse_btor2_phase_specs(&args[3])?;
             let certificate = btor2_phase::produce(&source, &phases, bad_property)
                 .map_err(|error| error.to_string())?;
             let encoded = btor2_phase::encode(&certificate).map_err(|error| error.to_string())?;
             let output = Path::new(&args[4]);
-            let mut options = fs::OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            options.mode(0o600);
-            let mut file = options
-                .open(output)
-                .map_err(|error| format!("create certificate {}: {error}", output.display()))?;
-            if let Err(error) = file
-                .write_all(encoded.as_bytes())
-                .and_then(|_| file.sync_all())
-            {
-                return Err(format!("write certificate {}: {error}", output.display()));
-            }
+            write_new_certificate(output, encoded.as_bytes())?;
             println!(
                 "btor2-phase-certificate status=CREATED version={} horizon={} phases={} final_state={} bad_property={} output={}",
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
@@ -24938,6 +24946,102 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 summary.phases,
                 summary.final_state,
                 summary.bad_property
+            );
+            Ok(true)
+        }
+        "certify-btor2-counter-trace" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker certify-btor2-counter-trace INPUT.btor2 BAD_PROPERTY PHASES OUTPUT.cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let bad_property = args[2]
+                .parse::<u64>()
+                .map_err(|_| "BAD_PROPERTY must be an unsigned node identifier".to_string())?;
+            let phases = parse_btor2_phase_specs(&args[3])?;
+            let (backend, encoded, horizon, final_state) = match btor2_phase::produce(
+                &source,
+                &phases,
+                bad_property,
+            ) {
+                Ok(certificate) => (
+                    "closed-form-phase",
+                    btor2_phase::encode(&certificate).map_err(|error| error.to_string())?,
+                    certificate.horizon,
+                    certificate.final_state,
+                ),
+                Err(admission_error) => {
+                    let certificate = btor2_phase::produce_replay(
+                            &source,
+                            &phases,
+                            bad_property,
+                        )
+                        .map_err(|fallback_error| {
+                            format!(
+                                "phase backend rejected: {admission_error}; exact replay rejected: {fallback_error}"
+                            )
+                        })?;
+                    let final_state = certificate
+                        .final_states
+                        .first()
+                        .map_or(0, |(_, value)| *value);
+                    (
+                        "exact-replay",
+                        btor2_phase::encode_replay(&certificate)
+                            .map_err(|error| error.to_string())?,
+                        certificate.horizon,
+                        final_state,
+                    )
+                }
+            };
+            let output = Path::new(&args[4]);
+            write_new_certificate(output, encoded.as_bytes())?;
+            println!(
+                "btor2-counter-trace status=CREATED backend={backend} horizon={horizon} phases={} final_state={final_state} bad_property={bad_property} output={}",
+                phases.len(),
+                output.display()
+            );
+            Ok(true)
+        }
+        "verify-btor2-counter-trace" => {
+            if args.len() != 3 {
+                return Err("usage: guarded-continuation-checker verify-btor2-counter-trace INPUT.btor2 CERTIFICATE.cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2_phase::MAX_CERTIFICATE_BYTES,
+                "BTOR2 counter trace certificate",
+            )?;
+            let (backend, summary) = if encoded.starts_with(b"phase_certificate_version=") {
+                let certificate =
+                    btor2_phase::decode(&encoded).map_err(|error| error.to_string())?;
+                (
+                    "closed-form-phase",
+                    btor2_phase::verify(&source, &certificate)
+                        .map_err(|error| error.to_string())?,
+                )
+            } else if encoded.starts_with(b"replay_certificate_version=") {
+                let certificate =
+                    btor2_phase::decode_replay(&encoded).map_err(|error| error.to_string())?;
+                (
+                    "exact-replay",
+                    btor2_phase::verify_replay(&source, &certificate)
+                        .map_err(|error| error.to_string())?,
+                )
+            } else {
+                return Err("unknown BTOR2 counter trace certificate format".to_string());
+            };
+            println!(
+                "btor2-counter-trace status=VERIFIED backend={backend} horizon={} phases={} final_state={} bad_property={}",
+                summary.horizon, summary.phases, summary.final_state, summary.bad_property
             );
             Ok(true)
         }
@@ -34629,7 +34733,7 @@ mod tests {
         assert!(!parse_predicate_certificate(&certificate).unwrap().avoidable);
         verify_aiger_predicate_certificate(&input, &certificate).unwrap();
         fs::remove_file(transcript).unwrap();
-        fs::remove_file(certificate).unwrap();
+        fs::remove_file(&certificate).unwrap();
     }
 
     #[test]
@@ -34805,6 +34909,58 @@ mod tests {
             ])
             .unwrap_err()
             .contains("create certificate")
+        );
+        fs::remove_file(&certificate).unwrap();
+
+        assert!(
+            run_artifact_cli(&[
+                "certify-btor2-counter-trace".to_string(),
+                fixture.display().to_string(),
+                "13".to_string(),
+                "0:3".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            fs::read_to_string(&certificate)
+                .unwrap()
+                .starts_with("phase_certificate_version=1\n")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-counter-trace".to_string(),
+                fixture.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        fs::remove_file(&certificate).unwrap();
+
+        let saturating = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/btor2/saturating-timer-rejected-v1.btor2");
+        assert!(
+            run_artifact_cli(&[
+                "certify-btor2-counter-trace".to_string(),
+                saturating.display().to_string(),
+                "15".to_string(),
+                "0:255".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            fs::read_to_string(&certificate)
+                .unwrap()
+                .starts_with("replay_certificate_version=1\n")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-counter-trace".to_string(),
+                saturating.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
         );
         fs::remove_file(certificate).unwrap();
     }

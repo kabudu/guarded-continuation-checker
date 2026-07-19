@@ -107,6 +107,8 @@ The [BTOR2 counter-phase certificate v1](docs/BTOR2_COUNTER_PHASE_CERTIFICATE_V1
 is the first source-bound composition candidate. It compresses strict
 reset-or-affine counter traces into separately rechecked phase endpoints. Its
 narrow admission boundary and unresolved novelty comparison are explicit.
+The paired counter-trace command preserves rejected supplied traces through a
+bounded exact replay certificate instead of approximating unsupported shapes.
 
 The [counterfactual portfolio v1](docs/COUNTERFACTUAL_PORTFOLIO_V1.md) exposes a
 single exact evaluation command over partial AIGER input transcripts. Its
