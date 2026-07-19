@@ -61,11 +61,12 @@ guarded-continuation-checker verify-btor2-bounded \
   INPUT.btor2 OUTPUT.btor2-cert
 ```
 
-The producer tries the exact word-region proof first. If it is inapplicable or
-the bad set intersects the region, the unchanged query goes to explicit exact
-search. Parse errors and region resource-limit errors are not converted into
-answers. The verifier dispatches only self-identifying versioned formats and
-then checks the selected backend from source.
+Portfolio v2 first tries the exact coupled-motion proof, then this word-region
+proof. If both are inapplicable or the bad set intersects the exact region, the
+unchanged query goes to explicit exact search. Parse errors and resource-limit
+errors are not converted into answers. The verifier dispatches only
+self-identifying versioned formats and then checks the selected backend from
+source. Portfolio v2 retains decoding and verification of every v1 artifact.
 
 Both CLI operations report the selected backend, answer, horizon, bad frame,
 logical reachable-state count, certificate bytes, and elapsed microseconds.

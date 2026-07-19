@@ -1,0 +1,3 @@
+schema_version,model,horizon,trials,explicit_bytes,motion_bytes,explicit_verify_median_micros,motion_verify_median_micros,verify_speedup,status
+1,motion-envelope,200,21,624272,358,17726,22,805.73,ok
+1,servo-motion,128,21,253928,358,7003,21,333.48,ok

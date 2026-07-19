@@ -1,0 +1,8 @@
+(set-logic QF_BV)
+(declare-const k (_ BitVec 16))
+(define-const velocity (_ BitVec 16) (bvmul #x0002 k))
+(define-const position (_ BitVec 16) (bvmul k (bvsub k #x0001)))
+(assert (bvule k #x0081))
+(assert (and (bvuge velocity #x0102)
+             (bvuge position #x4080)))
+(check-sat)

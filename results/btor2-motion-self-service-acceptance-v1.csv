@@ -1,0 +1,7 @@
+schema_version,case,source_sha256,bad_property,horizon,expected_result,actual_result,expected_backend,actual_backend,selection_reason,certificate_verified,status
+1,motion-safe,f01c2dc3cbad13d8200d6f663a40bc9e176ce60a9ab47c495b2eb528dab5606f,21,200,SAFE,SAFE,motion-curve,motion-curve,motion-curve-exact-safe,true,accepted
+1,motion-unsafe,f01c2dc3cbad13d8200d6f663a40bc9e176ce60a9ab47c495b2eb528dab5606f,21,201,UNSAFE,UNSAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted
+1,servo-safe,45db948a11667960be041bdd33e058da1d310bd7cab522be980e74028aad1617,21,128,SAFE,SAFE,motion-curve,motion-curve,motion-curve-exact-safe,true,accepted
+1,servo-unsafe,45db948a11667960be041bdd33e058da1d310bd7cab522be980e74028aad1617,21,129,UNSAFE,UNSAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted
+1,near-neighbour-safe,226cf0abf91f5e9ae48eb9f5d76e23a4c633442bf411553450a435ff29b5655a,21,3,SAFE,SAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted
+1,near-neighbour-unsafe,226cf0abf91f5e9ae48eb9f5d76e23a4c633442bf411553450a435ff29b5655a,21,4,UNSAFE,UNSAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted

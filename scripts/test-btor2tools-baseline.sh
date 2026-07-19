@@ -12,10 +12,16 @@ model=examples/btor2/watchdog-counter-v1.btor2
 witness=examples/btor2/watchdog-expiry-v1.witness
 actuator=examples/btor2/actuator-position-v1.btor2
 saturating=examples/btor2/saturating-timer-rejected-v1.btor2
+motion=examples/btor2/motion-envelope-v1.btor2
+servo=examples/btor2/servo-motion-envelope-v1.btor2
+semi_implicit=examples/btor2/semi-implicit-motion-rejected-v1.btor2
 certificate=${TMPDIR:-/tmp}/gcc-btor2-phase-$$.cert
 actuator_witness=${TMPDIR:-/tmp}/gcc-btor2-actuator-$$.witness
 saturating_witness=${TMPDIR:-/tmp}/gcc-btor2-saturating-$$.witness
-trap 'rm -f "$certificate" "$actuator_witness" "$saturating_witness"' EXIT HUP INT TERM
+motion_witness=${TMPDIR:-/tmp}/gcc-btor2-motion-$$.witness
+servo_witness=${TMPDIR:-/tmp}/gcc-btor2-servo-$$.witness
+semi_implicit_witness=${TMPDIR:-/tmp}/gcc-btor2-semi-implicit-$$.witness
+trap 'rm -f "$certificate" "$actuator_witness" "$saturating_witness" "$motion_witness" "$servo_witness" "$semi_implicit_witness"' EXIT HUP INT TERM
 
 write_zero_input_witness() {
   output=$1
@@ -47,11 +53,20 @@ printf '%s\n' "$inspection" | grep -q ' word_semantics=preserved$'
 "$btor2tools_bin_dir/catbtor" "$model" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$actuator" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$saturating" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$motion" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$servo" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$semi_implicit" >/dev/null
 "$btor2tools_bin_dir/btorsim" -c "$model" "$witness"
 write_zero_input_witness "$actuator_witness" 201 home
 write_zero_input_witness "$saturating_witness" 255 reset
 "$btor2tools_bin_dir/btorsim" -c "$actuator" "$actuator_witness"
 "$btor2tools_bin_dir/btorsim" -c "$saturating" "$saturating_witness"
+write_zero_input_witness "$motion_witness" 201 brake
+write_zero_input_witness "$servo_witness" 129 stop
+write_zero_input_witness "$semi_implicit_witness" 4 stop
+"$btor2tools_bin_dir/btorsim" -c "$motion" "$motion_witness"
+"$btor2tools_bin_dir/btorsim" -c "$servo" "$servo_witness"
+"$btor2tools_bin_dir/btorsim" -c "$semi_implicit" "$semi_implicit_witness"
 
 "$gcc_binary" certify-btor2-counter-phase "$model" 13 \
   1:2,0:1000000003 "$certificate"
@@ -96,5 +111,11 @@ check_bounded "$actuator" 13 200 SAFE region
 check_bounded "$actuator" 13 201 UNSAFE search
 check_bounded "$saturating" 15 254 SAFE region
 check_bounded "$saturating" 15 255 UNSAFE search
+check_bounded "$motion" 21 200 SAFE motion
+check_bounded "$motion" 21 201 UNSAFE search
+check_bounded "$servo" 21 128 SAFE motion
+check_bounded "$servo" 21 129 UNSAFE search
+check_bounded "$semi_implicit" 21 3 SAFE search
+check_bounded "$semi_implicit" 21 4 UNSAFE search
 
 echo 'btor2tools_baseline=PASS'

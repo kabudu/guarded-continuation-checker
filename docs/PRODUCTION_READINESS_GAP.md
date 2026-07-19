@@ -66,6 +66,16 @@ reachability and its SAFE
   retained both-answer agreement. It remains a narrow source-language result,
   not evidence for interacting firmware state, memory, interrupts, or a public
   unmodified product design.
+  Coupled-motion curve certificate v1 adds one exact two-state robotics
+  recurrence, independent source matching, both-answer fallback, and retained
+  artifact-size evidence. It does not cover signed coordinates, braking
+  dynamics, multiple controls, sensor uncertainty, continuous plant behavior,
+  or an unmodified public robot controller.
+  A six-case self-service acceptance harness proves the bundled workflow can be
+  repeated without formula calibration, but it is simulated rather than
+  independent evidence. Portfolio v2 exposes a stable typed selection reason
+  and per-operation backend, artifact-size, logical-state, and timing
+  observations; repository-wide multi-job aggregation remains open.
   It cannot change any production-readiness row until those gaps, stable release
 compatibility, full hostile-input coverage, and public product evidence close.
 
