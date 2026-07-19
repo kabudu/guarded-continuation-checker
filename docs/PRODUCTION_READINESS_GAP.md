@@ -71,9 +71,15 @@ reachability and its SAFE
   artifact-size evidence. It does not cover signed coordinates, braking
   dynamics, multiple controls, sensor uncertainty, continuous plant behavior,
   or an unmodified public robot controller.
+  Braking-phase certificate v1 adds a three-region resettable controller,
+  deterministic portfolio v3 routing, complete hostile text mutation coverage,
+  two product-shaped models, and independent BTOR2Tools plus SMT boundaries.
+  It remains unsigned, discrete, and closed-loop within one source model. It
+  does not cover separately supplied plant/controller components, external
+  disturbances, asynchronous inputs, or a public robot design.
   A six-case self-service acceptance harness proves the bundled workflow can be
   repeated without formula calibration, but it is simulated rather than
-  independent evidence. Portfolio v2 exposes a stable typed selection reason
+  independent evidence. Portfolio v3 exposes a stable typed selection reason
   and per-operation backend, artifact-size, logical-state, and timing
   observations; repository-wide multi-job aggregation remains open.
   It cannot change any production-readiness row until those gaps, stable release

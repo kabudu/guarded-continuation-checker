@@ -71,18 +71,23 @@ close either register by itself.
    its static portfolio retains exact search elsewhere. The first
    [coupled-motion curve](BTOR2_MOTION_CURVE_CERTIFICATE_V1.md) preserves an
    exact velocity-position relation without a Cartesian state product. Broader
-   multi-input composition, constraint semantics, and product validity remain
-   open. A pinned Bitwuzla 0.9.1 gate agrees on counter and motion boundaries.
+   phase composition now includes the
+   [resettable braking certificate](BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md),
+   which exactly joins accelerate, brake, and stopped regions under every reset
+   schedule. Separate controller/plant contracts, multi-input composition,
+   constraint semantics, and product validity remain open. A pinned Bitwuzla
+   0.9.1 gate agrees on counter, motion, and braking boundaries.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
    monitors; identify which component invalidates a system guarantee.
 
 7. **Robotics controller verification.** The first exact coupled-motion
-   envelope primitive is implemented. Extend it to braking phases, bounded
-   control inputs, signed coordinates, actuator interlocks, emergency stops,
-   motion envelopes, and bounded mission controllers using unmodified public
-   designs.
+   envelope and resettable braking-phase primitives are implemented. Extend
+   them to separately sourced controller/plant contracts, bounded control
+   inputs, signed coordinates, actuator interlocks, asynchronous emergency
+   stops, motion envelopes, and bounded mission controllers using unmodified
+   public designs.
 
 8. **Counterfactual repair synthesis.** Go beyond explaining a failure: compute
    minimal input-contract, guard, or state-machine changes that eliminate it,

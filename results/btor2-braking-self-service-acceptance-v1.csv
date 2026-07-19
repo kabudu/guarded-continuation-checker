@@ -1,0 +1,7 @@
+schema_version,case,source_sha256,bad_property,horizon,expected_result,actual_result,expected_backend,actual_backend,selection_reason,certificate_verified,status
+1,braking-safe,96ee5686288025caa2536ab5436291e40d2976f7aee6a262082e39da97dc10ee,31,255,SAFE,SAFE,braking-phases,braking-phases,braking-phases-exact-safe,true,accepted
+1,braking-unsafe,96ee5686288025caa2536ab5436291e40d2976f7aee6a262082e39da97dc10ee,31,256,UNSAFE,UNSAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted
+1,motor-safe,97f9ce802819e7d04e274f1bead235ff9882d86fa1f5c4c98674490b164f366d,31,159,SAFE,SAFE,braking-phases,braking-phases,braking-phases-exact-safe,true,accepted
+1,motor-unsafe,97f9ce802819e7d04e274f1bead235ff9882d86fa1f5c4c98674490b164f366d,31,160,UNSAFE,UNSAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted
+1,near-neighbour-safe,0a1d951dda6f1a2113c7d7017292d5bc429fcbe7078d6ebd553dbc7bbcfa7f51,31,127,SAFE,SAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted
+1,near-neighbour-unsafe,0a1d951dda6f1a2113c7d7017292d5bc429fcbe7078d6ebd553dbc7bbcfa7f51,31,128,UNSAFE,UNSAFE,explicit-search,explicit-search,specialised-inapplicable-or-intersecting,true,accepted

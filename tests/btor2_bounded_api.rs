@@ -2,6 +2,7 @@ use guarded_continuation_checker::{btor2_bounded, btor2_search};
 
 const WATCHDOG: &[u8] = include_bytes!("../examples/btor2/watchdog-counter-v1.btor2");
 const MOTION: &[u8] = include_bytes!("../examples/btor2/motion-envelope-v1.btor2");
+const BRAKING: &[u8] = include_bytes!("../examples/btor2/braking-controller-v1.btor2");
 
 #[test]
 fn public_bounded_api_preserves_both_exact_answers() {
@@ -42,4 +43,31 @@ fn public_bounded_api_exposes_exact_coupled_motion_and_fallback() {
     );
     assert_eq!(summary.result, btor2_search::SearchResult::Unsafe);
     assert_eq!(summary.bad_frame, Some(201));
+}
+
+#[test]
+fn public_bounded_api_exposes_phase_composed_braking_and_fallback() {
+    let production = btor2_bounded::produce_with_observation(BRAKING, 31, 255).unwrap();
+    assert_eq!(
+        production.selection_reason.as_str(),
+        "braking-phases-exact-safe"
+    );
+    let encoded = btor2_bounded::encode(&production.certificate).unwrap();
+    let certificate = btor2_bounded::decode(encoded.as_bytes()).unwrap();
+    let summary = btor2_bounded::verify(BRAKING, &certificate).unwrap();
+    assert_eq!(
+        summary.backend,
+        btor2_bounded::BoundedBackend::BrakingPhases
+    );
+    assert_eq!(summary.result, btor2_search::SearchResult::Safe);
+    assert_eq!(summary.logical_reachable_states, 32_896);
+
+    let unsafe_certificate = btor2_bounded::produce(BRAKING, 31, 256).unwrap();
+    let summary = btor2_bounded::verify(BRAKING, &unsafe_certificate).unwrap();
+    assert_eq!(
+        summary.backend,
+        btor2_bounded::BoundedBackend::ExplicitSearch
+    );
+    assert_eq!(summary.result, btor2_search::SearchResult::Unsafe);
+    assert_eq!(summary.bad_frame, Some(256));
 }

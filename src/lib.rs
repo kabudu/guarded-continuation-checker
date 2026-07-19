@@ -6,6 +6,7 @@
 
 pub mod btor2;
 pub mod btor2_bounded;
+pub mod btor2_braking;
 pub mod btor2_motion;
 pub mod btor2_phase;
 pub mod btor2_region;

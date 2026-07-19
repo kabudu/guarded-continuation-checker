@@ -1,0 +1,12 @@
+(set-logic QF_BV)
+(declare-const k (_ BitVec 32))
+(define-const r (_ BitVec 32) (bvsub k #x00000064))
+(define-const position (_ BitVec 32)
+  (ite (bvule k #x00000064)
+       (bvudiv (bvmul #x00000003 (bvmul k (bvsub k #x00000001))) #x00000002)
+       (bvadd #x00003a02
+              (bvsub (bvmul r #x0000012c)
+                     (bvudiv (bvmul #x00000005 (bvmul r (bvsub r #x00000001))) #x00000002)))))
+(assert (bvule k #x0000009f))
+(assert (bvuge position #x00005dc0))
+(check-sat)

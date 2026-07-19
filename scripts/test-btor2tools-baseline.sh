@@ -15,13 +15,19 @@ saturating=examples/btor2/saturating-timer-rejected-v1.btor2
 motion=examples/btor2/motion-envelope-v1.btor2
 servo=examples/btor2/servo-motion-envelope-v1.btor2
 semi_implicit=examples/btor2/semi-implicit-motion-rejected-v1.btor2
+braking=examples/btor2/braking-controller-v1.btor2
+motor_stop=examples/btor2/motor-emergency-stop-v1.btor2
+semi_implicit_braking=examples/btor2/semi-implicit-braking-rejected-v1.btor2
 certificate=${TMPDIR:-/tmp}/gcc-btor2-phase-$$.cert
 actuator_witness=${TMPDIR:-/tmp}/gcc-btor2-actuator-$$.witness
 saturating_witness=${TMPDIR:-/tmp}/gcc-btor2-saturating-$$.witness
 motion_witness=${TMPDIR:-/tmp}/gcc-btor2-motion-$$.witness
 servo_witness=${TMPDIR:-/tmp}/gcc-btor2-servo-$$.witness
 semi_implicit_witness=${TMPDIR:-/tmp}/gcc-btor2-semi-implicit-$$.witness
-trap 'rm -f "$certificate" "$actuator_witness" "$saturating_witness" "$motion_witness" "$servo_witness" "$semi_implicit_witness"' EXIT HUP INT TERM
+braking_witness=${TMPDIR:-/tmp}/gcc-btor2-braking-$$.witness
+semi_implicit_braking_witness=${TMPDIR:-/tmp}/gcc-btor2-semi-implicit-braking-$$.witness
+motor_stop_witness=${TMPDIR:-/tmp}/gcc-btor2-motor-stop-$$.witness
+trap 'rm -f "$certificate" "$actuator_witness" "$saturating_witness" "$motion_witness" "$servo_witness" "$semi_implicit_witness" "$braking_witness" "$semi_implicit_braking_witness" "$motor_stop_witness"' EXIT HUP INT TERM
 
 write_zero_input_witness() {
   output=$1
@@ -56,6 +62,9 @@ printf '%s\n' "$inspection" | grep -q ' word_semantics=preserved$'
 "$btor2tools_bin_dir/catbtor" "$motion" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$servo" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$semi_implicit" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$braking" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$motor_stop" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$semi_implicit_braking" >/dev/null
 "$btor2tools_bin_dir/btorsim" -c "$model" "$witness"
 write_zero_input_witness "$actuator_witness" 201 home
 write_zero_input_witness "$saturating_witness" 255 reset
@@ -67,6 +76,12 @@ write_zero_input_witness "$semi_implicit_witness" 4 stop
 "$btor2tools_bin_dir/btorsim" -c "$motion" "$motion_witness"
 "$btor2tools_bin_dir/btorsim" -c "$servo" "$servo_witness"
 "$btor2tools_bin_dir/btorsim" -c "$semi_implicit" "$semi_implicit_witness"
+write_zero_input_witness "$braking_witness" 256 reset
+write_zero_input_witness "$semi_implicit_braking_witness" 128 reset
+"$btor2tools_bin_dir/btorsim" -c "$braking" "$braking_witness"
+"$btor2tools_bin_dir/btorsim" -c "$semi_implicit_braking" "$semi_implicit_braking_witness"
+write_zero_input_witness "$motor_stop_witness" 160 reset
+"$btor2tools_bin_dir/btorsim" -c "$motor_stop" "$motor_stop_witness"
 
 "$gcc_binary" certify-btor2-counter-phase "$model" 13 \
   1:2,0:1000000003 "$certificate"
@@ -117,5 +132,11 @@ check_bounded "$servo" 21 128 SAFE motion
 check_bounded "$servo" 21 129 UNSAFE search
 check_bounded "$semi_implicit" 21 3 SAFE search
 check_bounded "$semi_implicit" 21 4 UNSAFE search
+check_bounded "$braking" 31 255 SAFE braking
+check_bounded "$braking" 31 256 UNSAFE search
+check_bounded "$semi_implicit_braking" 31 127 SAFE search
+check_bounded "$semi_implicit_braking" 31 128 UNSAFE search
+check_bounded "$motor_stop" 31 159 SAFE braking
+check_bounded "$motor_stop" 31 160 UNSAFE search
 
 echo 'btor2tools_baseline=PASS'

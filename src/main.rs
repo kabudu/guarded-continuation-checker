@@ -1,5 +1,5 @@
 use guarded_continuation_checker::{
-    btor2, btor2_bounded, btor2_motion, btor2_phase, btor2_region, btor2_search,
+    btor2, btor2_bounded, btor2_braking, btor2_motion, btor2_phase, btor2_region, btor2_search,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -24826,13 +24826,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
                 btor2_search::SEARCH_CERTIFICATE_VERSION,
                 btor2_region::REGION_CERTIFICATE_VERSION,
                 btor2_motion::MOTION_CERTIFICATE_VERSION,
+                btor2_braking::BRAKING_CERTIFICATE_VERSION,
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
@@ -24852,6 +24853,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_region::MAX_REGION_CERTIFICATE_BYTES,
                 btor2_motion::MAX_MOTION_HORIZON,
                 btor2_motion::MAX_MOTION_CERTIFICATE_BYTES,
+                btor2_braking::MAX_BRAKING_HORIZON,
+                btor2_braking::MAX_BRAKING_CERTIFICATE_BYTES,
             );
             Ok(true)
         }
@@ -25159,6 +25162,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let output = Path::new(&args[4]);
             write_new_certificate(output, encoded.as_bytes())?;
             let backend = match summary.backend {
+                btor2_bounded::BoundedBackend::BrakingPhases => "braking-phases",
                 btor2_bounded::BoundedBackend::MotionCurve => "motion-curve",
                 btor2_bounded::BoundedBackend::WordRegion => "word-region",
                 btor2_bounded::BoundedBackend::ExplicitSearch => "explicit-search",
@@ -25201,6 +25205,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let summary =
                 btor2_bounded::verify(&source, &certificate).map_err(|error| error.to_string())?;
             let backend = match summary.backend {
+                btor2_bounded::BoundedBackend::BrakingPhases => "braking-phases",
                 btor2_bounded::BoundedBackend::MotionCurve => "motion-curve",
                 btor2_bounded::BoundedBackend::WordRegion => "word-region",
                 btor2_bounded::BoundedBackend::ExplicitSearch => "explicit-search",
@@ -35223,6 +35228,38 @@ mod tests {
                 run_artifact_cli(&[
                     "verify-btor2-bounded".to_string(),
                     motion.display().to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            fs::remove_file(&certificate).unwrap();
+        }
+
+        let braking = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/btor2/braking-controller-v1.btor2");
+        for (horizon, header) in [
+            (255, "braking_certificate_version=1\n"),
+            (256, "search_certificate_version=1\n"),
+        ] {
+            assert!(
+                run_artifact_cli(&[
+                    "check-btor2-bounded".to_string(),
+                    braking.display().to_string(),
+                    "31".to_string(),
+                    horizon.to_string(),
+                    certificate.display().to_string(),
+                ])
+                .unwrap()
+            );
+            assert!(
+                fs::read_to_string(&certificate)
+                    .unwrap()
+                    .starts_with(header)
+            );
+            assert!(
+                run_artifact_cli(&[
+                    "verify-btor2-bounded".to_string(),
+                    braking.display().to_string(),
                     certificate.display().to_string(),
                 ])
                 .unwrap()

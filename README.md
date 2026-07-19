@@ -31,6 +31,14 @@ Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
 
+The experimental [BTOR2 braking-phase certificate](docs/BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md)
+now composes exact accelerate, brake, and stopped regions for a resettable
+controller. Bounded portfolio v3 proves both bundled SAFE boundaries with
+386-byte certificates, retains exact fallback for unsafe and semi-implicit
+near-neighbour cases, and agrees with official BTOR2Tools plus independent SMT
+controls. This is a narrow piecewise-affine result with established prior art,
+not a general robotics or novelty claim.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

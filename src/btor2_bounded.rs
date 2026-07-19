@@ -1,14 +1,15 @@
 //! Static exact portfolio for bounded BTOR2 reachability.
 
 use crate::btor2::NodeId;
-use crate::{btor2_motion, btor2_region, btor2_search};
+use crate::{btor2_braking, btor2_motion, btor2_region, btor2_search};
 use std::error::Error;
 use std::fmt;
 
-pub const BOUNDED_PORTFOLIO_VERSION: u32 = 2;
+pub const BOUNDED_PORTFOLIO_VERSION: u32 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BoundedBackend {
+    BrakingPhases,
     MotionCurve,
     WordRegion,
     ExplicitSearch,
@@ -16,6 +17,7 @@ pub enum BoundedBackend {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BoundedCertificate {
+    BrakingPhases(btor2_braking::BrakingCertificate),
     MotionCurve(btor2_motion::MotionCertificate),
     WordRegion(btor2_region::RegionCertificate),
     ExplicitSearch(btor2_search::SearchCertificate),
@@ -23,6 +25,7 @@ pub enum BoundedCertificate {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BoundedSelectionReason {
+    BrakingPhasesExactSafe,
     MotionCurveExactSafe,
     WordRegionExactSafe,
     SpecialisedInapplicableOrIntersecting,
@@ -31,6 +34,7 @@ pub enum BoundedSelectionReason {
 impl BoundedSelectionReason {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::BrakingPhasesExactSafe => "braking-phases-exact-safe",
             Self::MotionCurveExactSafe => "motion-curve-exact-safe",
             Self::WordRegionExactSafe => "word-region-exact-safe",
             Self::SpecialisedInapplicableOrIntersecting => {
@@ -71,8 +75,8 @@ fn reject(message: impl Into<String>) -> BoundedError {
 }
 
 /// Applies the versioned source-structural portfolio with no timing or
-/// per-formula training: coupled motion, then one-state word region, then the
-/// unchanged explicit exact query.
+/// per-formula training: resettable braking phases, coupled motion, one-state
+/// word region, then the unchanged explicit exact query.
 pub fn produce(
     source: &[u8],
     bad_property: NodeId,
@@ -86,6 +90,14 @@ pub fn produce_with_observation(
     bad_property: NodeId,
     horizon: u32,
 ) -> Result<BoundedProduction, BoundedError> {
+    if let Some(certificate) = btor2_braking::try_produce_safe(source, bad_property, horizon)
+        .map_err(|error| reject(format!("braking backend error: {error}")))?
+    {
+        return Ok(BoundedProduction {
+            certificate: BoundedCertificate::BrakingPhases(certificate),
+            selection_reason: BoundedSelectionReason::BrakingPhasesExactSafe,
+        });
+    }
     if let Some(certificate) = btor2_motion::try_produce_safe(source, bad_property, horizon)
         .map_err(|error| reject(format!("motion backend error: {error}")))?
     {
@@ -115,6 +127,17 @@ pub fn verify(
     certificate: &BoundedCertificate,
 ) -> Result<BoundedSummary, BoundedError> {
     match certificate {
+        BoundedCertificate::BrakingPhases(certificate) => {
+            let summary = btor2_braking::verify(source, certificate)
+                .map_err(|error| reject(error.to_string()))?;
+            Ok(BoundedSummary {
+                backend: BoundedBackend::BrakingPhases,
+                result: btor2_search::SearchResult::Safe,
+                query_horizon: summary.query_horizon,
+                bad_frame: None,
+                logical_reachable_states: summary.logical_reachable_states,
+            })
+        }
         BoundedCertificate::MotionCurve(certificate) => {
             let summary = btor2_motion::verify(source, certificate)
                 .map_err(|error| reject(error.to_string()))?;
@@ -153,6 +176,9 @@ pub fn verify(
 
 pub fn encode(certificate: &BoundedCertificate) -> Result<String, BoundedError> {
     match certificate {
+        BoundedCertificate::BrakingPhases(certificate) => {
+            btor2_braking::encode(certificate).map_err(|error| reject(error.to_string()))
+        }
         BoundedCertificate::MotionCurve(certificate) => {
             btor2_motion::encode(certificate).map_err(|error| reject(error.to_string()))
         }
@@ -166,6 +192,11 @@ pub fn encode(certificate: &BoundedCertificate) -> Result<String, BoundedError> 
 }
 
 pub fn decode(bytes: &[u8]) -> Result<BoundedCertificate, BoundedError> {
+    if bytes.starts_with(b"braking_certificate_version=") {
+        return btor2_braking::decode(bytes)
+            .map(BoundedCertificate::BrakingPhases)
+            .map_err(|error| reject(error.to_string()));
+    }
     if bytes.starts_with(b"motion_certificate_version=") {
         return btor2_motion::decode(bytes)
             .map(BoundedCertificate::MotionCurve)
@@ -190,6 +221,9 @@ mod tests {
 
     const WATCHDOG: &[u8] = include_bytes!("../examples/btor2/watchdog-counter-v1.btor2");
     const MOTION: &[u8] = include_bytes!("../examples/btor2/motion-envelope-v1.btor2");
+    const BRAKING: &[u8] = include_bytes!("../examples/btor2/braking-controller-v1.btor2");
+    const SEMI_IMPLICIT_BRAKING: &[u8] =
+        include_bytes!("../examples/btor2/semi-implicit-braking-rejected-v1.btor2");
     const SEMI_IMPLICIT: &[u8] =
         include_bytes!("../examples/btor2/semi-implicit-motion-rejected-v1.btor2");
 
@@ -264,6 +298,52 @@ mod tests {
             verify(MOTION, &unsafe_certificate).unwrap().bad_frame,
             Some(201)
         );
+    }
+
+    #[test]
+    fn selects_braking_phases_and_preserves_near_neighbour_fallback() {
+        let production = produce_with_observation(BRAKING, 31, 255).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            BoundedSelectionReason::BrakingPhasesExactSafe
+        );
+        assert!(matches!(
+            production.certificate,
+            BoundedCertificate::BrakingPhases(_)
+        ));
+        assert_eq!(
+            verify(BRAKING, &production.certificate).unwrap().result,
+            btor2_search::SearchResult::Safe
+        );
+
+        let unsafe_production = produce_with_observation(BRAKING, 31, 256).unwrap();
+        assert!(matches!(
+            unsafe_production.certificate,
+            BoundedCertificate::ExplicitSearch(_)
+        ));
+        assert_eq!(
+            verify(BRAKING, &unsafe_production.certificate)
+                .unwrap()
+                .bad_frame,
+            Some(256)
+        );
+
+        for (horizon, expected) in [
+            (127, btor2_search::SearchResult::Safe),
+            (128, btor2_search::SearchResult::Unsafe),
+        ] {
+            let production = produce_with_observation(SEMI_IMPLICIT_BRAKING, 31, horizon).unwrap();
+            assert!(matches!(
+                production.certificate,
+                BoundedCertificate::ExplicitSearch(_)
+            ));
+            assert_eq!(
+                verify(SEMI_IMPLICIT_BRAKING, &production.certificate)
+                    .unwrap()
+                    .result,
+                expected
+            );
+        }
     }
 
     #[test]

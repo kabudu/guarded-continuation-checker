@@ -1,0 +1,7 @@
+schema_version,model,bad_property,horizon,expected,actual,backend,reason,explicit_bytes,portfolio_bytes,byte_reduction_percent,verified,status
+1,braking-controller,31,255,SAFE,SAFE,braking-phases,braking-phases-exact-safe,1180313,386,99.97,true,ok
+1,braking-controller,31,256,UNSAFE,UNSAFE,explicit-search,specialised-inapplicable-or-intersecting,473,473,0.00,true,ok
+1,motor-emergency-stop,31,159,SAFE,SAFE,braking-phases,braking-phases-exact-safe,453342,386,99.91,true,ok
+1,motor-emergency-stop,31,160,UNSAFE,UNSAFE,explicit-search,specialised-inapplicable-or-intersecting,377,377,0.00,true,ok
+1,semi-implicit-braking,31,127,SAFE,SAFE,explicit-search,specialised-inapplicable-or-intersecting,283227,283227,0.00,true,ok
+1,semi-implicit-braking,31,128,UNSAFE,UNSAFE,explicit-search,specialised-inapplicable-or-intersecting,345,345,0.00,true,ok
