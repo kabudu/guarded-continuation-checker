@@ -398,6 +398,8 @@ fn proof_carrying_portfolio_uses_proof_and_falls_back_only_on_static_rejection()
     assert!(
         assess_controller_proof_mtbdd_plant_portfolio_resources(
             &controller,
+            &[0],
+            &[0],
             &inputs,
             &encoded,
             tight_proof,
@@ -405,6 +407,37 @@ fn proof_carrying_portfolio_uses_proof_and_falls_back_only_on_static_rejection()
         .unwrap_err()
         .0
         .contains("UNSAT-proof limit exceeded")
+    );
+    assert!(
+        assess_controller_proof_mtbdd_plant_portfolio_resources(
+            &controller,
+            &[],
+            &[0],
+            &inputs,
+            &encoded,
+            proof_envelope,
+        )
+        .unwrap_err()
+        .0
+        .contains("resource boundary mismatch")
+    );
+    let mismatched_wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![],
+        ..wiring.clone()
+    };
+    let mismatched_inputs = portfolio_inputs(&plant, &mismatched_wiring);
+    assert!(
+        assess_controller_proof_mtbdd_plant_portfolio_resources(
+            &controller,
+            &[0],
+            &[0],
+            &mismatched_inputs,
+            &encoded,
+            proof_envelope,
+        )
+        .unwrap_err()
+        .0
+        .contains("member boundary mismatch")
     );
 
     let wide = wide_state_controller();

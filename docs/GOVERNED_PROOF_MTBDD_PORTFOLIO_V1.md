@@ -96,6 +96,8 @@ exit-code-3 refusal contract before proof checking.
 every response field without invoking a shell. It reports bounded process
 metrics, converts exit-code-3 refusals into typed reasons, rejects inconsistent
 backend/reason pairs, and accepts the exact fallback route with zero proof bytes.
+The standalone resource assessment accepts the caller's boundary explicitly and
+rejects artifact boundary or member-wiring drift before calculating workload.
 
 ## Public workflow acceptance
 

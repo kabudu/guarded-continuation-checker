@@ -25,6 +25,8 @@
   policy, and corrupt evidence. Hosted reproduction and compatibility remain
   open. Freeze SHA-256 fingerprints for both routed v1 artifacts so a subsequent
   tagged release can prove byte compatibility.
+  Bind standalone portfolio resource assessment to caller-supplied relevant
+  inputs, observed outputs, and member wiring before workload calculation.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

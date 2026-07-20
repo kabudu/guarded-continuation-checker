@@ -1892,6 +1892,8 @@ pub fn verify_controller_proof_mtbdd_plant_artifact_with_resources(
 
 pub fn assess_controller_proof_mtbdd_plant_portfolio_resources(
     controller_model: &AigerTransition,
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
     members: &[ControllerPlantArtifactInput<'_>],
     bytes: &[u8],
     envelope: ControllerProofMtbddResourceEnvelope,
@@ -1908,6 +1910,18 @@ pub fn assess_controller_proof_mtbdd_plant_portfolio_resources(
         ));
     }
     let portfolio = decode_controller_proof_mtbdd_plant_portfolio(bytes)?;
+    if portfolio.relevant_inputs != relevant_inputs
+        || portfolio.observed_outputs != observed_outputs
+    {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource boundary mismatch",
+        ));
+    }
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource member boundary mismatch",
+        ));
+    }
     match portfolio.backend {
         ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
             let assessment = assess_controller_proof_mtbdd_plant_resources(
@@ -1939,7 +1953,7 @@ pub fn assess_controller_proof_mtbdd_plant_portfolio_resources(
             let omitted_controller_inputs = controller_model
                 .inputs
                 .len()
-                .checked_sub(portfolio.relevant_inputs.len())
+                .checked_sub(relevant_inputs.len())
                 .ok_or_else(|| reject("proof-carrying portfolio resource boundary is invalid"))?;
             let direct_multiplier = 1usize
                 .checked_shl(
@@ -2020,6 +2034,8 @@ pub fn verify_controller_proof_mtbdd_plant_portfolio_with_resources(
 ) -> Result<GovernedControllerProofMtbddPortfolioSummary, ControllerPlantArtifactError> {
     let resources = assess_controller_proof_mtbdd_plant_portfolio_resources(
         controller_model,
+        relevant_inputs,
+        observed_outputs,
         members,
         bytes,
         envelope,
