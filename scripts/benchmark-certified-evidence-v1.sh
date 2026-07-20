@@ -58,6 +58,7 @@ for trial in $(seq 1 "$trials"); do
       while read -r digest file; do
         property=${file#property-}
         property=${property%.witness.aag}
+        printf 'property_%s_witness_bytes=%s\n' "$property" "$(wc -c < "$trial_dir/$file" | tr -d ' ')"
         printf 'property_%s_witness_sha256=%s\n' "$property" "$digest"
       done <<< "$hashes"
     } > "$manifest"

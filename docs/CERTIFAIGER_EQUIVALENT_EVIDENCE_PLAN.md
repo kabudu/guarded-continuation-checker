@@ -178,7 +178,9 @@ All six models are 2,488 bytes. Their canonical digests and source bindings are
 in `manifest-v1.txt`. The qualified rIC3 producer returned SAT, SAT, SAT, SAT,
 UNSAT, and UNSAT. The four traces were replayed with `aigsim -c -m`; the two
 SAFE witnesses were accepted by Certifaiger with CaDiCaL and `lrat_isa`. Total
-external evidence is 5,270 bytes: 51, 66, 176, 176, 2,412, and 2,389 bytes.
+external evidence is 5,130 bytes: 51, 66, 106, 106, 2,412, and 2,389 bytes.
+The retained companion manifest binds those member sizes and digests to the
+frozen model manifest, qualification lock, producer binary, and consumer tree.
 This closes semantic equivalence and both evidence-class qualification gates.
 Resource comparison, deterministic clean-directory reproduction, hostile
 controls, and hosted amd64 replication remain open.
