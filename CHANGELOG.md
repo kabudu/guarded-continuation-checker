@@ -19,6 +19,11 @@
   replication with exact agreement, 1.62x faster proof creation, 1.95x faster
   proof verification, nearly tied creation RSS, and 1.77x higher proof-verifier
   RSS.
+  Add an identical-query maintained-tool baseline with exact agreement across
+  five local trials. Retain the negative runtime result: SymbiYosys/Yosys/Z3 is
+  1.33x faster than fresh proof verification and about 5.39x faster than initial
+  creation plus verification. Retain the positive consumer tradeoff of 65.5%
+  lower verifier peak RSS and portable evidence.
 
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch

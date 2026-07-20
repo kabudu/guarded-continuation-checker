@@ -1,0 +1,16 @@
+schema_version,profile,operation,trial,elapsed_seconds,peak_rss_bytes,portable_evidence_bytes,time_backend,platform,answers_agree,status
+1,proof,create,1,1.49,22183936,251221,bsd,Darwin-arm64,true,ok
+1,proof,verify,1,0.48,10092544,251221,bsd,Darwin-arm64,true,ok
+1,maintained-formal,oracle,1,0.36,29261824,0,bsd,Darwin-arm64,true,ok
+1,proof,create,2,1.45,22167552,251221,bsd,Darwin-arm64,true,ok
+1,proof,verify,2,0.47,10108928,251221,bsd,Darwin-arm64,true,ok
+1,maintained-formal,oracle,2,0.36,29851648,0,bsd,Darwin-arm64,true,ok
+1,proof,create,3,1.46,21987328,251221,bsd,Darwin-arm64,true,ok
+1,proof,verify,3,0.47,10059776,251221,bsd,Darwin-arm64,true,ok
+1,maintained-formal,oracle,3,0.38,29294592,0,bsd,Darwin-arm64,true,ok
+1,proof,create,4,1.43,22364160,251221,bsd,Darwin-arm64,true,ok
+1,proof,verify,4,0.48,10108928,251221,bsd,Darwin-arm64,true,ok
+1,maintained-formal,oracle,4,0.36,29851648,0,bsd,Darwin-arm64,true,ok
+1,proof,create,5,1.56,21970944,251221,bsd,Darwin-arm64,true,ok
+1,proof,verify,5,0.48,10043392,251221,bsd,Darwin-arm64,true,ok
+1,maintained-formal,oracle,5,0.35,29294592,0,bsd,Darwin-arm64,true,ok

@@ -327,4 +327,8 @@ and the strongest current consumer-speed result. SAT miters, UNSAT proof
 checking, and decision diagrams are established, so the result does not by
 itself establish scholarly novelty. Hosted replication, established-tool
 comparison on identical evidence scope, and independent expert review remain
-required.
+required. The first identical-query maintained-tool baseline is negative:
+SymbiYosys/Yosys/Z3 is 1.33 times faster than fresh proof verification on the
+retained host. GCC uses less verifier memory and transfers independently
+checkable evidence, but those properties do not overcome established
+proof-carrying-hardware prior art.
