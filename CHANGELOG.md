@@ -138,7 +138,9 @@
   trials with exact answer agreement, portable evidence bytes, wall time, and
   peak RSS. Require ordinary Linux CI to exercise the same complete operation
   set while treating timings and memory as architecture-labelled observations,
-  not reproducible values or routing inputs.
+  not reproducible values or routing inputs. Hosted run 29778509796 passes every
+  job at exact commit `1960cd3`; retain its three Linux x86_64 trials separately
+  with identical evidence sizes and answers.
   Add an explicit compatibility and migration policy for the first production
   line, including strict contract-version semantics, a minimum support window,
   fail-closed unsupported-version behavior, immutable upgrade and rollback
@@ -147,6 +149,13 @@
   retaining the honest distinction between a candidate baseline and later-tag
   compatibility history. Reconcile the readiness register with the already
   implemented operations runbook and executable Linux qualification evidence.
+  Add bounded process-client metrics aggregation schema v1. Use checked totals,
+  a one-million-job cap, canonical operation and failure distributions, and
+  explicit process-group and memory-limit coverage without changing the
+  existing per-invocation metrics schema. Exercise the public API against real
+  split resource discovery, successful governed verification, and a typed
+  resource refusal, retaining all three jobs in the aggregate. Internal cache,
+  allocation, and phase-resource counters remain open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

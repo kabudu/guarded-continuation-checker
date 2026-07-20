@@ -1,0 +1,13 @@
+schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,portable_evidence_bytes,time_backend,operating_system,architecture,answers_agree,status
+1,controller-certify,1,0.72,17096704,248889,gnu,Linux,x86_64,true,ok
+1,plant-door-certify,1,0.02,9551872,365,gnu,Linux,x86_64,true,ok
+1,plant-lock-certify,1,0.03,9547776,476,gnu,Linux,x86_64,true,ok
+1,governed-set-verify,1,0.04,9797632,249730,gnu,Linux,x86_64,true,ok
+1,controller-certify,2,0.80,17121280,248889,gnu,Linux,x86_64,true,ok
+1,plant-door-certify,2,0.02,9515008,365,gnu,Linux,x86_64,true,ok
+1,plant-lock-certify,2,0.03,9523200,476,gnu,Linux,x86_64,true,ok
+1,governed-set-verify,2,0.04,9596928,249730,gnu,Linux,x86_64,true,ok
+1,controller-certify,3,0.71,16826368,248889,gnu,Linux,x86_64,true,ok
+1,plant-door-certify,3,0.02,9404416,365,gnu,Linux,x86_64,true,ok
+1,plant-lock-certify,3,0.03,9605120,476,gnu,Linux,x86_64,true,ok
+1,governed-set-verify,3,0.04,9732096,249730,gnu,Linux,x86_64,true,ok

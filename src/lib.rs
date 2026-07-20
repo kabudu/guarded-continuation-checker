@@ -24,6 +24,7 @@ pub mod dense_relation;
 pub mod source_model_attestation;
 pub mod unsat_proof;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Read;
 #[cfg(unix)]
@@ -306,6 +307,181 @@ impl InvocationMetrics {
             failure_class,
         )
     }
+}
+
+pub const INVOCATION_METRICS_AGGREGATE_SCHEMA_VERSION: u32 = 1;
+pub const MAX_AGGREGATED_INVOCATIONS: usize = 1_000_000;
+
+/// Bounded, canonical aggregation of process-client observations.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct InvocationMetricsAggregate {
+    pub schema_version: u32,
+    pub jobs: u64,
+    pub successes: u64,
+    pub failures: u64,
+    pub total_duration_ns: u128,
+    pub maximum_duration_ns: u128,
+    pub total_stdout_bytes: u128,
+    pub total_stderr_bytes: u128,
+    pub process_group_contained_jobs: u64,
+    pub memory_limited_jobs: u64,
+    pub operation_counts: BTreeMap<&'static str, u64>,
+    pub failure_counts: BTreeMap<&'static str, u64>,
+}
+
+impl InvocationMetricsAggregate {
+    pub const fn csv_header() -> &'static str {
+        "schema_version,jobs,successes,failures,total_duration_ns,maximum_duration_ns,total_stdout_bytes,total_stderr_bytes,process_group_contained_jobs,memory_limited_jobs,operation_counts,failure_counts"
+    }
+
+    pub fn to_csv_row(&self) -> String {
+        let counts = |values: &BTreeMap<&'static str, u64>| {
+            if values.is_empty() {
+                "none".to_string()
+            } else {
+                values
+                    .iter()
+                    .map(|(name, count)| format!("{name}={count}"))
+                    .collect::<Vec<_>>()
+                    .join(";")
+            }
+        };
+        format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{}",
+            self.schema_version,
+            self.jobs,
+            self.successes,
+            self.failures,
+            self.total_duration_ns,
+            self.maximum_duration_ns,
+            self.total_stdout_bytes,
+            self.total_stderr_bytes,
+            self.process_group_contained_jobs,
+            self.memory_limited_jobs,
+            counts(&self.operation_counts),
+            counts(&self.failure_counts),
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum MetricsAggregationError {
+    Empty,
+    TooManyJobs,
+    UnsupportedSchema(u32),
+    Overflow,
+}
+
+impl fmt::Display for MetricsAggregationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(formatter, "invocation metrics set is empty"),
+            Self::TooManyJobs => write!(
+                formatter,
+                "invocation metrics set exceeds {MAX_AGGREGATED_INVOCATIONS} jobs"
+            ),
+            Self::UnsupportedSchema(version) => {
+                write!(formatter, "unsupported invocation metrics schema {version}")
+            }
+            Self::Overflow => write!(formatter, "invocation metrics aggregate overflows"),
+        }
+    }
+}
+
+impl std::error::Error for MetricsAggregationError {}
+
+/// Aggregate process observations without dropping failed jobs.
+pub fn aggregate_invocation_metrics<'a>(
+    metrics: impl IntoIterator<Item = &'a InvocationMetrics>,
+) -> Result<InvocationMetricsAggregate, MetricsAggregationError> {
+    let mut aggregate = InvocationMetricsAggregate {
+        schema_version: INVOCATION_METRICS_AGGREGATE_SCHEMA_VERSION,
+        jobs: 0,
+        successes: 0,
+        failures: 0,
+        total_duration_ns: 0,
+        maximum_duration_ns: 0,
+        total_stdout_bytes: 0,
+        total_stderr_bytes: 0,
+        process_group_contained_jobs: 0,
+        memory_limited_jobs: 0,
+        operation_counts: BTreeMap::new(),
+        failure_counts: BTreeMap::new(),
+    };
+    for metric in metrics {
+        if metric.schema_version != INVOCATION_METRICS_SCHEMA_VERSION {
+            return Err(MetricsAggregationError::UnsupportedSchema(
+                metric.schema_version,
+            ));
+        }
+        if aggregate.jobs as usize == MAX_AGGREGATED_INVOCATIONS {
+            return Err(MetricsAggregationError::TooManyJobs);
+        }
+        aggregate.jobs = aggregate
+            .jobs
+            .checked_add(1)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        let duration = metric.duration.as_nanos();
+        aggregate.total_duration_ns = aggregate
+            .total_duration_ns
+            .checked_add(duration)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        aggregate.maximum_duration_ns = aggregate.maximum_duration_ns.max(duration);
+        aggregate.total_stdout_bytes = aggregate
+            .total_stdout_bytes
+            .checked_add(metric.stdout_bytes as u128)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        aggregate.total_stderr_bytes = aggregate
+            .total_stderr_bytes
+            .checked_add(metric.stderr_bytes as u128)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        if metric.process_group_containment {
+            aggregate.process_group_contained_jobs = aggregate
+                .process_group_contained_jobs
+                .checked_add(1)
+                .ok_or(MetricsAggregationError::Overflow)?;
+        }
+        if metric.memory_limit_bytes.is_some() {
+            aggregate.memory_limited_jobs = aggregate
+                .memory_limited_jobs
+                .checked_add(1)
+                .ok_or(MetricsAggregationError::Overflow)?;
+        }
+        let operation_count = aggregate
+            .operation_counts
+            .entry(metric.operation.as_str())
+            .or_default();
+        *operation_count = operation_count
+            .checked_add(1)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        match metric.status {
+            InvocationStatus::Success => {
+                aggregate.successes = aggregate
+                    .successes
+                    .checked_add(1)
+                    .ok_or(MetricsAggregationError::Overflow)?;
+            }
+            InvocationStatus::Failed(class) => {
+                aggregate.failures = aggregate
+                    .failures
+                    .checked_add(1)
+                    .ok_or(MetricsAggregationError::Overflow)?;
+                let failure_count = aggregate.failure_counts.entry(class.as_str()).or_default();
+                *failure_count = failure_count
+                    .checked_add(1)
+                    .ok_or(MetricsAggregationError::Overflow)?;
+            }
+        }
+    }
+    if aggregate.jobs == 0 {
+        return Err(MetricsAggregationError::Empty);
+    }
+    if aggregate.successes.checked_add(aggregate.failures) != Some(aggregate.jobs) {
+        return Err(MetricsAggregationError::Overflow);
+    }
+    Ok(aggregate)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -5711,6 +5887,53 @@ mod tests {
         assert_eq!(
             metrics.to_csv_row(),
             "1,verify_v2,123,45,6,700,8192,2,error,exit_status"
+        );
+
+        let successful = InvocationMetrics {
+            schema_version: 1,
+            operation: OperationKind::Discover,
+            duration: Duration::from_nanos(7),
+            stdout_bytes: 10,
+            stderr_bytes: 0,
+            timeout: Duration::from_millis(700),
+            output_limit_bytes: 8192,
+            memory_limit_bytes: None,
+            file_limit_bytes: 32 * 1024 * 1024,
+            process_group_containment: true,
+            exit_code: Some(0),
+            status: InvocationStatus::Success,
+        };
+        let aggregate = aggregate_invocation_metrics([&metrics, &successful]).unwrap();
+        assert_eq!(aggregate.jobs, 2);
+        assert_eq!(aggregate.successes, 1);
+        assert_eq!(aggregate.failures, 1);
+        assert_eq!(aggregate.total_duration_ns, 130);
+        assert_eq!(aggregate.maximum_duration_ns, 123);
+        assert_eq!(aggregate.total_stdout_bytes, 55);
+        assert_eq!(aggregate.total_stderr_bytes, 6);
+        assert_eq!(aggregate.process_group_contained_jobs, 2);
+        assert_eq!(aggregate.memory_limited_jobs, 1);
+        assert_eq!(aggregate.operation_counts["discover"], 1);
+        assert_eq!(aggregate.operation_counts["verify_v2"], 1);
+        assert_eq!(aggregate.failure_counts["exit_status"], 1);
+        assert_eq!(
+            InvocationMetricsAggregate::csv_header(),
+            "schema_version,jobs,successes,failures,total_duration_ns,maximum_duration_ns,total_stdout_bytes,total_stderr_bytes,process_group_contained_jobs,memory_limited_jobs,operation_counts,failure_counts"
+        );
+        assert_eq!(
+            aggregate.to_csv_row(),
+            "1,2,1,1,130,123,55,6,2,1,discover=1;verify_v2=1,exit_status=1"
+        );
+
+        let mut incompatible = successful.clone();
+        incompatible.schema_version = 2;
+        assert_eq!(
+            aggregate_invocation_metrics([&incompatible]),
+            Err(MetricsAggregationError::UnsupportedSchema(2))
+        );
+        assert_eq!(
+            aggregate_invocation_metrics(std::iter::empty()),
+            Err(MetricsAggregationError::Empty)
         );
     }
 

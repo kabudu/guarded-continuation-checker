@@ -57,6 +57,17 @@ kernel, hardware, and measurement resolution affect them. They must not be
 used as portable thresholds, routing inputs, or evidence that one tool is
 faster than another.
 
+Hosted run
+[29778509796](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29778509796)
+passes every job on exact commit `1960cd3` and prints the independently measured
+Linux x86_64 rows retained in
+[`results/controller-split-process-resources-linux-v1.csv`](../results/controller-split-process-resources-linux-v1.csv).
+Across its three trials, controller certification peaked at 17,121,280 bytes
+RSS and governed verification peaked at 9,797,632 bytes. Verification took 0.04
+seconds in each hosted trial. Both architectures retain identical evidence byte
+counts and logical answers. Their timings and RSS values are observations, not
+cross-host equality requirements.
+
 ## CI contract
 
 Ordinary Linux CI builds the release executable, runs the same four-operation
@@ -66,6 +77,7 @@ CI prints the observed rows but does not compare them byte-for-byte with the
 arm64 CSV. Deterministic structural acceptance remains a separate exact-diff
 gate.
 
-This closes the missing whole-process peak-RSS measurement mechanism for the
-two-batch split fixture. It does not close compatibility through a later tag,
-independent acceptance, broader workload coverage, or production readiness.
+This closes the missing whole-process peak-RSS measurement and second-host
+reproduction mechanisms for the two-batch split fixture. It does not close
+compatibility through a later tag, independent acceptance, broader workload
+coverage, or production readiness.

@@ -8,6 +8,7 @@ use guarded_continuation_checker::{
     ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
     ControllerProofMtbddResourceTool, ControllerProofMtbddTool, ControllerSplitEvidenceTool,
     ControllerSplitResourceTool, FailureClass, InvocationStatus, OperationKind, PredicateApiError,
+    aggregate_invocation_metrics,
 };
 use sha2::{Digest, Sha256};
 
@@ -222,6 +223,7 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
 
     let resource_tool =
         ControllerSplitResourceTool::discover_observed(BINARY, Default::default()).unwrap();
+    let resource_discovery_metrics = resource_tool.metrics.clone();
     assert_eq!(
         resource_tool.metrics.operation,
         OperationKind::DiscoverControllerSplitResource
@@ -236,6 +238,7 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
             &[(&manifest, &results), (&manifest, &results_second)],
         )
         .unwrap();
+    let governed_metrics = typed_governed.metrics.clone();
     assert_eq!(
         typed_governed.metrics.operation,
         OperationKind::VerifyBoundPlantResultSetResources
@@ -292,6 +295,34 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
         typed_tight_controller.metrics.status,
         InvocationStatus::Failed(FailureClass::ResourceRefusal)
     );
+    let refusal_metrics = typed_tight_controller.metrics.clone();
+    let aggregate = aggregate_invocation_metrics([
+        &resource_discovery_metrics,
+        &governed_metrics,
+        &refusal_metrics,
+    ])
+    .unwrap();
+    assert_eq!(aggregate.jobs, 3);
+    assert_eq!(aggregate.successes, 2);
+    assert_eq!(aggregate.failures, 1);
+    assert_eq!(
+        aggregate.process_group_contained_jobs,
+        if cfg!(unix) { 3 } else { 0 }
+    );
+    assert_eq!(
+        aggregate.operation_counts["discover_controller_split_resource"],
+        1
+    );
+    assert_eq!(
+        aggregate.operation_counts["verify_bound_plant_result_set_resources"],
+        2
+    );
+    assert_eq!(aggregate.failure_counts["resource_refusal"], 1);
+    let aggregate_csv = aggregate.to_csv_row();
+    assert!(aggregate_csv.contains(
+        "discover_controller_split_resource=1;verify_bound_plant_result_set_resources=2"
+    ));
+    assert!(aggregate_csv.ends_with(",resource_refusal=1"));
 
     let tight_total_policy = root.join("tight-total-policy.txt");
     write_policy(
