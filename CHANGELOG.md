@@ -10,6 +10,9 @@
   Retain a nine-case public self-service acceptance fixture covering exact
   SAFE/UNSAFE answers, shortest bad frames, proof verification, manifest drift,
   artifact mutation, and output collision.
+  Add a five-trial release-build whole-process baseline retaining exact answer
+  agreement, 1.64x faster median creation, and 2.00x faster median verification
+  at the existing 29.39x artifact-size cost.
 
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch

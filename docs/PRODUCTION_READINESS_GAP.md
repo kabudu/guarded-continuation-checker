@@ -201,6 +201,11 @@ answers, bad frames, drift, mutation, and no-clobber behavior. Hosted process
 measurements and independent-tool comparison remain open. It stays outside the
 production portfolio and changes no readiness row.
 
+The first release-build whole-process baseline retains exact agreement and a
+2.00x median proof-verification improvement on one arm64 host. This closes the
+local process-overhead uncertainty, but hosted replication, peak-resource
+comparison, and identical-scope maintained-tool evidence remain open.
+
 ## Rules
 
 - No timing-based per-formula calibration.
