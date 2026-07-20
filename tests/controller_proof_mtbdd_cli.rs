@@ -7,7 +7,7 @@ use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason,
     ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
     ControllerProofMtbddResourceTool, ControllerProofMtbddTool, ControllerSplitEvidenceTool,
-    FailureClass, InvocationStatus, OperationKind, PredicateApiError,
+    ControllerSplitResourceTool, FailureClass, InvocationStatus, OperationKind, PredicateApiError,
 };
 use sha2::{Digest, Sha256};
 
@@ -162,6 +162,348 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
         "controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=2 members=4 safe=2 unsafe=2"
     ));
 
+    let resource_discovery = Command::new(BINARY)
+        .arg("controller-split-resource-cli-version")
+        .output()
+        .unwrap();
+    assert!(resource_discovery.status.success());
+    let resource_discovery = String::from_utf8(resource_discovery.stdout).unwrap();
+    assert!(resource_discovery.starts_with("controller_split_resource_cli_version=1"));
+    assert!(resource_discovery.contains("accounting=conservative-static-per-batch-and-total"));
+    assert!(resource_discovery.ends_with("unsupported=fail-closed\n"));
+
+    let evidence_bytes = fs::metadata(&evidence).unwrap().len() as usize;
+    let result_bytes = fs::metadata(&results).unwrap().len() as usize;
+    let result_second_bytes = fs::metadata(&results_second).unwrap().len() as usize;
+    let write_policy = |path: &Path,
+                        controller_bytes: usize,
+                        max_batches: usize,
+                        total_plant_bytes: usize| {
+        fs::write(
+            path,
+            format!(
+                "controller_split_resource_policy_version=1\nmax_controller_artifact_bytes={controller_bytes}\nmax_unsat_proof_bytes=1048576\nmax_batches={max_batches}\nmax_plant_artifact_bytes_per_batch={}\nmax_members_per_batch=2\nmax_member_horizon=2\nmax_product_states_per_member=4\nmax_transition_evaluations_per_batch=24\nmax_total_plant_artifact_bytes={total_plant_bytes}\nmax_total_members=4\nmax_total_transition_evaluations=48\nstatus=complete\n",
+                result_bytes.max(result_second_bytes),
+            ),
+        )
+        .unwrap();
+    };
+    let resource_policy = root.join("split-resource-policy.txt");
+    write_policy(
+        &resource_policy,
+        evidence_bytes,
+        2,
+        result_bytes + result_second_bytes,
+    );
+    let governed = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-v1")
+        .arg(&evidence)
+        .arg(&resource_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results_second)
+        .output()
+        .unwrap();
+    assert!(governed.status.success(), "{:?}", governed.stderr);
+    let governed = String::from_utf8(governed.stdout).unwrap();
+    assert!(governed.contains("controller-split-resource-batch index=0 status=VERIFIED"));
+    assert!(governed.contains("controller-split-resource-batch index=1 status=VERIFIED"));
+    assert!(governed.contains("controller-split-resource-set status=VERIFIED cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_admissions=1 batches=2 members=4 safe=2 unsafe=2"));
+    let governed_value = |key: &str| -> usize {
+        governed
+            .split_whitespace()
+            .find_map(|field| field.strip_prefix(&format!("{key}=")))
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    let unsat_proof_bytes = governed_value("unsat_proof_bytes");
+
+    let resource_tool =
+        ControllerSplitResourceTool::discover_observed(BINARY, Default::default()).unwrap();
+    assert_eq!(
+        resource_tool.metrics.operation,
+        OperationKind::DiscoverControllerSplitResource
+    );
+    assert_eq!(resource_tool.metrics.status, InvocationStatus::Success);
+    assert_eq!(resource_tool.value.capabilities().policy_version, 1);
+    let typed_governed = resource_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &resource_policy,
+            &[(&manifest, &results), (&manifest, &results_second)],
+        )
+        .unwrap();
+    assert_eq!(
+        typed_governed.metrics.operation,
+        OperationKind::VerifyBoundPlantResultSetResources
+    );
+    assert_eq!(typed_governed.metrics.status, InvocationStatus::Success);
+    assert_eq!(typed_governed.value.controller_admissions, 1);
+    assert_eq!(typed_governed.value.batches.len(), 2);
+    assert_eq!(typed_governed.value.members, 4);
+    assert_eq!(typed_governed.value.safe, 2);
+    assert_eq!(typed_governed.value.unsafe_count, 2);
+    assert_eq!(
+        typed_governed.value.total_plant_artifact_bytes,
+        result_bytes + result_second_bytes
+    );
+    assert_eq!(typed_governed.value.total_transition_evaluation_bound, 48);
+
+    let tight_controller_policy = root.join("tight-controller-policy.txt");
+    write_policy(
+        &tight_controller_policy,
+        evidence_bytes - 1,
+        2,
+        result_bytes + result_second_bytes,
+    );
+    let tight_controller = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-v1")
+        .arg(&evidence)
+        .arg(&tight_controller_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .output()
+        .unwrap();
+    assert_eq!(tight_controller.status.code(), Some(3));
+    assert!(tight_controller.stdout.is_empty());
+    assert!(
+        String::from_utf8(tight_controller.stderr)
+            .unwrap()
+            .contains("refusal=controller-artifact-bytes result=none")
+    );
+    let typed_tight_controller = resource_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &tight_controller_policy,
+            &[(&manifest, &results)],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *typed_tight_controller.error,
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::ControllerArtifactBytes
+        }
+    ));
+    assert_eq!(
+        typed_tight_controller.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
+
+    let tight_total_policy = root.join("tight-total-policy.txt");
+    write_policy(
+        &tight_total_policy,
+        evidence_bytes,
+        2,
+        result_bytes + result_second_bytes - 1,
+    );
+    let tight_total = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-v1")
+        .arg(&evidence)
+        .arg(&tight_total_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results_second)
+        .output()
+        .unwrap();
+    assert_eq!(tight_total.status.code(), Some(3));
+    assert!(tight_total.stdout.is_empty());
+    assert!(
+        String::from_utf8(tight_total.stderr)
+            .unwrap()
+            .contains("refusal=total-plant-artifact-bytes result=none")
+    );
+    let typed_tight_total = resource_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &tight_total_policy,
+            &[(&manifest, &results), (&manifest, &results_second)],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *typed_tight_total.error,
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::TotalPlantArtifactBytes
+        }
+    ));
+
+    let base_policy = fs::read_to_string(&resource_policy).unwrap();
+    let result_max = result_bytes.max(result_second_bytes);
+    let refusal_cases = vec![
+        (
+            "unsat-proof",
+            vec![(
+                "max_unsat_proof_bytes=1048576\n".to_string(),
+                format!("max_unsat_proof_bytes={}\n", unsat_proof_bytes - 1),
+            )],
+            "unsat-proof-bytes",
+        ),
+        (
+            "plant-artifact",
+            vec![
+                (
+                    format!("max_plant_artifact_bytes_per_batch={result_max}\n"),
+                    format!("max_plant_artifact_bytes_per_batch={}\n", result_max - 1),
+                ),
+                (
+                    format!(
+                        "max_total_plant_artifact_bytes={}\n",
+                        result_bytes + result_second_bytes
+                    ),
+                    format!("max_total_plant_artifact_bytes={}\n", (result_max - 1) * 2),
+                ),
+            ],
+            "plant-artifact-bytes",
+        ),
+        (
+            "members-per-batch",
+            vec![
+                (
+                    "max_members_per_batch=2\n".to_string(),
+                    "max_members_per_batch=1\n".to_string(),
+                ),
+                (
+                    "max_total_members=4\n".to_string(),
+                    "max_total_members=2\n".to_string(),
+                ),
+            ],
+            "members-per-batch",
+        ),
+        (
+            "horizon",
+            vec![(
+                "max_member_horizon=2\n".to_string(),
+                "max_member_horizon=1\n".to_string(),
+            )],
+            "horizon",
+        ),
+        (
+            "product-states",
+            vec![(
+                "max_product_states_per_member=4\n".to_string(),
+                "max_product_states_per_member=3\n".to_string(),
+            )],
+            "product-states",
+        ),
+        (
+            "transitions-per-batch",
+            vec![
+                (
+                    "max_transition_evaluations_per_batch=24\n".to_string(),
+                    "max_transition_evaluations_per_batch=23\n".to_string(),
+                ),
+                (
+                    "max_total_transition_evaluations=48\n".to_string(),
+                    "max_total_transition_evaluations=46\n".to_string(),
+                ),
+            ],
+            "transitions-per-batch",
+        ),
+        (
+            "total-members",
+            vec![(
+                "max_total_members=4\n".to_string(),
+                "max_total_members=3\n".to_string(),
+            )],
+            "total-members",
+        ),
+        (
+            "total-transitions",
+            vec![(
+                "max_total_transition_evaluations=48\n".to_string(),
+                "max_total_transition_evaluations=47\n".to_string(),
+            )],
+            "total-transition-evaluations",
+        ),
+    ];
+    for (name, replacements, reason) in refusal_cases {
+        let mut body = base_policy.clone();
+        for (from, to) in replacements {
+            assert!(body.contains(&from), "{name}: missing {from:?}");
+            body = body.replace(&from, &to);
+        }
+        let path = root.join(format!("tight-{name}-policy.txt"));
+        fs::write(&path, body).unwrap();
+        let refusal = Command::new(BINARY)
+            .arg("verify-bound-plant-result-set-with-resources-v1")
+            .arg(&evidence)
+            .arg(&path)
+            .arg(&manifest)
+            .arg(&results)
+            .arg(&manifest)
+            .arg(&results_second)
+            .output()
+            .unwrap();
+        assert_eq!(
+            refusal.status.code(),
+            Some(3),
+            "{name}: {:?}",
+            refusal.stderr
+        );
+        assert!(refusal.stdout.is_empty(), "{name}");
+        assert!(
+            String::from_utf8(refusal.stderr)
+                .unwrap()
+                .contains(&format!("refusal={reason} result=none")),
+            "{name}"
+        );
+    }
+
+    let tight_batch_policy = root.join("tight-batch-policy.txt");
+    write_policy(
+        &tight_batch_policy,
+        evidence_bytes,
+        1,
+        result_bytes.max(result_second_bytes),
+    );
+    let tight_batch_body = fs::read_to_string(&tight_batch_policy)
+        .unwrap()
+        .replace("max_total_members=4\n", "max_total_members=2\n")
+        .replace(
+            "max_total_transition_evaluations=48\n",
+            "max_total_transition_evaluations=24\n",
+        );
+    fs::write(&tight_batch_policy, tight_batch_body).unwrap();
+    let tight_batch = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-v1")
+        .arg(&evidence)
+        .arg(&tight_batch_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results_second)
+        .output()
+        .unwrap();
+    assert_eq!(tight_batch.status.code(), Some(3));
+    assert!(tight_batch.stdout.is_empty());
+    assert!(
+        String::from_utf8(tight_batch.stderr)
+            .unwrap()
+            .contains("refusal=batches result=none")
+    );
+
+    let malformed_policy = root.join("malformed-split-policy.txt");
+    fs::write(
+        &malformed_policy,
+        b"controller_split_resource_policy_version=1\r\n",
+    )
+    .unwrap();
+    let malformed = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-v1")
+        .arg(&evidence)
+        .arg(&malformed_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .output()
+        .unwrap();
+    assert_eq!(malformed.status.code(), Some(2));
+    assert!(malformed.stdout.is_empty());
+
     let mut corrupt = fs::read(&results).unwrap();
     let middle = corrupt.len() / 2;
     corrupt[middle] ^= 1;
@@ -284,7 +626,7 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
     let executable = root.join("hostile-helper");
     let maximum = usize::MAX;
     let script = format!(
-        "#!/bin/sh\ncase \"$1\" in\ncontroller-split-evidence-cli-version)\nprintf '%s\\n' 'controller_split_evidence_cli_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_batches=64 admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed'\n;;\nverify-bound-plant-result-set-v1)\nprintf '%s\\n' 'controller-split-batch index=0 status=VERIFIED members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=1 admission_micros=1 elapsed_micros=1'\n;;\n*) exit 2;;\nesac\n"
+        "#!/bin/sh\ncase \"$1\" in\ncontroller-split-evidence-cli-version)\nprintf '%s\\n' 'controller_split_evidence_cli_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_batches=64 admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed'\n;;\ncontroller-split-resource-cli-version)\nprintf '%s\\n' 'controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed'\n;;\nverify-bound-plant-result-set-v1)\nprintf '%s\\n' 'controller-split-batch index=0 status=VERIFIED members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=1 admission_micros=1 elapsed_micros=1'\n;;\nverify-bound-plant-result-set-with-resources-v1)\nprintf '%s\\n' 'controller-split-resource-batch index=0 status=VERIFIED policy_version=1 envelope_version=1 artifact_version=1 members={maximum} maximum_member_horizon=1 maximum_product_states=1 transition_evaluation_bound={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-resource-set status=VERIFIED cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=10 controller_mtbdd_bytes=1 equivalence_artifact_bytes=1 unsat_proof_bytes=1 total_plant_artifact_bytes=1 total_transition_evaluation_bound={maximum} admission_micros=1 elapsed_micros=1'\n;;\n*) exit 2;;\nesac\n"
     );
     fs::write(&executable, script).unwrap();
     let mut permissions = fs::metadata(&executable).unwrap().permissions();
@@ -304,6 +646,23 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
     ));
     assert_eq!(
         failure.metrics.status,
+        InvocationStatus::Failed(FailureClass::Response)
+    );
+
+    let resource_tool = ControllerSplitResourceTool::discover(&executable).unwrap();
+    let resource_failure = resource_tool
+        .verify_set_observed(
+            Path::new("evidence"),
+            Path::new("policy"),
+            &[(Path::new("manifest"), Path::new("results"))],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *resource_failure.error,
+        PredicateApiError::InvalidResponse(_)
+    ));
+    assert_eq!(
+        resource_failure.metrics.status,
         InvocationStatus::Failed(FailureClass::Response)
     );
 

@@ -84,7 +84,43 @@ drift, integrity failure, or semantic mismatch returns no verified aggregate.
   member, answer, reachable-state, and transition totals, and requires exactly
   one controller admission.
 - The CLI applies static compiled artifact limits. Explicit caller-selected
-  resource policy files remain a follow-up gate.
+  resource policies can narrow them for each deployment.
+
+## Governed multi-batch verification
+
+Discover the separate resource contract:
+
+```sh
+guarded-continuation-checker controller-split-resource-cli-version
+```
+
+Run the same one-admission verification under a canonical caller policy:
+
+```sh
+guarded-continuation-checker \
+  verify-bound-plant-result-set-with-resources-v1 \
+  controller.controller-evidence \
+  examples/controller-split-resource-policy-v1.txt \
+  original-manifest.txt original.plant-results \
+  replacement-manifest.txt replacement.plant-results
+```
+
+The policy independently bounds controller evidence bytes and its embedded
+UNSAT proof, batch count, per-batch plant bytes, members, horizon, product
+states, and conservative transition evaluations. It also bounds total plant
+bytes, members, and conservative transition evaluations across the request.
+
+GCC preflights the complete set before semantic replay. It snapshots canonical
+manifest semantics, source/model digests, result digests, and resource
+assessments, then checks those snapshots again during verification. Input drift,
+any tighter limit, malformed policy text, arithmetic overflow, or an unknown
+refusal fails closed. A policy refusal exits with code 3, emits no verified row
+or logical answer, and uses one of eleven versioned refusal reasons.
+
+Rust callers can use `ControllerSplitResourceTool` for the same path. It
+strictly validates discovery and result contracts, applies bounded shell-free
+execution, converts known exit-code-3 reasons into typed `ResourceRefused`
+errors, and rejects inconsistent or overflowing helper summaries.
 
 ## Typed Rust client
 

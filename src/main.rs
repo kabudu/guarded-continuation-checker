@@ -38,6 +38,9 @@ const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_RESOURCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_POLICY_VERSION: u32 = 1;
@@ -58,7 +61,7 @@ struct ComponentBatchManifestMember {
     horizon: u32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ControllerMtbddPlantManifestMember {
     plant_source_path: PathBuf,
     plant_aiger_path: PathBuf,
@@ -69,7 +72,7 @@ struct ControllerMtbddPlantManifestMember {
     horizon: usize,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ControllerMtbddPlantManifest {
     controller_source_path: PathBuf,
     controller_aiger_path: PathBuf,
@@ -92,7 +95,7 @@ struct SourceModelProvenanceManifest {
     members: Vec<SourceModelProvenanceMember>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct LoadedSourceModelSubject {
     source_path: PathBuf,
     model_path: PathBuf,
@@ -100,7 +103,7 @@ struct LoadedSourceModelSubject {
     model_sha256: [u8; 32],
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct LoadedSourceModelSnapshot {
     subjects: Vec<LoadedSourceModelSubject>,
 }
@@ -113,6 +116,16 @@ struct ControllerPlantResourcePolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ControllerProofMtbddResourcePolicy {
     envelope: controller_plant_artifact::ControllerProofMtbddResourceEnvelope,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ControllerSplitResourcePolicy {
+    controller: controller_plant_artifact::ControllerProofEvidenceResourceEnvelope,
+    plant: controller_plant_artifact::ControllerPlantResourceEnvelope,
+    max_batches: usize,
+    max_total_plant_artifact_bytes: usize,
+    max_total_members: usize,
+    max_total_transition_evaluations: usize,
 }
 
 fn synthesis_memory_limit_kind() -> &'static str {
@@ -25392,6 +25405,119 @@ fn parse_controller_proof_mtbdd_resource_policy(
     Ok(ControllerProofMtbddResourcePolicy { envelope })
 }
 
+fn parse_controller_split_resource_policy(
+    path: &Path,
+) -> Result<ControllerSplitResourcePolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES,
+        "controller split resource policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller split resource policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller split resource policy must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller split resource policy expected {key}"))
+    };
+    let version = take("controller_split_resource_policy_version")?;
+    if version != CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION.to_string() {
+        return Err("unsupported controller split resource policy version".to_string());
+    }
+    let parse = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller split resource policy {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!(
+                "controller split resource policy {label} is noncanonical"
+            ));
+        }
+        Ok(parsed)
+    };
+    let controller_artifact_text = take("max_controller_artifact_bytes")?;
+    let proof_text = take("max_unsat_proof_bytes")?;
+    let batches_text = take("max_batches")?;
+    let plant_artifact_text = take("max_plant_artifact_bytes_per_batch")?;
+    let members_text = take("max_members_per_batch")?;
+    let horizon_text = take("max_member_horizon")?;
+    let states_text = take("max_product_states_per_member")?;
+    let transitions_text = take("max_transition_evaluations_per_batch")?;
+    let total_artifact_text = take("max_total_plant_artifact_bytes")?;
+    let total_members_text = take("max_total_members")?;
+    let total_transitions_text = take("max_total_transition_evaluations")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller split resource policy is incomplete or has trailing fields".to_string(),
+        );
+    }
+    let canonical = format!(
+        "controller_split_resource_policy_version={version}\nmax_controller_artifact_bytes={controller_artifact_text}\nmax_unsat_proof_bytes={proof_text}\nmax_batches={batches_text}\nmax_plant_artifact_bytes_per_batch={plant_artifact_text}\nmax_members_per_batch={members_text}\nmax_member_horizon={horizon_text}\nmax_product_states_per_member={states_text}\nmax_transition_evaluations_per_batch={transitions_text}\nmax_total_plant_artifact_bytes={total_artifact_text}\nmax_total_members={total_members_text}\nmax_total_transition_evaluations={total_transitions_text}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("controller split resource policy is not canonical".to_string());
+    }
+    let controller_artifact_bytes = parse(controller_artifact_text, "controller artifact bytes")?;
+    let proof_bytes = parse(proof_text, "UNSAT proof bytes")?;
+    let max_batches = parse(batches_text, "batches")?;
+    let plant_artifact_bytes = parse(plant_artifact_text, "plant artifact bytes")?;
+    let max_members = parse(members_text, "members")?;
+    let max_horizon = parse(horizon_text, "member horizon")?;
+    let max_states = parse(states_text, "product states")?;
+    let max_transitions = parse(transitions_text, "transition evaluations")?;
+    let max_total_plant_artifact_bytes = parse(total_artifact_text, "total plant artifact bytes")?;
+    let max_total_members = parse(total_members_text, "total members")?;
+    let max_total_transition_evaluations =
+        parse(total_transitions_text, "total transition evaluations")?;
+    if max_batches == 0
+        || max_batches > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+        || max_total_plant_artifact_bytes == 0
+        || max_total_members == 0
+        || max_total_transition_evaluations == 0
+        || plant_artifact_bytes
+            .checked_mul(max_batches)
+            .is_some_and(|maximum| max_total_plant_artifact_bytes > maximum)
+        || max_members
+            .checked_mul(max_batches)
+            .is_some_and(|maximum| max_total_members > maximum)
+        || max_transitions
+            .checked_mul(max_batches)
+            .is_some_and(|maximum| max_total_transition_evaluations > maximum)
+    {
+        return Err(
+            "controller split resource policy totals are outside static limits".to_string(),
+        );
+    }
+    let controller = controller_plant_artifact::ControllerProofEvidenceResourceEnvelope::new(
+        controller_artifact_bytes,
+        proof_bytes,
+    )
+    .map_err(|error| error.to_string())?;
+    let plant = controller_plant_artifact::ControllerPlantResourceEnvelope::new(
+        plant_artifact_bytes,
+        max_members,
+        max_horizon,
+        max_states,
+        max_transitions,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(ControllerSplitResourcePolicy {
+        controller,
+        plant,
+        max_batches,
+        max_total_plant_artifact_bytes,
+        max_total_members,
+        max_total_transition_evaluations,
+    })
+}
+
 fn controller_proof_mtbdd_resource_refusal(error: &str) -> Option<&'static str> {
     if error.contains("resource artifact-byte limit exceeded")
         || (error.starts_with("proof-carrying controller MTBDD governed artifact exceeds ")
@@ -25445,6 +25571,40 @@ fn controller_plant_resource_refusal(error: &str) -> Option<&'static str> {
 fn classify_controller_plant_resource_error(error: String) -> String {
     controller_plant_resource_refusal(&error).map_or(error, |reason| {
         format!("controller-plant-resource refusal={reason} result=none")
+    })
+}
+
+fn controller_split_resource_refusal(error: &str) -> Option<&'static str> {
+    if error.contains("controller proof evidence resource artifact-byte limit exceeded") {
+        Some("controller-artifact-bytes")
+    } else if error.contains("controller proof evidence resource UNSAT-proof limit exceeded") {
+        Some("unsat-proof-bytes")
+    } else if error == "controller split resource batch limit exceeded" {
+        Some("batches")
+    } else if error.contains("bound plant result resource artifact-byte limit exceeded") {
+        Some("plant-artifact-bytes")
+    } else if error.contains("bound plant result resource member limit exceeded") {
+        Some("members-per-batch")
+    } else if error.contains("bound plant result resource horizon limit exceeded") {
+        Some("horizon")
+    } else if error.contains("bound plant result resource product-state limit exceeded") {
+        Some("product-states")
+    } else if error.contains("bound plant result resource transition limit exceeded") {
+        Some("transitions-per-batch")
+    } else if error == "controller split resource total plant artifact-byte limit exceeded" {
+        Some("total-plant-artifact-bytes")
+    } else if error == "controller split resource total member limit exceeded" {
+        Some("total-members")
+    } else if error == "controller split resource total transition limit exceeded" {
+        Some("total-transition-evaluations")
+    } else {
+        None
+    }
+}
+
+fn classify_controller_split_resource_error(error: String) -> String {
+    controller_split_resource_refusal(&error).map_or(error, |reason| {
+        format!("controller-split-resource refusal={reason} result=none")
     })
 }
 
@@ -25677,6 +25837,29 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "controller-split-resource-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-split-resource-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_split_resource_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} controller_envelope_version={} plant_envelope_version={} controller_artifact_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_policy_bytes={CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES} max_controller_artifact_bytes={} max_unsat_proof_bytes={} max_plant_artifact_bytes={} max_batches={} max_members_per_batch={} max_horizon={} max_product_states={} refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION,
+                controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+                controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+            );
+            Ok(true)
+        }
         "certify-controller-proof-evidence-v1" => {
             if args.len() != 3 {
                 return Err("usage: guarded-continuation-checker certify-controller-proof-evidence-v1 MANIFEST.txt OUTPUT.controller-evidence".to_string());
@@ -25881,6 +26064,257 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "controller-split-set status=VERIFIED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} controller_admissions=1 batches={} members={total_members} safe={total_safe} unsafe={total_unsafe} reachable_product_states={total_reachable} explored_transitions={total_transitions} controller_evidence_bytes={} admission_micros={admission_micros} elapsed_micros={}",
                 (args.len() - 2) / 2,
                 evidence.len(),
+                started.elapsed().as_micros(),
+            );
+            Ok(true)
+        }
+        "verify-bound-plant-result-set-with-resources-v1" => {
+            if args.len() < 5 || !(args.len() - 3).is_multiple_of(2) {
+                return Err("usage: guarded-continuation-checker verify-bound-plant-result-set-with-resources-v1 INPUT.controller-evidence POLICY.txt MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]".to_string());
+            }
+            let started = Instant::now();
+            let policy = parse_controller_split_resource_policy(Path::new(&args[2]))?;
+            let batch_count = (args.len() - 3) / 2;
+            if batch_count > policy.max_batches {
+                return Err(classify_controller_split_resource_error(
+                    "controller split resource batch limit exceeded".to_string(),
+                ));
+            }
+            let evidence = read_bounded_regular_file(
+                Path::new(&args[1]),
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                "controller proof evidence",
+            )?;
+            let (_, admitted_controller, admitted_digest, _, _, _) =
+                load_controller_plant_manifest(
+                    Path::new(&args[3]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let admission_started = Instant::now();
+            let governed_admission =
+                controller_plant_artifact::admit_controller_proof_evidence_with_resources(
+                    &admitted_controller,
+                    admitted_digest,
+                    &evidence,
+                    policy.controller,
+                )
+                .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+            let admission_micros = admission_started.elapsed().as_micros();
+            let mut total_plant_artifact_bytes = 0usize;
+            let mut total_members = 0usize;
+            let mut total_transition_bound = 0usize;
+            struct PreparedSplitBatch {
+                manifest: ControllerMtbddPlantManifest,
+                snapshot: LoadedSourceModelSnapshot,
+                resources: controller_plant_artifact::ControllerPlantResourceAssessment,
+                results_sha256: [u8; 32],
+            }
+            let mut prepared_batches = Vec::with_capacity(batch_count);
+            for (batch_index, pair) in args[3..].chunks_exact(2).enumerate() {
+                let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
+                    load_controller_plant_manifest(
+                        Path::new(&pair[0]),
+                        controller_mtbdd::MAX_MTBDD_INPUTS,
+                        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                    )?;
+                if controller != admitted_controller
+                    || controller_digest != admitted_digest
+                    || governed_admission.admitted.relevant_inputs() != manifest.relevant_inputs
+                    || governed_admission.admitted.observed_outputs() != manifest.observed_outputs
+                {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} does not match admitted controller"
+                    ));
+                }
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let encoded = read_bounded_regular_file(
+                    Path::new(&pair[1]),
+                    controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                    "bound plant results",
+                )?;
+                let resources = controller_plant_artifact::assess_bound_plant_results_resources(
+                    &controller,
+                    &inputs,
+                    &encoded,
+                    policy.plant,
+                )
+                .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+                total_plant_artifact_bytes = total_plant_artifact_bytes
+                    .checked_add(resources.artifact_bytes)
+                    .ok_or_else(|| {
+                        classify_controller_split_resource_error(
+                            "controller split resource total plant artifact-byte limit exceeded"
+                                .to_string(),
+                        )
+                    })?;
+                total_members = total_members
+                    .checked_add(resources.members)
+                    .ok_or_else(|| {
+                        classify_controller_split_resource_error(
+                            "controller split resource total member limit exceeded".to_string(),
+                        )
+                    })?;
+                total_transition_bound = total_transition_bound
+                    .checked_add(resources.transition_evaluation_bound)
+                    .ok_or_else(|| {
+                        classify_controller_split_resource_error(
+                            "controller split resource total transition limit exceeded".to_string(),
+                        )
+                    })?;
+                if total_plant_artifact_bytes > policy.max_total_plant_artifact_bytes {
+                    return Err(classify_controller_split_resource_error(
+                        "controller split resource total plant artifact-byte limit exceeded"
+                            .to_string(),
+                    ));
+                }
+                if total_members > policy.max_total_members {
+                    return Err(classify_controller_split_resource_error(
+                        "controller split resource total member limit exceeded".to_string(),
+                    ));
+                }
+                if total_transition_bound > policy.max_total_transition_evaluations {
+                    return Err(classify_controller_split_resource_error(
+                        "controller split resource total transition limit exceeded".to_string(),
+                    ));
+                }
+                prepared_batches.push(PreparedSplitBatch {
+                    manifest,
+                    snapshot,
+                    resources,
+                    results_sha256: Sha256::digest(&encoded).into(),
+                });
+            }
+            let mut total_safe = 0usize;
+            let mut total_unsafe = 0usize;
+            let mut total_reachable = 0usize;
+            let mut total_explored = 0usize;
+            let mut verified_batches = Vec::with_capacity(batch_count);
+            for (batch_index, (pair, prepared)) in
+                args[3..].chunks_exact(2).zip(&prepared_batches).enumerate()
+            {
+                let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
+                    load_controller_plant_manifest(
+                        Path::new(&pair[0]),
+                        controller_mtbdd::MAX_MTBDD_INPUTS,
+                        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                    )?;
+                if manifest != prepared.manifest
+                    || snapshot != prepared.snapshot
+                    || controller != admitted_controller
+                    || controller_digest != admitted_digest
+                {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} changed after preflight"
+                    ));
+                }
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let encoded = read_bounded_regular_file(
+                    Path::new(&pair[1]),
+                    controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                    "bound plant results",
+                )?;
+                if <[u8; 32]>::from(Sha256::digest(&encoded)) != prepared.results_sha256 {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} changed after preflight"
+                    ));
+                }
+                let resources = controller_plant_artifact::assess_bound_plant_results_resources(
+                    &controller,
+                    &inputs,
+                    &encoded,
+                    policy.plant,
+                )
+                .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+                if resources != prepared.resources {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} changed after preflight"
+                    ));
+                }
+                let batch_started = Instant::now();
+                let verification =
+                    controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
+                        &governed_admission.admitted,
+                        &inputs,
+                        &encoded,
+                    )
+                    .map_err(|error| error.to_string())?;
+                let verification_micros = batch_started.elapsed().as_micros();
+                total_safe = total_safe
+                    .checked_add(verification.safe)
+                    .ok_or_else(|| "controller split resource SAFE count overflow".to_string())?;
+                total_unsafe = total_unsafe
+                    .checked_add(verification.unsafe_count)
+                    .ok_or_else(|| "controller split resource UNSAFE count overflow".to_string())?;
+                total_reachable = total_reachable
+                    .checked_add(verification.reachable_product_states)
+                    .ok_or_else(|| {
+                        "controller split resource reachable count overflow".to_string()
+                    })?;
+                total_explored = total_explored
+                    .checked_add(verification.explored_transitions)
+                    .ok_or_else(|| {
+                        "controller split resource transition count overflow".to_string()
+                    })?;
+                verified_batches.push((
+                    batch_index,
+                    controller_plant_artifact::GovernedBoundPlantResultsSummary {
+                        resources,
+                        verification,
+                    },
+                    verification_micros,
+                ));
+            }
+            for (batch_index, governed, verification_micros) in &verified_batches {
+                println!(
+                    "controller-split-resource-batch index={batch_index} status=VERIFIED policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} verification_micros={verification_micros}",
+                    governed.resources.version,
+                    controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                    governed.resources.members,
+                    governed.resources.maximum_member_horizon,
+                    governed.resources.maximum_product_states,
+                    governed.resources.transition_evaluation_bound,
+                    governed.verification.safe,
+                    governed.verification.unsafe_count,
+                    governed.verification.reachable_product_states,
+                    governed.verification.explored_transitions,
+                    governed.resources.artifact_bytes,
+                );
+            }
+            println!(
+                "controller-split-resource-set status=VERIFIED cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} controller_envelope_version={} plant_envelope_version={} controller_admissions=1 batches={batch_count} members={total_members} safe={total_safe} unsafe={total_unsafe} reachable_product_states={total_reachable} explored_transitions={total_explored} controller_evidence_bytes={} controller_mtbdd_bytes={} equivalence_artifact_bytes={} unsat_proof_bytes={} total_plant_artifact_bytes={total_plant_artifact_bytes} total_transition_evaluation_bound={total_transition_bound} admission_micros={admission_micros} elapsed_micros={}",
+                governed_admission.resources.version,
+                controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+                governed_admission.resources.artifact_bytes,
+                governed_admission.resources.mtbdd_bytes,
+                governed_admission.resources.equivalence_artifact_bytes,
+                governed_admission.resources.unsat_proof_bytes,
                 started.elapsed().as_micros(),
             );
             Ok(true)
@@ -29205,6 +29639,7 @@ fn main() {
             std::process::exit(
                 if error.starts_with("controller-plant-resource refusal=")
                     || error.starts_with("controller-proof-mtbdd-resource refusal=")
+                    || error.starts_with("controller-split-resource refusal=")
                 {
                     3
                 } else {
@@ -40393,6 +40828,70 @@ mod tests {
             assert_eq!(controller_proof_mtbdd_resource_refusal(invalid), None);
             assert_eq!(
                 classify_controller_proof_mtbdd_resource_error(invalid.to_string()),
+                invalid
+            );
+        }
+    }
+
+    #[test]
+    fn controller_split_resource_refusal_reasons_are_stable_and_narrow() {
+        for (message, reason) in [
+            (
+                "controller proof evidence resource artifact-byte limit exceeded",
+                "controller-artifact-bytes",
+            ),
+            (
+                "controller proof evidence resource UNSAT-proof limit exceeded",
+                "unsat-proof-bytes",
+            ),
+            ("controller split resource batch limit exceeded", "batches"),
+            (
+                "bound plant result resource artifact-byte limit exceeded",
+                "plant-artifact-bytes",
+            ),
+            (
+                "bound plant result resource member limit exceeded",
+                "members-per-batch",
+            ),
+            (
+                "bound plant result resource horizon limit exceeded",
+                "horizon",
+            ),
+            (
+                "bound plant result resource product-state limit exceeded",
+                "product-states",
+            ),
+            (
+                "bound plant result resource transition limit exceeded",
+                "transitions-per-batch",
+            ),
+            (
+                "controller split resource total plant artifact-byte limit exceeded",
+                "total-plant-artifact-bytes",
+            ),
+            (
+                "controller split resource total member limit exceeded",
+                "total-members",
+            ),
+            (
+                "controller split resource total transition limit exceeded",
+                "total-transition-evaluations",
+            ),
+        ] {
+            assert_eq!(controller_split_resource_refusal(message), Some(reason));
+            assert_eq!(
+                classify_controller_split_resource_error(message.to_string()),
+                format!("controller-split-resource refusal={reason} result=none")
+            );
+        }
+        for invalid in [
+            "bound plant result mismatch",
+            "bound plant result resource transition bound overflow",
+            "controller split resource policy is not canonical",
+        ] {
+            assert_eq!(controller_split_resource_refusal(invalid), None);
+            assert_eq!(
+                classify_controller_split_resource_error(invalid.to_string()),
                 invalid
             );
         }

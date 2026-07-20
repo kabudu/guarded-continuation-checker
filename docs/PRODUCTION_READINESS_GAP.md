@@ -285,7 +285,7 @@ five-plant fixture shows a 49.75% marginal byte reduction against the faithful
 composed-witness route, but an 8.71 times larger initial package and a 58-change
 byte break-even. Stable file and typed bounded-process interfaces plus hosted
 cross-platform artifact reproduction are implemented. Compatibility fixtures,
-peak-RSS evidence, caller-selected CLI policy files, and external acceptance
+peak-RSS evidence, hosted governed-client acceptance, and external acceptance
 remain open. This adds a candidate product mechanism and closes no
 production-readiness row.
 
@@ -300,15 +300,19 @@ reports per-batch verification time and one aggregate while failing closed on
 controller, boundary, obligation, integrity, and argument drift. The typed Rust
 client now applies bounded shell-free execution, strictly parses the discovered
 contract and result rows, reconciles all batch totals with checked arithmetic,
-and reports stable per-invocation metrics. Caller-selected CLI policy files,
-retained metrics aggregation, compatibility through a later tag, and hosted
-typed-client acceptance remain open.
+and reports stable per-invocation metrics. A separate governed CLI and typed
+client now enforce caller-selected controller, proof, batch, per-batch, and
+complete-set limits before semantic replay. The two-pass verifier binds
+manifest semantics, source/model snapshots, result digests, and resource
+assessments across preflight and replay, emits no verified row on refusal, and
+maps eleven stable refusal reasons to exit code 3 without a logical answer.
+Retained metrics aggregation, compatibility through a later tag, and hosted
+governed-client acceptance remain open.
 Hosted amd64 run 29773273695 now reproduces the split controller and replacement
 artifact hashes, structural byte accounting, independent composed-witness
 hashes, and all logical answers from arm64. This closes the mechanism's second
-architecture reproduction gate. Compatibility through a later tag, governed
-CLI policy files, hosted typed-client acceptance, and independent acceptance
-remain open.
+architecture reproduction gate. Compatibility through a later tag, hosted
+governed-client acceptance, and independent acceptance remain open.
 
 ## Post-production-release deliverables
 

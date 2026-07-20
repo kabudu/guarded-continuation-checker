@@ -116,7 +116,14 @@
   multi-batch verification, stable invocation metrics, checked aggregation,
   and complete cross-row reconciliation. Reject empty or excessive sets before
   invocation and reject malformed, inconsistent, overflowing, or changed
-  helper responses without returning a verified summary.
+  helper responses without returning a verified summary. Add canonical
+  caller-selected split resource policy v1, discovery, governed multi-batch CLI,
+  and typed `ControllerSplitResourceTool`. Bound controller and proof evidence,
+  per-batch composition work, batch count, and complete-set bytes, members, and
+  conservative transitions. Preflight the entire request before replay, bind
+  manifest semantics and source/model/result snapshots across both passes,
+  buffer output until every batch succeeds, and return no logical answer or
+  verified row for eleven typed exit-code-3 refusal classes.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

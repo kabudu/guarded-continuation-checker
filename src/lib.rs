@@ -172,6 +172,8 @@ pub enum OperationKind {
     CertifyControllerProofEvidence,
     CertifyBoundPlantResults,
     VerifyBoundPlantResultSet,
+    DiscoverControllerSplitResource,
+    VerifyBoundPlantResultSetResources,
 }
 
 impl OperationKind {
@@ -223,6 +225,8 @@ impl OperationKind {
             Self::CertifyControllerProofEvidence => "certify_controller_proof_evidence",
             Self::CertifyBoundPlantResults => "certify_bound_plant_results",
             Self::VerifyBoundPlantResultSet => "verify_bound_plant_result_set",
+            Self::DiscoverControllerSplitResource => "discover_controller_split_resource",
+            Self::VerifyBoundPlantResultSetResources => "verify_bound_plant_result_set_resources",
         }
     }
 }
@@ -496,6 +500,60 @@ pub struct ControllerSplitSetSummary {
     pub batches: Vec<ControllerSplitBatchSummary>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitResourceCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub controller_envelope_version: u32,
+    pub plant_envelope_version: u32,
+    pub controller_artifact_version: u32,
+    pub plant_artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_controller_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
+    pub max_plant_artifact_bytes: usize,
+    pub max_batches: usize,
+    pub max_members_per_batch: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitResourceBatchSummary {
+    pub index: usize,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub verification_micros: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitResourceSetSummary {
+    pub controller_admissions: usize,
+    pub members: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub controller_evidence_bytes: usize,
+    pub controller_mtbdd_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub total_plant_artifact_bytes: usize,
+    pub total_transition_evaluation_bound: usize,
+    pub admission_micros: usize,
+    pub elapsed_micros: usize,
+    pub batches: Vec<ControllerSplitResourceBatchSummary>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerMtbddAnswer {
     Safe,
@@ -704,24 +762,40 @@ pub struct ControllerPlantResourceSummary {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerPlantResourceRefusalReason {
     ArtifactBytes,
+    ControllerArtifactBytes,
+    PlantArtifactBytes,
     EquivalenceArtifactBytes,
     UnsatProofBytes,
+    Batches,
     Members,
+    MembersPerBatch,
     Horizon,
     ProductStates,
     TransitionEvaluations,
+    TransitionsPerBatch,
+    TotalPlantArtifactBytes,
+    TotalMembers,
+    TotalTransitionEvaluations,
 }
 
 impl ControllerPlantResourceRefusalReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ArtifactBytes => "artifact-bytes",
+            Self::ControllerArtifactBytes => "controller-artifact-bytes",
+            Self::PlantArtifactBytes => "plant-artifact-bytes",
             Self::EquivalenceArtifactBytes => "equivalence-artifact-bytes",
             Self::UnsatProofBytes => "unsat-proof-bytes",
+            Self::Batches => "batches",
             Self::Members => "members",
+            Self::MembersPerBatch => "members-per-batch",
             Self::Horizon => "horizon",
             Self::ProductStates => "product-states",
             Self::TransitionEvaluations => "transition-evaluations",
+            Self::TransitionsPerBatch => "transitions-per-batch",
+            Self::TotalPlantArtifactBytes => "total-plant-artifact-bytes",
+            Self::TotalMembers => "total-members",
+            Self::TotalTransitionEvaluations => "total-transition-evaluations",
         }
     }
 }
@@ -1440,6 +1514,120 @@ impl ControllerSplitEvidenceTool {
             self.policy,
         )?;
         parse_controller_split_set_summary(bounded, batches.len(), &self.capabilities)
+    }
+}
+
+/// Typed, shell-free client for governed split-evidence verification v1.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitResourceTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitResourceCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitResourceTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-resource-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitResource,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_split_resource_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitResourceCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitResourceSetSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitResourceSetSummary>, PredicateOperationError> {
+        if batches.is_empty() || batches.len() > self.capabilities.max_batches {
+            let error = PredicateApiError::InvalidPolicy(
+                "governed split-evidence batch count is outside discovered limits".to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResources,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_resource_set_summary(output, batches.len(), &self.capabilities)
+            .map_err(classify_controller_split_resource_refusal)
     }
 }
 
@@ -3975,6 +4163,121 @@ fn parse_controller_split_evidence_capabilities(
     })
 }
 
+fn parse_controller_split_resource_capabilities(
+    line: &str,
+) -> Result<ControllerSplitResourceCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split resource capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_resource_cli_version",
+        "policy_version",
+        "controller_envelope_version",
+        "plant_envelope_version",
+        "controller_artifact_version",
+        "plant_artifact_version",
+        "manifest_version",
+        "max_policy_bytes",
+        "max_controller_artifact_bytes",
+        "max_unsat_proof_bytes",
+        "max_plant_artifact_bytes",
+        "max_batches",
+        "max_members_per_batch",
+        "max_horizon",
+        "max_product_states",
+        "refusal_exit",
+        "admission",
+        "verification",
+        "exhaustive_replay",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split resource capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[16..]
+        != [
+            "once",
+            "unsat-miter",
+            "no",
+            "conservative-static-per-batch-and-total",
+            "none",
+            "none",
+            "split-reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split resource trust contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..7]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[7..15]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 7]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[15], keys[15])?;
+    if versions != [1, 1, 1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split resource version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split resource discovered limits are invalid".to_string(),
+        ));
+    }
+    if limits[0] > 4096
+        || limits[1] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+        || limits[2] > unsat_proof::MAX_UNSAT_PROOF_BYTES
+        || limits[3] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+        || limits[4] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+        || limits[5] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+        || limits[6] > controller_plant::MAX_COMPOSITION_HORIZON
+        || limits[7] > controller_plant::MAX_PRODUCT_STATES
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split resource limits exceed client safety ceilings".to_string(),
+        ));
+    }
+    Ok(ControllerSplitResourceCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        controller_envelope_version: versions[2],
+        plant_envelope_version: versions[3],
+        controller_artifact_version: versions[4],
+        plant_artifact_version: versions[5],
+        manifest_version: versions[6],
+        max_policy_bytes: limits[0],
+        max_controller_artifact_bytes: limits[1],
+        max_unsat_proof_bytes: limits[2],
+        max_plant_artifact_bytes: limits[3],
+        max_batches: limits[4],
+        max_members_per_batch: limits[5],
+        max_horizon: limits[6],
+        max_product_states: limits[7],
+        refusal_exit_code: 3,
+    })
+}
+
 fn parse_controller_mtbdd_capabilities(
     line: &str,
 ) -> Result<ControllerMtbddCapabilities, PredicateApiError> {
@@ -4441,6 +4744,279 @@ fn parse_controller_split_set_summary(
             })
         }
     }
+}
+
+fn parse_controller_split_resource_set_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitResourceCapabilities,
+) -> Result<Observed<ControllerSplitResourceSetSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitResourceSetSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource response is not canonical LF text".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        if lines.len() != expected_batches + 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource response line count is invalid".to_string(),
+            ));
+        }
+        let mut batches = Vec::with_capacity(expected_batches);
+        for (expected_index, line) in lines[..expected_batches].iter().enumerate() {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-split-resource-batch",
+                "index",
+                "status",
+                "policy_version",
+                "envelope_version",
+                "artifact_version",
+                "members",
+                "maximum_member_horizon",
+                "maximum_product_states",
+                "transition_evaluation_bound",
+                "safe",
+                "unsafe",
+                "reachable_product_states",
+                "explored_transitions",
+                "artifact_bytes",
+                "verification_micros",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split resource batch fields are invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(&keys[1..])
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            let index = canonical_usize(values[0], "index")?;
+            if index != expected_index || values[1] != "VERIFIED" {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split resource batch order or status is invalid".to_string(),
+                ));
+            }
+            let policy_version = canonical_u32(values[2], "policy_version")?;
+            let envelope_version = canonical_u32(values[3], "envelope_version")?;
+            let artifact_version = canonical_u32(values[4], "artifact_version")?;
+            if policy_version != capabilities.policy_version
+                || envelope_version != capabilities.plant_envelope_version
+                || artifact_version != capabilities.plant_artifact_version
+            {
+                return Err(PredicateApiError::IncompatibleContract(
+                    "controller split resource batch versions changed".to_string(),
+                ));
+            }
+            let numbers = values[5..]
+                .iter()
+                .enumerate()
+                .map(|(index, value)| canonical_usize(value, keys[index + 6]))
+                .collect::<Result<Vec<_>, _>>()?;
+            if numbers[0] == 0
+                || numbers[0] > capabilities.max_members_per_batch
+                || numbers[1] > capabilities.max_horizon
+                || numbers[2] > capabilities.max_product_states
+                || numbers[4].checked_add(numbers[5]) != Some(numbers[0])
+                || numbers[8] == 0
+                || numbers[8] > capabilities.max_plant_artifact_bytes
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split resource batch dimensions are invalid".to_string(),
+                ));
+            }
+            batches.push(ControllerSplitResourceBatchSummary {
+                index,
+                members: numbers[0],
+                maximum_member_horizon: numbers[1],
+                maximum_product_states: numbers[2],
+                transition_evaluation_bound: numbers[3],
+                safe: numbers[4],
+                unsafe_count: numbers[5],
+                reachable_product_states: numbers[6],
+                explored_transitions: numbers[7],
+                artifact_bytes: numbers[8],
+                verification_micros: numbers[9],
+            });
+        }
+        let fields = lines[expected_batches].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-resource-set",
+            "status",
+            "cli_version",
+            "policy_version",
+            "controller_envelope_version",
+            "plant_envelope_version",
+            "controller_admissions",
+            "batches",
+            "members",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "controller_evidence_bytes",
+            "controller_mtbdd_bytes",
+            "equivalence_artifact_bytes",
+            "unsat_proof_bytes",
+            "total_plant_artifact_bytes",
+            "total_transition_evaluation_bound",
+            "admission_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource aggregate fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "VERIFIED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || canonical_u32(values[2], keys[3])? != capabilities.policy_version
+            || canonical_u32(values[3], keys[4])? != capabilities.controller_envelope_version
+            || canonical_u32(values[4], keys[5])? != capabilities.plant_envelope_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split resource aggregate contract changed".to_string(),
+            ));
+        }
+        let numbers = values[5..]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 6]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let summary = ControllerSplitResourceSetSummary {
+            controller_admissions: numbers[0],
+            members: numbers[2],
+            safe: numbers[3],
+            unsafe_count: numbers[4],
+            reachable_product_states: numbers[5],
+            explored_transitions: numbers[6],
+            controller_evidence_bytes: numbers[7],
+            controller_mtbdd_bytes: numbers[8],
+            equivalence_artifact_bytes: numbers[9],
+            unsat_proof_bytes: numbers[10],
+            total_plant_artifact_bytes: numbers[11],
+            total_transition_evaluation_bound: numbers[12],
+            admission_micros: numbers[13],
+            elapsed_micros: numbers[14],
+            batches,
+        };
+        let batch_members = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.members));
+        let batch_safe = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.safe));
+        let batch_unsafe = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.unsafe_count));
+        let batch_reachable = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.reachable_product_states)
+        });
+        let batch_explored = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.explored_transitions)
+        });
+        let batch_artifact_bytes = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.artifact_bytes)
+        });
+        let batch_transition_bound = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.transition_evaluation_bound)
+        });
+        if summary.controller_admissions != 1
+            || numbers[1] != expected_batches
+            || Some(summary.members) != batch_members
+            || Some(summary.safe) != batch_safe
+            || Some(summary.unsafe_count) != batch_unsafe
+            || Some(summary.reachable_product_states) != batch_reachable
+            || Some(summary.explored_transitions) != batch_explored
+            || Some(summary.total_plant_artifact_bytes) != batch_artifact_bytes
+            || Some(summary.total_transition_evaluation_bound) != batch_transition_bound
+            || summary.controller_evidence_bytes == 0
+            || summary.controller_evidence_bytes > capabilities.max_controller_artifact_bytes
+            || summary.controller_mtbdd_bytes == 0
+            || summary.equivalence_artifact_bytes == 0
+            || summary.unsat_proof_bytes == 0
+            || summary.unsat_proof_bytes > capabilities.max_unsat_proof_bytes
+            || summary.controller_mtbdd_bytes >= summary.controller_evidence_bytes
+            || summary.equivalence_artifact_bytes >= summary.controller_evidence_bytes
+            || summary
+                .controller_mtbdd_bytes
+                .checked_add(summary.equivalence_artifact_bytes)
+                .is_none_or(|payload| payload >= summary.controller_evidence_bytes)
+            || summary.unsat_proof_bytes > summary.equivalence_artifact_bytes
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource aggregate does not reconcile".to_string(),
+            ));
+        }
+        Ok(summary)
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn classify_controller_split_resource_refusal(
+    mut failure: PredicateOperationError,
+) -> PredicateOperationError {
+    let reason = match failure.error.as_ref() {
+        PredicateApiError::CommandFailed {
+            exit_code: Some(3),
+            stderr,
+        } => stderr
+            .trim_end_matches(['\r', '\n'])
+            .strip_prefix("error: controller-split-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none"))
+            .and_then(|value| match value {
+                "controller-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::ControllerArtifactBytes)
+                }
+                "unsat-proof-bytes" => Some(ControllerPlantResourceRefusalReason::UnsatProofBytes),
+                "batches" => Some(ControllerPlantResourceRefusalReason::Batches),
+                "plant-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::PlantArtifactBytes)
+                }
+                "members-per-batch" => Some(ControllerPlantResourceRefusalReason::MembersPerBatch),
+                "horizon" => Some(ControllerPlantResourceRefusalReason::Horizon),
+                "product-states" => Some(ControllerPlantResourceRefusalReason::ProductStates),
+                "transitions-per-batch" => {
+                    Some(ControllerPlantResourceRefusalReason::TransitionsPerBatch)
+                }
+                "total-plant-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::TotalPlantArtifactBytes)
+                }
+                "total-members" => Some(ControllerPlantResourceRefusalReason::TotalMembers),
+                "total-transition-evaluations" => {
+                    Some(ControllerPlantResourceRefusalReason::TotalTransitionEvaluations)
+                }
+                _ => None,
+            }),
+        _ => None,
+    };
+    if let Some(reason) = reason {
+        let error = PredicateApiError::ResourceRefused { reason };
+        failure.metrics.status = InvocationStatus::Failed(error.failure_class());
+        failure.error = Box::new(error);
+    }
+    failure
 }
 
 fn parse_controller_mtbdd_summary(
@@ -4963,6 +5539,31 @@ mod tests {
             canonical.replace('\n', "\r\n"),
         ] {
             assert!(parse_controller_split_evidence_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_split_resource_capability_parser_is_strict() {
+        let canonical = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_split_resource_capabilities(canonical).unwrap();
+        assert_eq!(parsed.policy_version, 1);
+        assert_eq!(parsed.max_batches, 64);
+        for hostile in [
+            canonical.replace("admission=once", "admission=per-batch"),
+            canonical.replace("verification=unsat-miter", "verification=trusted"),
+            canonical.replace(
+                "accounting=conservative-static-per-batch-and-total",
+                "accounting=measured",
+            ),
+            canonical.replace("timing_calibration=none", "timing_calibration=per-formula"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("refusal_exit=3", "refusal_exit=2"),
+            canonical.replace("max_batches=64", "max_batches=65"),
+            canonical.replace("max_policy_bytes=4096", "max_policy_bytes=0"),
+            canonical.replace("refusal_schema=split-reason-v1", "refusal_schema=free-text"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_split_resource_capabilities(&hostile).is_err());
         }
     }
 
