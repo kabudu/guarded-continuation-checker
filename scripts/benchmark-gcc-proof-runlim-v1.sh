@@ -8,9 +8,11 @@ set -euo pipefail
 gcc_output=$(cd "$1" && pwd)
 certifaiger_output=$(cd "$2" && pwd)
 output=$3
+manifest=${output%.csv}.manifest-v1.txt
 trials=${TRIALS:-3}
 [[ $trials =~ ^[1-9][0-9]*$ && $trials -le 10 ]] || { echo "TRIALS must be in 1..=10" >&2; exit 2; }
 [[ ! -e "$output" ]] || { echo "refusing to overwrite $output" >&2; exit 2; }
+[[ ! -e "$manifest" ]] || { echo "refusing to overwrite $manifest" >&2; exit 2; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 runtime_image=${GCC_RUNTIME_IMAGE:-rust@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-proof-runlim.XXXXXXXX")
@@ -31,7 +33,7 @@ for trial in $(seq 1 "$trials"); do
   for operation in create verify; do
     args=(verify-controller-proof-mtbdd-plant-batch)
     [[ $operation == create ]] && args=(certify-controller-proof-mtbdd-plant-batch)
-    docker run --rm --network none \
+    docker run --rm --network none --user "$(id -u):$(id -g)" \
       -v "$gcc_output:/gcc:ro" -v "$certifaiger_output/bin:/cert:ro" \
       -v "$repo_root:/repo:ro" -v "$scratch:/out" \
       "$runtime_image" \
@@ -44,8 +46,19 @@ for trial in $(seq 1 "$trials"); do
   done
   hash=$(sha256sum "$artifact" | cut -d' ' -f1)
   deterministic=true
-  if [[ -z "$reference" ]]; then reference=$hash; elif [[ $hash != "$reference" ]]; then deterministic=false; fi
   evidence_bytes=$(wc -c < "$artifact" | tr -d ' ')
+  if [[ -z "$reference" ]]; then
+    reference=$hash
+    {
+      printf 'schema_version=1\n'
+      printf 'source_manifest_sha256=%s\n' "$(sha256sum "$repo_root/corpus/rtl/wmcontroller/physical-plant-batch-v1.txt" | cut -d' ' -f1)"
+      printf 'tool_sha256=%s\n' "$(sha256sum "$binary" | cut -d' ' -f1)"
+      printf 'evidence_bytes=%s\n' "$evidence_bytes"
+      printf 'batch_proof_sha256=%s\n' "$hash"
+    } > "$manifest"
+  elif [[ $hash != "$reference" ]]; then
+    deterministic=false
+  fi
   for operation in create verify; do
     printf '1,%s,%s,%s,%s,%s,%s,true,%s,ok\n' \
       "$trial" "$operation" \
@@ -56,3 +69,4 @@ for trial in $(seq 1 "$trials"); do
 done
 awk -F, 'NR > 1 && $9 != "true" {exit 1}' "$output"
 echo "GCC proof runlim benchmark status=MEASURED trials=$trials output=$output"
+echo "GCC proof manifest status=RETAINED output=$manifest"

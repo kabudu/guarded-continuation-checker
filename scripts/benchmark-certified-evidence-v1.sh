@@ -8,9 +8,11 @@ set -euo pipefail
 ric3_output=$(cd "$1" && pwd)
 certifaiger_output=$(cd "$2" && pwd)
 output=$3
+manifest=${output%.csv}.manifest-v1.txt
 trials=${TRIALS:-3}
 [[ $trials =~ ^[1-9][0-9]*$ && $trials -le 10 ]] || { echo "TRIALS must be in 1..=10" >&2; exit 2; }
 [[ ! -e "$output" ]] || { echo "refusing to overwrite $output" >&2; exit 2; }
+[[ ! -e "$manifest" ]] || { echo "refusing to overwrite $manifest" >&2; exit 2; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ric3_image=${RIC3_IMAGE:-gcc-ric3-qualification:v1-arm64}
 certifaiger_image=${CERTIFAIGER_IMAGE:-gcc-certifaiger-qualification:v1-arm64}
@@ -41,14 +43,27 @@ for trial in $(seq 1 "$trials"); do
     -v "$trial_dir:/out" "$certifaiger_image" \
     /cert/runlim -p -r 300 --sample-rate=1000 -o /out/consumer.runlim \
     /repo/scripts/certified-evidence-container-v1.sh consume
-  hashes=$(cd "$trial_dir" && sha256sum property-*.witness.aag | sed 's/  .*/ /')
+  hashes=$(cd "$trial_dir" && sha256sum property-*.witness.aag)
+  evidence_bytes=$(wc -c "$trial_dir"/property-*.witness.aag | awk 'END {print $1}')
   deterministic=true
   if [[ -z "$reference" ]]; then
     reference=$hashes
+    {
+      printf 'schema_version=1\n'
+      printf 'qualification_lock_sha256=%s\n' "$(sha256sum "$repo_root/tools/certifaiger-qualification-v1.lock" | cut -d' ' -f1)"
+      printf 'model_manifest_sha256=%s\n' "$(sha256sum "$repo_root/corpus/rtl/wmcontroller/certified-baseline-v1/manifest-v1.txt" | cut -d' ' -f1)"
+      printf 'producer_binary_sha256=%s\n' "$(sha256sum "$ric3_output/ric3" | cut -d' ' -f1)"
+      printf 'consumer_tree_sha256=%s\n' "$(cd "$certifaiger_output/bin" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+      printf 'evidence_bytes=%s\n' "$evidence_bytes"
+      while read -r digest file; do
+        property=${file#property-}
+        property=${property%.witness.aag}
+        printf 'property_%s_witness_sha256=%s\n' "$property" "$digest"
+      done <<< "$hashes"
+    } > "$manifest"
   elif [[ "$hashes" != "$reference" ]]; then
     deterministic=false
   fi
-  evidence_bytes=$(wc -c "$trial_dir"/property-*.witness.aag | awk 'END {print $1}')
   for operation in producer consumer; do
     printf '1,%s,%s,%s,%s,%s,%s,%s,%s,true,%s,ok\n' \
       "$trial" "$operation" \
@@ -60,3 +75,4 @@ for trial in $(seq 1 "$trials"); do
 done
 awk -F, 'NR > 1 && $11 != "true" {exit 1}' "$output"
 echo "certified evidence benchmark status=MEASURED trials=$trials output=$output"
+echo "certified evidence manifest status=RETAINED output=$manifest"
