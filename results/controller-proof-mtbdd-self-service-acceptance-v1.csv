@@ -1,0 +1,10 @@
+schema_version,case,expected_answer,actual_answer,expected_bad_frame,actual_bad_frame,proof_verified,status
+1,member-0,UNSAFE,UNSAFE,4,4,true,accepted
+1,member-1,UNSAFE,UNSAFE,7,7,true,accepted
+1,member-2,UNSAFE,UNSAFE,15,15,true,accepted
+1,member-3,UNSAFE,UNSAFE,15,15,true,accepted
+1,member-4,SAFE,SAFE,none,none,true,accepted
+1,member-5,SAFE,SAFE,none,none,true,accepted
+1,manifest-drift,REJECTED,REJECTED,none,none,false,accepted
+1,artifact-mutation,REJECTED,REJECTED,none,none,false,accepted
+1,output-collision,REJECTED,REJECTED,none,none,false,accepted

@@ -35,6 +35,7 @@ const EVIDENCE_TOTAL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
 const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
+const CONTROLLER_PROOF_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
@@ -25076,6 +25077,31 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "controller-proof-mtbdd-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-proof-mtbdd-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_proof_mtbdd_cli_version={CONTROLLER_PROOF_MTBDD_CLI_VERSION} mtbdd_version={} equivalence_proof_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_state_bits={} max_inputs={} max_outputs={} max_nodes={} max_terminals={} max_horizon={} verification=unsat-miter exhaustive_replay=no unsupported=fail-closed",
+                controller_mtbdd::CONTROLLER_MTBDD_VERSION,
+                guarded_continuation_checker::controller_mtbdd_proof::CONTROLLER_MTBDD_EQUIVALENCE_VERSION,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                controller_mtbdd::MAX_MTBDD_STATE_BITS,
+                controller_mtbdd::MAX_MTBDD_INPUTS,
+                controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                controller_mtbdd::MAX_MTBDD_NODES,
+                controller_mtbdd::MAX_MTBDD_TERMINALS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+            );
+            Ok(true)
+        }
         "controller-plant-portfolio-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -25207,6 +25233,160 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     },
                     member.horizon,
                     member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
+        "certify-controller-proof-mtbdd-plant-batch"
+        | "verify-controller-proof-mtbdd-plant-batch" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-proof-mtbdd-plant-batch" {
+                        "OUTPUT.proof-mtbdd-plant"
+                    } else {
+                        "INPUT.proof-mtbdd-plant"
+                    }
+                ));
+            }
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let source_pairs = plants
+                .iter()
+                .zip(&plant_digests)
+                .map(|(plant, &digest)| (plant, digest))
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            let (encoded, action) = if command == "certify-controller-proof-mtbdd-plant-batch" {
+                let mtbdd = controller_mtbdd::produce_controller_mtbdd(
+                    &controller,
+                    controller_digest,
+                    &manifest.relevant_inputs,
+                    &manifest.observed_outputs,
+                )
+                .map_err(|error| error.to_string())?;
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let artifact =
+                    controller_plant_artifact::produce_controller_proof_mtbdd_plant_artifact(
+                        &controller,
+                        controller_digest,
+                        &mtbdd,
+                        &inputs,
+                    )
+                    .map_err(|error| error.to_string())?;
+                let encoded =
+                    controller_plant_artifact::encode_controller_proof_mtbdd_plant_artifact(
+                        &artifact,
+                    )
+                    .map_err(|error| error.to_string())?;
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED")
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "proof-carrying controller MTBDD plant artifact",
+                    )?,
+                    "VERIFIED",
+                )
+            };
+            let outer =
+                controller_plant_artifact::decode_controller_proof_mtbdd_plant_artifact(&encoded)
+                    .map_err(|error| error.to_string())?;
+            let inner = controller_plant_artifact::decode_controller_mtbdd_plant_artifact(
+                &outer.controller_mtbdd_plant,
+            )
+            .map_err(|error| error.to_string())?;
+            let decoded_mtbdd = controller_mtbdd::decode_controller_mtbdd(&inner.controller_mtbdd)
+                .map_err(|error| error.to_string())?;
+            if decoded_mtbdd.relevant_inputs != manifest.relevant_inputs
+                || decoded_mtbdd.observed_outputs != manifest.observed_outputs
+                || inner.members.len() != manifest.members.len()
+            {
+                return Err(
+                    "proof-carrying controller MTBDD plant artifact does not match manifest boundary"
+                        .to_string(),
+                );
+            }
+            for ((claimed, expected), expected_digest) in inner
+                .members
+                .iter()
+                .zip(&manifest.members)
+                .zip(&plant_digests)
+            {
+                if claimed.plant_source_sha256 != *expected_digest
+                    || claimed.wiring != expected.wiring
+                    || claimed.initial_controller_state != expected.initial_controller_state
+                    || claimed.initial_plant_state != expected.initial_plant_state
+                    || claimed.bad_plant_output != expected.bad_plant_output
+                    || claimed.horizon != expected.horizon
+                {
+                    return Err(
+                        "proof-carrying controller MTBDD plant artifact does not match manifest member"
+                            .to_string(),
+                    );
+                }
+            }
+            let summary = controller_plant_artifact::verify_controller_proof_mtbdd_plant_artifact(
+                &controller,
+                controller_digest,
+                &source_pairs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            println!(
+                "controller-proof-mtbdd-plant-batch status={action} cli_version={CONTROLLER_PROOF_MTBDD_CLI_VERSION} artifact_version={} members={} safe={} unsafe={} mtbdd_nodes={} mtbdd_terminals={} assignments_checked={} reachable_product_states={} explored_transitions={} artifact_bytes={} elapsed_micros={}{}",
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.mtbdd_nodes,
+                summary.mtbdd_terminals,
+                summary.assignments_checked,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if action == "CREATED" {
+                    format!(" output={}", args[2])
+                } else {
+                    String::new()
+                }
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-plant-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe =>
+                            "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe =>
+                            "UNSAFE",
+                    },
+                    member.horizon,
+                    member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |frame| frame.to_string()),
                     member.trace.len(),
                     member.reachable_product_states,
                     member.explored_transitions,

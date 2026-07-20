@@ -1,0 +1,13 @@
+schema_version,profile,operation,trial,artifact_bytes,elapsed_micros,assignments_checked,answers_agree,status
+1,compact,create,1,8549,3792017,131072,true,ok
+1,compact,verify,1,8549,1504322,131072,true,ok
+1,proof,create,1,251221,2317829,0,true,ok
+1,proof,verify,1,251221,769565,0,true,ok
+1,compact,create,2,8549,3762258,131072,true,ok
+1,compact,verify,2,8549,1518133,131072,true,ok
+1,proof,create,2,251221,2327885,0,true,ok
+1,proof,verify,2,251221,764125,0,true,ok
+1,compact,create,3,8549,3764247,131072,true,ok
+1,compact,verify,3,8549,1500370,131072,true,ok
+1,proof,create,3,251221,2338928,0,true,ok
+1,proof,verify,3,251221,779584,0,true,ok

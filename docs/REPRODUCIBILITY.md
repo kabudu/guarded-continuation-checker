@@ -1,5 +1,26 @@
 # Reproducibility
 
+## Proof-carrying MTBDD self-service profile
+
+```sh
+cargo build --release --locked
+scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-proof-acceptance.csv
+scripts/benchmark-controller-proof-mtbdd-process.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-proof-process.csv
+scripts/benchmark-controller-proof-mtbdd-resources.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-proof-resources.csv
+```
+
+Both scripts refuse to overwrite output. Set `TRIALS` from 1 to 20 for the
+process benchmark; the retained arm64 result uses the default five. The
+three-trial hosted Linux results are retained separately as
+`results/controller-proof-mtbdd-process-linux-v1.csv` and
+`results/controller-proof-mtbdd-resources-linux-v1.csv`.
+
 ## Environment
 
 - Rust 1.97.0 (pinned by `rust-toolchain.toml`)

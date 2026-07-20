@@ -51,12 +51,21 @@ semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.
 The follow-up [equivalence-proof experiment](docs/CONTROLLER_MTBDD_EQUIVALENCE_PROOF_V1.md)
 replaces exhaustive controller replay with a source-bound UNSAT miter proof.
+Its separate [proof-carrying CLI v1](docs/CONTROLLER_PROOF_MTBDD_CLI_V1.md)
+provides create-new file workflows and a typed, bounded Rust process client
+without changing the compact CLI contract.
+The first [whole-process baseline](docs/CONTROLLER_PROOF_MTBDD_PROCESS_V1.md)
+retains a 2.00x median verification improvement and 1.64x creation improvement
+on the public six-property batch, at the same 29.39x artifact-size cost.
 One retained arm64 run checks that proof about 121.6 times faster. Its
 [full plant integration](docs/PROOF_CARRYING_MTBDD_EQUIVALENCE_V1.md) reduces
 median verification for the six-member public physical-plant batch from 1.749
 seconds to 0.870 seconds with exact answer agreement. The artifact is 29.39
 times larger, so this is an explicit fast-verification profile rather than the
-compact portfolio default. Hosted and whole-process validation remain open.
+compact portfolio default. A hosted Linux whole-process run reproduces 1.62x
+faster creation and 1.95x faster verification, while retaining the negative
+verification-memory tradeoff. Identical-scope maintained-tool comparison and
+independent acceptance remain open.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

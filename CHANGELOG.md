@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Add proof-carrying controller MTBDD CLI v1 and the typed
+  `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the
+  canonical plant manifest, enforce create-new output, source and query binding,
+  bounded UNSAT-miter verification, deterministic bytes, typed observations,
+  and fail-closed mutation and drift handling. Discovery reports separate outer
+  equivalence-artifact and embedded UNSAT-proof byte limits.
+  Retain a nine-case public self-service acceptance fixture covering exact
+  SAFE/UNSAFE answers, shortest bad frames, proof verification, manifest drift,
+  artifact mutation, and output collision.
+  Add a five-trial release-build whole-process baseline retaining exact answer
+  agreement, 1.64x faster median creation, and 2.00x faster median verification
+  at the existing 29.39x artifact-size cost. Retain the negative resource
+  result: proof peak RSS is 1.29x higher for creation and 2.39x higher for
+  verification on the measured arm64 host. Retain a GitHub-hosted Linux x86_64
+  replication with exact agreement, 1.62x faster proof creation, 1.95x faster
+  proof verification, nearly tied creation RSS, and 1.77x higher proof-verifier
+  RSS.
+
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch
   artifacts. On the public 131,072-assignment controller, one retained arm64
