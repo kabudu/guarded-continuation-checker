@@ -39,9 +39,19 @@ EOF
 "$binary" certify-controller-plant-portfolio \
   "$fallback_manifest" "$fallback_artifact" >/dev/null
 
-admitted=$("$binary" verify-controller-plant-portfolio-resources \
+verify_governed() {
+  if [ "$(uname -s)" = Linux ]; then
+    command -v prlimit >/dev/null
+    prlimit --as=67108864 -- \
+      "$binary" verify-controller-plant-portfolio-resources "$@"
+  else
+    "$binary" verify-controller-plant-portfolio-resources "$@"
+  fi
+}
+
+admitted=$(verify_governed \
   "$admitted_manifest" "$permissive" "$admitted_artifact")
-fallback=$("$binary" verify-controller-plant-portfolio-resources \
+fallback=$(verify_governed \
   "$fallback_manifest" "$permissive" "$fallback_artifact")
 
 field() {
@@ -72,8 +82,7 @@ run_failure() {
   artifact=$3
   expected_exit=$4
   expected=$5
-  if failure=$("$binary" verify-controller-plant-portfolio-resources \
-    "$manifest" "$policy" "$artifact" 2>&1); then
+  if failure=$(verify_governed "$manifest" "$policy" "$artifact" 2>&1); then
     echo "governed verification unexpectedly succeeded" >&2
     exit 1
   else

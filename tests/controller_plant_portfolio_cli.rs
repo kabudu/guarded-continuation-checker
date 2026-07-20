@@ -1,7 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+#[cfg(all(unix, not(target_os = "macos")))]
+use std::time::Duration;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+use guarded_continuation_checker::ExecutionPolicy;
 use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason, ControllerPlantPortfolioTool,
     ControllerPlantResourceRefusalReason, ControllerPlantResourceTool, FailureClass,
@@ -171,6 +175,40 @@ fn portfolio_cli_routes_to_exact_fallback_and_rejects_drift() {
         refusal.metrics.status,
         InvocationStatus::Failed(FailureClass::ResourceRefusal)
     );
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let execution = ExecutionPolicy::new(Duration::from_secs(30), 64 * 1024)
+            .unwrap()
+            .with_file_limit(16 * 1024 * 1024)
+            .unwrap()
+            .with_memory_limit(64 * 1024 * 1024)
+            .unwrap();
+        let constrained = ControllerPlantResourceTool::discover_with_policy(BINARY, execution)
+            .expect("resource discovery must fit the constrained Linux policy");
+        let verified = constrained
+            .verify_observed(&manifest, &root.join("resource-policy.txt"), &artifact)
+            .expect("governed verification must fit the constrained Linux policy");
+        assert_eq!(verified.value.transition_evaluation_bound, 40);
+        assert_eq!(verified.metrics.timeout, Duration::from_secs(30));
+        assert_eq!(verified.metrics.output_limit_bytes, 64 * 1024);
+        assert_eq!(verified.metrics.file_limit_bytes, 16 * 1024 * 1024);
+        assert_eq!(verified.metrics.memory_limit_bytes, Some(64 * 1024 * 1024));
+        assert!(verified.metrics.process_group_containment);
+        let refused = constrained
+            .verify_observed(&manifest, &tight_policy, &artifact)
+            .unwrap_err();
+        assert!(matches!(
+            refused.error.as_ref(),
+            PredicateApiError::ResourceRefused {
+                reason: ControllerPlantResourceRefusalReason::TransitionEvaluations
+            }
+        ));
+        assert_eq!(
+            refused.metrics.status,
+            InvocationStatus::Failed(FailureClass::ResourceRefusal)
+        );
+        assert_eq!(refused.metrics.memory_limit_bytes, Some(64 * 1024 * 1024));
+    }
     for (name, body) in [
         ("crlf-policy.txt", policy.replace('\n', "\r\n")),
         (

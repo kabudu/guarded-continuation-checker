@@ -13,8 +13,11 @@
   `ControllerPlantResourceTool` with strict response parsing and invocation
   metrics. Distinguish policy refusal with exit code 3, five versioned refusal
   reasons, no logical answer, a typed `ResourceRefused` error, and the
-  `resource_refusal` metrics class. Linux enforcement evidence and independent
-  constrained-workflow acceptance remain open. Add a reproducible six-job
+  `resource_refusal` metrics class. Correlate the typed client with a 30-second
+  deadline, 64 KiB output cap, 16 MiB file cap, 64 MiB Linux address-space
+  ceiling, and process-group containment. Run every governed verification in
+  the release-build acceptance pipeline under the same Linux address-space
+  ceiling. Independent constrained-workflow acceptance remains open. Add a reproducible six-job
   release-build acceptance pipeline with two exact verified batches, two valid
   policy refusals, malformed-policy and corrupt-evidence controls, and a
   byte-stable aggregate retaining every row. Preserve 3 SAFE and 5 UNSAFE

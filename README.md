@@ -54,7 +54,10 @@ semantic replay without turning a refusal into a verification answer. A
 canonical policy CLI and typed process client now expose the same boundary for
 self-service integrations. Resource refusals use a versioned reason, exit code
 3, and no logical answer, while malformed input remains a tool error. Linux
-enforcement correlation and independent constrained acceptance are still open.
+enforcement now covers a typed direct-exact regression and every governed job
+in the release-build acceptance pipeline under a 64 MiB address-space ceiling.
+That ceiling is not an RSS measurement. Independent constrained acceptance is
+still open.
 The retained six-job acceptance pipeline aggregates two verified batches, two
 valid refusals, and two invalid-input controls without dropping any row or
 inventing a logical answer for rejected work. This is simulated self-service
