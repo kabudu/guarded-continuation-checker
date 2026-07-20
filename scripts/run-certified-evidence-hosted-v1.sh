@@ -70,6 +70,12 @@ CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
   /tmp/gcc-output/guarded-continuation-checker \
   /tmp/certifaiger-input/certifaiger /tmp/certifaiger-output \
   "$output/composed-witness-baseline-amd64-v1.csv"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-changing-plant-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/changing-plant-composed-witness-amd64-v1.csv"
 
 TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \

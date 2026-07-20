@@ -151,6 +151,27 @@ faithful baseline leaves the gate open and produces no positive result.
    controls pass. Version 1 rejects liveness and comment-based mappings instead
    of dropping them; broader section support remains open.
 4. Validate every SAFE output with qualified Certifaiger and `lrat_isa`.
+   Complete locally for the first comparison family: all eight individual
+   witnesses and all four distinct-property compositions pass Certifaiger
+   10.2.0 with `lrat_isa` checking the generated proofs. The composed witness
+   total is 9,665 bytes versus 19,164 bytes for the eight separate witnesses,
+   a 49.57% reduction. This is disconfirming evidence against a broad GCC
+   evidence-size advantage.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
 6. Retain manifests, raw measurements, hostile results, and tool provenance.
 7. Update the novelty register with the result, including a negative result.
+
+## Interim result boundary
+
+The safety-only merger now demonstrates the actual multi-property construction,
+not only self-composition. Four shared models contain properties 15 and 16. For
+each model, pinned rIC3 generates one witness from each corresponding
+single-property model; GCC's paper-derived baseline composes them; and the
+qualified independent checker accepts the result against the shared model.
+
+This does not close the experiment. Producer and consumer resource measurements,
+the predeclared one-plant replacement, hosted amd64 reproduction, broader AIGER
+section support, and independent implementation review remain open. Most
+importantly, the result confirms that established composed witnesses already
+remove almost half of the repeated evidence bytes. Only cross-plant reuse of
+controller-local semantics remains a plausible distinction.

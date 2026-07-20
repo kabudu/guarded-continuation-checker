@@ -20,6 +20,15 @@ pub struct ControllerPlantAigerExport {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantAigerMultiExport {
+    pub version: u32,
+    pub horizon: usize,
+    pub bad_plant_outputs: Vec<usize>,
+    pub external_plant_inputs: Vec<usize>,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerPlantAigerExportError(pub String);
 
 impl fmt::Display for ControllerPlantAigerExportError {
@@ -134,6 +143,30 @@ impl Builder {
         }
         text.into_bytes()
     }
+
+    fn finish_bads(self, bads: &[usize]) -> Vec<u8> {
+        let mut text = format!(
+            "aag {} {} {} 0 {} {} 0 0 0\n",
+            self.next_variable,
+            self.inputs.len(),
+            self.latches.len(),
+            self.ands.len(),
+            bads.len(),
+        );
+        for literal in self.inputs {
+            text.push_str(&format!("{literal}\n"));
+        }
+        for (current, next) in self.latches {
+            text.push_str(&format!("{current} {next} 0\n"));
+        }
+        for bad in bads {
+            text.push_str(&format!("{bad}\n"));
+        }
+        for (output, left, right) in self.ands {
+            text.push_str(&format!("{output} {left} {right}\n"));
+        }
+        text.into_bytes()
+    }
 }
 
 fn mapped(
@@ -163,21 +196,16 @@ fn append_gates(
     Ok(())
 }
 
-/// Exports one sampled controller/plant property as an unbounded AIGER safety model.
-///
-/// Frames `0..=horizon` retain the original bad predicate. The next state after
-/// the final checked frame is an absorbing completed state whose bad output is
-/// false, making unbounded safety equivalent to the bounded source query.
 #[allow(clippy::too_many_arguments)]
-pub fn export_bounded_controller_plant_aag(
+fn build_bounded_controller_plant_aag(
     controller: &AigerTransition,
     plant: &AigerTransition,
     wiring: &ControllerPlantWiring,
     initial_controller_state: usize,
     initial_plant_state: usize,
-    bad_plant_output: usize,
+    bad_plant_outputs: &[usize],
     horizon: usize,
-) -> Result<ControllerPlantAigerExport, ControllerPlantAigerExportError> {
+) -> Result<(Vec<usize>, Builder, Vec<usize>), ControllerPlantAigerExportError> {
     controller
         .validate()
         .map_err(|error| reject(error.to_string()))?;
@@ -187,19 +215,33 @@ pub fn export_bounded_controller_plant_aag(
     if initial_controller_state != 0 || initial_plant_state != 0 {
         return Err(reject("AIGER export v1 requires all-zero initial states"));
     }
-    if horizon > MAX_EXPORT_HORIZON || bad_plant_output >= plant.outputs.len() {
+    if horizon > MAX_EXPORT_HORIZON
+        || bad_plant_outputs.is_empty()
+        || bad_plant_outputs.len() > 64
+        || bad_plant_outputs
+            .iter()
+            .any(|&output| output >= plant.outputs.len())
+        || bad_plant_outputs
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .len()
+            != bad_plant_outputs.len()
+    {
         return Err(reject("AIGER export query is outside limits"));
     }
-    compose_controller_plant_direct(
-        controller,
-        plant,
-        wiring,
-        initial_controller_state,
-        initial_plant_state,
-        bad_plant_output,
-        horizon,
-    )
-    .map_err(|error| reject(error.to_string()))?;
+    for &bad_plant_output in bad_plant_outputs {
+        compose_controller_plant_direct(
+            controller,
+            plant,
+            wiring,
+            initial_controller_state,
+            initial_plant_state,
+            bad_plant_output,
+            horizon,
+        )
+        .map_err(|error| reject(error.to_string()))?;
+    }
 
     let action_inputs = wiring
         .plant_action_inputs
@@ -305,14 +347,75 @@ pub fn export_bounded_controller_plant_aag(
         let next = builder.mux(done, current, incremented);
         builder.set_latch_next(current, next)?;
     }
-    let source_bad = mapped(plant.outputs[bad_plant_output], &plant_map)?;
-    let bad = builder.and(source_bad, done ^ 1);
+    let mut bads = Vec::with_capacity(bad_plant_outputs.len());
+    for &bad_plant_output in bad_plant_outputs {
+        let source_bad = mapped(plant.outputs[bad_plant_output], &plant_map)?;
+        bads.push(builder.and(source_bad, done ^ 1));
+    }
+
+    Ok((external_plant_inputs, builder, bads))
+}
+
+/// Exports one sampled controller/plant property as an unbounded AIGER safety model.
+///
+/// Frames `0..=horizon` retain the original bad predicate. The next state after
+/// the final checked frame is an absorbing completed state whose bad output is
+/// false, making unbounded safety equivalent to the bounded source query.
+#[allow(clippy::too_many_arguments)]
+pub fn export_bounded_controller_plant_aag(
+    controller: &AigerTransition,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+) -> Result<ControllerPlantAigerExport, ControllerPlantAigerExportError> {
+    let (external_plant_inputs, builder, bads) = build_bounded_controller_plant_aag(
+        controller,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        &[bad_plant_output],
+        horizon,
+    )?;
 
     Ok(ControllerPlantAigerExport {
         version: CONTROLLER_PLANT_AIGER_EXPORT_VERSION,
         horizon,
         bad_plant_output,
         external_plant_inputs,
-        bytes: builder.finish(bad),
+        bytes: builder.finish(bads[0]),
+    })
+}
+
+/// Exports several sampled properties in one AIGER 1.9 model with explicit bad
+/// sections. Transition logic and the checked horizon are shared exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn export_bounded_controller_plant_multi_aag(
+    controller: &AigerTransition,
+    plant: &AigerTransition,
+    wiring: &ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_outputs: &[usize],
+    horizon: usize,
+) -> Result<ControllerPlantAigerMultiExport, ControllerPlantAigerExportError> {
+    let (external_plant_inputs, builder, bads) = build_bounded_controller_plant_aag(
+        controller,
+        plant,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_outputs,
+        horizon,
+    )?;
+    Ok(ControllerPlantAigerMultiExport {
+        version: CONTROLLER_PLANT_AIGER_EXPORT_VERSION,
+        horizon,
+        bad_plant_outputs: bad_plant_outputs.to_vec(),
+        external_plant_inputs,
+        bytes: builder.finish_bads(&bads),
     })
 }

@@ -25,6 +25,8 @@ jobs:
             scripts/certified-evidence-container-v1.sh \
             scripts/benchmark-certified-evidence-v1.sh \
             scripts/benchmark-gcc-proof-runlim-v1.sh \
+            scripts/test-composed-witness-baseline-v1.sh \
+            scripts/benchmark-changing-plant-composed-witness-v1.sh \
             scripts/test-certified-evidence-hostile-v1.sh
           scripts/run-certified-evidence-hosted-v1.sh /tmp/evidence-results
           cat /tmp/evidence-results/*.csv
@@ -55,6 +57,8 @@ jobs:
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Reproduce composed-witness model exports
+        run: scripts/test-composed-witness-model-exports-v1.sh
       - name: Check BTOR2 baseline scripts
         run: |
           shellcheck -s sh \

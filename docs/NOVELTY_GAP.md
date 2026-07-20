@@ -69,6 +69,14 @@ not a systematic or professional patent search.
    CaDiCaL and the formally verified `lrat_isa` checker. The remaining gate is
    a direct comparison with the FM 2026 composed multi-property witness, not a
    missing formally verified SAT-proof consumer.
+   The first faithful safety-only implementation now composes two distinct SAFE
+   property witnesses for each of four changing plants. Qualified Certifaiger
+   plus `lrat_isa` accepts every individual and composed witness. Composition
+   reduces the eight witnesses from 19,164 to 9,665 bytes, a 49.57% reduction.
+   This is a negative result for any broad evidence-size distinction. Hosted
+   reproduction, resource measurement, one-plant replacement accounting, and
+   independent implementation review remain open before the narrower
+   controller-reuse question can be judged.
 5. Search papers, tools, patents and current implementations for the complete
    proposed combination, recording both confirming and disconfirming evidence.
 6. Obtain external expert review of the scoped claim.

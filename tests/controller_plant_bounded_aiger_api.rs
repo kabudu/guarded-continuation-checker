@@ -6,6 +6,7 @@ use guarded_continuation_checker::controller_plant::{
 };
 use guarded_continuation_checker::controller_plant_aiger::{
     CONTROLLER_PLANT_AIGER_EXPORT_VERSION, export_bounded_controller_plant_aag,
+    export_bounded_controller_plant_multi_aag,
 };
 
 const CONTROLLER: &[u8] = include_bytes!("../corpus/rtl/wmcontroller/generated/controller.aag");
@@ -23,7 +24,7 @@ const PERSISTENT_DISTURBANCE_PLANT: &[u8] = include_bytes!(
 struct IndependentAag {
     inputs: Vec<usize>,
     latches: Vec<(usize, usize)>,
-    output: usize,
+    outputs: Vec<usize>,
     ands: Vec<(usize, usize, usize)>,
     max_variable: usize,
 }
@@ -40,9 +41,15 @@ fn parse_independently(bytes: &[u8]) -> IndependentAag {
     let max_variable = number(header.next());
     let input_count = number(header.next());
     let latch_count = number(header.next());
-    assert_eq!(number(header.next()), 1);
+    let output_count = number(header.next());
     let and_count = number(header.next());
-    assert!(header.next().is_none());
+    let extension = header
+        .map(|value| value.parse::<usize>().unwrap())
+        .collect::<Vec<_>>();
+    assert!(extension.len() <= 4);
+    let bad_count = extension.first().copied().unwrap_or(0);
+    assert!(extension.iter().skip(1).all(|&count| count == 0));
+    assert!((output_count == 1 && bad_count == 0) || (output_count == 0 && bad_count > 0));
     assert_eq!(max_variable, input_count + latch_count + and_count);
     let inputs = (0..input_count)
         .map(|_| number(lines.next()))
@@ -57,7 +64,10 @@ fn parse_independently(bytes: &[u8]) -> IndependentAag {
             (current, next)
         })
         .collect::<Vec<_>>();
-    let output = number(lines.next());
+    let mut outputs = (0..output_count)
+        .map(|_| number(lines.next()))
+        .collect::<Vec<_>>();
+    outputs.extend((0..bad_count).map(|_| number(lines.next())));
     let ands = (0..and_count)
         .map(|_| {
             let mut fields = lines.next().unwrap().split_whitespace();
@@ -74,7 +84,7 @@ fn parse_independently(bytes: &[u8]) -> IndependentAag {
     IndependentAag {
         inputs,
         latches,
-        output,
+        outputs,
         ands,
         max_variable,
     }
@@ -89,7 +99,7 @@ fn literal(literal: usize, values: &[bool]) -> bool {
 }
 
 impl IndependentAag {
-    fn evaluate(&self, state: u64, input: u64) -> (u64, bool) {
+    fn evaluate(&self, state: u64, input: u64) -> (u64, Vec<bool>) {
         let mut values = vec![false; self.max_variable + 1];
         for (bit, &(current, _)) in self.latches.iter().enumerate() {
             values[current / 2] = state >> bit & 1 == 1;
@@ -107,17 +117,23 @@ impl IndependentAag {
             .fold(0, |state, (bit, &(_, next))| {
                 state | (u64::from(literal(next, &values)) << bit)
             });
-        (next, literal(self.output, &values))
+        (
+            next,
+            self.outputs
+                .iter()
+                .map(|&output| literal(output, &values))
+                .collect(),
+        )
     }
 
-    fn shortest_bad_and_convergence(&self) -> (Option<usize>, usize) {
+    fn shortest_bad_and_convergence(&self, output: usize) -> (Option<usize>, usize) {
         let mut reached = BTreeSet::from([0]);
         for frame in 0..256 {
             let mut next = BTreeSet::new();
             for &state in &reached {
                 for input in 0..(1u64 << self.inputs.len()) {
-                    let (target, bad) = self.evaluate(state, input);
-                    if bad {
+                    let (target, bads) = self.evaluate(state, input);
+                    if bads[output] {
                         return (Some(frame), reached.len());
                     }
                     next.insert(target);
@@ -154,7 +170,7 @@ fn six_exports_preserve_answers_and_shortest_bad_frames() {
         assert_eq!(export.version, CONTROLLER_PLANT_AIGER_EXPORT_VERSION);
         assert_eq!(export.external_plant_inputs, vec![0, 5, 6, 7]);
         let independent = parse_independently(&export.bytes);
-        let (actual_bad, _) = independent.shortest_bad_and_convergence();
+        let (actual_bad, _) = independent.shortest_bad_and_convergence(0);
         assert_eq!(actual_bad, expected_bad, "plant output {bad_output}");
     }
 }
@@ -205,12 +221,51 @@ fn changing_plant_family_preserves_two_safe_properties() {
             .unwrap();
             answers.push(
                 parse_independently(&export.bytes)
-                    .shortest_bad_and_convergence()
+                    .shortest_bad_and_convergence(0)
                     .0,
             );
         }
         assert_eq!(answers, expected, "plant {name}");
     }
+}
+
+#[test]
+fn multi_property_export_shares_transition_logic_and_preserves_safe_answers() {
+    let controller = parse_ascii_aiger_transition(CONTROLLER).unwrap();
+    let plant = parse_ascii_aiger_transition(PLANT).unwrap();
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: (1..12).collect(),
+        controller_action_outputs: vec![2, 6, 7, 9],
+        plant_sensor_outputs: (0..11).collect(),
+        plant_action_inputs: vec![1, 2, 3, 4],
+    };
+    let export = export_bounded_controller_plant_multi_aag(
+        &controller,
+        &plant,
+        &wiring,
+        0,
+        0,
+        &[15, 16],
+        32,
+    )
+    .unwrap();
+    assert_eq!(export.bad_plant_outputs, vec![15, 16]);
+    let independent = parse_independently(&export.bytes);
+    assert_eq!(independent.outputs.len(), 2);
+    assert_eq!(independent.shortest_bad_and_convergence(0).0, None);
+    assert_eq!(independent.shortest_bad_and_convergence(1).0, None);
+    assert!(
+        export_bounded_controller_plant_multi_aag(
+            &controller,
+            &plant,
+            &wiring,
+            0,
+            0,
+            &[15, 15],
+            32,
+        )
+        .is_err()
+    );
 }
 
 #[test]

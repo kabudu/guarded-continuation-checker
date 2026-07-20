@@ -68,6 +68,15 @@
   exact hashes and add hosted amd64 reproduction. Distinct-property composition
   and the changing-plant comparison remain open, so this establishes baseline
   fidelity only and no novelty result.
+  Extend the bounded AIGER exporter with deterministic multi-property bad
+  sections and freeze paired single-property and shared two-property models for
+  all four changing plants. Generate eight separate SAFE witnesses with pinned
+  rIC3, independently validate each, compose each plant's two properties with
+  the FM 2026 baseline, and validate all four composed witnesses with
+  Certifaiger plus `lrat_isa`. The composed total is 9,665 bytes versus 19,164
+  bytes separately, a 49.57% reduction and a negative result for any broad GCC
+  evidence-size claim. Incremental plant-replacement cost remains the active
+  candidate distinction.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
