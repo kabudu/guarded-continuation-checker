@@ -333,3 +333,8 @@ retained host. GCC uses less verifier memory and transfers independently
 checkable evidence, but those properties do not overcome established
 proof-carrying-hardware prior art. Hosted Linux reproduces the negative runtime
 result.
+
+The next predeclared experiment compares GCC evidence with the
+competition-standard Certifaiger and `aigsim` path at equivalent bounded scope.
+The [comparison plan](CERTIFAIGER_EQUIVALENT_EVIDENCE_PLAN.md) explicitly allows
+the portable-batch distinction to be falsified.

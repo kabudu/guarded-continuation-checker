@@ -26,6 +26,10 @@
   lower verifier peak RSS and portable evidence. Retain a hosted Linux
   reproduction showing the same runtime loss and 79.8% lower proof-verifier
   peak RSS.
+  Predeclare the next equivalent-evidence comparison against the
+  competition-standard Certifaiger and `aigsim` certificate path, including
+  explicit semantic-equivalence, hostile-input, resource, and falsification
+  gates.
 
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch

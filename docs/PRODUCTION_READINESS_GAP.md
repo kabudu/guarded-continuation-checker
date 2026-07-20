@@ -211,6 +211,11 @@ open at equivalent certificate scope. An identical-query local baseline is now
 retained and is negative on runtime against SymbiYosys/Yosys/Z3. Hosted Linux
 reproduces that direction and the lower verifier-memory result.
 
+Equivalent-certificate evidence remains the next proof-profile gate. The
+[predeclared Certifaiger plan](CERTIFAIGER_EQUIVALENT_EVIDENCE_PLAN.md) requires
+competition-standard SAFE witness and UNSAFE trace checking before any portfolio
+or novelty conclusion.
+
 ## Rules
 
 - No timing-based per-formula calibration.
