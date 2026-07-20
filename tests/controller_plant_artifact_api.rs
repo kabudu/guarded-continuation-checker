@@ -176,6 +176,19 @@ fn proof_carrying_mtbdd_batch_is_canonical_bound_and_independently_checked() {
     let encoded = encode_controller_proof_mtbdd_plant_artifact(&artifact).unwrap();
     assert_eq!(
         encode_controller_proof_mtbdd_plant_artifact(
+            &produce_controller_proof_mtbdd_plant_artifact(
+                &controller,
+                controller_digest,
+                &mtbdd,
+                &inputs,
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        encoded
+    );
+    assert_eq!(
+        encode_controller_proof_mtbdd_plant_artifact(
             &decode_controller_proof_mtbdd_plant_artifact(&encoded).unwrap()
         )
         .unwrap(),

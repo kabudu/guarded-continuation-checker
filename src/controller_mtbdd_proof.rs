@@ -448,6 +448,10 @@ mod tests {
         let digest = [0x51; 32];
         let mtbdd = produce_controller_mtbdd(&model, digest, &[0], &[0]).unwrap();
         let proof = produce_controller_mtbdd_equivalence_proof(&model, digest, &mtbdd).unwrap();
+        assert_eq!(
+            produce_controller_mtbdd_equivalence_proof(&model, digest, &mtbdd).unwrap(),
+            proof
+        );
         let encoded = encode_controller_mtbdd_equivalence_proof(&proof).unwrap();
         assert_eq!(
             decode_controller_mtbdd_equivalence_proof(&encoded).unwrap(),
