@@ -8,6 +8,34 @@ permissions:
   contents: read
 
 jobs:
+  certified-equivalent-evidence:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Validate and run hosted evidence comparison
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+          shellcheck -s bash \
+            scripts/run-certified-evidence-hosted-v1.sh \
+            scripts/qualify-certifaiger-v1.sh \
+            scripts/qualify-ric3-v1.sh \
+            scripts/certified-evidence-container-v1.sh \
+            scripts/benchmark-certified-evidence-v1.sh \
+            scripts/benchmark-gcc-proof-runlim-v1.sh \
+            scripts/test-certified-evidence-hostile-v1.sh
+          scripts/run-certified-evidence-hosted-v1.sh /tmp/evidence-results
+          cat /tmp/evidence-results/*.csv
+      - name: Retain hosted comparison evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: certified-equivalent-evidence-amd64
+          path: /tmp/evidence-results/*
+          if-no-files-found: error
+          retention-days: 14
+
   test:
     runs-on: ubuntu-latest
     steps:
