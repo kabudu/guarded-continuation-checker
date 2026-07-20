@@ -151,12 +151,18 @@ faithful baseline leaves the gate open and produces no positive result.
    controls pass. Version 1 rejects liveness and comment-based mappings instead
    of dropping them; broader section support remains open.
 4. Validate every SAFE output with qualified Certifaiger and `lrat_isa`.
-   Complete locally for the first comparison family: all eight individual
+   Complete on local arm64 and hosted amd64 Linux for the first comparison
+   family: all eight individual
    witnesses and all four distinct-property compositions pass Certifaiger
    10.2.0 with `lrat_isa` checking the generated proofs. The composed witness
    total is 9,665 bytes versus 19,164 bytes for the eight separate witnesses,
    a 49.57% reduction. This is disconfirming evidence against a broad GCC
    evidence-size advantage.
+   Hosted run
+   [29769666175](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29769666175)
+   reproduced every CSV row and all twelve individual/composed witness SHA-256
+   values exactly. Platform-specific executable and checker-tree digests are
+   retained separately and are not represented as reproducible binaries.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
    In progress: GCC now has canonical controller-only evidence and a separate
    plant-results artifact bound to the controller-evidence SHA-256. A typed
