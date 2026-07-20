@@ -22,6 +22,7 @@ produce() {
   docker run --rm --network none \
     -v "$ric3_output:/tools:ro" -v "$certifaiger_output/bin:/cert:ro" \
     -v "$repo_root:/repo:ro" -v "$dir:/out" "$ric3_image" \
+    /cert/runlim -p -r 300 \
     /repo/scripts/certified-evidence-container-v1.sh produce >/dev/null 2>&1
 }
 consume() {
@@ -29,6 +30,7 @@ consume() {
   docker run --rm --network none \
     -v "$certifaiger_output/bin:/cert:ro" -v "$repo_root:/repo:ro" \
     -v "$dir:/out" "$certifaiger_image" \
+    /cert/runlim -p -r 300 \
     /repo/scripts/certified-evidence-container-v1.sh consume >/dev/null 2>&1
 }
 record_rejection() {
