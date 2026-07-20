@@ -39,6 +39,10 @@
   Make exact regeneration portable across compilers by checking the pinned
   binary revision separately and using Yosys `--no-version` for deterministic
   AIGER footers.
+  Bind the external production gate to the exact evidence-register digest and
+  require an OpenSSH signature from the attested independent reviewer under a
+  fixed namespace and caller-controlled allowed-signers policy. Add hostile
+  register substitution, attestation tampering, and untrusted-key controls.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

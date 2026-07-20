@@ -125,13 +125,14 @@ or disagreed. It remains in the private record and aggregate denominator.
 ## Independent aggregate attestation
 
 After all private approvals, the independent aggregate reviewer creates an
-LF-only file with exactly these 15 keys. Replace bracketed values; do not quote
+LF-only file with exactly these 16 keys. Replace bracketed values; do not quote
 values or include confidential names, formulas, commas, or private paths.
 
 ```text
-protocol_version=1
+protocol_version=2
 target_tag=[ANNOTATED_RELEASE_TAG]
 target_commit=[FULL_40_CHARACTER_COMMIT]
+register_digest=sha256:[REGISTER_SHA256]
 security_assessment_status=PASS
 security_assessment_report=[IMMUTABLE_REPORT_REFERENCE]
 technical_review_status=PASS
@@ -146,11 +147,25 @@ high_findings_open=0
 assessment_date=[YYYY-MM-DD]
 ```
 
+The reviewer signs the exact attestation bytes with their approved OpenSSH key:
+
+```sh
+ssh-keygen -Y sign -f REVIEWER_PRIVATE_KEY \
+  -n gcc-production-evidence-v2 ATTESTATION.conf
+```
+
+The release authority prepares `ALLOWED_SIGNERS` independently from the
+submitted evidence. It maps the opaque reviewer ID to the previously approved
+public key and restricts it to namespace `gcc-production-evidence-v2`. Never
+accept an allowed-signers file supplied only alongside the evidence it is meant
+to authenticate.
+
 Run the final gate from the reviewed source repository:
 
 ```sh
 scripts/external-evidence-register-check.sh \
-  --production-gate REGISTER.csv ATTESTATION.conf REVIEWED_SOURCE_REPOSITORY
+  --production-gate REGISTER.csv ATTESTATION.conf ALLOWED_SIGNERS \
+  ATTESTATION.conf.sig REVIEWED_SOURCE_REPOSITORY
 ```
 
 Exit 0 is necessary but not sufficient for a public production claim: the

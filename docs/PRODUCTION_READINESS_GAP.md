@@ -16,7 +16,7 @@ sufficient.
 | Cross-platform distribution | Candidate Linux bundle v1 defines static x86_64 musl archives, SPDX 2.3 SBOM, deterministic provenance, non-executing offline verification, and two-source-path reproducibility; [signed candidate run 29675023822](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29675023822) passes exact SLSA and SPDX identity policy with [retained evidence](../results/linux-evaluation-candidate-v1.md) | Add a justified macOS distribution decision, tagged-release compatibility, and release-level verification evidence | In progress; first Linux candidate gate closed |
 | Real product validity | Public synthetic/product-shaped fixtures | Multiple unmodified public firmware/robotics designs plus independent self-service evaluation outcomes | Open |
 | Operational guidance | Evaluation and isolation documentation | Installation, sizing, failure handling, upgrade/rollback and incident-response runbooks | Open |
-| Release governance | Claim-bounded tagged releases | Production release checklist requires every row above closed or explicitly excludes the capability from production support | Open |
+| Release governance | Claim-bounded tagged releases; the external production gate binds the exact register and release to an independently authenticated OpenSSH attestation | Production release checklist requires every row above closed or explicitly excludes the capability from production support; exercise the authenticated gate with real independent evidence | In progress; authenticated fail-closed mechanism complete |
 
 ## Event-contract experimental boundary
 

@@ -188,6 +188,7 @@ scripts/external-evidence-register-check.sh docs/EXTERNAL_EVIDENCE_REGISTER.csv
 
 The production gate additionally requires an LF-only `KEY=VALUE` attestation
 with exactly these keys: `protocol_version`, `target_tag`, `target_commit`,
+`register_digest`,
 `security_assessment_status`, `security_assessment_report`,
 `technical_review_status`, `technical_review_report`,
 `operator_exercises_status`, `data_handling_status`,
@@ -195,10 +196,17 @@ with exactly these keys: `protocol_version`, `target_tag`, `target_commit`,
 `independent_aggregate_report`, `critical_findings_open`,
 `high_findings_open`, and `assessment_date`. Status values must be `PASS`, open
 critical/high counts must be zero, and the release must match every row.
+`register_digest` is the `sha256:` digest of the exact register bytes. The
+independent reviewer signs the complete version 2 attestation with an OpenSSH
+signing key under namespace `gcc-production-evidence-v2`. The caller supplies
+a separately controlled OpenSSH allowed-signers file that maps the attested
+`independent_reviewer_id` to the approved public key. Repository contents must
+not be trusted to choose their own reviewer key.
 
 ```sh
 scripts/external-evidence-register-check.sh \
-  --production-gate REGISTER.csv ATTESTATION.conf REVIEWED_SOURCE_REPOSITORY
+  --production-gate REGISTER.csv ATTESTATION.conf ALLOWED_SIGNERS \
+  ATTESTATION.conf.sig REVIEWED_SOURCE_REPOSITORY
 ```
 
 Exit `0` means the selected mode passed. Exit `1` means a syntactically readable
@@ -211,7 +219,11 @@ three independent technical cases, the full partner cohort and result-class
 coverage, positive resource measurements, exact result/exit agreement,
 repeated validated results, replayed and triaged UNSAFE witnesses, no duplicate
 partner input/requirement pair, no unresolved row, and a complete passing
-attestation. The independent signatory remains responsible for detecting an
+attestation. It also rejects register substitution, attestation modification,
+an untrusted signer, the wrong signing namespace, symlinked evidence inputs,
+and oversized signature material. Register, attestation, signer policy, and
+signature validation operate on private snapshots so every check observes the
+same bytes. The independent signatory remains responsible for detecting an
 omitted test; no register can prove that its author disclosed every attempted
 configuration.
 
