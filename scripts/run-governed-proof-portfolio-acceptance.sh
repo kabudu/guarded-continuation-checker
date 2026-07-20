@@ -58,6 +58,14 @@ field() {
   printf '%s\n' "$1" | sed -n "1s/.* $2=\\([^ ]*\\).*/\\1/p"
 }
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 test "$(field "$proof" backend)" = PROOF_MTBDD
 test "$(field "$proof" reason)" = MTBDD_ADMITTED
 test "$(field "$proof" safe)" = 2
@@ -111,6 +119,8 @@ run_failure "$proof_manifest" "$policy" "$corrupt" 2 \
 
 proof_artifact_bytes=$(field "$proof" artifact_bytes)
 direct_artifact_bytes=$(field "$direct" artifact_bytes)
+proof_sha256=$(sha256_file "$proof_artifact")
+direct_sha256=$(sha256_file "$direct_artifact")
 proof_transition_bound=$(field "$proof" transition_evaluation_bound)
 direct_transition_bound=$(field "$direct" transition_evaluation_bound)
 equivalence_bytes=$(field "$proof" equivalence_artifact_bytes)
@@ -118,14 +128,14 @@ total_artifact_bytes=$((proof_artifact_bytes + direct_artifact_bytes))
 total_transition_bound=$((proof_transition_bound + direct_transition_bound))
 
 printf '%s\n' \
-  'schema_version,job,outcome,backend,reason,safe,unsafe,artifact_bytes,equivalence_bytes,unsat_proof_bytes,transition_bound,assignments_checked,exit_code,result,status' \
-  "1,public-washing-batch,verified,PROOF_MTBDD,MTBDD_ADMITTED,2,4,$proof_artifact_bytes,$equivalence_bytes,$proof_bytes,$proof_transition_bound,0,0,answers-retained,accepted" \
-  "1,direct-fallback-batch,verified,DIRECT_EXACT,BOUNDARY_LIMIT,1,1,$direct_artifact_bytes,0,0,$direct_transition_bound,0,0,answers-retained,accepted" \
-  '1,proof-budget-control,refused,NONE,unsat-proof-bytes,0,0,0,0,0,0,0,3,none,accepted' \
-  '1,transition-budget-control,refused,NONE,transition-evaluations,0,0,0,0,0,0,0,3,none,accepted' \
-  '1,malformed-policy-control,invalid,NONE,noncanonical-policy,0,0,0,0,0,0,0,2,none,accepted' \
-  '1,corrupt-evidence-control,invalid,NONE,integrity,0,0,0,0,0,0,0,2,none,accepted' \
-  "1,aggregate,summary,MIXED,none,3,5,$total_artifact_bytes,$equivalence_bytes,$proof_bytes,$total_transition_bound,0,0,2-verified-2-refused-2-invalid,accepted" \
+  'schema_version,job,outcome,backend,reason,safe,unsafe,artifact_bytes,artifact_sha256,equivalence_bytes,unsat_proof_bytes,transition_bound,assignments_checked,exit_code,result,status' \
+  "1,public-washing-batch,verified,PROOF_MTBDD,MTBDD_ADMITTED,2,4,$proof_artifact_bytes,$proof_sha256,$equivalence_bytes,$proof_bytes,$proof_transition_bound,0,0,answers-retained,accepted" \
+  "1,direct-fallback-batch,verified,DIRECT_EXACT,BOUNDARY_LIMIT,1,1,$direct_artifact_bytes,$direct_sha256,0,0,$direct_transition_bound,0,0,answers-retained,accepted" \
+  '1,proof-budget-control,refused,NONE,unsat-proof-bytes,0,0,0,none,0,0,0,0,3,none,accepted' \
+  '1,transition-budget-control,refused,NONE,transition-evaluations,0,0,0,none,0,0,0,0,3,none,accepted' \
+  '1,malformed-policy-control,invalid,NONE,noncanonical-policy,0,0,0,none,0,0,0,0,2,none,accepted' \
+  '1,corrupt-evidence-control,invalid,NONE,integrity,0,0,0,none,0,0,0,0,2,none,accepted' \
+  "1,aggregate,summary,MIXED,none,3,5,$total_artifact_bytes,see-member-rows,$equivalence_bytes,$proof_bytes,$total_transition_bound,0,0,2-verified-2-refused-2-invalid,accepted" \
   >"$output"
 
 echo "governed proof portfolio acceptance status=ACCEPTED jobs=6 verified=2 refused=2 invalid=2 safe=3 unsafe=5 output=$output"

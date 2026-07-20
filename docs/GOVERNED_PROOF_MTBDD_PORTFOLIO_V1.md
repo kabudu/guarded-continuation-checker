@@ -111,7 +111,10 @@ invalid-input rows carry no logical answer. The retained Linux result is
 [`results/governed-proof-mtbdd-portfolio-acceptance-linux-v1.csv`](../results/governed-proof-mtbdd-portfolio-acceptance-linux-v1.csv).
 CI regenerates it under a 64 MiB address-space ceiling and requires byte equality.
 The same six rows are byte-identical on macOS and Linux; timing is deliberately
-excluded from the acceptance record.
+excluded from the acceptance record. The two positive rows freeze canonical
+artifact SHA-256 fingerprints. They establish the baseline for a future tagged
+release compatibility test; they do not by themselves constitute compatibility
+history.
 
 ## Predeclared gates
 

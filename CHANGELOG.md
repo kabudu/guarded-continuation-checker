@@ -23,7 +23,8 @@
   only when no proof is present. Add deterministic macOS/Linux acceptance for the six-property public
   washing-controller proof route, exact fallback, two typed refusals, malformed
   policy, and corrupt evidence. Hosted reproduction and compatibility remain
-  open.
+  open. Freeze SHA-256 fingerprints for both routed v1 artifacts so a subsequent
+  tagged release can prove byte compatibility.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
