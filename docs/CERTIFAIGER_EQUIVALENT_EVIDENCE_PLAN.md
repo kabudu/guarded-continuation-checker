@@ -88,3 +88,18 @@ trace is invalid.
 - Freeze the six exported model digests only after independent semantic replay.
 - Add no GCC portfolio route until the complete external comparison and hostile
   controls pass on hosted Linux.
+
+## Qualification finding
+
+The first source audit pins Certifaiger 10.2.0 at commit
+`3b8d9e9937234b5e064923bd00f20d3eb97ccc3f` from 6 July 2026. Its upstream
+high-assurance Docker build selects CaDiCaL plus `lrat_isa`, but several CMake
+dependencies still default to moving branches such as `main`, `master`,
+`development`, or the AIGER development branch. Building the commit alone is
+therefore not reproducible. The GCC qualification harness must override every
+dependency with an immutable commit and retain the resolved revision manifest.
+
+The first isolated build attempt also failed while retrieving the Alpine 3.22
+base-image metadata from Docker Hub. That network failure is not a tool result.
+No comparison run is accepted until both the base image and every source
+dependency are content-addressed and the upstream tests pass.
