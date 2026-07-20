@@ -278,9 +278,21 @@ jobs:
         run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Cross-check stateful physical-plant batch with SymbiYosys
         run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Build pinned Yosys for source attestation
+        run: |
+          sudo apt-get install --yes \
+            bison flex gawk libffi-dev libreadline-dev pkg-config tcl-dev zlib1g-dev
+          git init /tmp/yosys-attestation
+          git -C /tmp/yosys-attestation remote add origin https://github.com/YosysHQ/yosys.git
+          git -C /tmp/yosys-attestation fetch --depth 1 origin \
+            b8e7da6f40ae8f552c116bf6c359b07c6533e159
+          git -C /tmp/yosys-attestation checkout --detach FETCH_HEAD
+          make -C /tmp/yosys-attestation config-gcc
+          make -C /tmp/yosys-attestation -j2 ENABLE_ABC=0 yosys
       - name: Reproduce public source-to-model attestation
         run: |
-          scripts/test-source-model-provenance.sh \
+          PATH="/tmp/yosys-attestation:$PATH" \
+            scripts/test-source-model-provenance.sh \
             results/public-washing-source-model-attestation-v1.csv
       - name: Compare proof profile with maintained formal workflow
         env:

@@ -50,7 +50,8 @@ It proves byte-for-byte regeneration of:
 `scripts/test-source-model-provenance.sh` regenerates the result and requires byte
 equality. Its controls reject retained-model drift, path traversal, wrong Yosys
 revision, CRLF, and NUL. CI runs the test with the same maintained Yosys revision
-used by the public formal oracle.
+recorded by the provenance manifest. The hosted workflow builds that exact
+revision without ABC rather than trusting the runner's moving package version.
 
 ## Claim boundary
 
