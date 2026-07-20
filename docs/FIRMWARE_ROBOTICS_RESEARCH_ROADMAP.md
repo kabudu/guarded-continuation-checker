@@ -156,11 +156,10 @@ then preserves exact proof verification and plant composition under the
 existing conservative work envelope. Canonical self-service policy and typed
 process integration are now implemented. The first library portfolio selects
 proof-carrying MTBDD or direct exact replay from the existing structural
-admission result and rejects forced downgrade. Its typed process integration,
-public-product acceptance, and compatibility history remain open. Versioned
-portfolio file commands now cover the admitted proof route and governed proof
-refusal. Typed portfolio integration and direct-route CLI acceptance remain
-open.
+admission result and rejects forced downgrade. Versioned portfolio file commands
+and a strict typed process client now cover the admitted proof route, governed
+proof refusal, and exact direct fallback. Public-product acceptance and
+compatibility history remain open.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.

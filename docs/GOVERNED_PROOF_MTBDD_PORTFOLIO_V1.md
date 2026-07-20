@@ -1,8 +1,8 @@
 # Governed proof-carrying MTBDD portfolio v1
 
-Status: experimental Rust API, canonical file policy and CLI, typed process
-client, proof/direct portfolio, and portfolio file CLI. Typed portfolio process
-integration, public-product acceptance, and compatibility gates remain open.
+Status: experimental Rust API, canonical file policy and CLI, proof/direct
+portfolio, and strict typed portfolio process client. Public-product acceptance
+and compatibility gates remain open.
 
 ## Problem
 
@@ -92,6 +92,11 @@ classes, reports its structural route, and checks zero exhaustive controller
 assignments. A proof budget below the embedded proof returns the same typed
 exit-code-3 refusal contract before proof checking.
 
+`ControllerProofMtbddPortfolioTool` validates the complete capability tuple and
+every response field without invoking a shell. It reports bounded process
+metrics, converts exit-code-3 refusals into typed reasons, rejects inconsistent
+backend/reason pairs, and accepts the exact fallback route with zero proof bytes.
+
 ## Predeclared gates
 
 | Gate | Required result |
@@ -101,7 +106,7 @@ exit-code-3 refusal contract before proof checking.
 | Composition governance | Member, horizon, product-state, and transition limits reject before semantic replay |
 | Query binding | Ordered source digests, wiring, initial states, property, and horizon cannot drift |
 | Stable self-service API | Implemented experimentally with policy, capability, CLI response, typed process client, and refusal classes versioned |
-| Static portfolio | Library and file CLI implemented; typed portfolio process integration and direct-route CLI acceptance remain open |
+| Static portfolio | Library, file CLI, strict typed process client, and proof/direct acceptance implemented |
 | Hostile input | Truncation, mutation, noncanonical policy, boundary drift, and oversize inputs fail closed |
 | Public product | The revision-pinned washing controller and physical-plant batch pass the governed proof path |
 | Strong baseline | Report proof checking against exhaustive equivalence and maintained proof consumers at identical scope |

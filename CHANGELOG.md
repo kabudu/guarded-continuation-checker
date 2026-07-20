@@ -18,8 +18,10 @@
   capability, certification, verification, and governed-verification file
   commands. The admitted proof route reports its structural decision, preserves
   both answer classes and zero exhaustive assignments, and refuses a tight
-  proof budget before proof checking. Typed portfolio process integration and
-  direct-route CLI acceptance remain open.
+  proof budget before proof checking. Add a strict typed portfolio process
+  client and direct-route CLI acceptance with proof limits deliberately ignored
+  only when no proof is present. Public-product and compatibility gates remain
+  open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

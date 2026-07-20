@@ -3,8 +3,10 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use guarded_continuation_checker::{
-    ControllerPlantResourceRefusalReason, ControllerProofMtbddResourceTool,
-    ControllerProofMtbddTool, FailureClass, InvocationStatus, OperationKind, PredicateApiError,
+    ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason,
+    ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
+    ControllerProofMtbddResourceTool, ControllerProofMtbddTool, FailureClass, InvocationStatus,
+    OperationKind, PredicateApiError,
 };
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
@@ -31,6 +33,40 @@ fn fixture() -> PathBuf {
     fs::write(
         root.join("manifest.txt"),
         b"controller_mtbdd_plant_manifest_version=1\ncontroller_source_path=controller.src\ncontroller_aiger_path=controller.aag\nrelevant_inputs=0\nobserved_outputs=0\nmember_count=2\nplant_source_path=plant.src\nplant_aiger_path=plant.aag\ncontroller_sensor_inputs=0\ncontroller_action_outputs=0\nplant_sensor_outputs=0\nplant_action_inputs=0\ninitial_controller_state=0\ninitial_plant_state=0\nbad_plant_output=1\nhorizon=2\nplant_source_path=plant.src\nplant_aiger_path=plant.aag\ncontroller_sensor_inputs=0\ncontroller_action_outputs=0\nplant_sensor_outputs=0\nplant_action_inputs=0\ninitial_controller_state=0\ninitial_plant_state=1\nbad_plant_output=1\nhorizon=2\nstatus=complete\n",
+    )
+    .unwrap();
+    root
+}
+
+fn direct_fixture() -> PathBuf {
+    let root = std::env::temp_dir().join(format!(
+        "gcc-controller-proof-portfolio-direct-cli-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("controller.src"), b"seven-latch controller\n").unwrap();
+    fs::write(
+        root.join("controller.aag"),
+        b"aag 8 1 7 1 0\n2\n4 2\n6 2\n8 2\n10 2\n12 2\n14 2\n16 2\n2\nc\nseven-latch controller\n",
+    )
+    .unwrap();
+    for (name, bad) in [("safe", 0), ("unsafe", 1)] {
+        fs::write(root.join(format!("{name}.src")), format!("{name} plant\n")).unwrap();
+        fs::write(
+            root.join(format!("{name}.aag")),
+            format!("aag 2 1 1 2 0\n2\n4 2\n4\n{bad}\nc\n{name} plant\n"),
+        )
+        .unwrap();
+    }
+    fs::write(
+        root.join("manifest.txt"),
+        b"controller_mtbdd_plant_manifest_version=1\ncontroller_source_path=controller.src\ncontroller_aiger_path=controller.aag\nrelevant_inputs=0\nobserved_outputs=0\nmember_count=2\nplant_source_path=safe.src\nplant_aiger_path=safe.aag\ncontroller_sensor_inputs=0\ncontroller_action_outputs=0\nplant_sensor_outputs=0\nplant_action_inputs=0\ninitial_controller_state=0\ninitial_plant_state=0\nbad_plant_output=1\nhorizon=4\nplant_source_path=unsafe.src\nplant_aiger_path=unsafe.aag\ncontroller_sensor_inputs=0\ncontroller_action_outputs=0\nplant_sensor_outputs=0\nplant_action_inputs=0\ninitial_controller_state=0\ninitial_plant_state=0\nbad_plant_output=1\nhorizon=4\nstatus=complete\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("policy.txt"),
+        b"controller_proof_mtbdd_resource_policy_version=1\nmax_artifact_bytes=16777216\nmax_equivalence_artifact_bytes=1\nmax_unsat_proof_bytes=1\nmax_members=2\nmax_member_horizon=4\nmax_product_states_per_member=256\nmax_transition_evaluations=2560\nstatus=complete\n",
     )
     .unwrap();
     root
@@ -103,12 +139,11 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
         .unwrap();
     assert!(portfolio_discovery.status.success());
     let portfolio_discovery = String::from_utf8(portfolio_discovery.stdout).unwrap();
-    assert!(
-        portfolio_discovery
-            .starts_with("controller_proof_mtbdd_portfolio_cli_version=1 artifact_version=1")
-    );
+    assert!(portfolio_discovery.starts_with(
+        "controller_proof_mtbdd_portfolio_cli_version=1 policy_version=1 envelope_version=1 artifact_version=1"
+    ));
     assert!(portfolio_discovery.ends_with(
-        "routing=static fallback=exact proof_failure=fail-closed unsupported=fail-closed\n"
+        "routing=static fallback=exact proof_failure=fail-closed accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n"
     ));
     let portfolio = root.join("batch.proof-mtbdd-portfolio");
     let portfolio_created = Command::new(BINARY)
@@ -153,6 +188,22 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     let governed_portfolio = String::from_utf8(governed_portfolio.stdout).unwrap();
     assert!(governed_portfolio.contains("backend=PROOF_MTBDD reason=MTBDD_ADMITTED"));
     assert!(governed_portfolio.contains("assignments_checked=0"));
+    let portfolio_tool = ControllerProofMtbddPortfolioTool::discover(BINARY).unwrap();
+    assert_eq!(portfolio_tool.capabilities().cli_version, 1);
+    assert_eq!(portfolio_tool.capabilities().refusal_exit_code, 3);
+    let typed_portfolio = portfolio_tool
+        .verify(&manifest, &policy, &portfolio)
+        .unwrap();
+    assert_eq!(
+        typed_portfolio.backend,
+        ControllerPlantPortfolioBackend::Mtbdd
+    );
+    assert_eq!(
+        typed_portfolio.reason,
+        ControllerPlantPortfolioReason::MtbddAdmitted
+    );
+    assert_eq!((typed_portfolio.safe, typed_portfolio.unsafe_count), (1, 1));
+    assert_eq!(typed_portfolio.assignments_checked, 0);
     let governed = Command::new(BINARY)
         .arg("verify-controller-proof-mtbdd-plant-resources")
         .arg(&manifest)
@@ -198,6 +249,19 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     assert_eq!(
         String::from_utf8(refused_portfolio.stderr).unwrap(),
         "error: controller-proof-mtbdd-resource refusal=unsat-proof-bytes result=none\n"
+    );
+    let typed_portfolio_refusal = portfolio_tool
+        .verify_observed(&manifest, &tight, &portfolio)
+        .unwrap_err();
+    assert!(matches!(
+        typed_portfolio_refusal.error.as_ref(),
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::UnsatProofBytes
+        }
+    ));
+    assert_eq!(
+        typed_portfolio_refusal.metrics.operation,
+        OperationKind::VerifyControllerProofMtbddPortfolioResources
     );
 
     let malformed = root.join("malformed-proof-resource.policy");
@@ -365,5 +429,40 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
             .code(),
         Some(2)
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn proof_mtbdd_portfolio_typed_client_accepts_exact_static_fallback() {
+    let root = direct_fixture();
+    let manifest = root.join("manifest.txt");
+    let policy = root.join("policy.txt");
+    let artifact = root.join("direct.proof-mtbdd-portfolio");
+    let created = Command::new(BINARY)
+        .arg("certify-controller-proof-mtbdd-portfolio")
+        .arg(&manifest)
+        .arg(&artifact)
+        .output()
+        .unwrap();
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let created = String::from_utf8(created.stdout).unwrap();
+    assert!(created.contains("backend=DIRECT_EXACT reason=BOUNDARY_LIMIT"));
+    assert!(created.contains("safe=1 unsafe=1"));
+
+    let tool = ControllerProofMtbddPortfolioTool::discover(BINARY).unwrap();
+    let governed = tool.verify(&manifest, &policy, &artifact).unwrap();
+    assert_eq!(
+        governed.backend,
+        ControllerPlantPortfolioBackend::DirectExact
+    );
+    assert_eq!(
+        governed.reason,
+        ControllerPlantPortfolioReason::BoundaryLimit
+    );
+    assert_eq!(governed.equivalence_artifact_bytes, 0);
+    assert_eq!(governed.unsat_proof_bytes, 0);
+    assert_eq!((governed.safe, governed.unsafe_count), (1, 1));
+    assert_eq!(governed.transition_evaluation_bound, 2560);
+    assert_eq!(governed.assignments_checked, 0);
     fs::remove_dir_all(root).unwrap();
 }

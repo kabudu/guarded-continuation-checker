@@ -25379,12 +25379,17 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "controller_proof_mtbdd_portfolio_cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} artifact_version={} proof_artifact_version={} direct_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_artifact_bytes={} max_members={} backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed unsupported=fail-closed",
+                "controller_proof_mtbdd_portfolio_cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} proof_artifact_version={} direct_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_policy_bytes={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_horizon={} max_product_states={} refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
                 controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
                 controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
                 controller_plant_artifact::DIRECT_PLANT_ARTIFACT_VERSION,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
             );
             Ok(true)
         }

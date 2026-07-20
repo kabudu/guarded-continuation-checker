@@ -71,9 +71,9 @@ canonical policy CLI and typed bounded process client expose the same contract
 with seven stable refusal reasons and no answer on refusal. Portfolio routing
 now has a first Rust API that selects proof-carrying MTBDD only after static
 admission and otherwise preserves the exact direct query. File/process
-portfolio commands now cover capability discovery, certification, verification,
-and governed proof-route verification. Typed portfolio process integration,
-direct-route CLI acceptance, and public-product gates remain open.
+portfolio commands and a typed bounded process client now cover capability
+discovery and governed verification for both the proof and exact fallback
+routes. Public-product and compatibility gates remain open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

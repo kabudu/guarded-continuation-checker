@@ -163,6 +163,8 @@ pub enum OperationKind {
     VerifyControllerPlantPortfolioResources,
     DiscoverControllerProofMtbddResource,
     VerifyControllerProofMtbddPlantResources,
+    DiscoverControllerProofMtbddPortfolio,
+    VerifyControllerProofMtbddPortfolioResources,
 }
 
 impl OperationKind {
@@ -200,6 +202,12 @@ impl OperationKind {
             }
             Self::VerifyControllerProofMtbddPlantResources => {
                 "verify_controller_proof_mtbdd_plant_resources"
+            }
+            Self::DiscoverControllerProofMtbddPortfolio => {
+                "discover_controller_proof_mtbdd_portfolio"
+            }
+            Self::VerifyControllerProofMtbddPortfolioResources => {
+                "verify_controller_proof_mtbdd_portfolio_resources"
             }
         }
     }
@@ -544,6 +552,51 @@ pub struct ControllerProofMtbddResourceSummary {
     pub policy_version: u32,
     pub envelope_version: u32,
     pub artifact_version: u32,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub assignments_checked: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub elapsed_micros: usize,
+    pub member_results: Vec<ControllerMtbddMemberResult>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPortfolioCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub proof_artifact_version: u32,
+    pub direct_artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_equivalence_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
+    pub max_members: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPortfolioResourceSummary {
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub backend: ControllerPlantPortfolioBackend,
+    pub reason: ControllerPlantPortfolioReason,
     pub members: usize,
     pub maximum_member_horizon: usize,
     pub maximum_product_states: usize,
@@ -1487,6 +1540,106 @@ impl ControllerProofMtbddResourceTool {
     }
 }
 
+/// Typed, shell-free client for the governed proof/direct controller portfolio.
+#[derive(Clone, Debug)]
+pub struct ControllerProofMtbddPortfolioTool {
+    executable: PathBuf,
+    capabilities: ControllerProofMtbddPortfolioCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerProofMtbddPortfolioTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-proof-mtbdd-portfolio-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerProofMtbddPortfolio,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_proof_mtbdd_portfolio_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerProofMtbddPortfolioCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
+        self.verify_observed(manifest, resource_policy, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError>
+    {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-portfolio-resources")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPortfolioResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_proof_mtbdd_portfolio_resource_summary(output, &self.capabilities)
+            .map_err(classify_controller_proof_mtbdd_resource_refusal)
+    }
+}
+
 /// Typed, shell-free client for event-contract certificate v3 and portfolio v1.
 #[derive(Clone, Debug)]
 pub struct EventContractTool {
@@ -2156,6 +2309,108 @@ fn parse_controller_proof_mtbdd_resource_capabilities(
     })
 }
 
+fn parse_controller_proof_mtbdd_portfolio_capabilities(
+    line: &str,
+) -> Result<ControllerProofMtbddPortfolioCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD portfolio capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_proof_mtbdd_portfolio_cli_version",
+        "policy_version",
+        "envelope_version",
+        "artifact_version",
+        "proof_artifact_version",
+        "direct_artifact_version",
+        "manifest_version",
+        "max_policy_bytes",
+        "max_artifact_bytes",
+        "max_equivalence_artifact_bytes",
+        "max_unsat_proof_bytes",
+        "max_members",
+        "max_horizon",
+        "max_product_states",
+        "refusal_exit",
+        "backends",
+        "routing",
+        "fallback",
+        "proof_failure",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD portfolio capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[15..]
+        != [
+            "proof-mtbdd,direct-exact",
+            "static",
+            "exact",
+            "fail-closed",
+            "conservative-static",
+            "none",
+            "none",
+            "proof-reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD portfolio contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..7]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[7..14]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 7]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[14], keys[14])?;
+    if versions != [1, 1, 1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD portfolio version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD portfolio discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerProofMtbddPortfolioCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        envelope_version: versions[2],
+        artifact_version: versions[3],
+        proof_artifact_version: versions[4],
+        direct_artifact_version: versions[5],
+        manifest_version: versions[6],
+        max_policy_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_equivalence_artifact_bytes: limits[2],
+        max_unsat_proof_bytes: limits[3],
+        max_members: limits[4],
+        max_horizon: limits[5],
+        max_product_states: limits[6],
+        refusal_exit_code: 3,
+    })
+}
+
 fn classify_controller_proof_mtbdd_resource_refusal(
     mut failure: PredicateOperationError,
 ) -> PredicateOperationError {
@@ -2702,6 +2957,249 @@ fn parse_controller_proof_mtbdd_resource_summary(
             policy_version,
             envelope_version,
             artifact_version,
+            members: member_count,
+            maximum_member_horizon: numeric[1],
+            maximum_product_states: numeric[2],
+            transition_evaluation_bound: numeric[3],
+            equivalence_artifact_bytes: numeric[4],
+            unsat_proof_bytes: numeric[5],
+            safe: numeric[6],
+            unsafe_count: numeric[7],
+            reachable_product_states: numeric[8],
+            explored_transitions: numeric[9],
+            artifact_bytes: numeric[10],
+            assignments_checked: numeric[11],
+            load_micros: numeric[12],
+            artifact_micros: numeric[13],
+            verification_micros: numeric[14],
+            elapsed_micros: numeric[15],
+            member_results,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_proof_mtbdd_portfolio_resource_summary(
+    output: ManagedOutput,
+    capabilities: &ControllerProofMtbddPortfolioCapabilities,
+) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio summary line is missing".to_string(),
+            )
+        })?;
+        let fields = first.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-proof-mtbdd-portfolio-resource",
+            "status",
+            "cli_version",
+            "policy_version",
+            "envelope_version",
+            "artifact_version",
+            "backend",
+            "reason",
+            "members",
+            "maximum_member_horizon",
+            "maximum_product_states",
+            "transition_evaluation_bound",
+            "equivalence_artifact_bytes",
+            "unsat_proof_bytes",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "assignments_checked",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len()
+            || fields[0] != keys[0]
+            || token_value(fields[1], "status")? != "VERIFIED"
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio summary shape is invalid".to_string(),
+            ));
+        }
+        let cli_version = canonical_u32(token_value(fields[2], keys[2])?, keys[2])?;
+        let policy_version = canonical_u32(token_value(fields[3], keys[3])?, keys[3])?;
+        let envelope_version = canonical_u32(token_value(fields[4], keys[4])?, keys[4])?;
+        let artifact_version = canonical_u32(token_value(fields[5], keys[5])?, keys[5])?;
+        if cli_version != capabilities.cli_version
+            || policy_version != capabilities.policy_version
+            || envelope_version != capabilities.envelope_version
+            || artifact_version != capabilities.artifact_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller proof MTBDD portfolio response version changed".to_string(),
+            ));
+        }
+        let backend = match token_value(fields[6], keys[6])? {
+            "PROOF_MTBDD" => ControllerPlantPortfolioBackend::Mtbdd,
+            "DIRECT_EXACT" => ControllerPlantPortfolioBackend::DirectExact,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio backend is invalid".to_string(),
+                ));
+            }
+        };
+        let reason = match token_value(fields[7], keys[7])? {
+            "MTBDD_ADMITTED" => ControllerPlantPortfolioReason::MtbddAdmitted,
+            "BOUNDARY_LIMIT" => ControllerPlantPortfolioReason::BoundaryLimit,
+            "TERMINAL_LIMIT" => ControllerPlantPortfolioReason::TerminalLimit,
+            "NODE_LIMIT" => ControllerPlantPortfolioReason::NodeLimit,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio reason is invalid".to_string(),
+                ));
+            }
+        };
+        if matches!(backend, ControllerPlantPortfolioBackend::Mtbdd)
+            != matches!(reason, ControllerPlantPortfolioReason::MtbddAdmitted)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio route is inconsistent".to_string(),
+            ));
+        }
+        let numeric = fields[8..]
+            .iter()
+            .zip(&keys[8..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        let member_count = numeric[0];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[1] > capabilities.max_horizon
+            || numeric[2] > capabilities.max_product_states
+            || numeric[4] > capabilities.max_equivalence_artifact_bytes
+            || numeric[5] > capabilities.max_unsat_proof_bytes
+            || numeric[10] > capabilities.max_artifact_bytes
+            || numeric[11] != 0
+            || numeric[6].checked_add(numeric[7]) != Some(member_count)
+            || (matches!(backend, ControllerPlantPortfolioBackend::DirectExact)
+                && (numeric[4] != 0 || numeric[5] != 0))
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut member_results = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-proof-mtbdd-portfolio-resource-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], keys[1])?, keys[1])?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member ordering changed".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], keys[2])? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller proof MTBDD portfolio member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_usize(token_value(fields[3], keys[3])?, keys[3])?;
+            let bad_frame = match token_value(fields[4], keys[4])? {
+                "none" => None,
+                value => Some(canonical_usize(value, keys[4])?),
+            };
+            let values = fields[5..]
+                .iter()
+                .zip(&keys[5..])
+                .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if horizon > capabilities.max_horizon
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => values[0] != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || values[0] != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member result is inconsistent".to_string(),
+                ));
+            }
+            member_results.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps: values[0],
+                reachable_product_states: values[1],
+                explored_transitions: values[2],
+            });
+        }
+        let safe = member_results
+            .iter()
+            .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+            .count();
+        let unsafe_count = member_results.len() - safe;
+        let reachable = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.reachable_product_states)
+        });
+        let explored = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.explored_transitions)
+        });
+        if lines.next().is_some()
+            || safe != numeric[6]
+            || unsafe_count != numeric[7]
+            || reachable != Some(numeric[8])
+            || explored != Some(numeric[9])
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerProofMtbddPortfolioResourceSummary {
+            policy_version,
+            envelope_version,
+            artifact_version,
+            backend,
+            reason,
             members: member_count,
             maximum_member_horizon: numeric[1],
             maximum_product_states: numeric[2],
@@ -3780,6 +4278,25 @@ mod tests {
             canonical.replace('\n', "\r\n"),
         ] {
             assert!(parse_controller_proof_mtbdd_resource_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_portfolio_capability_parser_is_strict() {
+        let canonical = "controller_proof_mtbdd_portfolio_cli_version=1 policy_version=1 envelope_version=1 artifact_version=1 proof_artifact_version=1 direct_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_proof_mtbdd_portfolio_capabilities(canonical).unwrap();
+        assert_eq!(parsed.artifact_version, 1);
+        assert_eq!(parsed.max_unsat_proof_bytes, 1_048_576);
+        for hostile in [
+            canonical.replace("backends=proof-mtbdd,direct-exact", "backends=direct-exact"),
+            canonical.replace("routing=static", "routing=timed"),
+            canonical.replace("fallback=exact", "fallback=heuristic"),
+            canonical.replace("proof_failure=fail-closed", "proof_failure=fallback"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("max_members=64", "max_members=064"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_proof_mtbdd_portfolio_capabilities(&hostile).is_err());
         }
     }
 
