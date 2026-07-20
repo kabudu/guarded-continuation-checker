@@ -1,0 +1,4 @@
+schema_version,profile,operation,trial,elapsed_seconds,peak_rss_bytes,portable_evidence_bytes,time_backend,platform,answers_agree,status
+1,proof,create,1,4.22,13791232,251221,gnu,Linux-x86_64,true,ok
+1,proof,verify,1,0.88,6828032,251221,gnu,Linux-x86_64,true,ok
+1,maintained-formal,oracle,1,0.53,33746944,0,gnu,Linux-x86_64,true,ok

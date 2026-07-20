@@ -90,4 +90,5 @@ faster than a fresh proof verifier and about 5.39 times faster than initial proo
 creation plus verification. Proof verification uses 65.5% less peak RSS and
 supplies portable evidence, but proof-carrying hardware already establishes that
 general value. This closes the local maintained-tool runtime question without
-supporting a novelty claim.
+supporting a novelty claim. Hosted Linux reproduces the runtime loss and
+verifier-memory advantage.

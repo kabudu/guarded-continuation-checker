@@ -71,7 +71,8 @@ The first
 is deliberately negative on runtime: the maintained SymbiYosys/Yosys/Z3 oracle
 is 1.33 times faster than fresh proof verification on the retained arm64 host.
 The proof verifier uses 65.5% less peak RSS and consumes portable evidence, but
-that operational tradeoff is not a novelty claim.
+that operational tradeoff is not a novelty claim. Hosted Linux independently
+reproduces the runtime loss and records 79.8% lower proof-verifier peak RSS.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

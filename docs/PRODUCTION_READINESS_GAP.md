@@ -208,7 +208,8 @@ local process-overhead uncertainty. The resource companion records higher proof
 peak RSS, so the profile is not an unconditional operational win. Hosted
 Linux replication is retained; identical-scope maintained-tool evidence remains
 open at equivalent certificate scope. An identical-query local baseline is now
-retained and is negative on runtime against SymbiYosys/Yosys/Z3.
+retained and is negative on runtime against SymbiYosys/Yosys/Z3. Hosted Linux
+reproduces that direction and the lower verifier-memory result.
 
 ## Rules
 

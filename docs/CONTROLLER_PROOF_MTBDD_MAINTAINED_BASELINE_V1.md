@@ -44,10 +44,20 @@ This is a negative runtime result and a positive evidence-transfer and consumer
 memory result. It does not establish novelty. The raw observations are retained
 in `results/controller-proof-mtbdd-maintained-baseline-v1.csv`.
 
+GitHub-hosted Linux x86_64 run
+[29734089858](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29734089858)
+reproduces the direction. Proof creation takes 4.22 s, fresh proof verification
+takes 0.88 s, and the maintained oracle takes 0.53 s. The oracle is 1.66 times
+faster than verification and about 9.62 times faster than creation plus
+verification. Proof-verifier peak RSS is 6,828,032 bytes versus 33,746,944 bytes
+for the oracle, a 79.8% reduction. The three exact-answer rows are retained in
+`results/controller-proof-mtbdd-maintained-baseline-linux-v1.csv`.
+
 ## Remaining boundary
 
-Peak RSS and timing vary by host. Hosted Linux replication is required. The
-formal oracle does not emit evidence with the same trust-transfer semantics, so
-this experiment cannot claim that GCC beats an equivalent external certificate.
-An established certifying hardware flow, independent expert review, and
-non-repository-authored designs remain open.
+Peak RSS and timing vary by host, but both measured platforms reproduce the
+runtime loss and verifier-memory advantage. The formal oracle does not emit
+evidence with the same trust-transfer semantics, so this experiment cannot claim
+that GCC beats an equivalent external certificate. An established certifying
+hardware flow, independent expert review, and non-repository-authored designs
+remain open.

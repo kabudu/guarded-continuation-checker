@@ -23,7 +23,9 @@
   five local trials. Retain the negative runtime result: SymbiYosys/Yosys/Z3 is
   1.33x faster than fresh proof verification and about 5.39x faster than initial
   creation plus verification. Retain the positive consumer tradeoff of 65.5%
-  lower verifier peak RSS and portable evidence.
+  lower verifier peak RSS and portable evidence. Retain a hosted Linux
+  reproduction showing the same runtime loss and 79.8% lower proof-verifier
+  peak RSS.
 
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch

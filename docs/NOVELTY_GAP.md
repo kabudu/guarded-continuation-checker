@@ -331,4 +331,5 @@ required. The first identical-query maintained-tool baseline is negative:
 SymbiYosys/Yosys/Z3 is 1.33 times faster than fresh proof verification on the
 retained host. GCC uses less verifier memory and transfers independently
 checkable evidence, but those properties do not overcome established
-proof-carrying-hardware prior art.
+proof-carrying-hardware prior art. Hosted Linux reproduces the negative runtime
+result.

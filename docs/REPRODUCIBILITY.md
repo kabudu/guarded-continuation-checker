@@ -32,7 +32,9 @@ TRIALS=5 scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh \
 
 The retained arm64 rows are
 `results/controller-proof-mtbdd-maintained-baseline-v1.csv`. The benchmark
-requires exact answer and shortest-frame agreement before recording a row.
+requires exact answer and shortest-frame agreement before recording a row. The
+hosted Linux reproduction is retained in
+`results/controller-proof-mtbdd-maintained-baseline-linux-v1.csv`.
 
 ## Environment
 
