@@ -5,6 +5,7 @@ use guarded_continuation_checker::{
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
+    source_model_attestation::{self, SourceModelBindingInput},
     unsat_proof::{self, CnfClause as Clause},
 };
 use sha2::{Digest, Sha256};
@@ -46,6 +47,8 @@ const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+const SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION: u32 = 1;
+const SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
 #[derive(Debug)]
 struct ComponentBatchManifestMember {
@@ -72,6 +75,20 @@ struct ControllerMtbddPlantManifest {
     relevant_inputs: Vec<usize>,
     observed_outputs: Vec<usize>,
     members: Vec<ControllerMtbddPlantManifestMember>,
+}
+
+#[derive(Debug)]
+struct SourceModelProvenanceMember {
+    source_path: PathBuf,
+    recipe_path: PathBuf,
+    model_path: PathBuf,
+}
+
+#[derive(Debug)]
+struct SourceModelProvenanceManifest {
+    tool: String,
+    tool_revision: String,
+    members: Vec<SourceModelProvenanceMember>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -24782,6 +24799,221 @@ fn parse_component_batch_manifest(
     Ok(members)
 }
 
+fn parse_source_model_provenance_manifest(
+    manifest_path: &Path,
+) -> Result<SourceModelProvenanceManifest, String> {
+    use std::path::Component;
+
+    let bytes = read_bounded_regular_file(
+        manifest_path,
+        SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES,
+        "source-model provenance manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "source-model provenance manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "source-model provenance manifest must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("source-model provenance manifest expected {key}"))
+    };
+    let version = take("source_model_provenance_manifest_version")?;
+    if version != SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION.to_string() {
+        return Err("unsupported source-model provenance manifest version".to_string());
+    }
+    let tool = take("tool")?;
+    if tool != "yosys" {
+        return Err("source-model provenance manifest tool is unsupported".to_string());
+    }
+    let tool_revision = take("tool_revision")?;
+    if tool_revision.len() != 40
+        || !tool_revision
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("source-model provenance manifest tool revision is invalid".to_string());
+    }
+    let count_text = take("member_count")?;
+    let count = count_text
+        .parse::<usize>()
+        .map_err(|_| "source-model provenance member count is invalid".to_string())?;
+    if count.to_string() != count_text
+        || count == 0
+        || count > source_model_attestation::MAX_ATTESTATION_MEMBERS
+    {
+        return Err("source-model provenance member count is outside limits".to_string());
+    }
+    let base = fs::canonicalize(manifest_path.parent().unwrap_or_else(|| Path::new(".")))
+        .map_err(|error| format!("resolve source-model provenance directory: {error}"))?;
+    let resolve = |workdir: &str, value: &str, label: &str| -> Result<PathBuf, String> {
+        if value.is_empty() || value.len() > 4096 || workdir.is_empty() || workdir.len() > 4096 {
+            return Err(format!(
+                "source-model provenance {label} path length is invalid"
+            ));
+        }
+        let workdir_path = Path::new(workdir);
+        let value_path = Path::new(value);
+        let workdir_valid = workdir == "."
+            || (!workdir_path.is_absolute()
+                && workdir_path
+                    .components()
+                    .all(|component| matches!(component, Component::Normal(_))));
+        if !workdir_valid
+            || value_path.is_absolute()
+            || value_path
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(format!(
+                "source-model provenance {label} path must be normalized and relative"
+            ));
+        }
+        let mut resolved = base.clone();
+        if workdir != "." {
+            resolved.push(workdir_path);
+        }
+        resolved.push(value_path);
+        let relative = resolved
+            .strip_prefix(&base)
+            .map_err(|_| format!("source-model provenance {label} escapes its directory"))?;
+        let mut checked = base.clone();
+        for component in relative.components() {
+            let Component::Normal(component) = component else {
+                return Err(format!("source-model provenance {label} path is invalid"));
+            };
+            checked.push(component);
+            let metadata = fs::symlink_metadata(&checked).map_err(|error| {
+                format!(
+                    "inspect source-model provenance {label} path {}: {error}",
+                    checked.display()
+                )
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "source-model provenance {label} path must not contain symlinks"
+                ));
+            }
+        }
+        Ok(checked)
+    };
+
+    let mut canonical = format!(
+        "source_model_provenance_manifest_version={version}\ntool={tool}\ntool_revision={tool_revision}\nmember_count={count_text}\n"
+    );
+    let mut members = Vec::with_capacity(count);
+    for _ in 0..count {
+        let workdir = take("workdir")?;
+        let source = take("source_path")?;
+        let recipe = take("recipe_path")?;
+        let model = take("model_path")?;
+        members.push(SourceModelProvenanceMember {
+            source_path: resolve(workdir, source, "source")?,
+            recipe_path: resolve(workdir, recipe, "recipe")?,
+            model_path: resolve(workdir, model, "model")?,
+        });
+        canonical.push_str(&format!(
+            "workdir={workdir}\nsource_path={source}\nrecipe_path={recipe}\nmodel_path={model}\n"
+        ));
+    }
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "source-model provenance manifest is incomplete or has trailing fields".to_string(),
+        );
+    }
+    canonical.push_str("status=complete\n");
+    if canonical != text {
+        return Err("source-model provenance manifest is not canonical".to_string());
+    }
+    Ok(SourceModelProvenanceManifest {
+        tool: tool.to_string(),
+        tool_revision: tool_revision.to_string(),
+        members,
+    })
+}
+
+fn verify_bound_source_model_provenance(
+    query: &ControllerMtbddPlantManifest,
+    provenance_path: &Path,
+    evidence_path: &Path,
+) -> Result<source_model_attestation::SourceModelAttestationSummary, String> {
+    let provenance = parse_source_model_provenance_manifest(provenance_path)?;
+    let mut expected_pairs = vec![(
+        query.controller_source_path.clone(),
+        query.controller_aiger_path.clone(),
+    )];
+    for member in &query.members {
+        let pair = (
+            member.plant_source_path.clone(),
+            member.plant_aiger_path.clone(),
+        );
+        if !expected_pairs.contains(&pair) {
+            expected_pairs.push(pair);
+        }
+    }
+    if provenance.members.len() != expected_pairs.len()
+        || provenance
+            .members
+            .iter()
+            .zip(&expected_pairs)
+            .any(|(member, expected)| {
+                member.source_path != expected.0 || member.model_path != expected.1
+            })
+    {
+        return Err(
+            "source-model provenance subjects do not exactly match the portfolio query".to_string(),
+        );
+    }
+
+    let mut owned = Vec::with_capacity(provenance.members.len());
+    for member in &provenance.members {
+        owned.push((
+            read_bounded_regular_file(
+                &member.source_path,
+                AAG_INPUT_LIMIT_BYTES as usize,
+                "attested source",
+            )?,
+            read_bounded_regular_file(
+                &member.recipe_path,
+                SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES,
+                "attested synthesis recipe",
+            )?,
+            read_bounded_regular_file(
+                &member.model_path,
+                AAG_INPUT_LIMIT_BYTES as usize,
+                "attested model",
+            )?,
+        ));
+    }
+    let inputs = owned
+        .iter()
+        .map(|(source, recipe, model)| SourceModelBindingInput {
+            source,
+            recipe,
+            model,
+        })
+        .collect::<Vec<_>>();
+    let evidence = read_bounded_regular_file(
+        evidence_path,
+        source_model_attestation::MAX_ATTESTATION_BYTES,
+        "source-model attestation evidence",
+    )?;
+    let summary = source_model_attestation::verify_source_model_attestation(&evidence, &inputs)
+        .map_err(|error| error.to_string())?;
+    if summary.tool != provenance.tool || summary.tool_revision != provenance.tool_revision {
+        return Err(
+            "source-model attestation tool identity does not match its provenance manifest"
+                .to_string(),
+        );
+    }
+    Ok(summary)
+}
+
 fn parse_controller_mtbdd_plant_manifest(
     manifest_path: &Path,
     max_controller_inputs: usize,
@@ -25379,17 +25611,19 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "controller_proof_mtbdd_portfolio_cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} proof_artifact_version={} direct_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_policy_bytes={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_horizon={} max_product_states={} refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed",
+                "controller_proof_mtbdd_portfolio_cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} proof_artifact_version={} direct_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} source_model_attestation_version={} max_policy_bytes={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_horizon={} max_product_states={} max_attestation_bytes={} refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed attested_verification=required accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed",
                 controller_plant_artifact::CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
                 controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
                 controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
                 controller_plant_artifact::DIRECT_PLANT_ARTIFACT_VERSION,
+                source_model_attestation::SOURCE_MODEL_ATTESTATION_VERSION,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
                 guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
                 guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
                 guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
                 guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+                source_model_attestation::MAX_ATTESTATION_BYTES,
             );
             Ok(true)
         }
@@ -25495,12 +25729,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             Ok(true)
         }
-        "verify-controller-proof-mtbdd-portfolio-resources" => {
-            if args.len() != 4 {
-                return Err(
+        "verify-controller-proof-mtbdd-portfolio-resources"
+        | "verify-controller-proof-mtbdd-portfolio-resources-attested" => {
+            let attested = command.ends_with("-attested");
+            let expected_args = if attested { 6 } else { 4 };
+            if args.len() != expected_args {
+                return Err(if attested {
+                    "usage: guarded-continuation-checker verify-controller-proof-mtbdd-portfolio-resources-attested MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-portfolio PROVENANCE.txt ATTESTATION.csv"
+                        .to_string()
+                } else {
                     "usage: guarded-continuation-checker verify-controller-proof-mtbdd-portfolio-resources MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-portfolio"
-                        .to_string(),
-                );
+                        .to_string()
+                });
             }
             let invocation_started = Instant::now();
             let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
@@ -25510,6 +25750,15 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     controller_mtbdd::MAX_MTBDD_INPUTS,
                     controller_mtbdd::MAX_MTBDD_OUTPUTS,
                 )?;
+            let provenance = if attested {
+                Some(verify_bound_source_model_provenance(
+                    &manifest,
+                    Path::new(&args[4]),
+                    Path::new(&args[5]),
+                )?)
+            } else {
+                None
+            };
             let load_micros = invocation_started.elapsed().as_micros();
             let inputs = manifest
                 .members
@@ -25548,7 +25797,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let resources = governed.resources;
             let summary = governed.verification;
             println!(
-                "controller-proof-mtbdd-portfolio-resource status=VERIFIED cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} backend={} reason={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} equivalence_artifact_bytes={} unsat_proof_bytes={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} assignments_checked={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}",
+                "controller-proof-mtbdd-portfolio-resource status=VERIFIED cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} backend={} reason={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} equivalence_artifact_bytes={} unsat_proof_bytes={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} assignments_checked={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}{}",
                 resources.version,
                 controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
                 match summary.backend {
@@ -25574,6 +25823,13 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 resources.artifact_bytes,
                 summary.assignments_checked,
                 invocation_started.elapsed().as_micros(),
+                provenance.map_or_else(String::new, |summary| format!(
+                    " source_model_attestation_version={} source_model_members={} source_model_tool={} source_model_tool_revision={} provenance=BOUND",
+                    summary.version,
+                    summary.member_count,
+                    summary.tool,
+                    summary.tool_revision,
+                )),
             );
             for (index, member) in summary.members.iter().enumerate() {
                 println!(

@@ -29,7 +29,11 @@
   inputs, observed outputs, and member wiring before workload calculation.
   Add canonical source-to-model provenance for the public controller and plant,
   with exact-revision isolated Yosys regeneration, deterministic SHA-256
-  evidence, CI reproduction, and hostile manifest/model controls.
+  evidence, CI reproduction, and hostile manifest/model controls. Add a public
+  canonical attestation verifier and an attested governed-portfolio command
+  that binds the exact controller and distinct plant source/model subjects
+  before returning any answer. Expose the same fail-closed path through the
+  typed Rust client and exercise it in public acceptance.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

@@ -8,8 +8,16 @@ use guarded_continuation_checker::{
     ControllerProofMtbddResourceTool, ControllerProofMtbddTool, FailureClass, InvocationStatus,
     OperationKind, PredicateApiError,
 };
+use sha2::{Digest, Sha256};
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
+
+fn sha256(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
 
 fn fixture() -> PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -143,7 +151,7 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
         "controller_proof_mtbdd_portfolio_cli_version=1 policy_version=1 envelope_version=1 artifact_version=1"
     ));
     assert!(portfolio_discovery.ends_with(
-        "routing=static fallback=exact proof_failure=fail-closed accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n"
+        "routing=static fallback=exact proof_failure=fail-closed attested_verification=required accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n"
     ));
     let portfolio = root.join("batch.proof-mtbdd-portfolio");
     let portfolio_created = Command::new(BINARY)
@@ -188,6 +196,71 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     let governed_portfolio = String::from_utf8(governed_portfolio.stdout).unwrap();
     assert!(governed_portfolio.contains("backend=PROOF_MTBDD reason=MTBDD_ADMITTED"));
     assert!(governed_portfolio.contains("assignments_checked=0"));
+    fs::write(root.join("controller.ys"), b"read controller\n").unwrap();
+    fs::write(root.join("plant.ys"), b"read plant\n").unwrap();
+    let revision = "0123456789abcdef0123456789abcdef01234567";
+    fs::write(
+        root.join("provenance.txt"),
+        format!(
+            "source_model_provenance_manifest_version=1\ntool=yosys\ntool_revision={revision}\nmember_count=2\nworkdir=.\nsource_path=controller.src\nrecipe_path=controller.ys\nmodel_path=controller.aag\nworkdir=.\nsource_path=plant.src\nrecipe_path=plant.ys\nmodel_path=plant.aag\nstatus=complete\n"
+        ),
+    )
+    .unwrap();
+    let attested_subjects = [
+        (
+            fs::read(root.join("controller.src")).unwrap(),
+            fs::read(root.join("controller.ys")).unwrap(),
+            fs::read(root.join("controller.aag")).unwrap(),
+        ),
+        (
+            fs::read(root.join("plant.src")).unwrap(),
+            fs::read(root.join("plant.ys")).unwrap(),
+            fs::read(root.join("plant.aag")).unwrap(),
+        ),
+    ];
+    let mut evidence = "schema_version,member,tool,tool_revision,source_sha256,recipe_sha256,model_sha256,regenerated_sha256,byte_match,status\n".to_string();
+    for (member, (source, recipe, model)) in attested_subjects.iter().enumerate() {
+        evidence.push_str(&format!(
+            "1,{member},yosys,{revision},{},{},{},{},true,attested\n",
+            sha256(source),
+            sha256(recipe),
+            sha256(model),
+            sha256(model),
+        ));
+    }
+    fs::write(root.join("attestation.csv"), &evidence).unwrap();
+    let attested = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-portfolio-resources-attested")
+        .arg(&manifest)
+        .arg(&policy)
+        .arg(&portfolio)
+        .arg(root.join("provenance.txt"))
+        .arg(root.join("attestation.csv"))
+        .output()
+        .unwrap();
+    assert!(attested.status.success(), "{:?}", attested.stderr);
+    let attested = String::from_utf8(attested.stdout).unwrap();
+    assert!(attested.contains("provenance=BOUND"));
+    assert!(attested.contains("source_model_members=2"));
+    assert!(attested.contains("safe=1 unsafe=1"));
+
+    fs::write(root.join("controller.src"), b"substituted controller\n").unwrap();
+    let refused_attestation = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-portfolio-resources-attested")
+        .arg(&manifest)
+        .arg(&policy)
+        .arg(&portfolio)
+        .arg(root.join("provenance.txt"))
+        .arg(root.join("attestation.csv"))
+        .output()
+        .unwrap();
+    assert!(!refused_attestation.status.success());
+    assert_eq!(refused_attestation.status.code(), Some(2));
+    let refusal = String::from_utf8(refused_attestation.stderr).unwrap();
+    assert!(refusal.contains("source digest does not match"));
+    assert!(!refusal.contains(" SAFE"));
+    assert!(!refusal.contains(" UNSAFE"));
+    fs::write(root.join("controller.src"), b"tiny controller v1\n").unwrap();
     let portfolio_tool = ControllerProofMtbddPortfolioTool::discover(BINARY).unwrap();
     assert_eq!(portfolio_tool.capabilities().cli_version, 1);
     assert_eq!(portfolio_tool.capabilities().refusal_exit_code, 3);
@@ -204,6 +277,16 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     );
     assert_eq!((typed_portfolio.safe, typed_portfolio.unsafe_count), (1, 1));
     assert_eq!(typed_portfolio.assignments_checked, 0);
+    let typed_attested = portfolio_tool
+        .verify_attested(
+            &manifest,
+            &policy,
+            &portfolio,
+            &root.join("provenance.txt"),
+            &root.join("attestation.csv"),
+        )
+        .unwrap();
+    assert_eq!((typed_attested.safe, typed_attested.unsafe_count), (1, 1));
     let governed = Command::new(BINARY)
         .arg("verify-controller-proof-mtbdd-plant-resources")
         .arg(&manifest)

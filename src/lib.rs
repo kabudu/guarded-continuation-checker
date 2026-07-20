@@ -166,6 +166,7 @@ pub enum OperationKind {
     VerifyControllerProofMtbddPlantResources,
     DiscoverControllerProofMtbddPortfolio,
     VerifyControllerProofMtbddPortfolioResources,
+    VerifyControllerProofMtbddPortfolioResourcesAttested,
 }
 
 impl OperationKind {
@@ -209,6 +210,9 @@ impl OperationKind {
             }
             Self::VerifyControllerProofMtbddPortfolioResources => {
                 "verify_controller_proof_mtbdd_portfolio_resources"
+            }
+            Self::VerifyControllerProofMtbddPortfolioResourcesAttested => {
+                "verify_controller_proof_mtbdd_portfolio_resources_attested"
             }
         }
     }
@@ -581,6 +585,7 @@ pub struct ControllerProofMtbddPortfolioCapabilities {
     pub proof_artifact_version: u32,
     pub direct_artifact_version: u32,
     pub manifest_version: u32,
+    pub source_model_attestation_version: u32,
     pub max_policy_bytes: usize,
     pub max_artifact_bytes: usize,
     pub max_equivalence_artifact_bytes: usize,
@@ -588,6 +593,7 @@ pub struct ControllerProofMtbddPortfolioCapabilities {
     pub max_members: usize,
     pub max_horizon: usize,
     pub max_product_states: usize,
+    pub max_attestation_bytes: usize,
     pub refusal_exit_code: i32,
 }
 
@@ -1636,7 +1642,52 @@ impl ControllerProofMtbddPortfolioTool {
             command,
             self.policy,
         )?;
-        parse_controller_proof_mtbdd_portfolio_resource_summary(output, &self.capabilities)
+        parse_controller_proof_mtbdd_portfolio_resource_summary(output, &self.capabilities, false)
+            .map_err(classify_controller_proof_mtbdd_resource_refusal)
+    }
+
+    pub fn verify_attested(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+        provenance_manifest: &Path,
+        attestation: &Path,
+    ) -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
+        self.verify_attested_observed(
+            manifest,
+            resource_policy,
+            artifact,
+            provenance_manifest,
+            attestation,
+        )
+        .map(|observed| observed.value)
+        .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_attested_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+        provenance_manifest: &Path,
+        attestation: &Path,
+    ) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError>
+    {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-portfolio-resources-attested")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact)
+            .arg(provenance_manifest)
+            .arg(attestation);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPortfolioResourcesAttested,
+            command,
+            self.policy,
+        )?;
+        parse_controller_proof_mtbdd_portfolio_resource_summary(output, &self.capabilities, true)
             .map_err(classify_controller_proof_mtbdd_resource_refusal)
     }
 }
@@ -2327,6 +2378,7 @@ fn parse_controller_proof_mtbdd_portfolio_capabilities(
         "proof_artifact_version",
         "direct_artifact_version",
         "manifest_version",
+        "source_model_attestation_version",
         "max_policy_bytes",
         "max_artifact_bytes",
         "max_equivalence_artifact_bytes",
@@ -2334,11 +2386,13 @@ fn parse_controller_proof_mtbdd_portfolio_capabilities(
         "max_members",
         "max_horizon",
         "max_product_states",
+        "max_attestation_bytes",
         "refusal_exit",
         "backends",
         "routing",
         "fallback",
         "proof_failure",
+        "attested_verification",
         "accounting",
         "timing_calibration",
         "result_on_refusal",
@@ -2355,12 +2409,13 @@ fn parse_controller_proof_mtbdd_portfolio_capabilities(
         .zip(keys)
         .map(|(field, key)| token_value(field, key))
         .collect::<Result<Vec<_>, _>>()?;
-    if values[15..]
+    if values[17..]
         != [
             "proof-mtbdd,direct-exact",
             "static",
             "exact",
             "fail-closed",
+            "required",
             "conservative-static",
             "none",
             "none",
@@ -2372,18 +2427,18 @@ fn parse_controller_proof_mtbdd_portfolio_capabilities(
             "controller proof MTBDD portfolio contract is unsupported".to_string(),
         ));
     }
-    let versions = values[..7]
+    let versions = values[..8]
         .iter()
         .enumerate()
         .map(|(index, value)| canonical_u32(value, keys[index]))
         .collect::<Result<Vec<_>, _>>()?;
-    let limits = values[7..14]
+    let limits = values[8..16]
         .iter()
         .enumerate()
-        .map(|(index, value)| canonical_usize(value, keys[index + 7]))
+        .map(|(index, value)| canonical_usize(value, keys[index + 8]))
         .collect::<Result<Vec<_>, _>>()?;
-    let refusal_exit = canonical_usize(values[14], keys[14])?;
-    if versions != [1, 1, 1, 1, 1, 1, 1] {
+    let refusal_exit = canonical_usize(values[16], keys[16])?;
+    if versions != [1, 1, 1, 1, 1, 1, 1, 1] {
         return Err(PredicateApiError::IncompatibleContract(
             "controller proof MTBDD portfolio version tuple is unsupported".to_string(),
         ));
@@ -2401,6 +2456,7 @@ fn parse_controller_proof_mtbdd_portfolio_capabilities(
         proof_artifact_version: versions[4],
         direct_artifact_version: versions[5],
         manifest_version: versions[6],
+        source_model_attestation_version: versions[7],
         max_policy_bytes: limits[0],
         max_artifact_bytes: limits[1],
         max_equivalence_artifact_bytes: limits[2],
@@ -2408,6 +2464,7 @@ fn parse_controller_proof_mtbdd_portfolio_capabilities(
         max_members: limits[4],
         max_horizon: limits[5],
         max_product_states: limits[6],
+        max_attestation_bytes: limits[7],
         refusal_exit_code: 3,
     })
 }
@@ -2992,6 +3049,7 @@ fn parse_controller_proof_mtbdd_resource_summary(
 fn parse_controller_proof_mtbdd_portfolio_resource_summary(
     output: ManagedOutput,
     capabilities: &ControllerProofMtbddPortfolioCapabilities,
+    require_attestation: bool,
 ) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError> {
     let (stdout, mut metrics) = successful_stdout(output)?;
     let parsed = (|| -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
@@ -3033,13 +3091,50 @@ fn parse_controller_proof_mtbdd_portfolio_resource_summary(
             "verification_micros",
             "elapsed_micros",
         ];
-        if fields.len() != keys.len()
+        let attested = fields.len() == keys.len() + 5;
+        if attested != require_attestation
+            || (!attested && fields.len() != keys.len())
             || fields[0] != keys[0]
             || token_value(fields[1], "status")? != "VERIFIED"
         {
             return Err(PredicateApiError::InvalidResponse(
                 "controller proof MTBDD portfolio summary shape is invalid".to_string(),
             ));
+        }
+        if attested {
+            let attestation_keys = [
+                "source_model_attestation_version",
+                "source_model_members",
+                "source_model_tool",
+                "source_model_tool_revision",
+                "provenance",
+            ];
+            let attestation_fields = &fields[keys.len()..];
+            let version = canonical_u32(
+                token_value(attestation_fields[0], attestation_keys[0])?,
+                attestation_keys[0],
+            )?;
+            let members = canonical_usize(
+                token_value(attestation_fields[1], attestation_keys[1])?,
+                attestation_keys[1],
+            )?;
+            let tool = token_value(attestation_fields[2], attestation_keys[2])?;
+            let revision = token_value(attestation_fields[3], attestation_keys[3])?;
+            let provenance = token_value(attestation_fields[4], attestation_keys[4])?;
+            if version != capabilities.source_model_attestation_version
+                || members == 0
+                || members > capabilities.max_members.saturating_add(1)
+                || tool != "yosys"
+                || revision.len() != 40
+                || !revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || provenance != "BOUND"
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio attestation response is invalid".to_string(),
+                ));
+            }
         }
         let cli_version = canonical_u32(token_value(fields[2], keys[2])?, keys[2])?;
         let policy_version = canonical_u32(token_value(fields[3], keys[3])?, keys[3])?;
@@ -3081,7 +3176,7 @@ fn parse_controller_proof_mtbdd_portfolio_resource_summary(
                 "controller proof MTBDD portfolio route is inconsistent".to_string(),
             ));
         }
-        let numeric = fields[8..]
+        let numeric = fields[8..keys.len()]
             .iter()
             .zip(&keys[8..])
             .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
@@ -4284,7 +4379,7 @@ mod tests {
 
     #[test]
     fn controller_proof_mtbdd_portfolio_capability_parser_is_strict() {
-        let canonical = "controller_proof_mtbdd_portfolio_cli_version=1 policy_version=1 envelope_version=1 artifact_version=1 proof_artifact_version=1 direct_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n";
+        let canonical = "controller_proof_mtbdd_portfolio_cli_version=1 policy_version=1 envelope_version=1 artifact_version=1 proof_artifact_version=1 direct_artifact_version=1 manifest_version=1 source_model_attestation_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_horizon=1024 max_product_states=4096 max_attestation_bytes=65536 refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed attested_verification=required accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n";
         let parsed = parse_controller_proof_mtbdd_portfolio_capabilities(canonical).unwrap();
         assert_eq!(parsed.artifact_version, 1);
         assert_eq!(parsed.max_unsat_proof_bytes, 1_048_576);
@@ -4293,6 +4388,10 @@ mod tests {
             canonical.replace("routing=static", "routing=timed"),
             canonical.replace("fallback=exact", "fallback=heuristic"),
             canonical.replace("proof_failure=fail-closed", "proof_failure=fallback"),
+            canonical.replace(
+                "attested_verification=required",
+                "attested_verification=optional",
+            ),
             canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
             canonical.replace("max_members=64", "max_members=064"),
             canonical.replace('\n', "\r\n"),

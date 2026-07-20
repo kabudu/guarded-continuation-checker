@@ -11,6 +11,9 @@ tool production-grade.
 - RTL synthesis has bounded input size, a wall-clock timeout, isolated staging,
   fixed scripts, portable hierarchy lowering, and atomic manifest publication.
 - Single- and multi-file sources are snapshotted with ordered provenance.
+- Governed proof-portfolio verification has an attested mode that refuses to
+  return an answer unless canonical source, recipe, and model evidence is bound
+  to the exact controller and distinct plant paths used by the query.
 - Unsafe bounded results preserve named inputs and state for replay.
 - RTL safety reports and manifests declare compatibility-locked artifact schema
   version 4 and firmware CLI contract version 2.

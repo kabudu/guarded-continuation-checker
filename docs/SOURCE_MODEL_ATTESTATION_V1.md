@@ -53,9 +53,33 @@ revision, CRLF, and NUL. CI runs the test with the same maintained Yosys revisio
 recorded by the provenance manifest. The hosted workflow builds that exact
 revision without ABC rather than trusting the runner's moving package version.
 
+## Bound portfolio verification
+
+The governed proof portfolio can require this evidence as part of the same
+invocation:
+
+```text
+guarded-continuation-checker \
+  verify-controller-proof-mtbdd-portfolio-resources-attested \
+  QUERY.txt POLICY.txt ARTIFACT.proof-mtbdd-portfolio \
+  PROVENANCE.txt ATTESTATION.csv
+```
+
+The command requires the first provenance subject to match the query's exact
+controller source and model paths. Each distinct plant source/model pair in the
+query must then appear exactly once and in first-use order. The verifier reads
+and hashes every source, recipe, and model, verifies the canonical CSV through
+the public `source_model_attestation` Rust API, and checks that its tool identity
+matches the provenance manifest before checking the proof portfolio. Failure
+produces no SAFE or UNSAFE answer. The typed
+`ControllerProofMtbddPortfolioTool::verify_attested` API applies the same
+contract without shell invocation.
+
 ## Claim boundary
 
-This closes source-to-model provenance for these two pinned models only. It does
+For the attested command, this closes the substitution gap between the query,
+the retained model bytes, and the proof portfolio. For the retained public
+evidence, it covers these two pinned models only. It does
 not prove Yosys correct, establish semantic equivalence independently of Yosys,
 validate the physical fidelity of the repository-authored plant, or attest an
 external partner model. General self-service projects still need a signed build

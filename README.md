@@ -79,8 +79,11 @@ routes. A deterministic six-job acceptance pipeline now passes the pinned public
 washing-controller batch and the exact fallback under Linux process limits.
 The pinned controller and physical-plant AIGER files now also have
 [deterministic source-to-model attestation](docs/SOURCE_MODEL_ATTESTATION_V1.md)
-through their exact Yosys revision and synthesis recipes. Hosted reproduction,
-general project provenance, and compatibility gates remain open.
+through their exact Yosys revision and synthesis recipes. Attestation can now
+be made mandatory in the governed proof-portfolio invocation, including through
+a typed Rust client. This prevents a valid portfolio result from being accepted
+against substituted controller or plant model bytes. General project
+provenance and compatibility gates remain open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

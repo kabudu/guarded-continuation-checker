@@ -51,8 +51,22 @@ verify_governed() {
   fi
 }
 
+verify_attested() {
+  if [ "$(uname -s)" = Linux ]; then
+    command -v prlimit >/dev/null
+    prlimit --as=67108864 -- \
+      "$binary" verify-controller-proof-mtbdd-portfolio-resources-attested "$@"
+  else
+    "$binary" verify-controller-proof-mtbdd-portfolio-resources-attested "$@"
+  fi
+}
+
 proof=$(verify_governed "$proof_manifest" "$policy" "$proof_artifact")
 direct=$(verify_governed "$direct_manifest" "$policy" "$direct_artifact")
+attested=$(verify_attested \
+  "$proof_manifest" "$policy" "$proof_artifact" \
+  corpus/rtl/wmcontroller/source-model-provenance-v1.txt \
+  results/public-washing-source-model-attestation-v1.csv)
 
 field() {
   printf '%s\n' "$1" | sed -n "1s/.* $2=\\([^ ]*\\).*/\\1/p"
@@ -71,6 +85,10 @@ test "$(field "$proof" reason)" = MTBDD_ADMITTED
 test "$(field "$proof" safe)" = 2
 test "$(field "$proof" unsafe)" = 4
 test "$(field "$proof" assignments_checked)" = 0
+test "$(field "$attested" provenance)" = BOUND
+test "$(field "$attested" source_model_members)" = 2
+test "$(field "$attested" safe)" = 2
+test "$(field "$attested" unsafe)" = 4
 test "$(field "$direct" backend)" = DIRECT_EXACT
 test "$(field "$direct" reason)" = BOUNDARY_LIMIT
 test "$(field "$direct" safe)" = 1
