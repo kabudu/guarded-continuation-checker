@@ -37,6 +37,9 @@ const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
+const CONTROLLER_PLANT_RESOURCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_PLANT_RESOURCE_POLICY_VERSION: u32 = 1;
+const CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
@@ -65,6 +68,11 @@ struct ControllerMtbddPlantManifest {
     relevant_inputs: Vec<usize>,
     observed_outputs: Vec<usize>,
     members: Vec<ControllerMtbddPlantManifestMember>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ControllerPlantResourcePolicy {
+    envelope: controller_plant_artifact::ControllerPlantResourceEnvelope,
 }
 
 fn synthesis_memory_limit_kind() -> &'static str {
@@ -24956,6 +24964,75 @@ fn parse_controller_mtbdd_plant_manifest(
     })
 }
 
+fn parse_controller_plant_resource_policy(
+    path: &Path,
+) -> Result<ControllerPlantResourcePolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES,
+        "controller plant resource policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller plant resource policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller plant resource policy must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller plant resource policy expected {key}"))
+    };
+    let version = take("controller_plant_resource_policy_version")?;
+    if version != CONTROLLER_PLANT_RESOURCE_POLICY_VERSION.to_string() {
+        return Err("unsupported controller plant resource policy version".to_string());
+    }
+    let parse = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller plant resource policy {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!(
+                "controller plant resource policy {label} is noncanonical"
+            ));
+        }
+        Ok(parsed)
+    };
+    let artifact_text = take("max_artifact_bytes")?;
+    let artifact_bytes = parse(artifact_text, "artifact bytes")?;
+    let members_text = take("max_members")?;
+    let members = parse(members_text, "members")?;
+    let horizon_text = take("max_member_horizon")?;
+    let horizon = parse(horizon_text, "member horizon")?;
+    let states_text = take("max_product_states_per_member")?;
+    let states = parse(states_text, "product states")?;
+    let transitions_text = take("max_transition_evaluations")?;
+    let transitions = parse(transitions_text, "transition evaluations")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller plant resource policy is incomplete or has trailing fields".to_string(),
+        );
+    }
+    let canonical = format!(
+        "controller_plant_resource_policy_version={version}\nmax_artifact_bytes={artifact_text}\nmax_members={members_text}\nmax_member_horizon={horizon_text}\nmax_product_states_per_member={states_text}\nmax_transition_evaluations={transitions_text}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("controller plant resource policy is not canonical".to_string());
+    }
+    let envelope = controller_plant_artifact::ControllerPlantResourceEnvelope::new(
+        artifact_bytes,
+        members,
+        horizon,
+        states,
+        transitions,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(ControllerPlantResourcePolicy { envelope })
+}
+
 type LoadedControllerPlantManifest = (
     ControllerMtbddPlantManifest,
     AigerTransition,
@@ -25115,6 +25192,115 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
             );
+            Ok(true)
+        }
+        "controller-plant-resource-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-plant-resource-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_plant_resource_cli_version={CONTROLLER_PLANT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PLANT_RESOURCE_POLICY_VERSION} envelope_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} portfolio_artifact_version={} max_policy_bytes={CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_members={} max_horizon={} max_product_states={} accounting=conservative-static timing_calibration=none result_on_refusal=none unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+                controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+            );
+            Ok(true)
+        }
+        "verify-controller-plant-portfolio-resources" => {
+            if args.len() != 4 {
+                return Err(
+                    "usage: guarded-continuation-checker verify-controller-plant-portfolio-resources MANIFEST.txt POLICY.txt INPUT.controller-plant"
+                        .to_string(),
+                );
+            }
+            let invocation_started = Instant::now();
+            let policy = parse_controller_plant_resource_policy(Path::new(&args[2]))?;
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
+                    guarded_continuation_checker::controller_plant::MAX_PLANT_INPUTS,
+                )?;
+            let load_micros = invocation_started.elapsed().as_micros();
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact_started = Instant::now();
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[3]),
+                policy.envelope.max_artifact_bytes(),
+                "controller plant governed portfolio",
+            )?;
+            let artifact_micros = artifact_started.elapsed().as_micros();
+            let verification_started = Instant::now();
+            let governed =
+                controller_plant_artifact::verify_controller_mtbdd_plant_portfolio_with_resources(
+                    &controller,
+                    controller_digest,
+                    &manifest.relevant_inputs,
+                    &manifest.observed_outputs,
+                    &inputs,
+                    &encoded,
+                    policy.envelope,
+                )
+                .map_err(|error| error.to_string())?;
+            let verification_micros = verification_started.elapsed().as_micros();
+            let resources = governed.resources;
+            let summary = governed.verification;
+            println!(
+                "controller-plant-resource status=VERIFIED cli_version={CONTROLLER_PLANT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PLANT_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} backend={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}",
+                resources.version,
+                controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
+                match resources.backend {
+                    controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::Mtbdd =>
+                        "MTBDD",
+                    controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::DirectExact =>
+                        "DIRECT_EXACT",
+                },
+                resources.members,
+                resources.maximum_member_horizon,
+                resources.maximum_product_states,
+                resources.transition_evaluation_bound,
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                resources.artifact_bytes,
+                invocation_started.elapsed().as_micros(),
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-plant-resource-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe =>
+                            "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe =>
+                            "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
             Ok(true)
         }
         "certify-controller-plant-portfolio" | "verify-controller-plant-portfolio" => {

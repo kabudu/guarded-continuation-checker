@@ -235,9 +235,11 @@ member, horizon, product-state, and conservative transition-evaluation limits
 through the public Rust API. Both exact portfolio routes pass at their inclusive
 boundaries, and each tighter policy fails before semantic replay. This begins an
 explicit policy layer for the low-memory consumer profile. Canonical CLI policy
-files, stable process refusal classes, Linux enforcement correlation, multi-job
-aggregation, and constrained-workflow acceptance remain open, so the general
-resource-governance and observability rows do not change.
+files, strict capability and result parsing, hostile policy rejection, and a
+typed bounded process client are now implemented. Stable process refusal
+classes, Linux enforcement correlation, multi-job aggregation, and
+constrained-workflow acceptance remain open, so the general resource-governance
+and observability rows do not change.
 
 ## Rules
 
