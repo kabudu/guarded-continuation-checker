@@ -254,6 +254,23 @@ under that address-space ceiling. Hosted Linux CI reproduces the governed
 pipeline. Address space is not peak RSS, and this evidence is not independent
 acceptance.
 
+The governed proof-carrying MTBDD portfolio now binds caller-selected proof and
+composition limits before proof checking or semantic replay. Its static route
+uses proof-carrying MTBDD only after structural admission and exact direct replay
+only for the three versioned structural rejection classes. Proof generation,
+encoding, checking, malformed evidence, and query drift fail closed rather than
+triggering fallback. Rust, file CLI, and typed bounded-process interfaces cover
+both routes and seven typed resource refusals. A deterministic six-job pipeline
+preserves 3 SAFE and 5 UNSAFE results across the public washing-controller batch
+and a boundary fallback control, with four negative controls carrying no answer.
+The acceptance CSV and both canonical artifact SHA-256 fingerprints are
+byte-identical on macOS and an offline Linux container under a 64 MiB
+address-space ceiling. This closes the local public-workflow, process-integration,
+and compatibility-baseline mechanism gates. Exact-head hosted reproduction,
+compatibility through a subsequent tagged release, independently sourced plant
+validity, source-to-model attestation, and independent suitability assessment
+remain open. No production-readiness row closes yet.
+
 ## Rules
 
 - No timing-based per-formula calibration.
