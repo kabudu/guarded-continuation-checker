@@ -113,6 +113,14 @@ jobs:
         run: |
           scripts/check-controller-split-compatibility-v1.sh \
             target/debug/guarded-continuation-checker
+      - name: Reproduce governed split observability acceptance
+        run: |
+          shellcheck -s sh scripts/run-controller-split-observability-acceptance.sh
+          scripts/run-controller-split-observability-acceptance.sh \
+            target/debug/guarded-continuation-checker \
+            /tmp/controller-split-observability-acceptance.csv
+          diff -u results/controller-split-observability-acceptance-v1.csv \
+            /tmp/controller-split-observability-acceptance.csv
       - name: Exercise proof-carrying MTBDD whole-process comparison
         env:
           TRIALS: 3

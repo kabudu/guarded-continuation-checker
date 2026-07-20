@@ -77,3 +77,7 @@ the governed split path. It does not yet expose cache hit rates, allocator
 peaks, CPU counters, or per-phase peak RSS. The external process-resource
 benchmark remains the source for architecture-labelled peak RSS and must not be
 mixed into deterministic compatibility results or routing decisions.
+
+After fixture setup, the separate governed split acceptance runs five observed
+contract invocations and retains only deterministic structural aggregates. It
+is linked from the controller split observability specification.

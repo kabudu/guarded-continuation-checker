@@ -76,7 +76,9 @@ containment coverage, operation counts, and failure-class counts in canonical
 CSV. A real governed split integration test retains discovery, verification,
 and resource refusal in one three-job aggregate. The additive observed split
 path reports reconciled phase durations and structural work counters only after
-a complete success. Internal verifier cache and allocation counters remain
+a complete success. After fixture setup, five retained observed-contract
+invocations aggregate four verified batches and prove that a resource refusal
+emits no partial metrics. Internal verifier cache and allocation counters remain
 open.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the

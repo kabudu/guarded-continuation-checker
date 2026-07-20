@@ -8,7 +8,11 @@
   complete success. Add a bounded shell-free Rust client that strictly parses
   and reconciles every counter, rejects hostile or overflowing helper output,
   and preserves typed refusals plus whole-process metrics without returning a
-  partial observed result.
+  partial observed result. After fixture setup, retain five observed-contract
+  invocations across discovery, three successful requests, four verified
+  batches, and a refusal that emits no partial metrics. Reproduce their
+  deterministic structural aggregate in ordinary Linux CI while excluding
+  host-dependent timings.
 - Add the first Rust API slice for governed proof-carrying controller MTBDD
   verification. Bound the complete artifact, equivalence artifact, embedded
   UNSAT proof, members, horizons, product states, and transition evaluations

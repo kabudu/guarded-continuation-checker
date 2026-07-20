@@ -67,6 +67,34 @@ resource refusal remains a typed refusal with process metrics. Other failures
 remain typed execution, contract, timeout, output, or response errors. This
 prevents incomplete measurements from being mistaken for successful evidence.
 
+## Retained multi-job acceptance
+
+Run:
+
+```sh
+scripts/run-controller-split-observability-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  /tmp/controller-split-observability-acceptance.csv
+diff -u results/controller-split-observability-acceptance-v1.csv \
+  /tmp/controller-split-observability-acceptance.csv
+```
+
+After three fixture-production processes, the workflow performs five observed
+contract invocations: discovery, one two-batch verification, two single-batch
+verifications, and a controller-budget refusal. Its retained CSV
+aggregates three controller admissions, four verified batches, eleven manifest
+loads, eight plant reads and resource assessments, seven buffered rows, exact
+evidence bytes, and exact conservative transition bounds. It also proves that
+the refused job contributes no partial metrics. Phase timings are validated in
+each successful observed process but omitted from the retained CSV because they
+are not portable evidence.
+
+Hosted run
+[29781337392](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29781337392)
+passes the CLI and typed observability contract, hostile-response controls,
+portable APIs on Linux, macOS, and Windows, the public RTL corpus, dependency
+audit, and reproducible Linux packaging on exact commit `6393ccf`.
+
 ## Boundary
 
 This contract exposes deterministic work counts and elapsed phase observations.
