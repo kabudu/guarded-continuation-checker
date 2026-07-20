@@ -45,7 +45,10 @@ if ! docker run --rm --network none \
   --volume "$source_dir:/source:ro" --volume "$vendor_dir:/vendor:ro" \
   --volume "$output_dir:/out" "$qualification_image" \
   bash -euo pipefail -c '
-    cp -a /source /tmp/ric3
+    # The source checkout may be owned by the hosted runner UID. Normalise the
+    # private copy so upstream build scripts can invoke Git without triggering
+    # safe.directory rejection inside the root-owned qualification container.
+    cp -a --no-preserve=ownership /source /tmp/ric3
     mkdir -p /tmp/ric3/.cargo
     printf "%s\n" "[source.crates-io]" "replace-with = \"vendored-sources\"" \
       "[source.vendored-sources]" "directory = \"/vendor\"" \
