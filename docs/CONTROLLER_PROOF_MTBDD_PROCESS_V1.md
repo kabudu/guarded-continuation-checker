@@ -27,6 +27,10 @@ All 20 rows preserve exact ordered answer and trace agreement. Compact checks
 assignment replay and writes 251,221 bytes, 29.39 times larger.
 
 This is a positive local whole-process result, not a universal speed claim.
-Hosted replication, peak-resource comparison, and comparison with the
-maintained formal workflow remain required. The static compact portfolio stays
-unchanged; no timing observation participates in routing.
+The complementary three-trial arm64 resource run records a negative memory
+tradeoff: median proof peak RSS is 21.22 MiB versus 16.41 MiB for creation, and
+9.61 MiB versus 4.02 MiB for verification. The speed profile therefore buys
+faster checking with larger transferred evidence and higher checker memory.
+Hosted replication and identical-scope comparison with the maintained formal
+workflow remain required. The static compact portfolio stays unchanged; no
+timing or memory observation participates in routing.

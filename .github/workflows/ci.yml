@@ -53,7 +53,8 @@ jobs:
             scripts/benchmark-controller-plant-portfolio-phases.sh \
             scripts/benchmark-controller-proof-mtbdd-plant.sh \
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
-            scripts/benchmark-controller-proof-mtbdd-process.sh
+            scripts/benchmark-controller-proof-mtbdd-process.sh \
+            scripts/benchmark-controller-proof-mtbdd-resources.sh
       - name: Exercise proof-carrying MTBDD plant benchmark
         run: |
           scripts/benchmark-controller-proof-mtbdd-plant.sh \
@@ -78,6 +79,16 @@ jobs:
           awk -F, -v trials="$TRIALS" 'NR > 1 { if ($8 != "true" || $9 != "ok" || $5 <= 0 || $6 <= 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["compact:create"] == trials && seen["compact:verify"] == trials && seen["proof:create"] == trials && seen["proof:verify"] == trials) }' \
             /tmp/controller-proof-mtbdd-process.csv
           cat /tmp/controller-proof-mtbdd-process.csv
+      - name: Measure proof-carrying MTBDD process resources
+        env:
+          TRIALS: 3
+        run: |
+          scripts/benchmark-controller-proof-mtbdd-resources.sh \
+            target/release/guarded-continuation-checker \
+            /tmp/controller-proof-mtbdd-resources.csv
+          awk -F, -v trials="$TRIALS" 'NR > 1 { if ($5 <= 0 || $6 <= 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["compact:create"] == trials && seen["compact:verify"] == trials && seen["proof:create"] == trials && seen["proof:verify"] == trials) }' \
+            /tmp/controller-proof-mtbdd-resources.csv
+          cat /tmp/controller-proof-mtbdd-resources.csv
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools

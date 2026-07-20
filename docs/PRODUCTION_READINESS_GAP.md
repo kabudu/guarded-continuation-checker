@@ -203,8 +203,9 @@ production portfolio and changes no readiness row.
 
 The first release-build whole-process baseline retains exact agreement and a
 2.00x median proof-verification improvement on one arm64 host. This closes the
-local process-overhead uncertainty, but hosted replication, peak-resource
-comparison, and identical-scope maintained-tool evidence remain open.
+local process-overhead uncertainty. The resource companion records higher proof
+peak RSS, so the profile is not an unconditional operational win. Hosted
+replication and identical-scope maintained-tool evidence remain open.
 
 ## Rules
 

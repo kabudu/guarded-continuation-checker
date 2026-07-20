@@ -10,6 +10,9 @@ scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
 scripts/benchmark-controller-proof-mtbdd-process.sh \
   target/release/guarded-continuation-checker \
   target/controller-proof-process.csv
+scripts/benchmark-controller-proof-mtbdd-resources.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-proof-resources.csv
 ```
 
 Both scripts refuse to overwrite output. Set `TRIALS` from 1 to 20 for the
