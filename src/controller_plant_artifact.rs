@@ -45,6 +45,7 @@ pub const PROOF_MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
 const PROOF_PORTFOLIO_MAGIC: &[u8; 8] = b"GCCPGP01";
 pub const CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION: u32 = 1;
 pub const CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION: u32 = 1;
+pub const CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ControllerPlantArtifactInput<'a> {
@@ -114,6 +115,63 @@ pub struct AdmittedControllerProofEvidence {
     evidence_sha256: [u8; 32],
     controller: ControllerMtbddArtifact,
     summary: ControllerMtbddSummary,
+}
+
+/// Caller-selected limits checked before controller proof admission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerProofEvidenceResourceEnvelope {
+    max_artifact_bytes: usize,
+    max_unsat_proof_bytes: usize,
+}
+
+impl ControllerProofEvidenceResourceEnvelope {
+    pub fn new(
+        max_artifact_bytes: usize,
+        max_unsat_proof_bytes: usize,
+    ) -> Result<Self, ControllerPlantArtifactError> {
+        if max_artifact_bytes == 0
+            || max_artifact_bytes > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+            || max_unsat_proof_bytes == 0
+            || max_unsat_proof_bytes > crate::unsat_proof::MAX_UNSAT_PROOF_BYTES
+        {
+            return Err(reject(
+                "controller proof evidence resource envelope is outside static limits",
+            ));
+        }
+        Ok(Self {
+            max_artifact_bytes,
+            max_unsat_proof_bytes,
+        })
+    }
+
+    pub fn max_artifact_bytes(self) -> usize {
+        self.max_artifact_bytes
+    }
+
+    pub fn max_unsat_proof_bytes(self) -> usize {
+        self.max_unsat_proof_bytes
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofEvidenceResourceAssessment {
+    pub version: u32,
+    pub artifact_bytes: usize,
+    pub mtbdd_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+}
+
+#[derive(Debug)]
+pub struct GovernedAdmittedControllerProofEvidence {
+    pub resources: ControllerProofEvidenceResourceAssessment,
+    pub admitted: AdmittedControllerProofEvidence,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GovernedBoundPlantResultsSummary {
+    pub resources: ControllerPlantResourceAssessment,
+    pub verification: ControllerMtbddPlantBatchSummary,
 }
 
 impl AdmittedControllerProofEvidence {
@@ -1485,6 +1543,138 @@ pub fn admit_controller_proof_evidence(
     })
 }
 
+/// Preflight controller evidence byte and embedded proof limits without
+/// checking the proof or admitting a trusted controller capability.
+pub fn assess_controller_proof_evidence_resources(
+    controller_evidence_bytes: &[u8],
+    envelope: ControllerProofEvidenceResourceEnvelope,
+) -> Result<ControllerProofEvidenceResourceAssessment, ControllerPlantArtifactError> {
+    if controller_evidence_bytes.len() > envelope.max_artifact_bytes {
+        return Err(reject(
+            "controller proof evidence resource artifact-byte limit exceeded",
+        ));
+    }
+    let evidence = decode_controller_proof_evidence_artifact(controller_evidence_bytes)?;
+    let proof = decode_controller_mtbdd_equivalence_proof(&evidence.equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    if proof.proof.len() > envelope.max_unsat_proof_bytes {
+        return Err(reject(
+            "controller proof evidence resource UNSAT-proof limit exceeded",
+        ));
+    }
+    Ok(ControllerProofEvidenceResourceAssessment {
+        version: CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION,
+        artifact_bytes: controller_evidence_bytes.len(),
+        mtbdd_bytes: evidence.controller_mtbdd.len(),
+        equivalence_artifact_bytes: evidence.equivalence_proof.len(),
+        unsat_proof_bytes: proof.proof.len(),
+    })
+}
+
+/// Admit controller evidence only after it fits every caller-selected proof
+/// resource limit.
+pub fn admit_controller_proof_evidence_with_resources(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller_evidence_bytes: &[u8],
+    envelope: ControllerProofEvidenceResourceEnvelope,
+) -> Result<GovernedAdmittedControllerProofEvidence, ControllerPlantArtifactError> {
+    let resources =
+        assess_controller_proof_evidence_resources(controller_evidence_bytes, envelope)?;
+    let admitted = admit_controller_proof_evidence(
+        controller_model,
+        controller_source_sha256,
+        controller_evidence_bytes,
+    )?;
+    Ok(GovernedAdmittedControllerProofEvidence {
+        resources,
+        admitted,
+    })
+}
+
+/// Conservatively preflight a replaceable plant batch before semantic replay.
+pub fn assess_bound_plant_results_resources(
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    plant_results_bytes: &[u8],
+    envelope: ControllerPlantResourceEnvelope,
+) -> Result<ControllerPlantResourceAssessment, ControllerPlantArtifactError> {
+    if plant_results_bytes.len() > envelope.max_artifact_bytes {
+        return Err(reject(
+            "bound plant result resource artifact-byte limit exceeded",
+        ));
+    }
+    if members.is_empty() || members.len() > envelope.max_members {
+        return Err(reject("bound plant result resource member limit exceeded"));
+    }
+    let artifact = decode_bound_plant_results_artifact(plant_results_bytes)?;
+    if members.len() != artifact.members.len() {
+        return Err(reject("bound plant result resource member count mismatch"));
+    }
+    let controller_states = bounded_state_count(controller_model.latches.len())?;
+    let mut maximum_member_horizon = 0usize;
+    let mut maximum_product_states = 0usize;
+    let mut transition_evaluation_bound = 0usize;
+    for (member, claimed) in members.iter().zip(&artifact.members) {
+        if member.plant_source_sha256 != claimed.plant_source_sha256
+            || member.wiring != &claimed.wiring
+            || member.initial_controller_state != claimed.initial_controller_state
+            || member.initial_plant_state != claimed.initial_plant_state
+            || member.bad_plant_output != claimed.bad_plant_output
+            || member.horizon != claimed.horizon
+        {
+            return Err(reject("bound plant result resource obligation mismatch"));
+        }
+        if member.horizon > envelope.max_member_horizon {
+            return Err(reject("bound plant result resource horizon limit exceeded"));
+        }
+        maximum_member_horizon = maximum_member_horizon.max(member.horizon);
+        let plant_states = bounded_state_count(member.plant.latches.len())?;
+        let product_states = controller_states
+            .checked_mul(plant_states)
+            .ok_or_else(|| reject("bound plant result product-state bound overflow"))?;
+        if product_states > envelope.max_product_states_per_member {
+            return Err(reject(
+                "bound plant result resource product-state limit exceeded",
+            ));
+        }
+        maximum_product_states = maximum_product_states.max(product_states);
+        let external_inputs = member
+            .plant
+            .inputs
+            .len()
+            .checked_sub(member.wiring.plant_action_inputs.len())
+            .ok_or_else(|| reject("bound plant result resource wiring is invalid"))?;
+        let external_patterns = 1usize
+            .checked_shl(
+                u32::try_from(external_inputs)
+                    .map_err(|_| reject("bound plant result input width exceeds range"))?,
+            )
+            .ok_or_else(|| reject("bound plant result input width exceeds range"))?;
+        let member_bound = product_states
+            .checked_mul(member.horizon.saturating_add(1))
+            .and_then(|value| value.checked_mul(external_patterns))
+            .ok_or_else(|| reject("bound plant result transition bound overflow"))?;
+        transition_evaluation_bound = transition_evaluation_bound
+            .checked_add(member_bound)
+            .ok_or_else(|| reject("bound plant result transition bound overflow"))?;
+        if transition_evaluation_bound > envelope.max_transition_evaluations {
+            return Err(reject(
+                "bound plant result resource transition limit exceeded",
+            ));
+        }
+    }
+    Ok(ControllerPlantResourceAssessment {
+        version: CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+        backend: ControllerMtbddPlantPortfolioBackend::Mtbdd,
+        artifact_bytes: plant_results_bytes.len(),
+        members: members.len(),
+        maximum_member_horizon,
+        maximum_product_states,
+        transition_evaluation_bound,
+    })
+}
+
 /// Check a plant-result batch using previously admitted controller evidence.
 pub fn verify_bound_plant_results_with_admitted_controller(
     admitted: &AdmittedControllerProofEvidence,
@@ -1548,6 +1738,32 @@ pub fn verify_bound_plant_results_with_admitted_controller(
         assignments_checked: verified.summary().assignments_checked,
         reachable_product_states,
         explored_transitions,
+    })
+}
+
+/// Verify a replaceable plant batch only after every caller-selected
+/// composition limit fits.
+pub fn verify_bound_plant_results_with_resources(
+    admitted: &AdmittedControllerProofEvidence,
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    plant_results_bytes: &[u8],
+    envelope: ControllerPlantResourceEnvelope,
+) -> Result<GovernedBoundPlantResultsSummary, ControllerPlantArtifactError> {
+    let resources = assess_bound_plant_results_resources(
+        controller_model,
+        members,
+        plant_results_bytes,
+        envelope,
+    )?;
+    let verification = verify_bound_plant_results_with_admitted_controller(
+        admitted,
+        members,
+        plant_results_bytes,
+    )?;
+    Ok(GovernedBoundPlantResultsSummary {
+        resources,
+        verification,
     })
 }
 

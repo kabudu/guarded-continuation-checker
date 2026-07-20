@@ -94,7 +94,12 @@
   APIs, and resource-envelope integration remain open. Add the replacement
   baseline and split-evidence measurement to the exact hosted amd64 evidence
   workflow; a successful exact-head run is still required before treating the
-  cross-platform gate as closed.
+  cross-platform gate as closed. Add two-stage Rust resource governance for the
+  split route. Controller evidence and its embedded UNSAT proof are bounded
+  before proof checking and admission; replaceable plant artifacts, ordered
+  obligations, horizons, product states, and conservative transition work are
+  bounded before semantic replay. Exact inclusive boundaries pass and each
+  tighter byte, proof, horizon, state, or transition limit fails closed.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

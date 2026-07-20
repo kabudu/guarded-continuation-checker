@@ -2,15 +2,18 @@ use guarded_continuation_checker::aiger_obligation::{AigerLatch, AigerTransition
 use guarded_continuation_checker::controller_mtbdd::produce_controller_mtbdd;
 use guarded_continuation_checker::controller_plant::ControllerPlantWiring;
 use guarded_continuation_checker::controller_plant_artifact::{
-    ControllerPlantArtifactInput, admit_controller_proof_evidence,
-    decode_bound_plant_results_artifact, decode_controller_mtbdd_plant_artifact,
-    decode_controller_proof_evidence_artifact, decode_controller_proof_mtbdd_plant_artifact,
-    encode_bound_plant_results_artifact, encode_controller_mtbdd_plant_artifact,
-    encode_controller_proof_evidence_artifact, encode_controller_proof_mtbdd_plant_artifact,
-    produce_bound_plant_results_artifact, produce_bound_plant_results_with_admitted_controller,
-    produce_controller_mtbdd_plant_artifact, produce_controller_proof_evidence_artifact,
-    produce_controller_proof_mtbdd_plant_artifact, verify_bound_plant_results_artifact,
-    verify_bound_plant_results_with_admitted_controller, verify_controller_mtbdd_plant_artifact,
+    ControllerPlantArtifactInput, ControllerPlantResourceEnvelope,
+    ControllerProofEvidenceResourceEnvelope, admit_controller_proof_evidence,
+    admit_controller_proof_evidence_with_resources, assess_bound_plant_results_resources,
+    assess_controller_proof_evidence_resources, decode_bound_plant_results_artifact,
+    decode_controller_mtbdd_plant_artifact, decode_controller_proof_evidence_artifact,
+    decode_controller_proof_mtbdd_plant_artifact, encode_bound_plant_results_artifact,
+    encode_controller_mtbdd_plant_artifact, encode_controller_proof_evidence_artifact,
+    encode_controller_proof_mtbdd_plant_artifact, produce_bound_plant_results_artifact,
+    produce_bound_plant_results_with_admitted_controller, produce_controller_mtbdd_plant_artifact,
+    produce_controller_proof_evidence_artifact, produce_controller_proof_mtbdd_plant_artifact,
+    verify_bound_plant_results_artifact, verify_bound_plant_results_with_admitted_controller,
+    verify_bound_plant_results_with_resources, verify_controller_mtbdd_plant_artifact,
     verify_controller_proof_mtbdd_plant_artifact,
 };
 
@@ -142,6 +145,118 @@ fn controller_evidence_is_reused_across_a_plant_replacement() {
     let admitted =
         admit_controller_proof_evidence(&controller, controller_digest, &evidence_bytes).unwrap();
     assert_eq!(admitted.summary().assignments_checked, 0);
+    let proof_limits = ControllerProofEvidenceResourceEnvelope::new(
+        evidence_bytes.len(),
+        guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+    )
+    .unwrap();
+    let proof_resources =
+        assess_controller_proof_evidence_resources(&evidence_bytes, proof_limits).unwrap();
+    let exact_proof_limits = ControllerProofEvidenceResourceEnvelope::new(
+        proof_resources.artifact_bytes,
+        proof_resources.unsat_proof_bytes,
+    )
+    .unwrap();
+    let governed_admission = admit_controller_proof_evidence_with_resources(
+        &controller,
+        controller_digest,
+        &evidence_bytes,
+        exact_proof_limits,
+    )
+    .unwrap();
+    assert_eq!(governed_admission.resources, proof_resources);
+    assert!(
+        assess_controller_proof_evidence_resources(
+            &evidence_bytes,
+            ControllerProofEvidenceResourceEnvelope::new(
+                evidence_bytes.len() - 1,
+                proof_resources.unsat_proof_bytes,
+            )
+            .unwrap(),
+        )
+        .is_err()
+    );
+    assert!(
+        assess_controller_proof_evidence_resources(
+            &evidence_bytes,
+            ControllerProofEvidenceResourceEnvelope::new(
+                evidence_bytes.len(),
+                proof_resources.unsat_proof_bytes - 1,
+            )
+            .unwrap(),
+        )
+        .is_err()
+    );
+    let replacement_input = [make_input(&replacement_plant, replacement_digest)];
+    let plant_resources = assess_bound_plant_results_resources(
+        &controller,
+        &replacement_input,
+        &replacement_bytes,
+        ControllerPlantResourceEnvelope::default(),
+    )
+    .unwrap();
+    let exact_plant_limits = ControllerPlantResourceEnvelope::new(
+        plant_resources.artifact_bytes,
+        plant_resources.members,
+        plant_resources.maximum_member_horizon,
+        plant_resources.maximum_product_states,
+        plant_resources.transition_evaluation_bound,
+    )
+    .unwrap();
+    let governed = verify_bound_plant_results_with_resources(
+        &governed_admission.admitted,
+        &controller,
+        &replacement_input,
+        &replacement_bytes,
+        exact_plant_limits,
+    )
+    .unwrap();
+    assert_eq!(governed.resources, plant_resources);
+    assert_eq!(governed.verification.safe, 1);
+    for tight in [
+        ControllerPlantResourceEnvelope::new(
+            plant_resources.artifact_bytes - 1,
+            1,
+            plant_resources.maximum_member_horizon,
+            plant_resources.maximum_product_states,
+            plant_resources.transition_evaluation_bound,
+        )
+        .unwrap(),
+        ControllerPlantResourceEnvelope::new(
+            plant_resources.artifact_bytes,
+            1,
+            plant_resources.maximum_member_horizon - 1,
+            plant_resources.maximum_product_states,
+            plant_resources.transition_evaluation_bound,
+        )
+        .unwrap(),
+        ControllerPlantResourceEnvelope::new(
+            plant_resources.artifact_bytes,
+            1,
+            plant_resources.maximum_member_horizon,
+            plant_resources.maximum_product_states - 1,
+            plant_resources.transition_evaluation_bound,
+        )
+        .unwrap(),
+        ControllerPlantResourceEnvelope::new(
+            plant_resources.artifact_bytes,
+            1,
+            plant_resources.maximum_member_horizon,
+            plant_resources.maximum_product_states,
+            plant_resources.transition_evaluation_bound - 1,
+        )
+        .unwrap(),
+    ] {
+        assert!(
+            assess_bound_plant_results_resources(
+                &controller,
+                &replacement_input,
+                &replacement_bytes,
+                tight,
+            )
+            .is_err()
+        );
+    }
     assert_eq!(
         verify_bound_plant_results_with_admitted_controller(
             &admitted,

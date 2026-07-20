@@ -283,10 +283,18 @@ Every ordered obligation field is caller-bound, and stale evidence, reordered
 or duplicated obligations, mutation, and truncation fail closed. The local
 five-plant fixture shows a 49.75% marginal byte reduction against the faithful
 composed-witness route, but an 8.71 times larger initial package and a 58-change
-byte break-even. Resource envelopes for the split wire formats, a stable file
-CLI and typed process client, hosted cross-platform evidence, compatibility
+byte break-even. A stable file CLI and typed process client, hosted
+cross-platform evidence, compatibility
 fixtures, peak-RSS evidence, and external acceptance remain open. This adds a
 candidate product mechanism and closes no production-readiness row.
+
+The split Rust API now preflights controller artifact bytes and embedded UNSAT
+proof bytes before admission, then independently preflights plant artifact
+bytes, complete ordered obligations, horizon, product states, and conservative
+transition evaluations before replay. Exact boundaries pass and tighter limits
+fail closed. This closes the in-process resource-governance mechanism only.
+Stable CLI policy files, typed process containment, metrics aggregation, and
+cross-platform acceptance remain open.
 
 ## Post-production-release deliverables
 
