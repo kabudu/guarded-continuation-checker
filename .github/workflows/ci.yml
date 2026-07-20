@@ -87,6 +87,7 @@ jobs:
             scripts/benchmark-controller-proof-mtbdd-plant.sh \
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
             scripts/run-controller-split-resource-acceptance.sh \
+            scripts/check-controller-split-compatibility-v1.sh \
             scripts/benchmark-controller-split-process-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
@@ -110,11 +111,8 @@ jobs:
             /tmp/controller-proof-mtbdd-acceptance.csv
       - name: Reproduce governed split-evidence acceptance
         run: |
-          scripts/run-controller-split-resource-acceptance.sh \
-            target/debug/guarded-continuation-checker \
-            /tmp/controller-split-resource-acceptance.csv
-          diff -u results/controller-split-resource-acceptance-v1.csv \
-            /tmp/controller-split-resource-acceptance.csv
+          scripts/check-controller-split-compatibility-v1.sh \
+            target/debug/guarded-continuation-checker
       - name: Exercise proof-carrying MTBDD whole-process comparison
         env:
           TRIALS: 3

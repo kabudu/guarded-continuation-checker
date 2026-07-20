@@ -15,7 +15,7 @@ sufficient.
 | Observability | Portfolio/cost reports preserve backend decisions and timings; predicate Rust API metrics schema v1 records every observed operation's duration, stream sizes, configured limits, exit status and stable failure class with canonical CSV output | Add cache/resource counters inside the executable and demonstrate multi-job aggregation in a product pipeline | In progress |
 | Cross-platform distribution | Candidate Linux bundle v1 defines static x86_64 musl archives, SPDX 2.3 SBOM, deterministic provenance, non-executing offline verification, and two-source-path reproducibility; [signed candidate run 29675023822](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29675023822) passes exact SLSA and SPDX identity policy with [retained evidence](../results/linux-evaluation-candidate-v1.md) | Add a justified macOS distribution decision, tagged-release compatibility, and release-level verification evidence | In progress; first Linux candidate gate closed |
 | Real product validity | Public synthetic/product-shaped fixtures | Multiple unmodified public firmware/robotics designs plus independent self-service evaluation outcomes | Open |
-| Operational guidance | Evaluation and isolation documentation | Installation, sizing, failure handling, upgrade/rollback and incident-response runbooks | Open |
+| Operational guidance | [Operations runbook](OPERATIONS.md), [isolation profile](ISOLATION_PROFILE_V1.md), and executable Linux qualification cover installation, sizing, failure handling, upgrade, rollback, incident response, restoration, and evidence retention | Retain the executable qualification and runbook drills across supported releases; independent operator execution remains part of the external-acceptance gate | Closed for the documented evaluation scope |
 | Release governance | Claim-bounded tagged releases; the external production gate binds the exact register and release to an independently authenticated OpenSSH attestation | Production release checklist requires every row above closed or explicitly excludes the capability from production support; exercise the authenticated gate with real independent evidence | In progress; authenticated fail-closed mechanism complete |
 
 ## Event-contract experimental boundary
@@ -317,14 +317,13 @@ maps eleven stable refusal reasons to exit code 3 without a logical answer.
 Retained self-service acceptance now aggregates one verified two-batch job,
 three typed refusals, two invalid controls, structural resource totals, and
 exact compatibility fingerprints while omitting non-reproducible timings.
-Compatibility through a later tag remains open. Hosted reproduction of the new
-retained public acceptance CSV is pending its exact-head run.
+Compatibility through a later tag remains open. Hosted Linux run 29777543062
+reproduces the retained public acceptance CSV on exact commit `e74828f`.
 Hosted amd64 run 29773273695 now reproduces the split controller and replacement
 artifact hashes, structural byte accounting, independent composed-witness
 hashes, and all logical answers from arm64. This closes the mechanism's second
 architecture reproduction gate. Compatibility through a later tag, hosted
-retained-acceptance and process-resource reproduction, and independent
-acceptance remain open.
+process-resource reproduction, and independent acceptance remain open.
 
 ## Post-production-release deliverables
 

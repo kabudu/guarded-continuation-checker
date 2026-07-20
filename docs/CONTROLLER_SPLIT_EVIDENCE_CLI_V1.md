@@ -170,9 +170,13 @@ not cross-host reproducibility claims.
 
 These fingerprints seed compatibility history for the experimental v1
 contracts. Compatibility through a later tagged release is still required.
+The executable release gate and forward-support rules are defined in
+[`COMPATIBILITY_AND_MIGRATION.md`](COMPATIBILITY_AND_MIGRATION.md).
 Hosted Linux run 29776279270 passes the governed CLI and typed-client integration
-on exact commit `1227d50`; hosted reproduction of this retained acceptance CSV
-will be established by the next exact-head run.
+on exact commit `1227d50`. Hosted Linux run
+[29777543062](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29777543062)
+reproduces the retained acceptance CSV on exact commit `e74828f` and also passes
+the portable API, public RTL, dependency-audit, and reproducible-bundle jobs.
 
 Whole-process resource observations are retained separately in
 [`CONTROLLER_SPLIT_PROCESS_RESOURCES_V1.md`](CONTROLLER_SPLIT_PROCESS_RESOURCES_V1.md).

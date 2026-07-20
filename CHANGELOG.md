@@ -130,7 +130,8 @@
   both manifests plus controller and plant artifacts. Reproduce the retained
   CSV in ordinary Linux CI without treating timing as portable evidence. Hosted
   run 29776279270 passes the real governed CLI and typed-client integration at
-  exact commit `1227d50`; retained-CSV hosted reproduction remains pending.
+  exact commit `1227d50`. Hosted Linux run 29777543062 reproduces the retained
+  CSV on exact commit `e74828f` and passes every companion CI job.
   Add a cross-platform whole-process resource harness that separately measures
   controller certification, both independently replaceable plant-result
   producers, and one-admission governed verification. Retain three Darwin arm64
@@ -138,6 +139,14 @@
   peak RSS. Require ordinary Linux CI to exercise the same complete operation
   set while treating timings and memory as architecture-labelled observations,
   not reproducible values or routing inputs.
+  Add an explicit compatibility and migration policy for the first production
+  line, including strict contract-version semantics, a minimum support window,
+  fail-closed unsupported-version behavior, immutable upgrade and rollback
+  rules, and registry SemVer expectations. Promote the deterministic split-v1
+  self-service fixture into an executable release-compatibility gate while
+  retaining the honest distinction between a candidate baseline and later-tag
+  compatibility history. Reconcile the readiness register with the already
+  implemented operations runbook and executable Linux qualification evidence.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

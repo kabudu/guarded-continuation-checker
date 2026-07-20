@@ -61,6 +61,12 @@ answers, evidence sizes, wall time, and peak RSS, while Linux CI validates the
 same operation set without pretending host-dependent measurements are
 byte-reproducible. This is operational evidence, not a speed or production
 claim.
+The [compatibility and migration policy](docs/COMPATIBILITY_AND_MIGRATION.md)
+defines contract-version semantics, a two-minor-release and 12-month minimum
+support window beginning with the first production tag, fail-closed version
+handling, immutable upgrade and rollback procedures, and an executable split-v1
+baseline. The current candidate establishes the baseline only; cross-tag
+history and registry SemVer evidence remain open.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct
