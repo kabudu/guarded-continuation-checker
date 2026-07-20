@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Pinned and offline-qualified the Certifaiger 10.2.0, AIGER, CaDiCaL,
+  `lrat_isa`, and runlim comparison stack on local arm64 Linux, including all
+  upstream Certifaiger witness fixtures and the intentionally invalid control.
+
 - Add proof-carrying controller MTBDD CLI v1 and the typed
   `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the
   canonical plant manifest, enforce create-new output, source and query binding,

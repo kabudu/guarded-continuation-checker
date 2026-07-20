@@ -1,0 +1,15 @@
+# Canonical qualification inputs. UTF-8, LF, one field per line.
+format=certifaiger-qualification-v1
+base_image=ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+base_architecture=arm64
+qualification_image=gcc-certifaiger-qualification:v1-arm64
+certifaiger_url=https://github.com/Froleyks/certifaiger.git
+certifaiger_commit=3b8d9e9937234b5e064923bd00f20d3eb97ccc3f
+aiger_url=https://github.com/arminbiere/aiger.git
+aiger_commit=1876b273dc603d000d11da8ebbc099353ac42c6f
+cadical_url=https://github.com/arminbiere/cadical.git
+cadical_commit=c60730422e758ef1cebe7aeddf2dda31c996bf04
+lrat_isa_url=https://github.com/lammich/lrat_isa.git
+lrat_isa_commit=99b832b501f473f7890f20b99755b5ace86eae48
+runlim_url=https://github.com/arminbiere/runlim.git
+runlim_commit=188f1e07fa233b787589900e0184092b49167706

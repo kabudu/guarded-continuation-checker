@@ -103,3 +103,42 @@ The first isolated build attempt also failed while retrieving the Alpine 3.22
 base-image metadata from Docker Hub. That network failure is not a tool result.
 No comparison run is accepted until both the base image and every source
 dependency are content-addressed and the upstream tests pass.
+
+The immutable qualification inputs are recorded in
+`tools/certifaiger-qualification-v1.lock`. The qualification harness verifies
+clean checkouts at those exact commits, disables container networking, and
+passes every dependency as a local CMake source directory. This makes an
+unexpected fetch or moving-branch resolution fail instead of silently changing
+the comparison. The first cached base is the arm64 Ubuntu 24.04 image with
+digest `sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90`.
+An independently pinned amd64 image remains required for hosted Linux evidence.
+
+The first offline arm64 compile reached all local dependency builds and then
+failed because `lrat_isa` invokes `clang++` directly. This exposed an undeclared
+toolchain dependency in the upstream container recipe. The local qualification
+image now pins Ubuntu's Clang 18 package explicitly; the failed run is not
+treated as a Certifaiger result.
+
+The second offline compile found a further implicit `lrat_isa` dependency: its
+fixed `-fuse-ld=lld` flag also requires LLVM's linker package. The qualification
+image pins the matching LLD 18 package as well. This second failed run likewise
+produced no pass marker and is not benchmark evidence.
+
+The third offline compile built Certifaiger itself but `lrat_isa` could not link
+`boost_iostreams`. The umbrella Boost headers package is insufficient on Ubuntu;
+the qualification image now pins the matching Boost iostreams development
+package explicitly. No partial binary from this run is accepted.
+
+The fourth offline compile and install passed, including the `lrat_isa` build's
+own checker test. Qualification also replays every upstream Certifaiger witness
+fixture serially and requires exact agreement with `tests/expected-invalid`, so
+the result does not depend on GNU Parallel being present in the container.
+
+The final local arm64 qualification passed on 20 July 2026. The toolchain image
+ID is `sha256:da1dd2f2e859a343cdf3f97500a23368dd4b69fe20ddca4a76b91f9a290800c5`.
+All nine valid upstream witnesses were accepted and the single intentionally
+invalid witness was rejected. The upstream-test log digest is
+`03792c83051ac80979650918190fb5c6b96eabf2f98340c78956d07ff20e0257` and the
+build-log digest is
+`3177300821a1e3e209330689fb4bc9926e7d40e78b13c779728b780a22949736`.
+These hashes qualify the toolchain only; they are not comparison measurements.
