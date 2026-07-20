@@ -137,8 +137,19 @@ faithful baseline leaves the gate open and produces no positive result.
    all four source-to-model regenerations are byte-identical, all 24 bounded
    answers are independently replayed, and every plant retains two SAFE
    properties.
-2. Obtain or implement the exact composed-witness construction.
+2. Obtain or implement the exact composed-witness construction. In progress:
+   the safety-only v1 paper-derived baseline now coalesces shared mapped model
+   state, keeps private variables disjoint, unions reset and transition
+   functions, conjoins safety and constraint semantics, and hash-conses gates.
+   A pinned upstream witness self-composition and a separately encoded but
+   equivalent witness pair are accepted by Certifaiger 10.2.0 with every SAT
+   obligation checked through `lrat_isa`. Composition of distinct property
+   witnesses and independent implementation review remain open.
 3. Add parser, collision, section-preservation, and deterministic-byte tests.
+   In progress: canonical ASCII AIGER, strict byte and count limits, truncation,
+   mapping-kind, comment-mapping, liveness, symlink, and output-collision
+   controls pass. Version 1 rejects liveness and comment-based mappings instead
+   of dropping them; broader section support remains open.
 4. Validate every SAFE output with qualified Certifaiger and `lrat_isa`.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
 6. Retain manifests, raw measurements, hostile results, and tool provenance.

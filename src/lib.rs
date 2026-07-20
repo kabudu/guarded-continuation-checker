@@ -13,6 +13,7 @@ pub mod btor2_motion;
 pub mod btor2_phase;
 pub mod btor2_region;
 pub mod btor2_search;
+pub mod composed_witness;
 pub mod controller_mtbdd;
 pub mod controller_mtbdd_proof;
 pub mod controller_plant;

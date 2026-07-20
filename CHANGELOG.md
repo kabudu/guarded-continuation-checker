@@ -58,6 +58,16 @@
   byte-for-byte from source with pinned Yosys, independently replay all 24
   horizon-32 answers and shortest traces, preserve two SAFE properties per
   plant, and add source, model, and member-substitution hostile controls.
+  Add a safety-only FM 2026 Theorem 1 baseline implementation with a versioned
+  Rust API and CLI. Coalesce shared model mappings, preserve private variables,
+  union reset and transition functions, conjoin safety and constraints, and
+  deterministically hash-cons gates. Fail closed on bounded parsing, mapping
+  mismatches, liveness, comment mappings, truncation, symlinks, and output
+  collisions. Validate an immutable upstream witness self-composition with
+  qualified Certifaiger 10.2.0 and formally verified `lrat_isa`; retain its
+  exact hashes and add hosted amd64 reproduction. Distinct-property composition
+  and the changing-plant comparison remain open, so this establishes baseline
+  fidelity only and no novelty result.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

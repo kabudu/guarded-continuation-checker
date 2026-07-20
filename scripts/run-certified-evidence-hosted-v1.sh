@@ -65,6 +65,12 @@ cp target/release/guarded-continuation-checker /tmp/gcc-output/
 sha256sum /tmp/gcc-output/guarded-continuation-checker \
   /tmp/ric3-output/ric3 /tmp/certifaiger-output/bin/* > "$output/binaries.sha256"
 
+CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/test-composed-witness-baseline-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/certifaiger-input/certifaiger /tmp/certifaiger-output \
+  "$output/composed-witness-baseline-amd64-v1.csv"
+
 TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
   scripts/benchmark-certified-evidence-v1.sh \

@@ -1,7 +1,7 @@
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search, controller_mtbdd,
+    btor2_search, composed_witness, controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
@@ -25567,6 +25567,52 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         return Ok(false);
     };
     match command {
+        "composed-witness-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker composed-witness-cli-version".to_string(),
+                );
+            }
+            println!(
+                "composed_witness_cli_version={} format=ascii-aiger-1.9 scope=safety baseline=fm-2026 max_witnesses={} max_input_bytes={} liveness=unsupported comment_mapping=unsupported unsupported=fail-closed",
+                composed_witness::COMPOSED_WITNESS_BASELINE_VERSION,
+                composed_witness::MAX_COMPOSED_WITNESSES,
+                composed_witness::MAX_COMPOSED_AIGER_BYTES,
+            );
+            Ok(true)
+        }
+        "compose-safety-witnesses-v1" => {
+            if args.len() < 5 || args.len() - 3 > composed_witness::MAX_COMPOSED_WITNESSES {
+                return Err("usage: guarded-continuation-checker compose-safety-witnesses-v1 MODEL.aag OUTPUT.aag WITNESS.aag WITNESS.aag [...]".to_string());
+            }
+            let model = read_bounded_regular_file(
+                Path::new(&args[1]),
+                composed_witness::MAX_COMPOSED_AIGER_BYTES,
+                "composed-witness model",
+            )?;
+            let witnesses = args[3..]
+                .iter()
+                .map(|path| {
+                    read_bounded_regular_file(
+                        Path::new(path),
+                        composed_witness::MAX_COMPOSED_AIGER_BYTES,
+                        "composed-witness member",
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let references = witnesses.iter().map(Vec::as_slice).collect::<Vec<_>>();
+            let encoded = composed_witness::compose_safety_witnesses_v1(&model, &references)
+                .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[2]), &encoded)?;
+            println!(
+                "composed-witness status=CREATED cli_version={} baseline=fm-2026 witnesses={} artifact_bytes={} output={}",
+                composed_witness::COMPOSED_WITNESS_BASELINE_VERSION,
+                references.len(),
+                encoded.len(),
+                Path::new(&args[2]).display(),
+            );
+            Ok(true)
+        }
         "controller-mtbdd-cli-version" => {
             if args.len() != 1 {
                 return Err(
