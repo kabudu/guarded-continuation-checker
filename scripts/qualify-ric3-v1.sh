@@ -41,7 +41,7 @@ vendor_hash=$(cd "$vendor_dir" && find . -type f -print0 | sort -z | xargs -0 sh
 [[ "$vendor_hash" == "$(value ric3_vendor_sha256)" ]]
 
 qualification_image=${QUALIFICATION_IMAGE:-gcc-ric3-qualification:v1-arm64}
-docker run --rm --network none \
+if ! docker run --rm --network none \
   --volume "$source_dir:/source:ro" --volume "$vendor_dir:/vendor:ro" \
   --volume "$output_dir:/out" "$qualification_image" \
   bash -euo pipefail -c '
@@ -55,6 +55,10 @@ docker run --rm --network none \
     cargo build --release --locked --offline
     ./target/release/ric3 --version
     cp target/release/ric3 /out/ric3
-  ' > "$output_dir/build-test.log" 2>&1
+  ' > "$output_dir/build-test.log" 2>&1; then
+  echo "rIC3 offline qualification failed; captured log follows" >&2
+  cat "$output_dir/build-test.log" >&2
+  exit 1
+fi
 sha256sum "$output_dir/ric3" > "$output_dir/binary.sha256"
 printf 'qualification=pass\n' > "$output_dir/result.txt"
