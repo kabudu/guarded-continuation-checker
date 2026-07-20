@@ -62,7 +62,10 @@ One retained arm64 run checks that proof about 121.6 times faster. Its
 median verification for the six-member public physical-plant batch from 1.749
 seconds to 0.870 seconds with exact answer agreement. The artifact is 29.39
 times larger, so this is an explicit fast-verification profile rather than the
-compact portfolio default. Hosted and whole-process validation remain open.
+compact portfolio default. A hosted Linux whole-process run reproduces 1.62x
+faster creation and 1.95x faster verification, while retaining the negative
+verification-memory tradeoff. Identical-scope maintained-tool comparison and
+independent acceptance remain open.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

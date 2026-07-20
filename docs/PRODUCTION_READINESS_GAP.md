@@ -198,14 +198,16 @@ plant-batch artifacts. Its public-controller in-process result is strong, but
 the new versioned CLI and typed process client close local integration and begin
 compatibility history. Retained public self-service acceptance now covers exact
 answers, bad frames, drift, mutation, and no-clobber behavior. Hosted process
-measurements and independent-tool comparison remain open. It stays outside the
+measurements reproduce the speed direction and negative verification-memory
+tradeoff. Independent-tool comparison remains open. It stays outside the
 production portfolio and changes no readiness row.
 
 The first release-build whole-process baseline retains exact agreement and a
 2.00x median proof-verification improvement on one arm64 host. This closes the
 local process-overhead uncertainty. The resource companion records higher proof
 peak RSS, so the profile is not an unconditional operational win. Hosted
-replication and identical-scope maintained-tool evidence remain open.
+Linux replication is retained; identical-scope maintained-tool evidence remains
+open.
 
 ## Rules
 

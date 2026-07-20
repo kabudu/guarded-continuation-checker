@@ -16,7 +16,10 @@ scripts/benchmark-controller-proof-mtbdd-resources.sh \
 ```
 
 Both scripts refuse to overwrite output. Set `TRIALS` from 1 to 20 for the
-process benchmark; the retained result uses the default five.
+process benchmark; the retained arm64 result uses the default five. The
+three-trial hosted Linux results are retained separately as
+`results/controller-proof-mtbdd-process-linux-v1.csv` and
+`results/controller-proof-mtbdd-resources-linux-v1.csv`.
 
 ## Environment
 
