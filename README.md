@@ -52,7 +52,8 @@ discovery, shell-free bounded artifact production, one-process multi-batch
 verification, reconciled typed summaries, and invocation metrics. Caller-selected
 resource policies now govern both per-batch and complete-set work through the
 file CLI and `ControllerSplitResourceTool`. Tagged compatibility and independent
-acceptance remain open.
+acceptance remain open. Retained public washing-controller acceptance freezes
+the first two split manifest and artifact compatibility fingerprints.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct

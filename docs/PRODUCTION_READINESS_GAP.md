@@ -285,9 +285,12 @@ five-plant fixture shows a 49.75% marginal byte reduction against the faithful
 composed-witness route, but an 8.71 times larger initial package and a 58-change
 byte break-even. Stable file and typed bounded-process interfaces plus hosted
 cross-platform artifact reproduction are implemented. Compatibility fixtures,
-peak-RSS evidence, hosted governed-client acceptance, and external acceptance
-remain open. This adds a candidate product mechanism and closes no
-production-readiness row.
+peak-RSS evidence and external acceptance remain open. Hosted Linux run
+29776279270 passes the real governed CLI and typed-client integration, including
+every tight policy boundary and hostile response controls. Two one-property
+public washing-controller manifests now seed compatibility history with exact
+manifest, controller-evidence, and plant-result fingerprints. This adds a
+candidate product mechanism and closes no production-readiness row.
 
 The split Rust API now preflights controller artifact bytes and embedded UNSAT
 proof bytes before admission, then independently preflights plant artifact
@@ -306,13 +309,16 @@ complete-set limits before semantic replay. The two-pass verifier binds
 manifest semantics, source/model snapshots, result digests, and resource
 assessments across preflight and replay, emits no verified row on refusal, and
 maps eleven stable refusal reasons to exit code 3 without a logical answer.
-Retained metrics aggregation, compatibility through a later tag, and hosted
-governed-client acceptance remain open.
+Retained self-service acceptance now aggregates one verified two-batch job,
+three typed refusals, two invalid controls, structural resource totals, and
+exact compatibility fingerprints while omitting non-reproducible timings.
+Compatibility through a later tag remains open. Hosted reproduction of the new
+retained public acceptance CSV is pending its exact-head run.
 Hosted amd64 run 29773273695 now reproduces the split controller and replacement
 artifact hashes, structural byte accounting, independent composed-witness
 hashes, and all logical answers from arm64. This closes the mechanism's second
 architecture reproduction gate. Compatibility through a later tag, hosted
-governed-client acceptance, and independent acceptance remain open.
+retained-acceptance reproduction, and independent acceptance remain open.
 
 ## Post-production-release deliverables
 

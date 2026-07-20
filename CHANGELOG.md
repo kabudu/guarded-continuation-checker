@@ -123,7 +123,14 @@
   conservative transitions. Preflight the entire request before replay, bind
   manifest semantics and source/model/result snapshots across both passes,
   buffer output until every batch succeeds, and return no logical answer or
-  verified row for eleven typed exit-code-3 refusal classes.
+  verified row for eleven typed exit-code-3 refusal classes. Add deterministic
+  self-service acceptance over two independent public washing-controller plant
+  batches, three resource refusals, malformed-policy and corrupt-evidence
+  controls, stable structural aggregation, and frozen SHA-256 fingerprints for
+  both manifests plus controller and plant artifacts. Reproduce the retained
+  CSV in ordinary Linux CI without treating timing as portable evidence. Hosted
+  run 29776279270 passes the real governed CLI and typed-client integration at
+  exact commit `1227d50`; retained-CSV hosted reproduction remains pending.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

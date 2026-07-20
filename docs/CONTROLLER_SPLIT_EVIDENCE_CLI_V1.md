@@ -146,3 +146,30 @@ The client rejects empty sets and requests above the discovered batch limit
 before process creation. A non-zero process exit, timeout, output overflow,
 non-canonical response, inconsistent aggregate, or changed contract produces no
 typed verified summary.
+
+## Retained acceptance and compatibility seed
+
+Run:
+
+```sh
+scripts/run-controller-split-resource-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  /tmp/controller-split-resource-acceptance.csv
+diff -u results/controller-split-resource-acceptance-v1.csv \
+  /tmp/controller-split-resource-acceptance.csv
+```
+
+The acceptance uses two independently generated, one-property batches over the
+public washing controller and physical plant. It retains two exact UNSAFE
+answers, one controller admission, structural byte and transition totals, six
+job outcomes, and SHA-256 fingerprints for both manifests and all three split
+artifacts. Controller-budget, batch-budget, total-member, malformed-policy, and
+corrupt-evidence controls must return their predeclared outcomes with no partial
+verified output. Timings are deliberately omitted because they are observations,
+not cross-host reproducibility claims.
+
+These fingerprints seed compatibility history for the experimental v1
+contracts. Compatibility through a later tagged release is still required.
+Hosted Linux run 29776279270 passes the governed CLI and typed-client integration
+on exact commit `1227d50`; hosted reproduction of this retained acceptance CSV
+will be established by the next exact-head run.

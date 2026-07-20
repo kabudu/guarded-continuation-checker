@@ -1,0 +1,8 @@
+schema_version,job,outcome,batches,members,safe,unsafe,controller_evidence_bytes,total_plant_artifact_bytes,total_transition_bound,controller_evidence_sha256,plant_a_sha256,plant_b_sha256,manifest_a_sha256,manifest_b_sha256,exit_code,result,status
+1,public-washing-two-batch,verified,2,2,0,2,248889,841,4325376,96b8f1bd63f8e5cbf9765eeafcda5c00fe5353e63ba45a341669ec8b52248262,625d4d633d6a7c73f1eb8176650fc37d04916d62ac7f8ce708573ebbba6a69b9,aa9ca7a7d130cfe74a65995ef7a4eacb7b971b03a3b57fb24a541b83f76a8ba5,24f75b5dbff8c0f10a8254861b8a0fa132988cff177d4c8fb3f8e5ed7c124382,f1b02bc284131484170fde4913b56f04bb26158efe57924d4329238f1e52ebe3,0,answers-retained,accepted
+1,controller-budget-control,refused,0,0,0,0,0,0,0,none,none,none,none,none,3,none,accepted
+1,batch-budget-control,refused,0,0,0,0,0,0,0,none,none,none,none,none,3,none,accepted
+1,total-member-control,refused,0,0,0,0,0,0,0,none,none,none,none,none,3,none,accepted
+1,malformed-policy-control,invalid,0,0,0,0,0,0,0,none,none,none,none,none,2,none,accepted
+1,corrupt-evidence-control,invalid,0,0,0,0,0,0,0,none,none,none,none,none,2,none,accepted
+1,aggregate,summary,2,2,0,2,248889,841,4325376,96b8f1bd63f8e5cbf9765eeafcda5c00fe5353e63ba45a341669ec8b52248262,625d4d633d6a7c73f1eb8176650fc37d04916d62ac7f8ce708573ebbba6a69b9,aa9ca7a7d130cfe74a65995ef7a4eacb7b971b03a3b57fb24a541b83f76a8ba5,24f75b5dbff8c0f10a8254861b8a0fa132988cff177d4c8fb3f8e5ed7c124382,f1b02bc284131484170fde4913b56f04bb26158efe57924d4329238f1e52ebe3,0,1-verified-3-refused-2-invalid,accepted
