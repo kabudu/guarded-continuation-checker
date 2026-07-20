@@ -7,10 +7,11 @@ use guarded_continuation_checker::controller_plant_artifact::{
     decode_controller_proof_evidence_artifact, decode_controller_proof_mtbdd_plant_artifact,
     encode_bound_plant_results_artifact, encode_controller_mtbdd_plant_artifact,
     encode_controller_proof_evidence_artifact, encode_controller_proof_mtbdd_plant_artifact,
-    produce_bound_plant_results_artifact, produce_controller_mtbdd_plant_artifact,
-    produce_controller_proof_evidence_artifact, produce_controller_proof_mtbdd_plant_artifact,
-    verify_bound_plant_results_artifact, verify_bound_plant_results_with_admitted_controller,
-    verify_controller_mtbdd_plant_artifact, verify_controller_proof_mtbdd_plant_artifact,
+    produce_bound_plant_results_artifact, produce_bound_plant_results_with_admitted_controller,
+    produce_controller_mtbdd_plant_artifact, produce_controller_proof_evidence_artifact,
+    produce_controller_proof_mtbdd_plant_artifact, verify_bound_plant_results_artifact,
+    verify_bound_plant_results_with_admitted_controller, verify_controller_mtbdd_plant_artifact,
+    verify_controller_proof_mtbdd_plant_artifact,
 };
 
 fn controller() -> AigerTransition {
@@ -144,7 +145,7 @@ fn controller_evidence_is_reused_across_a_plant_replacement() {
     assert_eq!(
         verify_bound_plant_results_with_admitted_controller(
             &admitted,
-            &[(&first_plant, first_digest)],
+            &[make_input(&first_plant, first_digest)],
             &first_bytes,
         )
         .unwrap()
@@ -154,7 +155,7 @@ fn controller_evidence_is_reused_across_a_plant_replacement() {
     assert_eq!(
         verify_bound_plant_results_with_admitted_controller(
             &admitted,
-            &[(&replacement_plant, replacement_digest)],
+            &[make_input(&replacement_plant, replacement_digest)],
             &replacement_bytes,
         )
         .unwrap()
@@ -166,7 +167,7 @@ fn controller_evidence_is_reused_across_a_plant_replacement() {
             &controller,
             controller_digest,
             &evidence_bytes,
-            &[(&replacement_plant, first_digest)],
+            &[make_input(&replacement_plant, first_digest)],
             &replacement_bytes,
         )
         .is_err()
@@ -176,8 +177,72 @@ fn controller_evidence_is_reused_across_a_plant_replacement() {
             &controller,
             controller_digest,
             &evidence_bytes,
-            &[(&first_plant, first_digest)],
+            &[make_input(&first_plant, first_digest)],
             &replacement_bytes,
+        )
+        .is_err()
+    );
+    let mut obligation_drift = make_input(&replacement_plant, replacement_digest);
+    obligation_drift.bad_plant_output = 0;
+    assert!(
+        verify_bound_plant_results_with_admitted_controller(
+            &admitted,
+            &[obligation_drift],
+            &replacement_bytes,
+        )
+        .is_err()
+    );
+
+    let other_digest = [0x92; 32];
+    let other_mtbdd = produce_controller_mtbdd(&controller, other_digest, &[0], &[0]).unwrap();
+    let other_evidence = encode_controller_proof_evidence_artifact(
+        &produce_controller_proof_evidence_artifact(&controller, other_digest, &other_mtbdd)
+            .unwrap(),
+    )
+    .unwrap();
+    let other_admitted =
+        admit_controller_proof_evidence(&controller, other_digest, &other_evidence).unwrap();
+    assert!(
+        verify_bound_plant_results_with_admitted_controller(
+            &other_admitted,
+            &[make_input(&replacement_plant, replacement_digest)],
+            &replacement_bytes,
+        )
+        .is_err()
+    );
+    let first_obligation = make_input(&replacement_plant, replacement_digest);
+    let mut second_obligation = first_obligation;
+    second_obligation.bad_plant_output = 0;
+    let ordered = [first_obligation, second_obligation];
+    let ordered_bytes = encode_bound_plant_results_artifact(
+        &produce_bound_plant_results_with_admitted_controller(&admitted, &ordered).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        verify_bound_plant_results_with_admitted_controller(&admitted, &ordered, &ordered_bytes,)
+            .is_ok()
+    );
+    assert!(
+        verify_bound_plant_results_with_admitted_controller(
+            &admitted,
+            &[second_obligation, first_obligation],
+            &ordered_bytes,
+        )
+        .is_err()
+    );
+    assert!(
+        verify_bound_plant_results_with_admitted_controller(
+            &admitted,
+            &[first_obligation, first_obligation],
+            &ordered_bytes,
+        )
+        .is_err()
+    );
+    assert!(
+        verify_bound_plant_results_with_admitted_controller(
+            &admitted,
+            &[first_obligation],
+            &ordered_bytes,
         )
         .is_err()
     );
@@ -190,12 +255,27 @@ fn controller_evidence_is_reused_across_a_plant_replacement() {
             &controller,
             controller_digest,
             &wrong_evidence,
-            &[(&replacement_plant, replacement_digest)],
+            &[make_input(&replacement_plant, replacement_digest)],
             &replacement_bytes,
         )
         .is_err()
     );
-    assert!(decode_bound_plant_results_artifact(&replacement_bytes[..32]).is_err());
+    for length in 0..evidence_bytes.len() {
+        assert!(decode_controller_proof_evidence_artifact(&evidence_bytes[..length]).is_err());
+    }
+    for index in 0..evidence_bytes.len() {
+        let mut mutated = evidence_bytes.clone();
+        mutated[index] ^= 1;
+        assert!(decode_controller_proof_evidence_artifact(&mutated).is_err());
+    }
+    for length in 0..replacement_bytes.len() {
+        assert!(decode_bound_plant_results_artifact(&replacement_bytes[..length]).is_err());
+    }
+    for index in 0..replacement_bytes.len() {
+        let mut mutated = replacement_bytes.clone();
+        mutated[index] ^= 1;
+        assert!(decode_bound_plant_results_artifact(&mutated).is_err());
+    }
 }
 
 fn plant() -> AigerTransition {

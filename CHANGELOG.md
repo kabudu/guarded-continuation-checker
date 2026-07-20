@@ -83,7 +83,15 @@
   the stateless convenience path remains fail closed. Bind plant results to the
   exact controller-evidence SHA-256 and reject stale evidence, source drift,
   cross-plant substitution, mutation, and truncation. Real-family marginal-cost
-  measurement and resource-envelope integration remain open.
+  measurement now replaces the third member of a four-plant package with a
+  fifth pinned-Yosys-attested actuator transport-lag revision. Bind the complete
+  ordered property, wiring, state, and horizon obligation and reject missing,
+  duplicated, reordered, mutated, truncated, or stale evidence. GCC transfers
+  4,160 marginal bytes versus 8,278 for the independently accepted FM 2026-style
+  composed-witness path, a 49.75% reduction, but its initial package is 8.71
+  times larger and breaks even only after 58 observed replacements. Hosted
+  replacement reproduction, controlled resource accounting, file and process
+  APIs, and resource-envelope integration remain open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

@@ -392,3 +392,24 @@ Deterministic source-to-model attestation for the public controller and plant is
 reproducible-build provenance, not a new verification algorithm. It strengthens
 the benchmark trust chain without changing any novelty claim or closest-prior-art
 conclusion.
+
+## Changing-plant evidence reuse
+
+The predeclared local replacement experiment now supplies the first positive
+evidence for the narrow candidate distinction. GCC checks a 248,889-byte
+controller MTBDD equivalence artifact once, retains a typed admitted capability,
+and binds separately replaceable plant results to its SHA-256. Replacing the
+third member of a four-plant package transfers 4,160 bytes including source and
+raw plant model. The faithful FM 2026-style route transfers 8,278 bytes including
+the same source, combined model, and independently accepted composed witness.
+This is a 49.75% marginal byte reduction at equal two-property SAFE scope.
+
+The result does not establish a novel algorithm. Content addressing, proof
+caching, assume-guarantee separation, and incremental verification are known.
+The complete initial GCC transfer is 265,927 bytes, 8.71 times the external
+30,531-byte initial package, and requires 58 observed replacements to recover
+that deficit. Hosted reproduction, peak memory, controlled checked-work
+accounting, independent review of the paper-derived merger, a search for systems
+with the same proof-cache boundary, and a non-repository-authored changing plant
+remain open. The narrow hypothesis advances; every broader novelty or product
+superiority claim remains prohibited.

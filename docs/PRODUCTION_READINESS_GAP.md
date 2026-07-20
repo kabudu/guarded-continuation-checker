@@ -277,6 +277,17 @@ correct or cover external designs. Attested portfolio verification additionally
 binds provenance to the exact source and model snapshot loaded for the query and
 rejects post-snapshot replacement. No production-readiness row closes yet.
 
+The changing-plant experiment now separates controller proof evidence from
+content-addressed plant results and supports process-local proof admission.
+Every ordered obligation field is caller-bound, and stale evidence, reordered
+or duplicated obligations, mutation, and truncation fail closed. The local
+five-plant fixture shows a 49.75% marginal byte reduction against the faithful
+composed-witness route, but an 8.71 times larger initial package and a 58-change
+byte break-even. Resource envelopes for the split wire formats, a stable file
+CLI and typed process client, hosted cross-platform evidence, compatibility
+fixtures, peak-RSS evidence, and external acceptance remain open. This adds a
+candidate product mechanism and closes no production-readiness row.
+
 ## Post-production-release deliverables
 
 - Create a visually polished, accessible SVG architecture diagram after the

@@ -137,6 +137,10 @@ faithful baseline leaves the gate open and produces no positive result.
    all four source-to-model regenerations are byte-identical, all 24 bounded
    answers are independently replayed, and every plant retains two SAFE
    properties.
+   A fifth replacement-only actuator transport-lag revision is also reproduced
+   byte-for-byte from source with the same pinned Yosys revision. It preserves
+   the two SAFE comparison properties and is not counted as another row in the
+   original four-plant result.
 2. Obtain or implement the exact composed-witness construction. In progress:
    the safety-only v1 paper-derived baseline now coalesces shared mapped model
    state, keeps private variables disjoint, unions reset and transition
@@ -164,14 +168,34 @@ faithful baseline leaves the gate open and produces no positive result.
    values exactly. Platform-specific executable and checker-tree digests are
    retained separately and are not represented as reproducible binaries.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
-   In progress: GCC now has canonical controller-only evidence and a separate
+   Complete locally and open on hosted amd64: GCC now has canonical
+   controller-only evidence and a separate
    plant-results artifact bound to the controller-evidence SHA-256. A typed
    admitted-controller capability independently checks the controller proof
    once and reuses the verified state for subsequent plant batches. The public
-   API rejects stale controller evidence, source drift, cross-plant
-   substitution, mutation, and truncation. The current test uses synthetic
-   models only; it is mechanism evidence, not the required four-plant
-   measurement.
+   API binds the complete ordered obligation and rejects stale controller
+   evidence, source drift, property or wiring drift, missing, duplicated, or
+   reordered obligations, every single-byte mutation, and every truncation.
+   Starting with the four distinct original plants, member 3 is replaced by
+   the fifth attested plant while members 1, 2, and 4 regenerate byte-identically.
+
+   The cached controller evidence is 248,889 bytes. The four initial plant
+   result objects total 1,132 bytes, and the replacement result is 283 bytes.
+   Counting replacement source and model bytes, split GCC transfers 4,160
+   marginal bytes. Rebuilding the old monolithic GCC package transfers 253,639
+   bytes at the same scope, so the split route uses 1.64% of that marginal
+   transfer.
+
+   The faithful external route independently validates two replacement
+   witnesses totalling 5,524 bytes and their 3,117-byte composition against a
+   2,486-byte combined model. Counting the same 2,675-byte replacement source,
+   the external marginal transfer is 8,278 bytes. GCC therefore uses 49.75%
+   fewer marginal bytes in this local run. The initial GCC package is 265,927
+   bytes when source and raw plant models are included, versus 30,531 bytes for
+   the four external source, model, and composed-witness rows. At the observed
+   4,118-byte marginal saving, the initial byte deficit is recovered only after
+   58 replacements. This is a narrow repeated-change regime, not a broad size
+   advantage.
 6. Retain manifests, raw measurements, hostile results, and tool provenance.
 7. Update the novelty register with the result, including a negative result.
 
@@ -183,9 +207,10 @@ each model, pinned rIC3 generates one witness from each corresponding
 single-property model; GCC's paper-derived baseline composes them; and the
 qualified independent checker accepts the result against the shared model.
 
-This does not close the experiment. Producer and consumer resource measurements,
-the predeclared one-plant replacement, hosted amd64 reproduction, broader AIGER
-section support, and independent implementation review remain open. Most
-importantly, the result confirms that established composed witnesses already
-remove almost half of the repeated evidence bytes. Only cross-plant reuse of
-controller-local semantics remains a plausible distinction.
+This does not close the experiment. Controlled producer and consumer peak-RSS
+measurements, hosted amd64 replacement reproduction, broader AIGER section
+support, and independent implementation review remain open. The established
+composed-witness route is much smaller initially. GCC's only observed advantage
+is after repeated plant replacement, and its byte break-even is 58 changes on
+this family. That advances the narrow controller-local reuse hypothesis without
+establishing novelty or general practical superiority.

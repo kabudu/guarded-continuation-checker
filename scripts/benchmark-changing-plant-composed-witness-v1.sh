@@ -25,6 +25,21 @@ models=$repository/corpus/rtl/wmcontroller/composed-witness-models-v1
 }
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-changing-plant-witness.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+read -r -a plants <<<"${GCC_COMPOSED_WITNESS_PLANTS:-nominal sensor-stuck actuator-delay persistent-disturbance}"
+[[ ${#plants[@]} -ge 1 && ${#plants[@]} -le 5 ]] || {
+  echo "changing-plant selection is outside limits" >&2; exit 2;
+}
+seen_plants=' '
+for plant in "${plants[@]}"; do
+  case "$plant" in
+    nominal|sensor-stuck|actuator-delay|persistent-disturbance|actuator-transport-lag) ;;
+    *) echo "changing-plant selection is invalid" >&2; exit 2 ;;
+  esac
+  case "$seen_plants" in
+    *" $plant "*) echo "changing-plant selection contains a duplicate" >&2; exit 2 ;;
+  esac
+  seen_plants="$seen_plants$plant "
+done
 
 sha256sum_portable() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -62,7 +77,7 @@ printf '%s\n' \
     "$(cd "$certifaiger_output/bin" && find . -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')"
 } >"$manifest"
 
-for plant in nominal sensor-stuck actuator-delay persistent-disturbance; do
+for plant in "${plants[@]}"; do
   for property in 15 16; do
     docker run --rm --network none \
       -v "$ric3_output:/tools:ro" -v "$models:/models:ro" \
@@ -107,4 +122,4 @@ for plant in nominal sensor-stuck actuator-delay persistent-disturbance; do
   } >>"$manifest"
 done
 printf 'status=validated\n' >>"$manifest"
-echo "changing-plant composed-witness baseline status=VALIDATED plants=4 properties=2 output=$output"
+echo "changing-plant composed-witness baseline status=VALIDATED plants=${#plants[@]} properties=2 output=$output"

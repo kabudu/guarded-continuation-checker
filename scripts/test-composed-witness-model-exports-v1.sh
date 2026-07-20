@@ -16,4 +16,4 @@ if cargo run --quiet --locked --example export_composed_witness_plant_family -- 
   echo "existing composed-witness model directory was overwritten" >&2
   exit 1
 fi
-echo 'composed-witness model export tests status=PASS models=12 collision=rejected'
+echo 'composed-witness model export tests status=PASS models=15 collision=rejected'

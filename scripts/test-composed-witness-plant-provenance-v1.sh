@@ -49,4 +49,4 @@ expect_failure 2 'provenance manifest contains duplicate member subject' \
   "$attester" "$root" "$scratch/substitution.txt" \
   "$scratch/substitution.csv"
 
-echo 'changing-plant provenance tests status=PASS attested=4 hostile=3'
+echo 'changing-plant provenance tests status=PASS attested=5 hostile=3'

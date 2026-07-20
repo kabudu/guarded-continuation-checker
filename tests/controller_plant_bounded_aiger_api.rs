@@ -20,6 +20,9 @@ const ACTUATOR_DELAY_PLANT: &[u8] = include_bytes!(
 const PERSISTENT_DISTURBANCE_PLANT: &[u8] = include_bytes!(
     "../corpus/rtl/wmcontroller/composed-witness-plants-v1/persistent-disturbance/physical-plant.aag"
 );
+const ACTUATOR_TRANSPORT_LAG_PLANT: &[u8] = include_bytes!(
+    "../corpus/rtl/wmcontroller/composed-witness-plants-v1/actuator-transport-lag/physical-plant.aag"
+);
 
 struct IndependentAag {
     inputs: Vec<usize>,
@@ -204,6 +207,11 @@ fn changing_plant_family_preserves_two_safe_properties() {
             "persistent-disturbance",
             PERSISTENT_DISTURBANCE_PLANT,
             [Some(4), Some(7), Some(15), Some(15), None, None],
+        ),
+        (
+            "actuator-transport-lag",
+            ACTUATOR_TRANSPORT_LAG_PLANT,
+            [Some(5), Some(8), Some(16), Some(16), None, None],
         ),
     ] {
         let plant = parse_ascii_aiger_transition(bytes).unwrap();

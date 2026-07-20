@@ -1347,21 +1347,23 @@ pub fn produce_bound_plant_results_artifact(
     controller_evidence_bytes: &[u8],
     members: &[ControllerPlantArtifactInput<'_>],
 ) -> Result<BoundPlantResultsArtifact, ControllerPlantArtifactError> {
+    let admitted = admit_controller_proof_evidence(
+        controller_model,
+        controller_source_sha256,
+        controller_evidence_bytes,
+    )?;
+    produce_bound_plant_results_with_admitted_controller(&admitted, members)
+}
+
+/// Produce replaceable plant results after admitting controller evidence once.
+pub fn produce_bound_plant_results_with_admitted_controller(
+    admitted: &AdmittedControllerProofEvidence,
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<BoundPlantResultsArtifact, ControllerPlantArtifactError> {
     if members.is_empty() || members.len() > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
         return Err(reject("bound plant result member count is outside limit"));
     }
-    let evidence = decode_controller_proof_evidence_artifact(controller_evidence_bytes)?;
-    let controller = decode_controller_mtbdd(&evidence.controller_mtbdd)
-        .map_err(|error| reject(error.to_string()))?;
-    let proof = decode_controller_mtbdd_equivalence_proof(&evidence.equivalence_proof)
-        .map_err(|error| reject(error.to_string()))?;
-    let verified = verify_proof_carrying_mtbdd_for_composition(
-        controller_model,
-        controller_source_sha256,
-        &controller,
-        &proof,
-    )
-    .map_err(|error| reject(error.to_string()))?;
+    let verified = reuse_verified_controller_mtbdd(&admitted.controller, admitted.summary.clone());
     let members = members
         .iter()
         .map(|member| {
@@ -1388,7 +1390,7 @@ pub fn produce_bound_plant_results_artifact(
         .collect::<Result<Vec<_>, ControllerPlantArtifactError>>()?;
     Ok(BoundPlantResultsArtifact {
         version: BOUND_PLANT_RESULTS_VERSION,
-        controller_evidence_sha256: Sha256::digest(controller_evidence_bytes).into(),
+        controller_evidence_sha256: admitted.evidence_sha256,
         members,
     })
 }
@@ -1486,34 +1488,40 @@ pub fn admit_controller_proof_evidence(
 /// Check a plant-result batch using previously admitted controller evidence.
 pub fn verify_bound_plant_results_with_admitted_controller(
     admitted: &AdmittedControllerProofEvidence,
-    plants: &[(&AigerTransition, [u8; 32])],
+    members: &[ControllerPlantArtifactInput<'_>],
     plant_results_bytes: &[u8],
 ) -> Result<ControllerMtbddPlantBatchSummary, ControllerPlantArtifactError> {
     let results = decode_bound_plant_results_artifact(plant_results_bytes)?;
     if results.controller_evidence_sha256 != admitted.evidence_sha256 {
         return Err(reject("bound plant result controller evidence mismatch"));
     }
-    if plants.len() != results.members.len() {
+    if members.len() != results.members.len() {
         return Err(reject("bound plant result source count mismatch"));
     }
     let verified = reuse_verified_controller_mtbdd(&admitted.controller, admitted.summary.clone());
-    let mut members = Vec::with_capacity(plants.len());
+    let mut verified_members = Vec::with_capacity(members.len());
     let mut safe = 0usize;
     let mut unsafe_count = 0usize;
     let mut reachable_product_states = 0usize;
     let mut explored_transitions = 0usize;
-    for ((plant, digest), claimed) in plants.iter().copied().zip(&results.members) {
-        if digest != claimed.plant_source_sha256 {
-            return Err(reject("bound plant result source digest mismatch"));
+    for (member, claimed) in members.iter().zip(&results.members) {
+        if member.plant_source_sha256 != claimed.plant_source_sha256
+            || member.wiring != &claimed.wiring
+            || member.initial_controller_state != claimed.initial_controller_state
+            || member.initial_plant_state != claimed.initial_plant_state
+            || member.bad_plant_output != claimed.bad_plant_output
+            || member.horizon != claimed.horizon
+        {
+            return Err(reject("bound plant result obligation mismatch"));
         }
         let result = compose_verified_mtbdd_plant(
             &verified,
-            plant,
-            &claimed.wiring,
-            claimed.initial_controller_state,
-            claimed.initial_plant_state,
-            claimed.bad_plant_output,
-            claimed.horizon,
+            member.plant,
+            member.wiring,
+            member.initial_controller_state,
+            member.initial_plant_state,
+            member.bad_plant_output,
+            member.horizon,
         )
         .map_err(|error| reject(error.to_string()))?;
         if result != claimed.result {
@@ -1529,10 +1537,10 @@ pub fn verify_bound_plant_results_with_admitted_controller(
         explored_transitions = explored_transitions
             .checked_add(result.explored_transitions)
             .ok_or_else(|| reject("bound plant transition count overflow"))?;
-        members.push(result);
+        verified_members.push(result);
     }
     Ok(ControllerMtbddPlantBatchSummary {
-        members,
+        members: verified_members,
         safe,
         unsafe_count,
         mtbdd_nodes: verified.summary().nodes,
@@ -1549,7 +1557,7 @@ pub fn verify_bound_plant_results_artifact(
     controller_model: &AigerTransition,
     controller_source_sha256: [u8; 32],
     controller_evidence_bytes: &[u8],
-    plants: &[(&AigerTransition, [u8; 32])],
+    members: &[ControllerPlantArtifactInput<'_>],
     plant_results_bytes: &[u8],
 ) -> Result<ControllerMtbddPlantBatchSummary, ControllerPlantArtifactError> {
     let admitted = admit_controller_proof_evidence(
@@ -1557,7 +1565,7 @@ pub fn verify_bound_plant_results_artifact(
         controller_source_sha256,
         controller_evidence_bytes,
     )?;
-    verify_bound_plant_results_with_admitted_controller(&admitted, plants, plant_results_bytes)
+    verify_bound_plant_results_with_admitted_controller(&admitted, members, plant_results_bytes)
 }
 
 pub fn produce_controller_direct_plant_artifact(
