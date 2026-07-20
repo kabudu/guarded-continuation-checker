@@ -12,7 +12,7 @@ sufficient.
 | Resource governance | Static dimensions; Rust API applies deadlines, stream/file caps, Unix process groups and non-macOS Unix address-space limits; macOS group regression and a Rust 1.97 Linux container pass; [hosted run 29661860245](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29661860245) passes the Ubuntu limit regression, public RTL corpus and dependency audit; metrics record enforced controls and stable failure classes | Retain these regressions across supported releases; macOS remains development-only for hard memory evidence | Closed for predicate API v1 on supported Linux; macOS limitation explicit |
 | Input reliability | Strict certificate/transcript sizes and syntax; v2 reliability boundary; structural native-proof preflight; 5,000 deterministic parser transformations; invalid-UTF8, sparse-oversize and oversized-proof tests; 128 proof transformations; canonical no-clobber DIMACS export plus 40 individual and four aggregate proofs accepted by pinned CaDiCaL/DRAT-trim under Linux process limits | Add continuous robustness coverage; extend checker diversity from completeness obligations to the whole certificate | Closed for bounded v2 parsing and external completeness checking; whole-certificate diversity open |
 | Stable interface | Predicate CLI v1 freezes discovery, commands and exit meanings; typed Rust API v1 validates capabilities and exposes shell-free v1/v2 production/verification; a separate integration-test crate proves discovery, production and checking against the real binary | Preserve API compatibility across a tagged release; add an in-process verifier only if deployment evidence shows the process boundary is unsuitable | Closed for candidate CLI/Rust API v1; release evidence open |
-| Observability | Portfolio/cost reports preserve backend decisions and timings; predicate Rust API metrics schema v1 records every observed operation's duration, stream sizes, configured limits, exit status and stable failure class; bounded aggregate schema v1 preserves operation, containment, and failure distributions; governed split observability adds four internal phase durations, eleven checked work counters, and an additive system-allocation event contract, with five retained observed-contract invocations after fixture setup | Add cache counters; retain the phase, resource, and allocation acceptance across supported releases | In progress; phase, structural, and allocation counters complete |
+| Observability | Portfolio/cost reports preserve backend decisions and timings; predicate Rust API metrics schema v1 records every observed operation's duration, stream sizes, configured limits, exit status and stable failure class; bounded aggregate schema v1 preserves operation, containment, and failure distributions; governed split observability adds four internal phase durations, eleven checked work counters, system-allocation events, and integrity-preserving process-local cache counters | Retain phase, resource, allocation, and cache acceptance across supported releases; allocator peaks remain covered only by the separate process-resource benchmark | Closed for the governed split candidate surface |
 | Cross-platform distribution | Candidate Linux bundle v1 defines static x86_64 musl archives, SPDX 2.3 SBOM, deterministic provenance, non-executing offline verification, and two-source-path reproducibility; [signed candidate run 29675023822](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29675023822) passes exact SLSA and SPDX identity policy with [retained evidence](../results/linux-evaluation-candidate-v1.md) | Add a justified macOS distribution decision, tagged-release compatibility, and release-level verification evidence | In progress; first Linux candidate gate closed |
 | Real product validity | Public synthetic/product-shaped fixtures | Multiple unmodified public firmware/robotics designs plus independent self-service evaluation outcomes | Open |
 | Operational guidance | [Operations runbook](OPERATIONS.md), [isolation profile](ISOLATION_PROFILE_V1.md), and executable Linux qualification cover installation, sizing, failure handling, upgrade, rollback, incident response, restoration, and evidence retention | Retain the executable qualification and runbook drills across supported releases; independent operator execution remains part of the external-acceptance gate | Closed for the documented evaluation scope |
@@ -331,12 +331,15 @@ The additive governed split observability contract now reports four versioned
 internal phase durations and eleven checked structural work counters after a
 complete success. Its typed client reconciles those counters with the strict
 base result, rejects hostile or overflowing summaries, and returns no partial
-measurement on refusal. Cache behavior, allocator peaks, CPU counters, and
-per-phase peak RSS remain open observability work.
-After fixture setup, the retained acceptance adds five observed-contract
-invocations: discovery, three successful verifications covering four batches,
-and one fail-closed resource refusal. Its canonical CSV aggregates deterministic
-work and evidence totals while excluding host-dependent phase timings.
+measurement on refusal. The additive cache path reports process-local semantic
+replay lookups, hits, misses, and entries only after full two-pass integrity
+preflight. Allocator peaks, CPU counters, and per-phase peak RSS remain outside
+this contract.
+After fixture setup, the retained acceptance adds six observed-contract
+invocations: discovery, three successful verifications covering four retained
+batches, one duplicate-batch cache probe, and one fail-closed resource refusal.
+Its canonical CSV aggregates deterministic work and evidence totals while
+excluding host-dependent phase timings and the separate cache probe.
 The workflow now exercises allocation observation on all three successes,
 requires positive allocation calls and bytes, and still requires no stdout on
 refusal. Allocation values remain live checks rather than portable retained
@@ -345,7 +348,8 @@ Hosted run 29781337392 passes the underlying observed CLI and typed contract on
 exact commit `6393ccf`, including all portable API, public RTL, hostile-input,
 dependency, and reproducible-package companion jobs. Hosted run 29782315590
 reproduces the retained multi-job CSV on exact commit `7b9e024`, with every
-companion job green.
+companion job green. Hosted run 29783651272 validates allocation observation on
+exact commit `2c68e5e`, with every required job green.
 
 ## Post-production-release deliverables
 

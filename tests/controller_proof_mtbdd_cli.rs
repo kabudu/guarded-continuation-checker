@@ -7,9 +7,9 @@ use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason,
     ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
     ControllerProofMtbddResourceTool, ControllerProofMtbddTool,
-    ControllerSplitAllocationObservabilityTool, ControllerSplitEvidenceTool,
-    ControllerSplitObservabilityTool, ControllerSplitResourceTool, FailureClass, InvocationStatus,
-    OperationKind, PredicateApiError, aggregate_invocation_metrics,
+    ControllerSplitAllocationObservabilityTool, ControllerSplitCacheObservabilityTool,
+    ControllerSplitEvidenceTool, ControllerSplitObservabilityTool, ControllerSplitResourceTool,
+    FailureClass, InvocationStatus, OperationKind, PredicateApiError, aggregate_invocation_metrics,
 };
 use sha2::{Digest, Sha256};
 
@@ -343,6 +343,29 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     assert!(allocation_value("deallocated_bytes") > 0);
     assert!(allocation_line.ends_with("overflow=none timing_calibration=none"));
 
+    let cache_governed = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-cache-observed-v1")
+        .arg(&evidence)
+        .arg(&resource_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results)
+        .output()
+        .unwrap();
+    assert!(
+        cache_governed.status.success(),
+        "{:?}",
+        cache_governed.stderr
+    );
+    let cache_governed = String::from_utf8(cache_governed.stdout).unwrap();
+    assert_eq!(cache_governed.lines().count(), 6);
+    let cache_line = cache_governed.lines().last().unwrap();
+    assert_eq!(
+        cache_line,
+        "controller-split-cache-observability status=MEASURED cli_version=1 scope=semantic-replay key=manifest-snapshot,resource-assessment,result-sha256 lookups=2 hits=1 misses=1 entries=1 integrity_preflight=required overflow=none timing_calibration=none"
+    );
+
     let observability_tool =
         ControllerSplitObservabilityTool::discover_observed(BINARY, Default::default()).unwrap();
     assert_eq!(
@@ -416,6 +439,58 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     assert_eq!(typed_allocation.value.observed.verification.members, 4);
     assert!(typed_allocation.value.allocations.allocation_calls > 0);
     assert!(typed_allocation.value.allocations.allocated_bytes > 0);
+
+    let cache_tool =
+        ControllerSplitCacheObservabilityTool::discover_observed(BINARY, Default::default())
+            .unwrap();
+    assert_eq!(
+        cache_tool.metrics.operation,
+        OperationKind::DiscoverControllerSplitCacheObservability
+    );
+    assert_eq!(cache_tool.value.capabilities().cli_version, 1);
+    let typed_cache = cache_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &resource_policy,
+            &[(&manifest, &results), (&manifest, &results)],
+        )
+        .unwrap();
+    assert_eq!(
+        typed_cache.metrics.operation,
+        OperationKind::VerifyBoundPlantResultSetResourcesCacheObserved
+    );
+    assert_eq!(typed_cache.value.cache.lookups, 2);
+    assert_eq!(typed_cache.value.cache.hits, 1);
+    assert_eq!(typed_cache.value.cache.misses, 1);
+    assert_eq!(typed_cache.value.cache.entries, 1);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let hostile_cache = root.join("hostile-cache-observability-helper");
+        fs::write(
+            &hostile_cache,
+            format!(
+                "#!/bin/sh\n'{}' \"$@\" | sed 's/ hits=[0-9][0-9]*/ hits=999/'\n",
+                BINARY.replace('\'', "'\\''")
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&hostile_cache).unwrap().permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&hostile_cache, permissions).unwrap();
+        let hostile_tool = ControllerSplitCacheObservabilityTool::discover(&hostile_cache).unwrap();
+        let failure = hostile_tool
+            .verify_set(
+                &evidence,
+                &resource_policy,
+                &[(&manifest, &results), (&manifest, &results)],
+            )
+            .unwrap_err();
+        assert!(matches!(failure, PredicateApiError::InvalidResponse(_)));
+    }
 
     let resource_tool =
         ControllerSplitResourceTool::discover_observed(BINARY, Default::default()).unwrap();
@@ -578,6 +653,34 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     ));
     assert_eq!(
         typed_allocation_refusal.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
+    let cache_refusal = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-cache-observed-v1")
+        .arg(&evidence)
+        .arg(&tight_controller_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .output()
+        .unwrap();
+    assert_eq!(cache_refusal.status.code(), Some(3));
+    assert!(cache_refusal.stdout.is_empty());
+    let typed_cache_refusal = cache_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &tight_controller_policy,
+            &[(&manifest, &results)],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *typed_cache_refusal.error,
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::ControllerArtifactBytes
+        }
+    ));
+    assert_eq!(
+        typed_cache_refusal.metrics.status,
         InvocationStatus::Failed(FailureClass::ResourceRefusal)
     );
 

@@ -23,10 +23,10 @@ results_a=$scratch/physical-a.plant-results
 results_b=$scratch/physical-b.plant-results
 policy=$scratch/permissive.policy
 
-capabilities=$("$binary" controller-split-allocation-observability-cli-version)
-test "$(printf '%s\n' "$capabilities" | wc -l | tr -d ' ')" -eq 3
+capabilities=$("$binary" controller-split-cache-observability-cli-version)
+test "$(printf '%s\n' "$capabilities" | wc -l | tr -d ' ')" -eq 4
 printf '%s\n' "$capabilities" | tail -n 1 | grep -q \
-  '^controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay .* overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed$'
+  '^controller_split_cache_observability_cli_version=1 base_allocation_observability_cli_version=1 scope=semantic-replay .* integrity_preflight=required overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed$'
 
 "$binary" certify-controller-proof-evidence-v1 "$manifest_a" "$evidence" >/dev/null
 "$binary" certify-bound-plant-results-v1 "$manifest_a" "$evidence" "$results_a" >/dev/null
@@ -74,10 +74,17 @@ check_phases() {
   test "$(field "$observed" allocation_calls)" -gt 0
   test "$(field "$observed" allocated_bytes)" -gt 0
   test "$(field "$observed" overflow)" = none
+  cache_lookups=$(field "$observed" lookups)
+  cache_hits=$(field "$observed" hits)
+  cache_misses=$(field "$observed" misses)
+  batch_rows=$(printf '%s\n' "$observed" | grep -c '^controller-split-resource-batch ')
+  test "$cache_lookups" -eq "$batch_rows"
+  test $((cache_hits + cache_misses)) -eq "$cache_lookups"
+  test "$(field "$observed" entries)" -eq "$cache_misses"
 }
 
 run_observed() {
-  "$binary" verify-bound-plant-result-set-with-resources-allocation-observed-v1 \
+  "$binary" verify-bound-plant-result-set-with-resources-cache-observed-v1 \
     "$evidence" "$policy" "$@"
 }
 
@@ -89,6 +96,10 @@ single_b=$(run_observed "$manifest_b" "$results_b")
 check_phases "$two_batch"
 check_phases "$single_a"
 check_phases "$single_b"
+cache_probe=$(run_observed "$manifest_a" "$results_a" "$manifest_a" "$results_a")
+check_phases "$cache_probe"
+test "$(field "$cache_probe" hits)" -eq 1
+test "$(field "$cache_probe" misses)" -eq 1
 
 check_counts() {
   observed=$1
@@ -124,7 +135,7 @@ sed "s/max_controller_artifact_bytes=$controller_bytes/max_controller_artifact_b
   "$policy" >"$tight"
 refusal_stdout=$scratch/refusal.stdout
 refusal_stderr=$scratch/refusal.stderr
-if "$binary" verify-bound-plant-result-set-with-resources-allocation-observed-v1 \
+if "$binary" verify-bound-plant-result-set-with-resources-cache-observed-v1 \
   "$evidence" "$tight" "$manifest_a" "$results_a" \
   >"$refusal_stdout" 2>"$refusal_stderr"; then
   echo "observed governed split verification unexpectedly succeeded" >&2
@@ -152,4 +163,4 @@ printf '%s\n' \
   >"$output"
 set +C
 
-echo "controller split observability acceptance status=ACCEPTED observed_contract_jobs=5 measured=3 refused=1 discovery=1 fixture_setup_jobs=3 batches=4 members=4 output=$output"
+echo "controller split observability acceptance status=ACCEPTED observed_contract_jobs=6 measured=4 refused=1 discovery=1 fixture_setup_jobs=3 retained_batches=4 retained_members=4 cache_probe_hits=1 output=$output"

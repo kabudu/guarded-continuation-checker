@@ -84,6 +84,7 @@ validated live rather than frozen across platforms and toolchains.
 ## Boundary
 
 This closes the bounded allocation-event counter requirement for the governed
-split path. It does not provide per-phase allocation attribution, cache hit
-rates, live-heap accounting, or an allocator-independent peak. Cache
-instrumentation remains the next internal observability gap.
+split path. It does not provide per-phase allocation attribution, live-heap
+accounting, or an allocator-independent peak. The additive
+[cache-observability contract](CONTROLLER_SPLIT_CACHE_OBSERVABILITY_V1.md)
+reports integrity-preserving process-local semantic replay reuse separately.

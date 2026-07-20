@@ -21,6 +21,13 @@
   emit no partial metrics on refusal. Exercise positive allocation evidence in
   every successful retained observed request while keeping allocator-dependent
   totals out of portable CSV evidence.
+  Add an integrity-preserving process-local semantic replay cache behind a new
+  additive discovery, command, strict result row, and typed Rust client. Require
+  complete manifest, source/model snapshot, result-digest, and resource
+  revalidation before lookup. Reconcile lookup, hit, miss, and entry counters,
+  reject hostile summaries, retain old commands on their uncached paths, and
+  exercise a deterministic duplicate-batch hit without changing the portable
+  structural CSV.
 - Add the first Rust API slice for governed proof-carrying controller MTBDD
   verification. Bound the complete artifact, equivalence artifact, embedded
   UNSAT proof, members, horizons, product states, and transition evaluations

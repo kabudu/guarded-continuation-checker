@@ -102,12 +102,16 @@ then reproduces the retained five-invocation structural CSV on exact commit
 The additive
 [allocation observability contract](CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_V1.md)
 extends this workflow without modifying either v1 row.
+The further additive
+[cache-observability contract](CONTROLLER_SPLIT_CACHE_OBSERVABILITY_V1.md)
+reports process-local semantic replay reuse only after integrity preflight.
 
 ## Boundary
 
 This contract exposes deterministic work counts and elapsed phase observations.
-The separate allocation contract reports system-allocator event counts. Neither
-contract reports allocator peak usage, cache hit rates, CPU counters, or
-per-phase peak RSS. Architecture-labelled whole-process peak RSS remains in the
-separate process-resource benchmark. Neither source is valid as a per-formula
-calibration or an answer-selection signal.
+The separate allocation contract reports system-allocator event counts, and the
+cache contract reports integrity-preserving process-local reuse. They do not
+report allocator peak usage, CPU counters, or per-phase peak RSS.
+Architecture-labelled whole-process peak RSS remains in the separate
+process-resource benchmark. None is valid as a per-formula calibration or an
+answer-selection signal.

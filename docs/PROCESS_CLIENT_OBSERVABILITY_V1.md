@@ -74,11 +74,13 @@ containment. The additive
 [controller split observability contract](CONTROLLER_SPLIT_OBSERVABILITY_V1.md)
 now exposes versioned internal phase durations and structural work counters for
 the governed split path. Its additive allocation contract reports bounded
-system-allocator events. It does not yet expose cache hit rates, allocator
-peaks, CPU counters, or per-phase peak RSS. The external process-resource
-benchmark remains the source for architecture-labelled peak RSS and must not be
-mixed into deterministic compatibility results or routing decisions.
+system-allocator events, and its cache contract reports integrity-preserving
+process-local semantic replay reuse. It does not expose allocator peaks, CPU
+counters, or per-phase peak RSS. The external process-resource benchmark
+remains the source for architecture-labelled peak RSS and must not be mixed
+into deterministic compatibility results or routing decisions.
 
-After fixture setup, the separate governed split acceptance runs five observed
-contract invocations and retains only deterministic structural aggregates. It
-is linked from the controller split observability specification.
+After fixture setup, the separate governed split acceptance runs six observed
+contract invocations, including one duplicate-batch cache probe, and retains
+only deterministic structural aggregates. It is linked from the controller
+split observability specification.

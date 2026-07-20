@@ -27,6 +27,8 @@ commands may be added without changing an existing command.
 The split allocation-observability v1 interface follows that rule: it has a
 separate discovery command, verification command, typed client, and final row.
 The resource and phase-observability v1 responses remain unchanged.
+The split cache-observability v1 interface follows the same additive pattern
+and leaves every preceding command on its original uncached execution path.
 
 ## First production-line guarantee
 

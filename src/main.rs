@@ -44,6 +44,7 @@ const CONTROLLER_SPLIT_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_PHASE_METRICS_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_CACHE_OBSERVABILITY_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
@@ -159,6 +160,12 @@ fn controller_split_observability_capability_line() -> String {
 fn controller_split_allocation_observability_capability_line() -> String {
     format!(
         "controller_split_allocation_observability_cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} base_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    )
+}
+
+fn controller_split_cache_observability_capability_line() -> String {
+    format!(
+        "controller_split_cache_observability_cli_version={CONTROLLER_SPLIT_CACHE_OBSERVABILITY_CLI_VERSION} base_allocation_observability_cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} scope=semantic-replay key=manifest-snapshot,resource-assessment,result-sha256 counters=lookups,hits,misses,entries integrity_preflight=required overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
     )
 }
 
@@ -25908,6 +25915,19 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "controller-split-cache-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker controller-split-cache-observability-cli-version".to_string());
+            }
+            println!("{}", controller_split_resource_capability_line());
+            println!("{}", controller_split_observability_capability_line());
+            println!(
+                "{}",
+                controller_split_allocation_observability_capability_line()
+            );
+            println!("{}", controller_split_cache_observability_capability_line());
+            Ok(true)
+        }
         "certify-controller-proof-evidence-v1" => {
             if args.len() != 3 {
                 return Err("usage: guarded-continuation-checker certify-controller-proof-evidence-v1 MANIFEST.txt OUTPUT.controller-evidence".to_string());
@@ -26118,15 +26138,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         }
         "verify-bound-plant-result-set-with-resources-v1"
         | "verify-bound-plant-result-set-with-resources-observed-v1"
-        | "verify-bound-plant-result-set-with-resources-allocation-observed-v1" => {
+        | "verify-bound-plant-result-set-with-resources-allocation-observed-v1"
+        | "verify-bound-plant-result-set-with-resources-cache-observed-v1" => {
             if args.len() < 5 || !(args.len() - 3).is_multiple_of(2) {
                 return Err(format!(
                     "usage: guarded-continuation-checker {} INPUT.controller-evidence POLICY.txt MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]",
                     args[0]
                 ));
             }
-            let emit_allocation_observability =
-                args[0] == "verify-bound-plant-result-set-with-resources-allocation-observed-v1";
+            let emit_cache_observability =
+                args[0] == "verify-bound-plant-result-set-with-resources-cache-observed-v1";
+            let emit_allocation_observability = emit_cache_observability
+                || args[0] == "verify-bound-plant-result-set-with-resources-allocation-observed-v1";
             let emit_observability = emit_allocation_observability
                 || args[0] == "verify-bound-plant-result-set-with-resources-observed-v1";
             let allocation_observation = emit_allocation_observability
@@ -26139,6 +26162,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let mut batch_verifications = 0usize;
             let mut buffered_result_rows = 0usize;
             let mut prepared_batch_count = 0usize;
+            let mut cache_lookups = 0usize;
+            let mut cache_hits = 0usize;
+            let mut cache_misses = 0usize;
             let policy = parse_controller_split_resource_policy(Path::new(&args[2]))?;
             let batch_count = (args.len() - 3) / 2;
             if batch_count > policy.max_batches {
@@ -26283,6 +26309,20 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let mut total_reachable = 0usize;
             let mut total_explored = 0usize;
             let mut verified_batches = Vec::with_capacity(batch_count);
+            struct VerifiedSplitCacheEntry {
+                manifest: ControllerMtbddPlantManifest,
+                snapshot: LoadedSourceModelSnapshot,
+                resources: controller_plant_artifact::ControllerPlantResourceAssessment,
+                results_sha256: [u8; 32],
+                verification: controller_plant_artifact::ControllerMtbddPlantBatchSummary,
+            }
+            let cache_capacity = if emit_cache_observability {
+                batch_count
+            } else {
+                0
+            };
+            let mut verification_cache =
+                Vec::<VerifiedSplitCacheEntry>::with_capacity(cache_capacity);
             let replay_started = Instant::now();
             for (batch_index, (pair, prepared)) in
                 args[3..].chunks_exact(2).zip(&prepared_batches).enumerate()
@@ -26345,13 +26385,42 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     ));
                 }
                 let batch_started = Instant::now();
-                let verification =
+                let verification = if emit_cache_observability {
+                    increment_controller_split_observation(&mut cache_lookups, "cache-lookup")?;
+                    let cached = verification_cache.iter().find(|entry| {
+                        entry.manifest == manifest
+                            && entry.snapshot == snapshot
+                            && entry.resources == resources
+                            && entry.results_sha256 == prepared.results_sha256
+                    });
+                    if let Some(entry) = cached {
+                        increment_controller_split_observation(&mut cache_hits, "cache-hit")?;
+                        entry.verification.clone()
+                    } else {
+                        increment_controller_split_observation(&mut cache_misses, "cache-miss")?;
+                        let verification = controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
+                                &governed_admission.admitted,
+                                &inputs,
+                                &encoded,
+                            )
+                            .map_err(|error| error.to_string())?;
+                        verification_cache.push(VerifiedSplitCacheEntry {
+                            manifest: manifest.clone(),
+                            snapshot: snapshot.clone(),
+                            resources: resources.clone(),
+                            results_sha256: prepared.results_sha256,
+                            verification: verification.clone(),
+                        });
+                        verification
+                    }
+                } else {
                     controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
                         &governed_admission.admitted,
                         &inputs,
                         &encoded,
                     )
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| error.to_string())?
+                };
                 increment_controller_split_observation(
                     &mut batch_verifications,
                     "batch-verification",
@@ -26436,6 +26505,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     allocation.deallocated_bytes,
                     allocation.reallocation_calls,
                     allocation.reallocated_bytes,
+                );
+            }
+            if emit_cache_observability {
+                println!(
+                    "controller-split-cache-observability status=MEASURED cli_version={CONTROLLER_SPLIT_CACHE_OBSERVABILITY_CLI_VERSION} scope=semantic-replay key=manifest-snapshot,resource-assessment,result-sha256 lookups={cache_lookups} hits={cache_hits} misses={cache_misses} entries={} integrity_preflight=required overflow=none timing_calibration=none",
+                    verification_cache.len(),
                 );
             }
             Ok(true)
