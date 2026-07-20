@@ -73,7 +73,10 @@ the public `source_model_attestation` Rust API, and checks that its tool identit
 matches the provenance manifest before checking the proof portfolio. Failure
 produces no SAFE or UNSAFE answer. The typed
 `ControllerProofMtbddPortfolioTool::verify_attested` API applies the same
-contract without shell invocation.
+contract without shell invocation. Source and model digests captured while the
+query is loaded must also match the later provenance read. Concurrent file
+replacement therefore fails closed instead of attesting different bytes from
+those used by portfolio verification.
 
 ## Claim boundary
 

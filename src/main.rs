@@ -91,6 +91,19 @@ struct SourceModelProvenanceManifest {
     members: Vec<SourceModelProvenanceMember>,
 }
 
+#[derive(Debug)]
+struct LoadedSourceModelSubject {
+    source_path: PathBuf,
+    model_path: PathBuf,
+    source_sha256: [u8; 32],
+    model_sha256: [u8; 32],
+}
+
+#[derive(Debug)]
+struct LoadedSourceModelSnapshot {
+    subjects: Vec<LoadedSourceModelSubject>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ControllerPlantResourcePolicy {
     envelope: controller_plant_artifact::ControllerPlantResourceEnvelope,
@@ -24939,6 +24952,7 @@ fn parse_source_model_provenance_manifest(
 
 fn verify_bound_source_model_provenance(
     query: &ControllerMtbddPlantManifest,
+    loaded: &LoadedSourceModelSnapshot,
     provenance_path: &Path,
     evidence_path: &Path,
 ) -> Result<source_model_attestation::SourceModelAttestationSummary, String> {
@@ -24956,7 +24970,15 @@ fn verify_bound_source_model_provenance(
             expected_pairs.push(pair);
         }
     }
-    if provenance.members.len() != expected_pairs.len()
+    if loaded.subjects.len() != expected_pairs.len()
+        || loaded
+            .subjects
+            .iter()
+            .zip(&expected_pairs)
+            .any(|(subject, expected)| {
+                subject.source_path != expected.0 || subject.model_path != expected.1
+            })
+        || provenance.members.len() != expected_pairs.len()
         || provenance
             .members
             .iter()
@@ -24998,6 +25020,7 @@ fn verify_bound_source_model_provenance(
             model,
         })
         .collect::<Vec<_>>();
+    verify_loaded_source_model_snapshot(&owned, loaded)?;
     let evidence = read_bounded_regular_file(
         evidence_path,
         source_model_attestation::MAX_ATTESTATION_BYTES,
@@ -25012,6 +25035,26 @@ fn verify_bound_source_model_provenance(
         );
     }
     Ok(summary)
+}
+
+fn verify_loaded_source_model_snapshot(
+    subjects: &[(Vec<u8>, Vec<u8>, Vec<u8>)],
+    loaded: &LoadedSourceModelSnapshot,
+) -> Result<(), String> {
+    if subjects.len() != loaded.subjects.len() {
+        return Err("source-model subject count changed after the query snapshot".to_string());
+    }
+    for (index, ((source, _, model), snapshot)) in subjects.iter().zip(&loaded.subjects).enumerate()
+    {
+        if <[u8; 32]>::from(Sha256::digest(source)) != snapshot.source_sha256
+            || <[u8; 32]>::from(Sha256::digest(model)) != snapshot.model_sha256
+        {
+            return Err(format!(
+                "source-model provenance subject {index} changed after the query snapshot"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn parse_controller_mtbdd_plant_manifest(
@@ -25410,6 +25453,7 @@ type LoadedControllerPlantManifest = (
     [u8; 32],
     Vec<AigerTransition>,
     Vec<[u8; 32]>,
+    LoadedSourceModelSnapshot,
 );
 
 fn load_controller_plant_manifest(
@@ -25432,6 +25476,12 @@ fn load_controller_plant_manifest(
     let controller = aiger_obligation::parse_ascii_aiger_transition(&controller_aiger)
         .map_err(|error| error.to_string())?;
     let controller_digest: [u8; 32] = Sha256::digest(&controller_source).into();
+    let mut source_model_subjects = vec![LoadedSourceModelSubject {
+        source_path: manifest.controller_source_path.clone(),
+        model_path: manifest.controller_aiger_path.clone(),
+        source_sha256: controller_digest,
+        model_sha256: Sha256::digest(&controller_aiger).into(),
+    }];
     let mut plant_digests = Vec::with_capacity(manifest.members.len());
     let mut plants = Vec::with_capacity(manifest.members.len());
     for member in &manifest.members {
@@ -25446,6 +25496,17 @@ fn load_controller_plant_manifest(
             "plant AIGER model",
         )?;
         plant_digests.push(<[u8; 32]>::from(Sha256::digest(&plant_source)));
+        if !source_model_subjects.iter().any(|subject| {
+            subject.source_path == member.plant_source_path
+                && subject.model_path == member.plant_aiger_path
+        }) {
+            source_model_subjects.push(LoadedSourceModelSubject {
+                source_path: member.plant_source_path.clone(),
+                model_path: member.plant_aiger_path.clone(),
+                source_sha256: Sha256::digest(&plant_source).into(),
+                model_sha256: Sha256::digest(&plant_aiger).into(),
+            });
+        }
         plants.push(
             aiger_obligation::parse_ascii_aiger_transition(&plant_aiger)
                 .map_err(|error| error.to_string())?,
@@ -25457,6 +25518,9 @@ fn load_controller_plant_manifest(
         controller_digest,
         plants,
         plant_digests,
+        LoadedSourceModelSnapshot {
+            subjects: source_model_subjects,
+        },
     ))
 }
 
@@ -25639,7 +25703,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 ));
             }
             let started = Instant::now();
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -25744,7 +25808,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let invocation_started = Instant::now();
             let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -25753,6 +25817,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let provenance = if attested {
                 Some(verify_bound_source_model_provenance(
                     &manifest,
+                    &snapshot,
                     Path::new(&args[4]),
                     Path::new(&args[5]),
                 )?)
@@ -25856,7 +25921,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let invocation_started = Instant::now();
             let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -25940,7 +26005,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let invocation_started = Instant::now();
             let policy = parse_controller_plant_resource_policy(Path::new(&args[2]))?;
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
@@ -26035,7 +26100,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 ));
             }
             let invocation_started = Instant::now();
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
@@ -26158,7 +26223,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     }
                 ));
             }
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -26311,7 +26376,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     }
                 ));
             }
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -40060,5 +40125,37 @@ mod tests {
                 invalid
             );
         }
+    }
+
+    #[test]
+    fn source_model_attestation_rejects_post_snapshot_replacement() {
+        let source = b"module controller; endmodule\n".to_vec();
+        let recipe = b"read_verilog controller.v\n".to_vec();
+        let model = b"aag 0 0 0 0 0\n".to_vec();
+        let snapshot = LoadedSourceModelSnapshot {
+            subjects: vec![LoadedSourceModelSubject {
+                source_path: PathBuf::from("controller.v"),
+                model_path: PathBuf::from("controller.aag"),
+                source_sha256: Sha256::digest(&source).into(),
+                model_sha256: Sha256::digest(&model).into(),
+            }],
+        };
+        let original = vec![(source.clone(), recipe.clone(), model.clone())];
+        verify_loaded_source_model_snapshot(&original, &snapshot).unwrap();
+
+        let replaced_source = vec![(b"replacement source\n".to_vec(), recipe.clone(), model)];
+        assert_eq!(
+            verify_loaded_source_model_snapshot(&replaced_source, &snapshot).unwrap_err(),
+            "source-model provenance subject 0 changed after the query snapshot"
+        );
+        let replaced_model = vec![(source, recipe, b"aag 1 0 0 0 0\n".to_vec())];
+        assert_eq!(
+            verify_loaded_source_model_snapshot(&replaced_model, &snapshot).unwrap_err(),
+            "source-model provenance subject 0 changed after the query snapshot"
+        );
+        assert_eq!(
+            verify_loaded_source_model_snapshot(&[], &snapshot).unwrap_err(),
+            "source-model subject count changed after the query snapshot"
+        );
     }
 }

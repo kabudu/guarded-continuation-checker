@@ -273,7 +273,9 @@ assessment remain open. The pinned public controller and physical plant now
 have deterministic exact-revision Yosys regeneration with retained source,
 recipe, model, and regenerated-model SHA-256 evidence. This closes their local
 source-to-model provenance mechanism gap, but does not independently prove Yosys
-correct or cover external designs. No production-readiness row closes yet.
+correct or cover external designs. Attested portfolio verification additionally
+binds provenance to the exact source and model snapshot loaded for the query and
+rejects post-snapshot replacement. No production-readiness row closes yet.
 
 ## Rules
 

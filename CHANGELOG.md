@@ -33,7 +33,9 @@
   canonical attestation verifier and an attested governed-portfolio command
   that binds the exact controller and distinct plant source/model subjects
   before returning any answer. Expose the same fail-closed path through the
-  typed Rust client and exercise it in public acceptance.
+  typed Rust client and exercise it in public acceptance. Bind the attestation
+  pass to source and model digests captured during query loading so concurrent
+  post-snapshot file replacement cannot substitute the verified semantics.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
