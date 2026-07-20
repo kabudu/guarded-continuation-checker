@@ -135,8 +135,9 @@ remain open.
 
 The first controller/plant resource envelope now preflights conservative work
 through public Rust, canonical file CLI, and typed process APIs without timing
-calibration. The next release-path cycle must add stable refusal classes,
-correlate static bounds with Linux process enforcement, and retain
+calibration. Policy refusal now has a distinct versioned exit and typed failure
+class. The next release-path cycle must correlate static bounds with Linux
+process enforcement and retain
 admitted/refused multi-job observations before using it in a constrained
 firmware workflow.
 

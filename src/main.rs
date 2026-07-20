@@ -25033,6 +25033,31 @@ fn parse_controller_plant_resource_policy(
     Ok(ControllerPlantResourcePolicy { envelope })
 }
 
+fn controller_plant_resource_refusal(error: &str) -> Option<&'static str> {
+    if error.contains("resource envelope artifact-byte limit exceeded")
+        || (error.starts_with("controller plant governed portfolio exceeds ")
+            && error.ends_with(" bytes"))
+    {
+        Some("artifact-bytes")
+    } else if error.contains("resource envelope member limit exceeded") {
+        Some("members")
+    } else if error.contains("resource envelope horizon limit exceeded") {
+        Some("horizon")
+    } else if error.contains("resource envelope product-state limit exceeded") {
+        Some("product-states")
+    } else if error.contains("resource envelope transition limit exceeded") {
+        Some("transition-evaluations")
+    } else {
+        None
+    }
+}
+
+fn classify_controller_plant_resource_error(error: String) -> String {
+    controller_plant_resource_refusal(&error).map_or(error, |reason| {
+        format!("controller-plant-resource refusal={reason} result=none")
+    })
+}
+
 type LoadedControllerPlantManifest = (
     ControllerMtbddPlantManifest,
     AigerTransition,
@@ -25202,7 +25227,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "controller_plant_resource_cli_version={CONTROLLER_PLANT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PLANT_RESOURCE_POLICY_VERSION} envelope_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} portfolio_artifact_version={} max_policy_bytes={CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_members={} max_horizon={} max_product_states={} accounting=conservative-static timing_calibration=none result_on_refusal=none unsupported=fail-closed",
+                "controller_plant_resource_cli_version={CONTROLLER_PLANT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PLANT_RESOURCE_POLICY_VERSION} envelope_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} portfolio_artifact_version={} max_policy_bytes={CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_members={} max_horizon={} max_product_states={} refusal_exit=3 accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed",
                 controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
                 controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
@@ -25247,7 +25272,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 Path::new(&args[3]),
                 policy.envelope.max_artifact_bytes(),
                 "controller plant governed portfolio",
-            )?;
+            )
+            .map_err(classify_controller_plant_resource_error)?;
             let artifact_micros = artifact_started.elapsed().as_micros();
             let verification_started = Instant::now();
             let governed =
@@ -25260,7 +25286,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     &encoded,
                     policy.envelope,
                 )
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| classify_controller_plant_resource_error(error.to_string()))?;
             let verification_micros = verification_started.elapsed().as_micros();
             let resources = governed.resources;
             let summary = governed.verification;
@@ -25374,7 +25400,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 &inputs,
                 &encoded,
             )
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| classify_controller_plant_resource_error(error.to_string()))?;
             let verification_micros = verification_started.elapsed().as_micros();
             println!(
                 "controller-plant-portfolio status={action} cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} write_micros={write_micros} elapsed_micros={}{}",
@@ -28146,7 +28172,11 @@ fn main() {
         Ok(false) => {}
         Err(error) => {
             eprintln!("error: {error}");
-            std::process::exit(2);
+            std::process::exit(if error.starts_with("controller-plant-resource refusal=") {
+                3
+            } else {
+                2
+            });
         }
     }
     let vars = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(16);
@@ -39235,5 +39265,48 @@ mod tests {
         .unwrap()
         .expect("memory-limit probe timed out");
         assert!(!memory_status.success());
+    }
+
+    #[test]
+    fn controller_plant_resource_refusal_reasons_are_stable_and_narrow() {
+        for (message, reason) in [
+            (
+                "controller-plant resource envelope artifact-byte limit exceeded",
+                "artifact-bytes",
+            ),
+            (
+                "controller-plant resource envelope member limit exceeded",
+                "members",
+            ),
+            (
+                "controller-plant resource envelope horizon limit exceeded",
+                "horizon",
+            ),
+            (
+                "controller-plant resource envelope product-state limit exceeded",
+                "product-states",
+            ),
+            (
+                "controller-plant resource envelope transition limit exceeded",
+                "transition-evaluations",
+            ),
+        ] {
+            assert_eq!(controller_plant_resource_refusal(message), Some(reason));
+            assert_eq!(
+                classify_controller_plant_resource_error(message.to_string()),
+                format!("controller-plant-resource refusal={reason} result=none")
+            );
+        }
+        for invalid in [
+            "controller MTBDD portfolio integrity mismatch",
+            "controller-plant resource transition bound overflow",
+            "controller plant resource policy is not canonical",
+        ] {
+            assert_eq!(controller_plant_resource_refusal(invalid), None);
+            assert_eq!(
+                classify_controller_plant_resource_error(invalid.to_string()),
+                invalid
+            );
+        }
     }
 }

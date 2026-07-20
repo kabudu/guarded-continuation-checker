@@ -52,8 +52,10 @@ adds caller-selected artifact, batch, horizon, product-state, and conservative
 transition bounds to the public Rust verifier. It refuses excess work before
 semantic replay without turning a refusal into a verification answer. A
 canonical policy CLI and typed process client now expose the same boundary for
-self-service integrations. Stable refusal classes, Linux enforcement
-correlation, aggregation, and constrained acceptance are still open.
+self-service integrations. Resource refusals use a versioned reason, exit code
+3, and no logical answer, while malformed input remains a tool error. Linux
+enforcement correlation, aggregation, and constrained acceptance are still
+open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

@@ -204,6 +204,7 @@ pub enum FailureClass {
     Timeout,
     OutputLimit,
     ExitStatus,
+    ResourceRefusal,
     Compatibility,
     Response,
 }
@@ -216,6 +217,7 @@ impl FailureClass {
             Self::Timeout => "timeout",
             Self::OutputLimit => "output_limit",
             Self::ExitStatus => "exit_status",
+            Self::ResourceRefusal => "resource_refusal",
             Self::Compatibility => "compatibility",
             Self::Response => "response",
         }
@@ -509,6 +511,7 @@ pub struct ControllerPlantResourceCapabilities {
     pub max_members: usize,
     pub max_horizon: usize,
     pub max_product_states: usize,
+    pub refusal_exit_code: i32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -531,6 +534,27 @@ pub struct ControllerPlantResourceSummary {
     pub verification_micros: usize,
     pub elapsed_micros: usize,
     pub member_results: Vec<ControllerMtbddMemberResult>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerPlantResourceRefusalReason {
+    ArtifactBytes,
+    Members,
+    Horizon,
+    ProductStates,
+    TransitionEvaluations,
+}
+
+impl ControllerPlantResourceRefusalReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ArtifactBytes => "artifact-bytes",
+            Self::Members => "members",
+            Self::Horizon => "horizon",
+            Self::ProductStates => "product-states",
+            Self::TransitionEvaluations => "transition-evaluations",
+        }
+    }
 }
 
 pub type ControllerPlantResourceApiError = PredicateApiError;
@@ -557,6 +581,9 @@ pub enum PredicateApiError {
         exit_code: Option<i32>,
         stderr: String,
     },
+    ResourceRefused {
+        reason: ControllerPlantResourceRefusalReason,
+    },
     IncompatibleContract(String),
     InvalidResponse(String),
 }
@@ -569,6 +596,7 @@ impl PredicateApiError {
             Self::TimedOut { .. } => FailureClass::Timeout,
             Self::OutputLimitExceeded { .. } => FailureClass::OutputLimit,
             Self::CommandFailed { .. } => FailureClass::ExitStatus,
+            Self::ResourceRefused { .. } => FailureClass::ResourceRefusal,
             Self::IncompatibleContract(_) => FailureClass::Compatibility,
             Self::InvalidResponse(_) => FailureClass::Response,
         }
@@ -617,6 +645,11 @@ impl fmt::Display for PredicateApiError {
                     .map(|code| code.to_string())
                     .unwrap_or_else(|| "no status".to_string()),
                 stderr.trim()
+            ),
+            Self::ResourceRefused { reason } => write!(
+                formatter,
+                "controller plant verification refused by resource policy: {}",
+                reason.as_str()
             ),
             Self::IncompatibleContract(message) => {
                 write!(formatter, "incompatible predicate contract: {message}")
@@ -1298,6 +1331,7 @@ impl ControllerPlantResourceTool {
             self.policy,
         )?;
         parse_controller_plant_resource_summary(output, &self.capabilities)
+            .map_err(classify_controller_plant_resource_refusal)
     }
 }
 
@@ -1896,9 +1930,11 @@ fn parse_controller_plant_resource_capabilities(
         "max_members",
         "max_horizon",
         "max_product_states",
+        "refusal_exit",
         "accounting",
         "timing_calibration",
         "result_on_refusal",
+        "refusal_schema",
         "unsupported",
     ];
     if fields.len() != keys.len() {
@@ -1911,7 +1947,15 @@ fn parse_controller_plant_resource_capabilities(
         .zip(keys)
         .map(|(field, key)| token_value(field, key))
         .collect::<Result<Vec<_>, _>>()?;
-    if values[10..] != ["conservative-static", "none", "none", "fail-closed"] {
+    if values[11..]
+        != [
+            "conservative-static",
+            "none",
+            "none",
+            "reason-v1",
+            "fail-closed",
+        ]
+    {
         return Err(PredicateApiError::IncompatibleContract(
             "controller plant resource accounting contract is unsupported".to_string(),
         ));
@@ -1926,12 +1970,13 @@ fn parse_controller_plant_resource_capabilities(
         .enumerate()
         .map(|(index, value)| canonical_usize(value, keys[index + 5]))
         .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[10], keys[10])?;
     if versions != [1, 1, 1, 1, 1] {
         return Err(PredicateApiError::IncompatibleContract(
             "controller plant resource version tuple is unsupported".to_string(),
         ));
     }
-    if limits.contains(&0) {
+    if limits.contains(&0) || refusal_exit != 3 {
         return Err(PredicateApiError::InvalidResponse(
             "controller plant resource discovered limit must be positive".to_string(),
         ));
@@ -1947,7 +1992,39 @@ fn parse_controller_plant_resource_capabilities(
         max_members: limits[2],
         max_horizon: limits[3],
         max_product_states: limits[4],
+        refusal_exit_code: 3,
     })
+}
+
+fn classify_controller_plant_resource_refusal(
+    mut failure: PredicateOperationError,
+) -> PredicateOperationError {
+    let reason = match failure.error.as_ref() {
+        PredicateApiError::CommandFailed {
+            exit_code: Some(3),
+            stderr,
+        } => stderr
+            .trim_end_matches(['\r', '\n'])
+            .strip_prefix("error: controller-plant-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none"))
+            .and_then(|value| match value {
+                "artifact-bytes" => Some(ControllerPlantResourceRefusalReason::ArtifactBytes),
+                "members" => Some(ControllerPlantResourceRefusalReason::Members),
+                "horizon" => Some(ControllerPlantResourceRefusalReason::Horizon),
+                "product-states" => Some(ControllerPlantResourceRefusalReason::ProductStates),
+                "transition-evaluations" => {
+                    Some(ControllerPlantResourceRefusalReason::TransitionEvaluations)
+                }
+                _ => None,
+            }),
+        _ => None,
+    };
+    if let Some(reason) = reason {
+        let error = PredicateApiError::ResourceRefused { reason };
+        failure.metrics.status = InvocationStatus::Failed(error.failure_class());
+        failure.error = Box::new(error);
+    }
+    failure
 }
 
 fn parse_controller_plant_resource_summary(
@@ -3177,7 +3254,7 @@ mod tests {
 
     #[test]
     fn controller_plant_resource_capability_parser_is_strict() {
-        let canonical = "controller_plant_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 portfolio_artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_members=64 max_horizon=1024 max_product_states=4096 accounting=conservative-static timing_calibration=none result_on_refusal=none unsupported=fail-closed\n";
+        let canonical = "controller_plant_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 portfolio_artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed\n";
         let parsed = parse_controller_plant_resource_capabilities(canonical).unwrap();
         assert_eq!(parsed.envelope_version, 1);
         assert_eq!(parsed.max_product_states, 4096);
@@ -3185,6 +3262,8 @@ mod tests {
             canonical.replace("accounting=conservative-static", "accounting=measured"),
             canonical.replace("timing_calibration=none", "timing_calibration=per-formula"),
             canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("refusal_exit=3", "refusal_exit=2"),
+            canonical.replace("refusal_schema=reason-v1", "refusal_schema=free-text"),
             canonical.replace("max_policy_bytes=4096", "max_policy_bytes=0"),
             canonical.replace("max_members=64", "max_members=064"),
             canonical.replace('\n', "\r\n"),

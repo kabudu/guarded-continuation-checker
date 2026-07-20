@@ -4,7 +4,8 @@ use std::process::Command;
 
 use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason, ControllerPlantPortfolioTool,
-    ControllerPlantResourceTool, InvocationStatus, OperationKind,
+    ControllerPlantResourceRefusalReason, ControllerPlantResourceTool, FailureClass,
+    InvocationStatus, OperationKind, PredicateApiError,
 };
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
@@ -66,7 +67,7 @@ fn portfolio_cli_routes_to_exact_fallback_and_rejects_drift() {
     assert!(resource_discovery.status.success());
     assert_eq!(
         String::from_utf8(resource_discovery.stdout).unwrap(),
-        "controller_plant_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 portfolio_artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_members=64 max_horizon=1024 max_product_states=4096 accounting=conservative-static timing_calibration=none result_on_refusal=none unsupported=fail-closed\n"
+        "controller_plant_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 portfolio_artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed\n"
     );
 
     let root = fixture();
@@ -137,14 +138,40 @@ fn portfolio_cli_routes_to_exact_fallback_and_rejects_drift() {
     assert_eq!(typed_governed.value.member_results[1].bad_frame, Some(0));
 
     let policy = fs::read_to_string(root.join("resource-policy.txt")).unwrap();
-    for (name, body) in [
-        (
-            "tight-policy.txt",
-            policy.replace(
-                "max_transition_evaluations=40",
-                "max_transition_evaluations=39",
-            ),
+    let tight_policy = root.join("tight-policy.txt");
+    fs::write(
+        &tight_policy,
+        policy.replace(
+            "max_transition_evaluations=40",
+            "max_transition_evaluations=39",
         ),
+    )
+    .unwrap();
+    assert_eq!(
+        Command::new(BINARY)
+            .arg("verify-controller-plant-portfolio-resources")
+            .arg(&manifest)
+            .arg(&tight_policy)
+            .arg(&artifact)
+            .status()
+            .unwrap()
+            .code(),
+        Some(3)
+    );
+    let refusal = resource_tool
+        .verify_observed(&manifest, &tight_policy, &artifact)
+        .unwrap_err();
+    assert!(matches!(
+        refusal.error.as_ref(),
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::TransitionEvaluations
+        }
+    ));
+    assert_eq!(
+        refusal.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
+    for (name, body) in [
         ("crlf-policy.txt", policy.replace('\n', "\r\n")),
         (
             "trailing-policy.txt",

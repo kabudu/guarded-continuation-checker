@@ -75,6 +75,18 @@ returns typed resource, aggregate, member, and invocation observations. Policy
 files are bounded to 4 KiB. Invalid UTF-8, NUL, CRLF, missing, trailing,
 misordered, noncanonical numeric, zero, and over-limit values fail closed.
 
+Resource refusal is separate from malformed input and tool failure. A valid job
+that exceeds artifact, member, horizon, product-state, or transition limits
+returns exit code 3 and exactly one versioned reason-v1 line:
+
+```text
+error: controller-plant-resource refusal=transition-evaluations result=none
+```
+
+The typed client maps that contract to `PredicateApiError::ResourceRefused` and
+the `resource_refusal` metrics class. Malformed input, corrupt evidence, and
+ordinary tool failures remain exit code 2. No refusal carries SAFE or UNSAFE.
+
 ## Retained mechanism tests
 
 The Rust integration test covers:
@@ -93,11 +105,10 @@ The Rust integration test covers:
 This first slice does not yet close the production resource-governance row.
 Before it can be used as a production deployment policy, GCC still needs:
 
-1. stable machine-readable refusal classes instead of a shared tool-error exit;
-2. Linux process-limit tests showing the conservative envelope agrees with
+1. Linux process-limit tests showing the conservative envelope agrees with
    enforced memory, file, output, and deadline controls;
-3. multi-job aggregation with admitted and refused workload counters; and
-4. simulated constrained firmware-CI acceptance followed by independent use.
+2. multi-job aggregation with admitted and refused workload counters; and
+3. simulated constrained firmware-CI acceptance followed by independent use.
 
 The arithmetic envelope is conservative. Admission means the requested static
 work bound fits the caller's policy, not that a wall-clock deadline or exact

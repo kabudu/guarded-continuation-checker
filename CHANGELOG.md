@@ -11,8 +11,10 @@
   Add a canonical bounded policy file, separate machine-readable capability and
   verification commands, hostile parser controls, and the typed shell-free
   `ControllerPlantResourceTool` with strict response parsing and invocation
-  metrics. Stable process refusal classes, Linux enforcement evidence,
-  aggregation, and constrained-workflow acceptance remain open.
+  metrics. Distinguish policy refusal with exit code 3, five versioned refusal
+  reasons, no logical answer, a typed `ResourceRefused` error, and the
+  `resource_refusal` metrics class. Linux enforcement evidence, aggregation,
+  and constrained-workflow acceptance remain open.
 
 - Pinned and offline-qualified the Certifaiger 10.2.0, AIGER, CaDiCaL,
   `lrat_isa`, and runlim comparison stack on local arm64 Linux, including all
