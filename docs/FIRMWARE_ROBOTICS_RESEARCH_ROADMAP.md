@@ -149,5 +149,13 @@ process enforcement now passes locally for every governed verification in the
 pipeline and is reproduced in hosted Linux CI. An independently sourced
 constrained workflow and external suitability assessment remain open.
 
+The next proof-delivery cycle now has a first
+[governed proof-carrying MTBDD API](GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md).
+It separately preflights the equivalence artifact and embedded UNSAT proof,
+then preserves exact proof verification and plant composition under the
+existing conservative work envelope. Canonical self-service policy, typed
+process integration, static portfolio fallback, public-product acceptance, and
+compatibility history remain open.
+
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.

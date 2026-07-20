@@ -63,6 +63,12 @@ The retained six-job acceptance pipeline aggregates two verified batches, two
 valid refusals, and two invalid-input controls without dropping any row or
 inventing a logical answer for rejected work. This is simulated self-service
 evidence, not independent partner acceptance.
+The first experimental
+[governed proof-carrying MTBDD slice](docs/GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md)
+extends the Rust resource boundary to the equivalence artifact and embedded
+UNSAT proof while preserving zero exhaustive controller assignments. Its file
+policy, typed process client, portfolio routing, and public-product gates remain
+open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

@@ -349,3 +349,9 @@ into an explicit conservative consumer policy boundary. Static work estimates,
 resource admission, exact fallback, and fail-closed verification are established
 systems techniques. This is production hardening, not novelty evidence, and it
 does not change any scholarly claim gate.
+
+The governed proof-carrying MTBDD portfolio experiment extends that same policy
+boundary to the equivalence artifact and embedded UNSAT proof. This is also
+production integration, not a new algorithmic claim. Its public-product and
+strong-baseline results may supply evidence for later work, but cannot close
+the novelty register by themselves.

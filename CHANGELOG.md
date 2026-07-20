@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add the first Rust API slice for governed proof-carrying controller MTBDD
+  verification. Bound the complete artifact, equivalence artifact, embedded
+  UNSAT proof, members, horizons, product states, and transition evaluations
+  before proof checking or semantic replay. Bind every ordered member and
+  preserve the existing independently checked proof path with zero exhaustive
+  controller assignments. Self-service CLI, portfolio, public-product, and
+  compatibility gates remain open.
+
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
   states, external-input branches, and direct-backend controller evaluations
