@@ -20,7 +20,7 @@ fn pinned_public_controller_remains_source_exact_and_statically_rejected() {
     );
     assert_eq!(
         digest(MODEL),
-        "89fe66bf6172d714e4a58a3891ddc1c7a78f341e1ee68bf8ffef6f6a45a182a4"
+        "42654f35ed3183ad61c612ddee993b4ded88cc544d82a66831eb3070a89e9524"
     );
     let model = parse_ascii_aiger_transition(MODEL).unwrap();
     assert_eq!(

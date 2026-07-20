@@ -292,6 +292,7 @@ jobs:
             libs/slang frontends/slang/lib
           cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
             -DCMAKE_BUILD_TYPE=Release \
+            -DYOSYS_CHECKOUT_INFO=b8e7da6f40ae8f552c116bf6c359b07c6533e159 \
             -DYOSYS_WITHOUT_ABC=ON \
             -DYOSYS_WITHOUT_SLANG=ON
           cmake --build /tmp/yosys-attestation/build --parallel 2 --target yosys

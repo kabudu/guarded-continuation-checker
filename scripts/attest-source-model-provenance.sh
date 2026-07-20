@@ -138,9 +138,9 @@ for ((index = 0; index < member_count; index++)); do
   model_sha256=$(sha256_file "$member_root/${models[index]}")
   if command -v prlimit >/dev/null 2>&1; then
     (cd "$copied_root" && prlimit --as=1073741824 --fsize=67108864 --nproc=64 -- \
-      "${deadline[@]}" yosys -Q -q -s "${recipes[index]}")
+      "${deadline[@]}" yosys --no-version -Q -q -s "${recipes[index]}")
   else
-    (cd "$copied_root" && "${deadline[@]}" yosys -Q -q -s "${recipes[index]}")
+    (cd "$copied_root" && "${deadline[@]}" yosys --no-version -Q -q -s "${recipes[index]}")
   fi
   regenerated_sha256=$(sha256_file "$copied_root/${models[index]}")
   [[ "$regenerated_sha256" == "$model_sha256" ]] || {

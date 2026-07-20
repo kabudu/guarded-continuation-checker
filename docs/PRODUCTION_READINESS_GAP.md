@@ -277,6 +277,17 @@ correct or cover external designs. Attested portfolio verification additionally
 binds provenance to the exact source and model snapshot loaded for the query and
 rejects post-snapshot replacement. No production-readiness row closes yet.
 
+## Post-production-release deliverables
+
+- Create a visually polished, accessible SVG architecture diagram after the
+  first production release passes every applicable gate. It must show GCC's
+  platform boundary, the CQ-SAT engine, source-to-model attestation, governed
+  verification and exact fallback, proof artifacts, independent checking, and
+  embedded firmware and RTL integration paths. Keep the source editable and
+  publish an optimised web-ready SVG as the canonical asset embedded in both
+  the project README and guardedcontinuation.org. Include accessible metadata,
+  responsive sizing, and a lightweight fallback for non-SVG contexts.
+
 ## Rules
 
 - No timing-based per-formula calibration.

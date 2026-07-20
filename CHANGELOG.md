@@ -36,6 +36,9 @@
   typed Rust client and exercise it in public acceptance. Bind the attestation
   pass to source and model digests captured during query loading so concurrent
   post-snapshot file replacement cannot substitute the verified semantics.
+  Make exact regeneration portable across compilers by checking the pinned
+  binary revision separately and using Yosys `--no-version` for deterministic
+  AIGER footers.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
