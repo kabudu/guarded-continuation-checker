@@ -131,6 +131,13 @@
   CSV in ordinary Linux CI without treating timing as portable evidence. Hosted
   run 29776279270 passes the real governed CLI and typed-client integration at
   exact commit `1227d50`; retained-CSV hosted reproduction remains pending.
+  Add a cross-platform whole-process resource harness that separately measures
+  controller certification, both independently replaceable plant-result
+  producers, and one-admission governed verification. Retain three Darwin arm64
+  trials with exact answer agreement, portable evidence bytes, wall time, and
+  peak RSS. Require ordinary Linux CI to exercise the same complete operation
+  set while treating timings and memory as architecture-labelled observations,
+  not reproducible values or routing inputs.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

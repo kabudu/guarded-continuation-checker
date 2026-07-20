@@ -284,8 +284,13 @@ or duplicated obligations, mutation, and truncation fail closed. The local
 five-plant fixture shows a 49.75% marginal byte reduction against the faithful
 composed-witness route, but an 8.71 times larger initial package and a 58-change
 byte break-even. Stable file and typed bounded-process interfaces plus hosted
-cross-platform artifact reproduction are implemented. Compatibility fixtures,
-peak-RSS evidence and external acceptance remain open. Hosted Linux run
+cross-platform artifact reproduction are implemented. Compatibility through a
+later tag and external acceptance remain open. A three-trial Darwin arm64
+baseline now separates controller production, both replaceable plant-result
+producers, and governed verification, retaining peak RSS, wall time,
+deterministic evidence bytes, and exact answer agreement. Ordinary Linux CI
+validates the same measurement schema and complete operation set without
+comparing host-dependent values for equality. Hosted Linux run
 29776279270 passes the real governed CLI and typed-client integration, including
 every tight policy boundary and hostile response controls. Two one-property
 public washing-controller manifests now seed compatibility history with exact
@@ -318,7 +323,8 @@ Hosted amd64 run 29773273695 now reproduces the split controller and replacement
 artifact hashes, structural byte accounting, independent composed-witness
 hashes, and all logical answers from arm64. This closes the mechanism's second
 architecture reproduction gate. Compatibility through a later tag, hosted
-retained-acceptance reproduction, and independent acceptance remain open.
+retained-acceptance and process-resource reproduction, and independent
+acceptance remain open.
 
 ## Post-production-release deliverables
 

@@ -87,6 +87,7 @@ jobs:
             scripts/benchmark-controller-proof-mtbdd-plant.sh \
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
             scripts/run-controller-split-resource-acceptance.sh \
+            scripts/benchmark-controller-split-process-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
@@ -135,6 +136,16 @@ jobs:
           awk -F, -v trials="$TRIALS" 'NR > 1 { if ($5 <= 0 || $6 <= 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["compact:create"] == trials && seen["compact:verify"] == trials && seen["proof:create"] == trials && seen["proof:verify"] == trials) }' \
             /tmp/controller-proof-mtbdd-resources.csv
           cat /tmp/controller-proof-mtbdd-resources.csv
+      - name: Measure governed split-evidence process resources
+        env:
+          TRIALS: 3
+        run: |
+          scripts/benchmark-controller-split-process-resources.sh \
+            target/release/guarded-continuation-checker \
+            /tmp/controller-split-process-resources.csv
+          awk -F, -v trials="$TRIALS" 'BEGIN { allowed["controller-certify"]=1; allowed["plant-door-certify"]=1; allowed["plant-lock-certify"]=1; allowed["governed-set-verify"]=1 } NR == 1 { expected="schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,portable_evidence_bytes,time_backend,operating_system,architecture,answers_agree,status"; if ($0 != expected) exit 1; next } { if (!($2 in allowed) || $4 < 0 || $5 <= 0 || $6 <= 0 || $7 != "gnu" || $8 != "Linux" || $9 == "" || $10 != "true" || $11 != "ok") exit 1; seen[$2]++ } END { exit !(NR == 1 + (4 * trials) && seen["controller-certify"] == trials && seen["plant-door-certify"] == trials && seen["plant-lock-certify"] == trials && seen["governed-set-verify"] == trials) }' \
+            /tmp/controller-split-process-resources.csv
+          cat /tmp/controller-split-process-resources.csv
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools

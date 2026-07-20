@@ -54,6 +54,13 @@ resource policies now govern both per-batch and complete-set work through the
 file CLI and `ControllerSplitResourceTool`. Tagged compatibility and independent
 acceptance remain open. Retained public washing-controller acceptance freezes
 the first two split manifest and artifact compatibility fingerprints.
+The first [governed split process-resource baseline](docs/CONTROLLER_SPLIT_PROCESS_RESOURCES_V1.md)
+separates controller certification, each replaceable plant result, and
+one-admission governed verification. Three Darwin arm64 trials retain exact
+answers, evidence sizes, wall time, and peak RSS, while Linux CI validates the
+same operation set without pretending host-dependent measurements are
+byte-reproducible. This is operational evidence, not a speed or production
+claim.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct

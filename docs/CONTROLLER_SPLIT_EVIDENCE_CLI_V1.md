@@ -173,3 +173,9 @@ contracts. Compatibility through a later tagged release is still required.
 Hosted Linux run 29776279270 passes the governed CLI and typed-client integration
 on exact commit `1227d50`; hosted reproduction of this retained acceptance CSV
 will be established by the next exact-head run.
+
+Whole-process resource observations are retained separately in
+[`CONTROLLER_SPLIT_PROCESS_RESOURCES_V1.md`](CONTROLLER_SPLIT_PROCESS_RESOURCES_V1.md).
+They measure controller production, both plant-result producers, and governed
+verification without mixing host-dependent timings into this deterministic
+compatibility seed.

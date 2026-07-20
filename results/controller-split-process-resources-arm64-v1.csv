@@ -1,0 +1,13 @@
+schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,portable_evidence_bytes,time_backend,operating_system,architecture,answers_agree,status
+1,controller-certify,1,0.50,19677184,248889,bsd,Darwin,arm64,true,ok
+1,plant-door-certify,1,0.01,8568832,365,bsd,Darwin,arm64,true,ok
+1,plant-lock-certify,1,0.03,8617984,476,bsd,Darwin,arm64,true,ok
+1,governed-set-verify,1,0.03,8716288,249730,bsd,Darwin,arm64,true,ok
+1,controller-certify,2,0.52,20824064,248889,bsd,Darwin,arm64,true,ok
+1,plant-door-certify,2,0.01,8552448,365,bsd,Darwin,arm64,true,ok
+1,plant-lock-certify,2,0.03,8617984,476,bsd,Darwin,arm64,true,ok
+1,governed-set-verify,2,0.03,8814592,249730,bsd,Darwin,arm64,true,ok
+1,controller-certify,3,0.48,19677184,248889,bsd,Darwin,arm64,true,ok
+1,plant-door-certify,3,0.01,8585216,365,bsd,Darwin,arm64,true,ok
+1,plant-lock-certify,3,0.02,8617984,476,bsd,Darwin,arm64,true,ok
+1,governed-set-verify,3,0.03,8814592,249730,bsd,Darwin,arm64,true,ok
