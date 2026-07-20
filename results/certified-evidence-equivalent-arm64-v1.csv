@@ -1,0 +1,7 @@
+schema_version,trial,operation,wall_seconds,peak_space_mb,model_bytes,evidence_bytes,producer_tool_bytes,consumer_tool_bytes,answers_agree,deterministic,status
+1,1,producer,0.21,23,14928,5130,7353840,10280960,true,true,ok
+1,1,consumer,0.29,126,14928,5130,7353840,10280960,true,true,ok
+1,2,producer,0.24,24,14928,5130,7353840,10280960,true,true,ok
+1,2,consumer,0.33,127,14928,5130,7353840,10280960,true,true,ok
+1,3,producer,0.21,24,14928,5130,7353840,10280960,true,true,ok
+1,3,consumer,0.30,134,14928,5130,7353840,10280960,true,true,ok

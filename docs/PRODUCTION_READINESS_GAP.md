@@ -211,6 +211,25 @@ open at equivalent certificate scope. An identical-query local baseline is now
 retained and is negative on runtime against SymbiYosys/Yosys/Z3. Hosted Linux
 reproduces that direction and the lower verifier-memory result.
 
+Equivalent-certificate evidence remains the next proof-profile gate. The
+[predeclared Certifaiger plan](CERTIFAIGER_EQUIVALENT_EVIDENCE_PLAN.md) requires
+competition-standard SAFE witness and UNSAFE trace checking before any portfolio
+or novelty conclusion.
+
+The local arm64 equivalent-certificate qualification now passes for the six
+frozen horizon-32 exports. Independent replay preserves the four shortest bad
+frames and two SAFE answers, rIC3 emits both evidence classes, Certifaiger
+accepts the SAFE witnesses, and `aigsim` accepts the UNSAFE traces. Hosted
+amd64 qualification now reproduces the semantic results, all seven hostile
+controls, all six external witness digests, and GCC's exact batch-proof digest.
+The comparison is negative on GCC runtime, evidence size, and executable
+footprint on both hosts, but positive on producer and verifier memory. The
+amd64 verifier uses 7 MB versus 115 MB for the standard consumer. This closes
+the comparison's hosted and deterministic-evidence gates. Integration policy,
+formally verified checker comparison, constrained-device acceptance, and
+external expert review remain open. This is evidence for a narrow low-memory
+consumer profile, not for broad production superiority.
+
 ## Rules
 
 - No timing-based per-formula calibration.

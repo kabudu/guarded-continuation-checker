@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- Pinned and offline-qualified the Certifaiger 10.2.0, AIGER, CaDiCaL,
+  `lrat_isa`, and runlim comparison stack on local arm64 Linux, including all
+  upstream Certifaiger witness fixtures and the intentionally invalid control.
+- Pinned and offline-qualified rIC3 1.5.2 with its recursive source and Cargo
+  dependency graph, then independently replayed one SAFE certificate with
+  Certifaiger and one UNSAFE trace with `aigsim`.
+- Add bounded-equivalent AIGER export v1 for sampled controller and plant
+  queries. Freeze six horizon-32 washing-controller models only after an
+  independently implemented parser and reachable-state replay reproduced all
+  answers and shortest bad frames. Validate all four UNSAFE traces with
+  `aigsim` and both SAFE witnesses with Certifaiger, CaDiCaL, and `lrat_isa`.
+- Retain the negative same-host Certifaiger-equivalent comparison: standard
+  evidence is 48.97 times smaller, production is 6.57 times faster, checking
+  is 1.63 times faster, and its tools are smaller. Retain the provisional GCC
+  advantages of 45.8% lower producer space and 18.14 times lower verifier
+  space. Reject seven hostile package controls. Record that plain IC3 and
+  first-answer portfolio traces do not reliably preserve shortest bad frames;
+  use one static BMC/IC3 minimality race for every external formula.
+- Reproduce the Certifaiger-equivalent comparison on hosted Linux amd64 from
+  clean pinned sources. Standard evidence remains 48.97 times smaller, is
+  13.00 times faster to produce and 2.21 times faster to check. GCC retains a
+  40.0% producer-space and 16.43-times verifier-space advantage. Retain exact
+  per-property sizes and digests, all seven hostile-control results, tool and
+  image provenance, and byte-identical external witnesses and GCC proof across
+  arm64 and amd64. Add no automatic portfolio route from this narrow memory
+  result.
+
 - Add proof-carrying controller MTBDD CLI v1 and the typed
   `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the
   canonical plant manifest, enforce create-new output, source and query binding,
@@ -26,6 +53,10 @@
   lower verifier peak RSS and portable evidence. Retain a hosted Linux
   reproduction showing the same runtime loss and 79.8% lower proof-verifier
   peak RSS.
+  Predeclare the next equivalent-evidence comparison against the
+  competition-standard Certifaiger and `aigsim` certificate path, including
+  explicit semantic-equivalence, hostile-input, resource, and falsification
+  gates.
 
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch
