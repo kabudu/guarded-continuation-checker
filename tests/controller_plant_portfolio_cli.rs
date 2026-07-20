@@ -1,10 +1,15 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+#[cfg(all(unix, not(target_os = "macos")))]
+use std::time::Duration;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+use guarded_continuation_checker::ExecutionPolicy;
 use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason, ControllerPlantPortfolioTool,
-    InvocationStatus, OperationKind,
+    ControllerPlantResourceRefusalReason, ControllerPlantResourceTool, FailureClass,
+    InvocationStatus, OperationKind, PredicateApiError,
 };
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
@@ -40,6 +45,11 @@ fn fixture() -> PathBuf {
         ),
     )
     .unwrap();
+    fs::write(
+        root.join("resource-policy.txt"),
+        b"controller_plant_resource_policy_version=1\nmax_artifact_bytes=16777216\nmax_members=2\nmax_member_horizon=4\nmax_product_states_per_member=4\nmax_transition_evaluations=40\nstatus=complete\n",
+    )
+    .unwrap();
     root
 }
 
@@ -53,6 +63,15 @@ fn portfolio_cli_routes_to_exact_fallback_and_rejects_drift() {
     assert_eq!(
         String::from_utf8(discovery.stdout).unwrap(),
         "controller_plant_portfolio_cli_version=1 artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_members=64 backends=mtbdd,direct-exact routing=static fallback=exact unsupported=fail-closed\n"
+    );
+    let resource_discovery = Command::new(BINARY)
+        .arg("controller-plant-resource-cli-version")
+        .output()
+        .unwrap();
+    assert!(resource_discovery.status.success());
+    assert_eq!(
+        String::from_utf8(resource_discovery.stdout).unwrap(),
+        "controller_plant_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 portfolio_artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed\n"
     );
 
     let root = fixture();
@@ -82,6 +101,140 @@ fn portfolio_cli_routes_to_exact_fallback_and_rejects_drift() {
             .unwrap()
             .contains("status=VERIFIED cli_version=1 artifact_version=1 backend=DIRECT_EXACT")
     );
+
+    let governed = Command::new(BINARY)
+        .arg("verify-controller-plant-portfolio-resources")
+        .arg(&manifest)
+        .arg(root.join("resource-policy.txt"))
+        .arg(&artifact)
+        .output()
+        .unwrap();
+    assert!(governed.status.success(), "{:?}", governed.stderr);
+    let governed = String::from_utf8(governed.stdout).unwrap();
+    assert!(governed.contains(
+        "status=VERIFIED cli_version=1 policy_version=1 envelope_version=1 artifact_version=1 backend=DIRECT_EXACT members=2 maximum_member_horizon=4 maximum_product_states=4 transition_evaluation_bound=40 safe=1 unsafe=1"
+    ));
+    assert!(
+        governed.contains(
+            "controller-plant-resource-member index=1 answer=UNSAFE horizon=4 bad_frame=0"
+        )
+    );
+
+    let resource_tool = ControllerPlantResourceTool::discover(BINARY).unwrap();
+    assert_eq!(resource_tool.capabilities().max_product_states, 4096);
+    let typed_governed = resource_tool
+        .verify_observed(&manifest, &root.join("resource-policy.txt"), &artifact)
+        .unwrap();
+    assert_eq!(
+        typed_governed.metrics.operation,
+        OperationKind::VerifyControllerPlantPortfolioResources
+    );
+    assert_eq!(typed_governed.metrics.status, InvocationStatus::Success);
+    assert_eq!(
+        typed_governed.value.backend,
+        ControllerPlantPortfolioBackend::DirectExact
+    );
+    assert_eq!(typed_governed.value.transition_evaluation_bound, 40);
+    assert_eq!(
+        (typed_governed.value.safe, typed_governed.value.unsafe_count),
+        (1, 1)
+    );
+    assert_eq!(typed_governed.value.member_results[1].bad_frame, Some(0));
+
+    let policy = fs::read_to_string(root.join("resource-policy.txt")).unwrap();
+    let tight_policy = root.join("tight-policy.txt");
+    fs::write(
+        &tight_policy,
+        policy.replace(
+            "max_transition_evaluations=40",
+            "max_transition_evaluations=39",
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        Command::new(BINARY)
+            .arg("verify-controller-plant-portfolio-resources")
+            .arg(&manifest)
+            .arg(&tight_policy)
+            .arg(&artifact)
+            .status()
+            .unwrap()
+            .code(),
+        Some(3)
+    );
+    let refusal = resource_tool
+        .verify_observed(&manifest, &tight_policy, &artifact)
+        .unwrap_err();
+    assert!(matches!(
+        refusal.error.as_ref(),
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::TransitionEvaluations
+        }
+    ));
+    assert_eq!(
+        refusal.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let execution = ExecutionPolicy::new(Duration::from_secs(30), 64 * 1024)
+            .unwrap()
+            .with_file_limit(16 * 1024 * 1024)
+            .unwrap()
+            .with_memory_limit(64 * 1024 * 1024)
+            .unwrap();
+        let constrained = ControllerPlantResourceTool::discover_with_policy(BINARY, execution)
+            .expect("resource discovery must fit the constrained Linux policy");
+        let verified = constrained
+            .verify_observed(&manifest, &root.join("resource-policy.txt"), &artifact)
+            .expect("governed verification must fit the constrained Linux policy");
+        assert_eq!(verified.value.transition_evaluation_bound, 40);
+        assert_eq!(verified.metrics.timeout, Duration::from_secs(30));
+        assert_eq!(verified.metrics.output_limit_bytes, 64 * 1024);
+        assert_eq!(verified.metrics.file_limit_bytes, 16 * 1024 * 1024);
+        assert_eq!(verified.metrics.memory_limit_bytes, Some(64 * 1024 * 1024));
+        assert!(verified.metrics.process_group_containment);
+        let refused = constrained
+            .verify_observed(&manifest, &tight_policy, &artifact)
+            .unwrap_err();
+        assert!(matches!(
+            refused.error.as_ref(),
+            PredicateApiError::ResourceRefused {
+                reason: ControllerPlantResourceRefusalReason::TransitionEvaluations
+            }
+        ));
+        assert_eq!(
+            refused.metrics.status,
+            InvocationStatus::Failed(FailureClass::ResourceRefusal)
+        );
+        assert_eq!(refused.metrics.memory_limit_bytes, Some(64 * 1024 * 1024));
+    }
+    for (name, body) in [
+        ("crlf-policy.txt", policy.replace('\n', "\r\n")),
+        (
+            "trailing-policy.txt",
+            policy.replace("status=complete\n", "status=complete\nextra=1\n"),
+        ),
+        (
+            "noncanonical-policy.txt",
+            policy.replace("max_members=2", "max_members=02"),
+        ),
+    ] {
+        let path = root.join(name);
+        fs::write(&path, body).unwrap();
+        assert_eq!(
+            Command::new(BINARY)
+                .arg("verify-controller-plant-portfolio-resources")
+                .arg(&manifest)
+                .arg(&path)
+                .arg(&artifact)
+                .status()
+                .unwrap()
+                .code(),
+            Some(2),
+            "hostile policy {name} was accepted"
+        );
+    }
 
     let tool = ControllerPlantPortfolioTool::discover(BINARY).unwrap();
     assert_eq!(tool.capabilities().max_members, 64);

@@ -159,6 +159,8 @@ pub enum OperationKind {
     DiscoverControllerPlantPortfolio,
     CertifyControllerPlantPortfolio,
     VerifyControllerPlantPortfolio,
+    DiscoverControllerPlantResource,
+    VerifyControllerPlantPortfolioResources,
 }
 
 impl OperationKind {
@@ -187,6 +189,10 @@ impl OperationKind {
             Self::DiscoverControllerPlantPortfolio => "discover_controller_plant_portfolio",
             Self::CertifyControllerPlantPortfolio => "certify_controller_plant_portfolio",
             Self::VerifyControllerPlantPortfolio => "verify_controller_plant_portfolio",
+            Self::DiscoverControllerPlantResource => "discover_controller_plant_resource",
+            Self::VerifyControllerPlantPortfolioResources => {
+                "verify_controller_plant_portfolio_resources"
+            }
         }
     }
 }
@@ -198,6 +204,7 @@ pub enum FailureClass {
     Timeout,
     OutputLimit,
     ExitStatus,
+    ResourceRefusal,
     Compatibility,
     Response,
 }
@@ -210,6 +217,7 @@ impl FailureClass {
             Self::Timeout => "timeout",
             Self::OutputLimit => "output_limit",
             Self::ExitStatus => "exit_status",
+            Self::ResourceRefusal => "resource_refusal",
             Self::Compatibility => "compatibility",
             Self::Response => "response",
         }
@@ -491,6 +499,67 @@ pub struct ControllerPlantPortfolioBatchSummary {
 pub type ControllerPlantPortfolioApiError = PredicateApiError;
 pub type ControllerPlantPortfolioOperationError = PredicateOperationError;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantResourceCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub manifest_version: u32,
+    pub portfolio_artifact_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_members: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantResourceSummary {
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub backend: ControllerPlantPortfolioBackend,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub elapsed_micros: usize,
+    pub member_results: Vec<ControllerMtbddMemberResult>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerPlantResourceRefusalReason {
+    ArtifactBytes,
+    Members,
+    Horizon,
+    ProductStates,
+    TransitionEvaluations,
+}
+
+impl ControllerPlantResourceRefusalReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ArtifactBytes => "artifact-bytes",
+            Self::Members => "members",
+            Self::Horizon => "horizon",
+            Self::ProductStates => "product-states",
+            Self::TransitionEvaluations => "transition-evaluations",
+        }
+    }
+}
+
+pub type ControllerPlantResourceApiError = PredicateApiError;
+pub type ControllerPlantResourceOperationError = PredicateOperationError;
+
 /// Event-contract v1 uses the same two logical outcomes as predicate checks.
 pub type EventContractResult = PredicateResult;
 pub type EventContractApiError = PredicateApiError;
@@ -512,6 +581,9 @@ pub enum PredicateApiError {
         exit_code: Option<i32>,
         stderr: String,
     },
+    ResourceRefused {
+        reason: ControllerPlantResourceRefusalReason,
+    },
     IncompatibleContract(String),
     InvalidResponse(String),
 }
@@ -524,6 +596,7 @@ impl PredicateApiError {
             Self::TimedOut { .. } => FailureClass::Timeout,
             Self::OutputLimitExceeded { .. } => FailureClass::OutputLimit,
             Self::CommandFailed { .. } => FailureClass::ExitStatus,
+            Self::ResourceRefused { .. } => FailureClass::ResourceRefusal,
             Self::IncompatibleContract(_) => FailureClass::Compatibility,
             Self::InvalidResponse(_) => FailureClass::Response,
         }
@@ -572,6 +645,11 @@ impl fmt::Display for PredicateApiError {
                     .map(|code| code.to_string())
                     .unwrap_or_else(|| "no status".to_string()),
                 stderr.trim()
+            ),
+            Self::ResourceRefused { reason } => write!(
+                formatter,
+                "controller plant verification refused by resource policy: {}",
+                reason.as_str()
             ),
             Self::IncompatibleContract(message) => {
                 write!(formatter, "incompatible predicate contract: {message}")
@@ -1155,6 +1233,108 @@ impl ControllerPlantPortfolioTool {
     }
 }
 
+/// Typed, shell-free client for governed controller/plant verification v1.
+#[derive(Clone, Debug)]
+pub struct ControllerPlantResourceTool {
+    executable: PathBuf,
+    capabilities: ControllerPlantResourceCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerPlantResourceTool {
+    pub fn discover(
+        executable: impl Into<PathBuf>,
+    ) -> Result<Self, ControllerPlantResourceApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, ControllerPlantResourceApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, ControllerPlantResourceOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-plant-resource-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerPlantResource,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_plant_resource_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerPlantResourceCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerPlantResourceSummary, ControllerPlantResourceApiError> {
+        self.verify_observed(manifest, resource_policy, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerPlantResourceSummary>, ControllerPlantResourceOperationError>
+    {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-plant-portfolio-resources")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerPlantPortfolioResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_plant_resource_summary(output, &self.capabilities)
+            .map_err(classify_controller_plant_resource_refusal)
+    }
+}
+
 /// Typed, shell-free client for event-contract certificate v3 and portfolio v1.
 #[derive(Clone, Debug)]
 pub struct EventContractTool {
@@ -1728,6 +1908,338 @@ fn token_value<'a>(token: &'a str, key: &str) -> Result<&'a str, PredicateApiErr
     token
         .strip_prefix(&format!("{key}="))
         .ok_or_else(|| PredicateApiError::InvalidResponse(format!("expected response field {key}")))
+}
+
+fn parse_controller_plant_resource_capabilities(
+    line: &str,
+) -> Result<ControllerPlantResourceCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller plant resource capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_plant_resource_cli_version",
+        "policy_version",
+        "envelope_version",
+        "manifest_version",
+        "portfolio_artifact_version",
+        "max_policy_bytes",
+        "max_artifact_bytes",
+        "max_members",
+        "max_horizon",
+        "max_product_states",
+        "refusal_exit",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller plant resource capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[11..]
+        != [
+            "conservative-static",
+            "none",
+            "none",
+            "reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller plant resource accounting contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..5]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[5..10]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 5]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[10], keys[10])?;
+    if versions != [1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller plant resource version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller plant resource discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerPlantResourceCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        envelope_version: versions[2],
+        manifest_version: versions[3],
+        portfolio_artifact_version: versions[4],
+        max_policy_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_members: limits[2],
+        max_horizon: limits[3],
+        max_product_states: limits[4],
+        refusal_exit_code: 3,
+    })
+}
+
+fn classify_controller_plant_resource_refusal(
+    mut failure: PredicateOperationError,
+) -> PredicateOperationError {
+    let reason = match failure.error.as_ref() {
+        PredicateApiError::CommandFailed {
+            exit_code: Some(3),
+            stderr,
+        } => stderr
+            .trim_end_matches(['\r', '\n'])
+            .strip_prefix("error: controller-plant-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none"))
+            .and_then(|value| match value {
+                "artifact-bytes" => Some(ControllerPlantResourceRefusalReason::ArtifactBytes),
+                "members" => Some(ControllerPlantResourceRefusalReason::Members),
+                "horizon" => Some(ControllerPlantResourceRefusalReason::Horizon),
+                "product-states" => Some(ControllerPlantResourceRefusalReason::ProductStates),
+                "transition-evaluations" => {
+                    Some(ControllerPlantResourceRefusalReason::TransitionEvaluations)
+                }
+                _ => None,
+            }),
+        _ => None,
+    };
+    if let Some(reason) = reason {
+        let error = PredicateApiError::ResourceRefused { reason };
+        failure.metrics.status = InvocationStatus::Failed(error.failure_class());
+        failure.error = Box::new(error);
+    }
+    failure
+}
+
+fn parse_controller_plant_resource_summary(
+    output: ManagedOutput,
+    capabilities: &ControllerPlantResourceCapabilities,
+) -> Result<Observed<ControllerPlantResourceSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerPlantResourceSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant resource response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller plant resource summary line is missing".to_string(),
+            )
+        })?;
+        let fields = first.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-plant-resource",
+            "status",
+            "cli_version",
+            "policy_version",
+            "envelope_version",
+            "artifact_version",
+            "backend",
+            "members",
+            "maximum_member_horizon",
+            "maximum_product_states",
+            "transition_evaluation_bound",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len()
+            || fields[0] != keys[0]
+            || token_value(fields[1], "status")? != "VERIFIED"
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant resource summary shape is invalid".to_string(),
+            ));
+        }
+        let cli_version = canonical_u32(token_value(fields[2], keys[2])?, keys[2])?;
+        let policy_version = canonical_u32(token_value(fields[3], keys[3])?, keys[3])?;
+        let envelope_version = canonical_u32(token_value(fields[4], keys[4])?, keys[4])?;
+        let artifact_version = canonical_u32(token_value(fields[5], keys[5])?, keys[5])?;
+        if cli_version != capabilities.cli_version
+            || policy_version != capabilities.policy_version
+            || envelope_version != capabilities.envelope_version
+            || artifact_version != capabilities.portfolio_artifact_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller plant resource response version changed".to_string(),
+            ));
+        }
+        let backend = match token_value(fields[6], "backend")? {
+            "MTBDD" => ControllerPlantPortfolioBackend::Mtbdd,
+            "DIRECT_EXACT" => ControllerPlantPortfolioBackend::DirectExact,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant resource backend is invalid".to_string(),
+                ));
+            }
+        };
+        let numeric = fields[7..]
+            .iter()
+            .zip(&keys[7..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        let member_count = numeric[0];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[1] > capabilities.max_horizon
+            || numeric[2] > capabilities.max_product_states
+            || numeric[8] > capabilities.max_artifact_bytes
+            || numeric[4].checked_add(numeric[5]) != Some(member_count)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant resource response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut member_results = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller plant resource member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-plant-resource-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant resource member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], "index")?, "index")?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant resource member ordering changed".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], "answer")? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller plant resource member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_usize(token_value(fields[3], "horizon")?, "horizon")?;
+            let bad_frame = match token_value(fields[4], "bad_frame")? {
+                "none" => None,
+                value => Some(canonical_usize(value, "bad_frame")?),
+            };
+            let values = fields[5..]
+                .iter()
+                .zip(&keys[5..])
+                .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if horizon > capabilities.max_horizon
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => values[0] != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || values[0] != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant resource member result is inconsistent".to_string(),
+                ));
+            }
+            member_results.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps: values[0],
+                reachable_product_states: values[1],
+                explored_transitions: values[2],
+            });
+        }
+        let reachable_total = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.reachable_product_states)
+        });
+        let transition_total = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.explored_transitions)
+        });
+        if lines.next().is_some()
+            || member_results
+                .iter()
+                .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+                .count()
+                != numeric[4]
+            || member_results
+                .iter()
+                .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Unsafe))
+                .count()
+                != numeric[5]
+            || reachable_total != Some(numeric[6])
+            || transition_total != Some(numeric[7])
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant resource member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerPlantResourceSummary {
+            policy_version,
+            envelope_version,
+            artifact_version,
+            backend,
+            members: member_count,
+            maximum_member_horizon: numeric[1],
+            maximum_product_states: numeric[2],
+            transition_evaluation_bound: numeric[3],
+            safe: numeric[4],
+            unsafe_count: numeric[5],
+            reachable_product_states: numeric[6],
+            explored_transitions: numeric[7],
+            artifact_bytes: numeric[8],
+            load_micros: numeric[9],
+            artifact_micros: numeric[10],
+            verification_micros: numeric[11],
+            elapsed_micros: numeric[12],
+            member_results,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
 }
 
 fn parse_controller_plant_portfolio_capabilities(
@@ -2738,6 +3250,26 @@ mod tests {
             parse_controller_plant_portfolio_capabilities(&canonical.replace('\n', "\r\n"))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn controller_plant_resource_capability_parser_is_strict() {
+        let canonical = "controller_plant_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 portfolio_artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_plant_resource_capabilities(canonical).unwrap();
+        assert_eq!(parsed.envelope_version, 1);
+        assert_eq!(parsed.max_product_states, 4096);
+        for hostile in [
+            canonical.replace("accounting=conservative-static", "accounting=measured"),
+            canonical.replace("timing_calibration=none", "timing_calibration=per-formula"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("refusal_exit=3", "refusal_exit=2"),
+            canonical.replace("refusal_schema=reason-v1", "refusal_schema=free-text"),
+            canonical.replace("max_policy_bytes=4096", "max_policy_bytes=0"),
+            canonical.replace("max_members=64", "max_members=064"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_plant_resource_capabilities(&hostile).is_err());
+        }
     }
 
     #[test]

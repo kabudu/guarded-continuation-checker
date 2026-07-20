@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Add experimental controller/plant verification resource envelope v1 through
+  the public Rust API. Preflight artifact bytes, members, horizons, product
+  states, external-input branches, and direct-backend controller evaluations
+  with checked conservative arithmetic before semantic replay. Preserve the
+  existing exact MTBDD/direct portfolio, return the assessment separately from
+  the verification answer, and fail closed at every caller-selected limit.
+  Add a canonical bounded policy file, separate machine-readable capability and
+  verification commands, hostile parser controls, and the typed shell-free
+  `ControllerPlantResourceTool` with strict response parsing and invocation
+  metrics. Distinguish policy refusal with exit code 3, five versioned refusal
+  reasons, no logical answer, a typed `ResourceRefused` error, and the
+  `resource_refusal` metrics class. Correlate the typed client with a 30-second
+  deadline, 64 KiB output cap, 16 MiB file cap, 64 MiB Linux address-space
+  ceiling, and process-group containment. Run every governed verification in
+  the release-build acceptance pipeline under the same Linux address-space
+  ceiling locally and on a hosted Linux runner. Independent
+  constrained-workflow acceptance remains open. Add a reproducible six-job
+  release-build acceptance pipeline with two exact verified batches, two valid
+  policy refusals, malformed-policy and corrupt-evidence controls, and a
+  byte-stable aggregate retaining every row. Preserve 3 SAFE and 5 UNSAFE
+  answers and distinguish two verified, two refused, and two invalid jobs. Gate
+  the retained result in Linux CI.
+
 - Pinned and offline-qualified the Certifaiger 10.2.0, AIGER, CaDiCaL,
   `lrat_isa`, and runlim comparison stack on local arm64 Linux, including all
   upstream Certifaiger witness fixtures and the intentionally invalid control.

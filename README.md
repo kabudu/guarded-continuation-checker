@@ -46,6 +46,23 @@ controller, and otherwise preserves the identical bounded query through direct
 exact evaluation through both Rust and file interfaces. Only three explicit
 resource-limit rejections permit fallback; malformed models, semantic errors,
 query drift, and forced downgrades fail closed.
+The experimental
+[verification resource envelope v1](docs/CONTROLLER_PLANT_RESOURCE_ENVELOPE_V1.md)
+adds caller-selected artifact, batch, horizon, product-state, and conservative
+transition bounds to the public Rust verifier. It refuses excess work before
+semantic replay without turning a refusal into a verification answer. A
+canonical policy CLI and typed process client now expose the same boundary for
+self-service integrations. Resource refusals use a versioned reason, exit code
+3, and no logical answer, while malformed input remains a tool error. Linux
+enforcement now covers a typed direct-exact regression and every governed job
+in the release-build acceptance pipeline under a 64 MiB address-space ceiling.
+The [hosted Linux run](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29750776535)
+reproduces the governed pipeline. That ceiling is not an RSS measurement.
+Independent constrained acceptance is still open.
+The retained six-job acceptance pipeline aggregates two verified batches, two
+valid refusals, and two invalid-input controls without dropping any row or
+inventing a logical answer for rejected work. This is simulated self-service
+evidence, not independent partner acceptance.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

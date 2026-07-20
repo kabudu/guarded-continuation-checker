@@ -230,6 +230,30 @@ formally verified checker comparison, constrained-device acceptance, and
 external expert review remain open. This is evidence for a narrow low-memory
 consumer profile, not for broad production superiority.
 
+Controller/plant resource envelope v1 now exposes caller-selected artifact,
+member, horizon, product-state, and conservative transition-evaluation limits
+through the public Rust API. Both exact portfolio routes pass at their inclusive
+boundaries, and each tighter policy fails before semantic replay. This begins an
+explicit policy layer for the low-memory consumer profile. Canonical CLI policy
+files, strict capability and result parsing, hostile policy rejection, and a
+typed bounded process client are now implemented. Policy refusal has a separate
+exit code, five versioned reasons, no logical answer, and a typed metrics class.
+The release-build acceptance pipeline now retains six process jobs: two
+verified, two valid policy refusals, one malformed policy, and one corrupt
+artifact. Its byte-stable aggregate preserves 3 SAFE and 5 UNSAFE results from
+verified jobs only and records every negative row. This closes local multi-job
+aggregation and simulated self-service acceptance for the controller/plant
+resource surface. Independently sourced workflow evidence, compatibility
+history, and independent acceptance remain open, so no production-readiness
+row closes. Local Linux correlation now
+passes: the typed direct-exact route preserves verification and policy-refusal
+semantics under a 30-second deadline, 64 KiB output cap, 16 MiB file cap,
+64 MiB address-space ceiling, and process-group containment. The six-job
+release-build acceptance pipeline also passes with every governed verification
+under that address-space ceiling. Hosted Linux CI reproduces the governed
+pipeline. Address space is not peak RSS, and this evidence is not independent
+acceptance.
+
 ## Rules
 
 - No timing-based per-formula calibration.
