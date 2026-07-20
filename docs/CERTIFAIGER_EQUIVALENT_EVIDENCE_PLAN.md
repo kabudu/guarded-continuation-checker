@@ -182,3 +182,46 @@ external evidence is 5,270 bytes: 51, 66, 176, 176, 2,412, and 2,389 bytes.
 This closes semantic equivalence and both evidence-class qualification gates.
 Resource comparison, deterministic clean-directory reproduction, hostile
 controls, and hosted amd64 replication remain open.
+
+A single-engine IC3 negative control produced valid but nonminimal traces for
+properties 13 and 14 at frame 29 instead of the independently established
+shortest frame 15. It also accepted a property-12 trace as valid property-11
+evidence because reachability witnesses do not certify minimality. An initial
+rIC3 portfolio probe produced frame 15, but a clean rerun produced frame 25, so
+first-answer portfolio evidence is also unsuitable for an exact shortest-trace
+contract.
+
+The accepted baseline uses the same static minimality-aware race for every
+formula. BMC and IC3 start together; depth-ordered BMC SAT is accepted, IC3 SAT
+is provisional until BMC finishes, and Certifaiger-compatible IC3 UNSAT is
+accepted immediately. The losing process is cancelled. No answer, timing, or
+formula-specific calibration selects the engine. The consumer additionally
+checks each UNSAFE witness frame against the independently replayed frozen
+manifest before invoking `aigsim`.
+
+## Local arm64 comparison finding
+
+Three clean network-disabled trials use the same pinned Linux host, Rust 1.97
+base, `runlim` 2.0.0rc14 sampler, six models, and exact answers. The
+competition-standard path has median production time 0.21 seconds, consumer
+time 0.30 seconds, producer space 24 MB, consumer space 127 MB, and 5,130 bytes
+of evidence. GCC has median batch production time 1.38 seconds, verification
+time 0.49 seconds, producer space 13 MB, verifier space 7 MB, and 251,221 bytes
+of evidence.
+
+This is a strong negative result for GCC transfer size and runtime in this
+regime. Standard evidence is 48.97 times smaller, production is 6.57 times
+faster, and checking is 1.63 times faster. The surviving GCC advantages are
+45.8% lower producer space and a fresh verifier memory profile 18.14 times
+smaller at the sampler's 1 MB resolution. GCC's unstripped 78,167,632-byte
+executable is also much larger
+than the 7,353,840-byte rIC3 binary or 10,280,960-byte Certifaiger tool
+directory. No speed, size, or packaging advantage may be claimed from this
+experiment. The memory result remains provisional until hosted amd64
+replication passes.
+
+The local hostile suite accepts the unchanged six-member package and rejects
+witness mutation, truncation, cross-property substitution, member reordering,
+stale evidence, output collision, and model source drift. The frame-binding
+control is material: without it, `aigsim` correctly accepts some later valid
+traces that do not preserve GCC's shortest-trace result.

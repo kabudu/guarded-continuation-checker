@@ -222,7 +222,12 @@ frames and two SAFE answers, rIC3 emits both evidence classes, Certifaiger
 accepts the SAFE witnesses, and `aigsim` accepts the UNSAFE traces. This closes
 the local semantic and tool-interface portions of the gate only. Comparative
 resources, hostile controls, deterministic clean-directory reproduction,
-hosted amd64 evidence, and integration policy remain open.
+hosted amd64 evidence and integration policy remain open. The completed local
+comparison is negative on GCC runtime, evidence size, and executable footprint,
+but positive on producer and verifier memory. Seven external-package hostile
+controls pass only after adding explicit shortest-frame binding to the standard
+witness checks. This is evidence for a narrow low-memory consumer profile, not
+for broad production superiority.
 
 ## Rules
 

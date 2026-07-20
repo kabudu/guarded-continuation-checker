@@ -13,6 +13,13 @@
   independently implemented parser and reachable-state replay reproduced all
   answers and shortest bad frames. Validate all four UNSAFE traces with
   `aigsim` and both SAFE witnesses with Certifaiger, CaDiCaL, and `lrat_isa`.
+- Retain the negative same-host Certifaiger-equivalent comparison: standard
+  evidence is 48.97 times smaller, production is 6.57 times faster, checking
+  is 1.63 times faster, and its tools are smaller. Retain the provisional GCC
+  advantages of 45.8% lower producer space and 18.14 times lower verifier
+  space. Reject seven hostile package controls. Record that plain IC3 and
+  first-answer portfolio traces do not reliably preserve shortest bad frames;
+  use one static BMC/IC3 minimality race for every external formula.
 
 - Add proof-carrying controller MTBDD CLI v1 and the typed
   `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the

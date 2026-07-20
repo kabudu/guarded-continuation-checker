@@ -1,0 +1,9 @@
+schema_version,case,rejected,status
+1,baseline,false,accepted-valid-evidence
+1,mutation,true,rejected
+1,truncation,true,rejected
+1,property-substitution,true,rejected
+1,member-reordering,true,rejected
+1,stale-evidence,true,rejected
+1,output-collision,true,rejected
+1,source-drift,true,rejected
