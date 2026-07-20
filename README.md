@@ -66,9 +66,10 @@ evidence, not independent partner acceptance.
 The first experimental
 [governed proof-carrying MTBDD slice](docs/GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md)
 extends the Rust resource boundary to the equivalence artifact and embedded
-UNSAT proof while preserving zero exhaustive controller assignments. Its file
-policy, typed process client, portfolio routing, and public-product gates remain
-open.
+UNSAT proof while preserving zero exhaustive controller assignments. A
+canonical policy CLI and typed bounded process client expose the same contract
+with seven stable refusal reasons and no answer on refusal. Portfolio routing
+and public-product gates remain open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

@@ -161,6 +161,8 @@ pub enum OperationKind {
     VerifyControllerPlantPortfolio,
     DiscoverControllerPlantResource,
     VerifyControllerPlantPortfolioResources,
+    DiscoverControllerProofMtbddResource,
+    VerifyControllerProofMtbddPlantResources,
 }
 
 impl OperationKind {
@@ -192,6 +194,12 @@ impl OperationKind {
             Self::DiscoverControllerPlantResource => "discover_controller_plant_resource",
             Self::VerifyControllerPlantPortfolioResources => {
                 "verify_controller_plant_portfolio_resources"
+            }
+            Self::DiscoverControllerProofMtbddResource => {
+                "discover_controller_proof_mtbdd_resource"
+            }
+            Self::VerifyControllerProofMtbddPlantResources => {
+                "verify_controller_proof_mtbdd_plant_resources"
             }
         }
     }
@@ -515,6 +523,47 @@ pub struct ControllerPlantResourceCapabilities {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddResourceCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub manifest_version: u32,
+    pub artifact_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_equivalence_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
+    pub max_members: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddResourceSummary {
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub assignments_checked: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub elapsed_micros: usize,
+    pub member_results: Vec<ControllerMtbddMemberResult>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerPlantResourceSummary {
     pub policy_version: u32,
     pub envelope_version: u32,
@@ -539,6 +588,8 @@ pub struct ControllerPlantResourceSummary {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerPlantResourceRefusalReason {
     ArtifactBytes,
+    EquivalenceArtifactBytes,
+    UnsatProofBytes,
     Members,
     Horizon,
     ProductStates,
@@ -549,6 +600,8 @@ impl ControllerPlantResourceRefusalReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ArtifactBytes => "artifact-bytes",
+            Self::EquivalenceArtifactBytes => "equivalence-artifact-bytes",
+            Self::UnsatProofBytes => "unsat-proof-bytes",
             Self::Members => "members",
             Self::Horizon => "horizon",
             Self::ProductStates => "product-states",
@@ -1335,6 +1388,105 @@ impl ControllerPlantResourceTool {
     }
 }
 
+/// Typed, shell-free client for governed proof-carrying MTBDD verification v1.
+#[derive(Clone, Debug)]
+pub struct ControllerProofMtbddResourceTool {
+    executable: PathBuf,
+    capabilities: ControllerProofMtbddResourceCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerProofMtbddResourceTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-proof-mtbdd-resource-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerProofMtbddResource,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_proof_mtbdd_resource_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerProofMtbddResourceCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerProofMtbddResourceSummary, PredicateApiError> {
+        self.verify_observed(manifest, resource_policy, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerProofMtbddResourceSummary>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-plant-resources")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPlantResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_proof_mtbdd_resource_summary(output, &self.capabilities)
+            .map_err(classify_controller_proof_mtbdd_resource_refusal)
+    }
+}
+
 /// Typed, shell-free client for event-contract certificate v3 and portfolio v1.
 #[derive(Clone, Debug)]
 pub struct EventContractTool {
@@ -1910,6 +2062,135 @@ fn token_value<'a>(token: &'a str, key: &str) -> Result<&'a str, PredicateApiErr
         .ok_or_else(|| PredicateApiError::InvalidResponse(format!("expected response field {key}")))
 }
 
+fn parse_controller_proof_mtbdd_resource_capabilities(
+    line: &str,
+) -> Result<ControllerProofMtbddResourceCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD resource capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_proof_mtbdd_resource_cli_version",
+        "policy_version",
+        "envelope_version",
+        "manifest_version",
+        "artifact_version",
+        "max_policy_bytes",
+        "max_artifact_bytes",
+        "max_equivalence_artifact_bytes",
+        "max_unsat_proof_bytes",
+        "max_members",
+        "max_horizon",
+        "max_product_states",
+        "refusal_exit",
+        "verification",
+        "exhaustive_replay",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD resource capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[13..]
+        != [
+            "unsat-miter",
+            "no",
+            "conservative-static",
+            "none",
+            "none",
+            "proof-reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD resource contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..5]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[5..12]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 5]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[12], keys[12])?;
+    if versions != [1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD resource version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD resource discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerProofMtbddResourceCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        envelope_version: versions[2],
+        manifest_version: versions[3],
+        artifact_version: versions[4],
+        max_policy_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_equivalence_artifact_bytes: limits[2],
+        max_unsat_proof_bytes: limits[3],
+        max_members: limits[4],
+        max_horizon: limits[5],
+        max_product_states: limits[6],
+        refusal_exit_code: 3,
+    })
+}
+
+fn classify_controller_proof_mtbdd_resource_refusal(
+    mut failure: PredicateOperationError,
+) -> PredicateOperationError {
+    let reason = match failure.error.as_ref() {
+        PredicateApiError::CommandFailed {
+            exit_code: Some(3),
+            stderr,
+        } => stderr
+            .trim_end_matches(['\r', '\n'])
+            .strip_prefix("error: controller-proof-mtbdd-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none"))
+            .and_then(|value| match value {
+                "artifact-bytes" => Some(ControllerPlantResourceRefusalReason::ArtifactBytes),
+                "equivalence-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::EquivalenceArtifactBytes)
+                }
+                "unsat-proof-bytes" => Some(ControllerPlantResourceRefusalReason::UnsatProofBytes),
+                "members" => Some(ControllerPlantResourceRefusalReason::Members),
+                "horizon" => Some(ControllerPlantResourceRefusalReason::Horizon),
+                "product-states" => Some(ControllerPlantResourceRefusalReason::ProductStates),
+                "transition-evaluations" => {
+                    Some(ControllerPlantResourceRefusalReason::TransitionEvaluations)
+                }
+                _ => None,
+            }),
+        _ => None,
+    };
+    if let Some(reason) = reason {
+        let error = PredicateApiError::ResourceRefused { reason };
+        failure.metrics.status = InvocationStatus::Failed(error.failure_class());
+        failure.error = Box::new(error);
+    }
+    failure
+}
+
 fn parse_controller_plant_resource_capabilities(
     line: &str,
 ) -> Result<ControllerPlantResourceCapabilities, PredicateApiError> {
@@ -2227,6 +2508,216 @@ fn parse_controller_plant_resource_summary(
             artifact_micros: numeric[10],
             verification_micros: numeric[11],
             elapsed_micros: numeric[12],
+            member_results,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_proof_mtbdd_resource_summary(
+    output: ManagedOutput,
+    capabilities: &ControllerProofMtbddResourceCapabilities,
+) -> Result<Observed<ControllerProofMtbddResourceSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerProofMtbddResourceSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource summary line is missing".to_string(),
+            )
+        })?;
+        let fields = first.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-proof-mtbdd-resource",
+            "status",
+            "cli_version",
+            "policy_version",
+            "envelope_version",
+            "artifact_version",
+            "members",
+            "maximum_member_horizon",
+            "maximum_product_states",
+            "transition_evaluation_bound",
+            "equivalence_artifact_bytes",
+            "unsat_proof_bytes",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "assignments_checked",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len()
+            || fields[0] != keys[0]
+            || token_value(fields[1], "status")? != "VERIFIED"
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource summary shape is invalid".to_string(),
+            ));
+        }
+        let cli_version = canonical_u32(token_value(fields[2], keys[2])?, keys[2])?;
+        let policy_version = canonical_u32(token_value(fields[3], keys[3])?, keys[3])?;
+        let envelope_version = canonical_u32(token_value(fields[4], keys[4])?, keys[4])?;
+        let artifact_version = canonical_u32(token_value(fields[5], keys[5])?, keys[5])?;
+        if cli_version != capabilities.cli_version
+            || policy_version != capabilities.policy_version
+            || envelope_version != capabilities.envelope_version
+            || artifact_version != capabilities.artifact_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller proof MTBDD resource response version changed".to_string(),
+            ));
+        }
+        let numeric = fields[6..]
+            .iter()
+            .zip(&keys[6..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        let member_count = numeric[0];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[1] > capabilities.max_horizon
+            || numeric[2] > capabilities.max_product_states
+            || numeric[4] > capabilities.max_equivalence_artifact_bytes
+            || numeric[5] > capabilities.max_unsat_proof_bytes
+            || numeric[10] > capabilities.max_artifact_bytes
+            || numeric[11] != 0
+            || numeric[6].checked_add(numeric[7]) != Some(member_count)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut member_results = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-proof-mtbdd-resource-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], "index")?, "index")?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member ordering changed".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], "answer")? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller proof MTBDD resource member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_usize(token_value(fields[3], "horizon")?, "horizon")?;
+            let bad_frame = match token_value(fields[4], "bad_frame")? {
+                "none" => None,
+                value => Some(canonical_usize(value, "bad_frame")?),
+            };
+            let values = fields[5..]
+                .iter()
+                .zip(&keys[5..])
+                .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if horizon > capabilities.max_horizon
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => values[0] != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || values[0] != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member result is inconsistent".to_string(),
+                ));
+            }
+            member_results.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps: values[0],
+                reachable_product_states: values[1],
+                explored_transitions: values[2],
+            });
+        }
+        let safe = member_results
+            .iter()
+            .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+            .count();
+        let unsafe_count = member_results.len() - safe;
+        let reachable = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.reachable_product_states)
+        });
+        let explored = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.explored_transitions)
+        });
+        if lines.next().is_some()
+            || safe != numeric[6]
+            || unsafe_count != numeric[7]
+            || reachable != Some(numeric[8])
+            || explored != Some(numeric[9])
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerProofMtbddResourceSummary {
+            policy_version,
+            envelope_version,
+            artifact_version,
+            members: member_count,
+            maximum_member_horizon: numeric[1],
+            maximum_product_states: numeric[2],
+            transition_evaluation_bound: numeric[3],
+            equivalence_artifact_bytes: numeric[4],
+            unsat_proof_bytes: numeric[5],
+            safe: numeric[6],
+            unsafe_count: numeric[7],
+            reachable_product_states: numeric[8],
+            explored_transitions: numeric[9],
+            artifact_bytes: numeric[10],
+            assignments_checked: numeric[11],
+            load_micros: numeric[12],
+            artifact_micros: numeric[13],
+            verification_micros: numeric[14],
+            elapsed_micros: numeric[15],
             member_results,
         })
     })();
@@ -3269,6 +3760,26 @@ mod tests {
             canonical.replace('\n', "\r\n"),
         ] {
             assert!(parse_controller_plant_resource_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_resource_capability_parser_is_strict() {
+        let canonical = "controller_proof_mtbdd_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 verification=unsat-miter exhaustive_replay=no accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_proof_mtbdd_resource_capabilities(canonical).unwrap();
+        assert_eq!(parsed.max_equivalence_artifact_bytes, 2_097_152);
+        assert_eq!(parsed.max_unsat_proof_bytes, 1_048_576);
+        for hostile in [
+            canonical.replace("verification=unsat-miter", "verification=trusted"),
+            canonical.replace("exhaustive_replay=no", "exhaustive_replay=yes"),
+            canonical.replace("accounting=conservative-static", "accounting=measured"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("refusal_schema=proof-reason-v1", "refusal_schema=free-text"),
+            canonical.replace("max_unsat_proof_bytes=1048576", "max_unsat_proof_bytes=0"),
+            canonical.replace("max_members=64", "max_members=064"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_proof_mtbdd_resource_capabilities(&hostile).is_err());
         }
     }
 

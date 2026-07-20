@@ -1,8 +1,8 @@
 # Governed proof-carrying MTBDD portfolio v1
 
-Status: first experimental Rust API slice. File policy, typed process client,
-portfolio routing, public-product acceptance, and compatibility gates remain
-open.
+Status: experimental Rust API, canonical file policy and CLI, and typed process
+client. Portfolio routing, public-product acceptance, and compatibility gates
+remain open.
 
 ## Problem
 
@@ -37,6 +37,28 @@ governed result keeps the deterministic resource assessment separate from the
 logical verification summary. The retained test proves both answer classes and
 requires `assignments_checked=0`.
 
+## Self-service contract
+
+Policy v1 is canonical LF text with ordered fields for the outer artifact,
+equivalence artifact, embedded UNSAT proof, members, horizon, product states,
+and transition evaluations. The executable exposes separate version discovery
+and verification commands:
+
+```sh
+guarded-continuation-checker controller-proof-mtbdd-resource-cli-version
+guarded-continuation-checker verify-controller-proof-mtbdd-plant-resources \
+  MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-plant
+```
+
+Valid resource refusal returns exit code 3, no logical answer, and one of seven
+`proof-reason-v1` values. Malformed policy, corrupt evidence, boundary drift,
+and ordinary tool failures remain exit code 2.
+`ControllerProofMtbddResourceTool` discovers and validates the full contract,
+invokes the verifier without a shell under the shared execution policy, checks
+every aggregate and member field, and maps valid refusals to typed invocation
+metrics. CRLF, NUL, missing, trailing, noncanonical, zero, and over-limit policy
+controls fail closed.
+
 ## Predeclared gates
 
 | Gate | Required result |
@@ -45,7 +67,7 @@ requires `assignments_checked=0`.
 | Proof governance | Artifact, equivalence-artifact, and embedded-proof limits reject before proof checking |
 | Composition governance | Member, horizon, product-state, and transition limits reject before semantic replay |
 | Query binding | Ordered source digests, wiring, initial states, property, and horizon cannot drift |
-| Stable self-service API | Canonical policy, capability, CLI response, typed process client, and refusal classes are versioned |
+| Stable self-service API | Implemented experimentally with policy, capability, CLI response, typed process client, and refusal classes versioned |
 | Static portfolio | Unsupported proof production preserves the unchanged exact query without trial timing |
 | Hostile input | Truncation, mutation, noncanonical policy, boundary drift, and oversize inputs fail closed |
 | Public product | The revision-pinned washing controller and physical-plant batch pass the governed proof path |
@@ -61,4 +83,3 @@ and process limits are established techniques. This integration is production
 hardening, not a novelty result. It advances the reusable proof-carrying product
 path while the separate novelty register still requires a distinguishing
 algorithmic result, closest-prior-art review, and independent evidence.
-

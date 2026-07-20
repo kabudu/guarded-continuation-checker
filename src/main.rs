@@ -40,6 +40,9 @@ const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_POLICY_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
+const CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION: u32 = 1;
+const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
@@ -73,6 +76,11 @@ struct ControllerMtbddPlantManifest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ControllerPlantResourcePolicy {
     envelope: controller_plant_artifact::ControllerPlantResourceEnvelope,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ControllerProofMtbddResourcePolicy {
+    envelope: controller_plant_artifact::ControllerProofMtbddResourceEnvelope,
 }
 
 fn synthesis_memory_limit_kind() -> &'static str {
@@ -25033,6 +25041,109 @@ fn parse_controller_plant_resource_policy(
     Ok(ControllerPlantResourcePolicy { envelope })
 }
 
+fn parse_controller_proof_mtbdd_resource_policy(
+    path: &Path,
+) -> Result<ControllerProofMtbddResourcePolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES,
+        "controller proof MTBDD resource policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller proof MTBDD resource policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller proof MTBDD resource policy must be canonical LF text without NUL"
+                .to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller proof MTBDD resource policy expected {key}"))
+    };
+    let version = take("controller_proof_mtbdd_resource_policy_version")?;
+    if version != CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION.to_string() {
+        return Err("unsupported controller proof MTBDD resource policy version".to_string());
+    }
+    let parse = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller proof MTBDD resource policy {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!(
+                "controller proof MTBDD resource policy {label} is noncanonical"
+            ));
+        }
+        Ok(parsed)
+    };
+    let artifact_text = take("max_artifact_bytes")?;
+    let equivalence_text = take("max_equivalence_artifact_bytes")?;
+    let proof_text = take("max_unsat_proof_bytes")?;
+    let members_text = take("max_members")?;
+    let horizon_text = take("max_member_horizon")?;
+    let states_text = take("max_product_states_per_member")?;
+    let transitions_text = take("max_transition_evaluations")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller proof MTBDD resource policy is incomplete or has trailing fields"
+                .to_string(),
+        );
+    }
+    let canonical = format!(
+        "controller_proof_mtbdd_resource_policy_version={version}\nmax_artifact_bytes={artifact_text}\nmax_equivalence_artifact_bytes={equivalence_text}\nmax_unsat_proof_bytes={proof_text}\nmax_members={members_text}\nmax_member_horizon={horizon_text}\nmax_product_states_per_member={states_text}\nmax_transition_evaluations={transitions_text}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("controller proof MTBDD resource policy is not canonical".to_string());
+    }
+    let composition = controller_plant_artifact::ControllerPlantResourceEnvelope::new(
+        parse(artifact_text, "artifact bytes")?,
+        parse(members_text, "members")?,
+        parse(horizon_text, "member horizon")?,
+        parse(states_text, "product states")?,
+        parse(transitions_text, "transition evaluations")?,
+    )
+    .map_err(|error| error.to_string())?;
+    let envelope = controller_plant_artifact::ControllerProofMtbddResourceEnvelope::new(
+        composition,
+        parse(equivalence_text, "equivalence artifact bytes")?,
+        parse(proof_text, "UNSAT proof bytes")?,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(ControllerProofMtbddResourcePolicy { envelope })
+}
+
+fn controller_proof_mtbdd_resource_refusal(error: &str) -> Option<&'static str> {
+    if error.contains("resource artifact-byte limit exceeded")
+        || (error.starts_with("proof-carrying controller MTBDD governed artifact exceeds ")
+            && error.ends_with(" bytes"))
+    {
+        Some("artifact-bytes")
+    } else if error.contains("resource equivalence-artifact limit exceeded") {
+        Some("equivalence-artifact-bytes")
+    } else if error.contains("resource UNSAT-proof limit exceeded") {
+        Some("unsat-proof-bytes")
+    } else if error.contains("resource member limit exceeded") {
+        Some("members")
+    } else if error.contains("resource horizon limit exceeded") {
+        Some("horizon")
+    } else if error.contains("resource product-state limit exceeded") {
+        Some("product-states")
+    } else if error.contains("resource transition limit exceeded") {
+        Some("transition-evaluations")
+    } else {
+        None
+    }
+}
+
+fn classify_controller_proof_mtbdd_resource_error(error: String) -> String {
+    controller_proof_mtbdd_resource_refusal(&error).map_or(error, |reason| {
+        format!("controller-proof-mtbdd-resource refusal={reason} result=none")
+    })
+}
+
 fn controller_plant_resource_refusal(error: &str) -> Option<&'static str> {
     if error.contains("resource envelope artifact-byte limit exceeded")
         || (error.starts_with("controller plant governed portfolio exceeds ")
@@ -25235,6 +25346,110 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
                 guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
             );
+            Ok(true)
+        }
+        "controller-proof-mtbdd-resource-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-proof-mtbdd-resource-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_proof_mtbdd_resource_cli_version={CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} artifact_version={} max_policy_bytes={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_horizon={} max_product_states={} refusal_exit=3 verification=unsat-miter exhaustive_replay=no accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+            );
+            Ok(true)
+        }
+        "verify-controller-proof-mtbdd-plant-resources" => {
+            if args.len() != 4 {
+                return Err(
+                    "usage: guarded-continuation-checker verify-controller-proof-mtbdd-plant-resources MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-plant"
+                        .to_string(),
+                );
+            }
+            let invocation_started = Instant::now();
+            let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let load_micros = invocation_started.elapsed().as_micros();
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact_started = Instant::now();
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[3]),
+                policy.envelope.composition().max_artifact_bytes(),
+                "proof-carrying controller MTBDD governed artifact",
+            )
+            .map_err(classify_controller_proof_mtbdd_resource_error)?;
+            let artifact_micros = artifact_started.elapsed().as_micros();
+            let verification_started = Instant::now();
+            let governed = controller_plant_artifact::verify_controller_proof_mtbdd_plant_artifact_with_resources(
+                &controller,
+                controller_digest,
+                &inputs,
+                &encoded,
+                policy.envelope,
+            )
+            .map_err(|error| classify_controller_proof_mtbdd_resource_error(error.to_string()))?;
+            let verification_micros = verification_started.elapsed().as_micros();
+            let resources = governed.resources;
+            let summary = governed.verification;
+            println!(
+                "controller-proof-mtbdd-resource status=VERIFIED cli_version={CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} equivalence_artifact_bytes={} unsat_proof_bytes={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} assignments_checked={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}",
+                resources.version,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                resources.members,
+                resources.maximum_member_horizon,
+                resources.maximum_product_states,
+                resources.transition_evaluation_bound,
+                resources.equivalence_artifact_bytes,
+                resources.unsat_proof_bytes,
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                resources.artifact_bytes,
+                summary.assignments_checked,
+                invocation_started.elapsed().as_micros(),
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-resource-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe => "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe => "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
             Ok(true)
         }
         "verify-controller-plant-portfolio-resources" => {
@@ -28172,11 +28387,15 @@ fn main() {
         Ok(false) => {}
         Err(error) => {
             eprintln!("error: {error}");
-            std::process::exit(if error.starts_with("controller-plant-resource refusal=") {
-                3
-            } else {
-                2
-            });
+            std::process::exit(
+                if error.starts_with("controller-plant-resource refusal=")
+                    || error.starts_with("controller-proof-mtbdd-resource refusal=")
+                {
+                    3
+                } else {
+                    2
+                },
+            );
         }
     }
     let vars = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(16);
@@ -39305,6 +39524,60 @@ mod tests {
             assert_eq!(controller_plant_resource_refusal(invalid), None);
             assert_eq!(
                 classify_controller_plant_resource_error(invalid.to_string()),
+                invalid
+            );
+        }
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_resource_refusal_reasons_are_stable_and_narrow() {
+        for (message, reason) in [
+            (
+                "proof-carrying controller MTBDD resource artifact-byte limit exceeded",
+                "artifact-bytes",
+            ),
+            (
+                "proof-carrying controller MTBDD resource equivalence-artifact limit exceeded",
+                "equivalence-artifact-bytes",
+            ),
+            (
+                "proof-carrying controller MTBDD resource UNSAT-proof limit exceeded",
+                "unsat-proof-bytes",
+            ),
+            (
+                "proof-carrying controller MTBDD resource member limit exceeded",
+                "members",
+            ),
+            (
+                "proof-carrying controller MTBDD resource horizon limit exceeded",
+                "horizon",
+            ),
+            (
+                "proof-carrying controller MTBDD resource product-state limit exceeded",
+                "product-states",
+            ),
+            (
+                "proof-carrying controller MTBDD resource transition limit exceeded",
+                "transition-evaluations",
+            ),
+        ] {
+            assert_eq!(
+                controller_proof_mtbdd_resource_refusal(message),
+                Some(reason)
+            );
+            assert_eq!(
+                classify_controller_proof_mtbdd_resource_error(message.to_string()),
+                format!("controller-proof-mtbdd-resource refusal={reason} result=none")
+            );
+        }
+        for invalid in [
+            "proof-carrying controller MTBDD plant artifact integrity mismatch",
+            "proof-carrying transition bound overflow",
+            "controller proof MTBDD resource policy is not canonical",
+        ] {
+            assert_eq!(controller_proof_mtbdd_resource_refusal(invalid), None);
+            assert_eq!(
+                classify_controller_proof_mtbdd_resource_error(invalid.to_string()),
                 invalid
             );
         }

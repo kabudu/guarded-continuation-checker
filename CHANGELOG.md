@@ -7,8 +7,11 @@
   UNSAT proof, members, horizons, product states, and transition evaluations
   before proof checking or semantic replay. Bind every ordered member and
   preserve the existing independently checked proof path with zero exhaustive
-  controller assignments. Self-service CLI, portfolio, public-product, and
-  compatibility gates remain open.
+  controller assignments. Add canonical policy and capability contracts, a
+  governed verification command, seven stable refusal reasons, exit code 3
+  without a logical answer, strict response parsing, and a typed shell-free
+  process client. Portfolio, public-product, and compatibility gates remain
+  open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

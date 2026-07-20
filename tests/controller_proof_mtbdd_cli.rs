@@ -2,7 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use guarded_continuation_checker::{ControllerProofMtbddTool, OperationKind};
+use guarded_continuation_checker::{
+    ControllerPlantResourceRefusalReason, ControllerProofMtbddResourceTool,
+    ControllerProofMtbddTool, FailureClass, InvocationStatus, OperationKind, PredicateApiError,
+};
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
 
@@ -70,6 +73,161 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     let verified = String::from_utf8(verified.stdout).unwrap();
     assert!(verified.contains("status=VERIFIED"));
     assert!(verified.contains("assignments_checked=0"));
+
+    let resource_discovery = Command::new(BINARY)
+        .arg("controller-proof-mtbdd-resource-cli-version")
+        .output()
+        .unwrap();
+    assert!(resource_discovery.status.success());
+    let resource_discovery = String::from_utf8(resource_discovery.stdout).unwrap();
+    assert!(resource_discovery.starts_with(
+        "controller_proof_mtbdd_resource_cli_version=1 policy_version=1 envelope_version=1"
+    ));
+    assert!(
+        resource_discovery.contains(
+            "verification=unsat-miter exhaustive_replay=no accounting=conservative-static"
+        )
+    );
+    assert!(resource_discovery.ends_with(
+        "result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n"
+    ));
+    let policy = root.join("proof-resource.policy");
+    fs::write(
+        &policy,
+        b"controller_proof_mtbdd_resource_policy_version=1\nmax_artifact_bytes=16777216\nmax_equivalence_artifact_bytes=2097152\nmax_unsat_proof_bytes=1048576\nmax_members=64\nmax_member_horizon=1024\nmax_product_states_per_member=4096\nmax_transition_evaluations=18446744073709551615\nstatus=complete\n",
+    )
+    .unwrap();
+    let governed = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-plant-resources")
+        .arg(&manifest)
+        .arg(&policy)
+        .arg(&artifact)
+        .output()
+        .unwrap();
+    assert!(governed.status.success(), "{:?}", governed.stderr);
+    let governed = String::from_utf8(governed.stdout).unwrap();
+    assert!(governed.contains("status=VERIFIED"));
+    assert!(governed.contains("members=2"));
+    assert!(governed.contains("safe=1 unsafe=1"));
+    assert!(governed.contains("assignments_checked=0"));
+
+    let tight = root.join("tight-proof-resource.policy");
+    fs::write(
+        &tight,
+        fs::read_to_string(&policy)
+            .unwrap()
+            .replace("max_unsat_proof_bytes=1048576", "max_unsat_proof_bytes=1"),
+    )
+    .unwrap();
+    let refused = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-plant-resources")
+        .arg(&manifest)
+        .arg(&tight)
+        .arg(&artifact)
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(3));
+    assert_eq!(
+        String::from_utf8(refused.stderr).unwrap(),
+        "error: controller-proof-mtbdd-resource refusal=unsat-proof-bytes result=none\n"
+    );
+
+    let malformed = root.join("malformed-proof-resource.policy");
+    fs::write(
+        &malformed,
+        fs::read_to_string(&policy)
+            .unwrap()
+            .replace("max_members=64", "max_members=064"),
+    )
+    .unwrap();
+    let malformed = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-plant-resources")
+        .arg(&manifest)
+        .arg(&malformed)
+        .arg(&artifact)
+        .output()
+        .unwrap();
+    assert_eq!(malformed.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(malformed.stderr).unwrap(),
+        "error: controller proof MTBDD resource policy members is noncanonical\n"
+    );
+    let canonical_policy = fs::read_to_string(&policy).unwrap();
+    for (name, body) in [
+        ("crlf-proof-resource.policy", canonical_policy.replace('\n', "\r\n")),
+        (
+            "trailing-proof-resource.policy",
+            canonical_policy.replace("status=complete\n", "status=complete\nextra=1\n"),
+        ),
+        (
+            "missing-proof-resource.policy",
+            canonical_policy.replace("status=complete\n", ""),
+        ),
+        (
+            "zero-proof-resource.policy",
+            canonical_policy.replace("max_members=64", "max_members=0"),
+        ),
+        (
+            "oversize-proof-resource.policy",
+            canonical_policy.replace(
+                "max_equivalence_artifact_bytes=2097152",
+                "max_equivalence_artifact_bytes=2097153",
+            ),
+        ),
+    ] {
+        let path = root.join(name);
+        fs::write(&path, body).unwrap();
+        assert_eq!(
+            Command::new(BINARY)
+                .arg("verify-controller-proof-mtbdd-plant-resources")
+                .arg(&manifest)
+                .arg(&path)
+                .arg(&artifact)
+                .status()
+                .unwrap()
+                .code(),
+            Some(2),
+            "hostile policy {name} was accepted"
+        );
+    }
+    let nul_policy = root.join("nul-proof-resource.policy");
+    let mut nul = canonical_policy.into_bytes();
+    nul.insert(nul.len() / 2, 0);
+    fs::write(&nul_policy, nul).unwrap();
+    assert_eq!(
+        Command::new(BINARY)
+            .arg("verify-controller-proof-mtbdd-plant-resources")
+            .arg(&manifest)
+            .arg(&nul_policy)
+            .arg(&artifact)
+            .status()
+            .unwrap()
+            .code(),
+        Some(2)
+    );
+
+    let resource_tool = ControllerProofMtbddResourceTool::discover(BINARY).unwrap();
+    assert_eq!(resource_tool.capabilities().cli_version, 1);
+    assert_eq!(
+        resource_tool.capabilities().max_unsat_proof_bytes,
+        1_048_576
+    );
+    let typed_governed = resource_tool.verify(&manifest, &policy, &artifact).unwrap();
+    assert_eq!((typed_governed.safe, typed_governed.unsafe_count), (1, 1));
+    assert_eq!(typed_governed.assignments_checked, 0);
+    let typed_refusal = resource_tool
+        .verify_observed(&manifest, &tight, &artifact)
+        .unwrap_err();
+    assert!(matches!(
+        typed_refusal.error.as_ref(),
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::UnsatProofBytes
+        }
+    ));
+    assert_eq!(
+        typed_refusal.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
 
     let tool = ControllerProofMtbddTool::discover(BINARY).unwrap();
     assert_eq!(tool.capabilities().equivalence_proof_version, 1);
