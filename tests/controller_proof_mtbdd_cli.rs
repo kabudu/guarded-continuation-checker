@@ -1,16 +1,18 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason,
     ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
-    ControllerProofMtbddResourceTool, ControllerProofMtbddTool, FailureClass, InvocationStatus,
-    OperationKind, PredicateApiError,
+    ControllerProofMtbddResourceTool, ControllerProofMtbddTool, ControllerSplitEvidenceTool,
+    FailureClass, InvocationStatus, OperationKind, PredicateApiError,
 };
 use sha2::{Digest, Sha256};
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
+static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -21,8 +23,9 @@ fn sha256(bytes: &[u8]) -> String {
 
 fn fixture() -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "gcc-controller-proof-mtbdd-cli-{}",
-        std::process::id()
+        "gcc-controller-proof-mtbdd-cli-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
@@ -180,6 +183,131 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
         .output()
         .unwrap();
     assert!(!incomplete.status.success());
+
+    let discovery =
+        ControllerSplitEvidenceTool::discover_observed(BINARY, Default::default()).unwrap();
+    assert_eq!(
+        discovery.metrics.operation,
+        OperationKind::DiscoverControllerSplitEvidence
+    );
+    assert_eq!(discovery.metrics.status, InvocationStatus::Success);
+    assert_eq!(discovery.value.capabilities().cli_version, 1);
+    assert_eq!(
+        discovery.value.capabilities().controller_artifact_version,
+        1
+    );
+    assert_eq!(discovery.value.capabilities().plant_artifact_version, 1);
+
+    let typed_evidence = root.join("typed.controller-evidence");
+    let typed_evidence_summary = discovery
+        .value
+        .certify_controller_evidence_observed(&manifest, &typed_evidence)
+        .unwrap();
+    assert_eq!(
+        typed_evidence_summary.metrics.operation,
+        OperationKind::CertifyControllerProofEvidence
+    );
+    assert_eq!(
+        typed_evidence_summary.metrics.status,
+        InvocationStatus::Success
+    );
+    assert_eq!(typed_evidence_summary.value.artifact_version, 1);
+    assert_eq!(typed_evidence_summary.value.members, None);
+    assert_eq!(typed_evidence_summary.value.mtbdd_nodes, Some(1));
+    assert_eq!(typed_evidence_summary.value.mtbdd_terminals, Some(2));
+    assert_eq!(
+        typed_evidence_summary.value.artifact_bytes,
+        fs::metadata(&typed_evidence).unwrap().len() as usize
+    );
+
+    let typed_results = root.join("typed.plant-results");
+    let typed_results_second = root.join("typed-second.plant-results");
+    for output in [&typed_results, &typed_results_second] {
+        let summary = discovery
+            .value
+            .certify_plant_results(&manifest, &typed_evidence, output)
+            .unwrap();
+        assert_eq!(summary.artifact_version, 1);
+        assert_eq!(summary.members, Some(2));
+        assert_eq!(summary.mtbdd_nodes, None);
+        assert_eq!(summary.mtbdd_terminals, None);
+        assert_eq!(
+            summary.artifact_bytes,
+            fs::metadata(output).unwrap().len() as usize
+        );
+    }
+
+    let typed_verified = discovery
+        .value
+        .verify_set_observed(
+            &typed_evidence,
+            &[
+                (&manifest, &typed_results),
+                (&manifest, &typed_results_second),
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        typed_verified.metrics.operation,
+        OperationKind::VerifyBoundPlantResultSet
+    );
+    assert_eq!(typed_verified.metrics.status, InvocationStatus::Success);
+    assert_eq!(typed_verified.value.controller_admissions, 1);
+    assert_eq!(typed_verified.value.batches.len(), 2);
+    assert_eq!(typed_verified.value.members, 4);
+    assert_eq!(typed_verified.value.safe, 2);
+    assert_eq!(typed_verified.value.unsafe_count, 2);
+
+    let empty = discovery
+        .value
+        .verify_set_observed(&typed_evidence, &[])
+        .unwrap_err();
+    assert!(matches!(*empty.error, PredicateApiError::InvalidPolicy(_)));
+    assert_eq!(
+        empty.metrics.status,
+        InvocationStatus::Failed(FailureClass::Policy)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!(
+        "gcc-hostile-split-client-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let executable = root.join("hostile-helper");
+    let maximum = usize::MAX;
+    let script = format!(
+        "#!/bin/sh\ncase \"$1\" in\ncontroller-split-evidence-cli-version)\nprintf '%s\\n' 'controller_split_evidence_cli_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_batches=64 admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed'\n;;\nverify-bound-plant-result-set-v1)\nprintf '%s\\n' 'controller-split-batch index=0 status=VERIFIED members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=1 admission_micros=1 elapsed_micros=1'\n;;\n*) exit 2;;\nesac\n"
+    );
+    fs::write(&executable, script).unwrap();
+    let mut permissions = fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&executable, permissions).unwrap();
+
+    let tool = ControllerSplitEvidenceTool::discover(&executable).unwrap();
+    let failure = tool
+        .verify_set_observed(
+            Path::new("evidence"),
+            &[(Path::new("manifest"), Path::new("results"))],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *failure.error,
+        PredicateApiError::InvalidResponse(_)
+    ));
+    assert_eq!(
+        failure.metrics.status,
+        InvocationStatus::Failed(FailureClass::Response)
+    );
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

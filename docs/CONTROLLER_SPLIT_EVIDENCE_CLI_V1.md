@@ -75,5 +75,38 @@ drift, integrity failure, or semantic mismatch returns no verified aggregate.
 - Canonical decoders reject truncation, mutation, malformed counts, and trailing
   bytes.
 - The set command accepts at most 64 manifest/result pairs.
-- The CLI applies static compiled limits. Explicit caller-selected resource
-  policy files and the typed bounded-process wrapper remain follow-up gates.
+- `ControllerSplitEvidenceTool` is the typed Rust process client. It discovers
+  and enforces the versioned contract, invokes the executable without a shell,
+  applies time, output, file, and supported-platform memory bounds, and reports
+  stable invocation metrics.
+- Typed response parsing requires canonical fields and versions, checks every
+  batch index and answer count, uses checked aggregate arithmetic, reconciles
+  member, answer, reachable-state, and transition totals, and requires exactly
+  one controller admission.
+- The CLI applies static compiled artifact limits. Explicit caller-selected
+  resource policy files remain a follow-up gate.
+
+## Typed Rust client
+
+```rust,no_run
+use guarded_continuation_checker::ControllerSplitEvidenceTool;
+use std::path::Path;
+
+let tool = ControllerSplitEvidenceTool::discover(
+    "guarded-continuation-checker",
+)?;
+let evidence = Path::new("controller.controller-evidence");
+let manifest = Path::new("controller-plant-manifest.txt");
+let results = Path::new("batch.plant-results");
+
+tool.certify_controller_evidence(manifest, evidence)?;
+tool.certify_plant_results(manifest, evidence, results)?;
+let summary = tool.verify_set(evidence, &[(manifest, results)])?;
+assert_eq!(summary.controller_admissions, 1);
+# Ok::<(), guarded_continuation_checker::PredicateApiError>(())
+```
+
+The client rejects empty sets and requests above the discovered batch limit
+before process creation. A non-zero process exit, timeout, output overflow,
+non-canonical response, inconsistent aggregate, or changed contract produces no
+typed verified summary.

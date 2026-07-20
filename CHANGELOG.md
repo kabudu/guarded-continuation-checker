@@ -110,7 +110,13 @@
   replacement artifact SHA-256 values, structural byte accounting, ten SAFE
   results, unchanged-member identity, and all three independently checked
   replacement-witness hashes. Timing observations differ by host and are not
-  represented as reproducible measurements.
+  represented as reproducible measurements. Add the typed shell-free
+  `ControllerSplitEvidenceTool` with strict contract discovery, bounded process
+  execution, deterministic artifact-production summaries, one-admission
+  multi-batch verification, stable invocation metrics, checked aggregation,
+  and complete cross-row reconciliation. Reject empty or excessive sets before
+  invocation and reject malformed, inconsistent, overflowing, or changed
+  helper responses without returning a verified summary.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

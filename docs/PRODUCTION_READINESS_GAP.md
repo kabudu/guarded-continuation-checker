@@ -283,10 +283,11 @@ Every ordered obligation field is caller-bound, and stale evidence, reordered
 or duplicated obligations, mutation, and truncation fail closed. The local
 five-plant fixture shows a 49.75% marginal byte reduction against the faithful
 composed-witness route, but an 8.71 times larger initial package and a 58-change
-byte break-even. A stable file CLI and typed process client, hosted
-cross-platform evidence, compatibility
-fixtures, peak-RSS evidence, and external acceptance remain open. This adds a
-candidate product mechanism and closes no production-readiness row.
+byte break-even. Stable file and typed bounded-process interfaces plus hosted
+cross-platform artifact reproduction are implemented. Compatibility fixtures,
+peak-RSS evidence, caller-selected CLI policy files, and external acceptance
+remain open. This adds a candidate product mechanism and closes no
+production-readiness row.
 
 The split Rust API now preflights controller artifact bytes and embedded UNSAT
 proof bytes before admission, then independently preflights plant artifact
@@ -296,15 +297,18 @@ fail closed. This closes the in-process resource-governance mechanism only.
 The versioned file CLI now creates deterministic split artifacts and admits one
 controller proof for multiple manifest/result pairs in a single process. It
 reports per-batch verification time and one aggregate while failing closed on
-controller, boundary, obligation, integrity, and argument drift. Caller-selected
-CLI policy files, typed process containment, retained metrics aggregation,
-compatibility through a later tag, and cross-platform acceptance remain open.
+controller, boundary, obligation, integrity, and argument drift. The typed Rust
+client now applies bounded shell-free execution, strictly parses the discovered
+contract and result rows, reconciles all batch totals with checked arithmetic,
+and reports stable per-invocation metrics. Caller-selected CLI policy files,
+retained metrics aggregation, compatibility through a later tag, and hosted
+typed-client acceptance remain open.
 Hosted amd64 run 29773273695 now reproduces the split controller and replacement
 artifact hashes, structural byte accounting, independent composed-witness
 hashes, and all logical answers from arm64. This closes the mechanism's second
 architecture reproduction gate. Compatibility through a later tag, governed
-CLI policy files, typed process containment, and independent acceptance remain
-open.
+CLI policy files, hosted typed-client acceptance, and independent acceptance
+remain open.
 
 ## Post-production-release deliverables
 

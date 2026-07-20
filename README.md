@@ -47,8 +47,10 @@ The experimental
 proof-carrying controller artifact from replaceable plant-result batches. Its
 multi-batch verifier admits the controller proof once per process, checks every
 controller and obligation binding, and emits per-batch plus aggregate results.
-Caller-selected CLI policies, a typed bounded-process client, tagged
-compatibility, and independent acceptance remain open.
+Rust callers can use `ControllerSplitEvidenceTool` for strict capability
+discovery, shell-free bounded artifact production, one-process multi-batch
+verification, reconciled typed summaries, and invocation metrics. Caller-selected
+CLI policies, tagged compatibility, and independent acceptance remain open.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct
