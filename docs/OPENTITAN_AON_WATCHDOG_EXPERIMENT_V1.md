@@ -56,3 +56,13 @@ The next meaningful novelty test is composition: preserve a compact proof across
 multiple interacting dense predicates or separately supplied controller and
 plant contracts on public embedded or robotics designs, then compare equivalent
 evidence against maintained certifying systems.
+
+## Hosted reproduction
+
+[Hosted run 29787171907](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29787171907)
+passes on exact commit `6f0c4d4`. Ubuntu rebuilds the pinned Yosys revision,
+reproduces the source-bound BTOR2 models and all certificates byte for byte,
+executes the five hostile controls, and passes the maintained Bitwuzla and
+official BTOR2Tools baselines. The public Rust API test also passes on Ubuntu,
+macOS, and Windows. The dependency audit and reproducible Linux bundle pass in
+the same run.

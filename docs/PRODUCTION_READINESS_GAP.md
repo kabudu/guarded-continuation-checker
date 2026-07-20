@@ -361,6 +361,9 @@ SAFE, UNSAFE, and billion-frame SAFE certificates verify independently; and
 five hostile controls fail closed or route to exact fallback. The wrapper fixes
 one watchdog configuration and supplies reduced register types, so it does not
 close the real-product row or substitute for independent operator acceptance.
+Hosted run 29787171907 reproduces this complete path on exact commit `6f0c4d4`,
+including pinned Linux Yosys, maintained Bitwuzla, official BTOR2Tools, the
+three-platform Rust API matrix, dependency audit, and reproducible packaging.
 
 ## Post-production-release deliverables
 
