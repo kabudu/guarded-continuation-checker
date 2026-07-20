@@ -6,7 +6,8 @@
   `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the
   canonical plant manifest, enforce create-new output, source and query binding,
   bounded UNSAT-miter verification, deterministic bytes, typed observations,
-  and fail-closed mutation and drift handling.
+  and fail-closed mutation and drift handling. Discovery reports separate outer
+  equivalence-artifact and embedded UNSAT-proof byte limits.
   Retain a nine-case public self-service acceptance fixture covering exact
   SAFE/UNSAFE answers, shortest bad frames, proof verification, manifest drift,
   artifact mutation, and output collision.

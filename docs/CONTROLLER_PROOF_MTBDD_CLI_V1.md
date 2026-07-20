@@ -16,6 +16,10 @@ limit, `verification=unsat-miter`, `exhaustive_replay=no`, and
 `unsupported=fail-closed`. Unknown, missing, reordered, or changed fields are
 incompatible.
 
+The response distinguishes the 2 MiB outer equivalence-artifact limit from the
+1 MiB limit on each embedded raw UNSAT proof. Callers can therefore govern both
+resource boundaries without guessing what a single proof-size field means.
+
 ## Create and verify
 
 ```sh

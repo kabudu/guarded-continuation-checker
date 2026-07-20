@@ -378,7 +378,8 @@ pub struct ControllerProofMtbddCapabilities {
     pub manifest_version: u32,
     pub max_manifest_bytes: usize,
     pub max_artifact_bytes: usize,
-    pub max_proof_bytes: usize,
+    pub max_equivalence_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
     pub max_members: usize,
     pub max_state_bits: usize,
     pub max_inputs: usize,
@@ -2149,7 +2150,8 @@ fn parse_controller_proof_mtbdd_capabilities(
         "manifest_version",
         "max_manifest_bytes",
         "max_artifact_bytes",
-        "max_proof_bytes",
+        "max_equivalence_artifact_bytes",
+        "max_unsat_proof_bytes",
         "max_members",
         "max_state_bits",
         "max_inputs",
@@ -2171,7 +2173,7 @@ fn parse_controller_proof_mtbdd_capabilities(
         .zip(keys)
         .map(|(field, key)| token_value(field, key))
         .collect::<Result<Vec<_>, _>>()?;
-    if values[15] != "unsat-miter" || values[16] != "no" || values[17] != "fail-closed" {
+    if values[16] != "unsat-miter" || values[17] != "no" || values[18] != "fail-closed" {
         return Err(PredicateApiError::IncompatibleContract(
             "proof-carrying controller MTBDD verification contract changed".to_string(),
         ));
@@ -2186,7 +2188,7 @@ fn parse_controller_proof_mtbdd_capabilities(
             "proof-carrying controller MTBDD version tuple is unsupported".to_string(),
         ));
     }
-    let limits = values[5..15]
+    let limits = values[5..16]
         .iter()
         .enumerate()
         .map(|(index, value)| canonical_usize(value, keys[index + 5]))
@@ -2204,14 +2206,15 @@ fn parse_controller_proof_mtbdd_capabilities(
         manifest_version: versions[4],
         max_manifest_bytes: limits[0],
         max_artifact_bytes: limits[1],
-        max_proof_bytes: limits[2],
-        max_members: limits[3],
-        max_state_bits: limits[4],
-        max_inputs: limits[5],
-        max_outputs: limits[6],
-        max_nodes: limits[7],
-        max_terminals: limits[8],
-        max_horizon: limits[9],
+        max_equivalence_artifact_bytes: limits[2],
+        max_unsat_proof_bytes: limits[3],
+        max_members: limits[4],
+        max_state_bits: limits[5],
+        max_inputs: limits[6],
+        max_outputs: limits[7],
+        max_nodes: limits[8],
+        max_terminals: limits[9],
+        max_horizon: limits[10],
     })
 }
 
@@ -2692,14 +2695,19 @@ mod tests {
 
     #[test]
     fn controller_proof_mtbdd_capability_parser_is_strict() {
-        let canonical = "controller_proof_mtbdd_cli_version=1 mtbdd_version=1 equivalence_proof_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_proof_bytes=2097152 max_members=64 max_state_bits=6 max_inputs=12 max_outputs=8 max_nodes=512 max_terminals=1024 max_horizon=1024 verification=unsat-miter exhaustive_replay=no unsupported=fail-closed\n";
+        let canonical = "controller_proof_mtbdd_cli_version=1 mtbdd_version=1 equivalence_proof_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_state_bits=6 max_inputs=12 max_outputs=8 max_nodes=512 max_terminals=1024 max_horizon=1024 verification=unsat-miter exhaustive_replay=no unsupported=fail-closed\n";
         let parsed = parse_controller_proof_mtbdd_capabilities(canonical).unwrap();
         assert_eq!(parsed.equivalence_proof_version, 1);
-        assert_eq!(parsed.max_proof_bytes, 2_097_152);
+        assert_eq!(parsed.max_equivalence_artifact_bytes, 2_097_152);
+        assert_eq!(parsed.max_unsat_proof_bytes, 1_048_576);
         for hostile in [
             canonical.replace("verification=unsat-miter", "verification=trusted"),
             canonical.replace("exhaustive_replay=no", "exhaustive_replay=yes"),
-            canonical.replace("max_proof_bytes=2097152", "max_proof_bytes=0"),
+            canonical.replace(
+                "max_equivalence_artifact_bytes=2097152",
+                "max_equivalence_artifact_bytes=0",
+            ),
+            canonical.replace("max_unsat_proof_bytes=1048576", "max_unsat_proof_bytes=0"),
             canonical.replace("unsupported=fail-closed", "unsupported=best-effort"),
             canonical.replace('\n', "\r\n"),
         ] {

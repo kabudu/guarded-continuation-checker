@@ -25085,12 +25085,13 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "controller_proof_mtbdd_cli_version={CONTROLLER_PROOF_MTBDD_CLI_VERSION} mtbdd_version={} equivalence_proof_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_proof_bytes={} max_members={} max_state_bits={} max_inputs={} max_outputs={} max_nodes={} max_terminals={} max_horizon={} verification=unsat-miter exhaustive_replay=no unsupported=fail-closed",
+                "controller_proof_mtbdd_cli_version={CONTROLLER_PROOF_MTBDD_CLI_VERSION} mtbdd_version={} equivalence_proof_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_state_bits={} max_inputs={} max_outputs={} max_nodes={} max_terminals={} max_horizon={} verification=unsat-miter exhaustive_replay=no unsupported=fail-closed",
                 controller_mtbdd::CONTROLLER_MTBDD_VERSION,
                 guarded_continuation_checker::controller_mtbdd_proof::CONTROLLER_MTBDD_EQUIVALENCE_VERSION,
                 controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
                 guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
                 controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
                 controller_mtbdd::MAX_MTBDD_STATE_BITS,
                 controller_mtbdd::MAX_MTBDD_INPUTS,
