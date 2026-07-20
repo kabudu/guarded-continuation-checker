@@ -55,7 +55,7 @@ for checkout in certifaiger aiger cadical lrat_isa runlim; do
   verify_checkout "$checkout"
 done
 
-qualification_image=$(lock_value qualification_image)
+qualification_image=${QUALIFICATION_IMAGE:-$(lock_value qualification_image)}
 cp "$lock" "$output_dir/revisions.lock"
 sha256sum "$output_dir/revisions.lock" > "$output_dir/revisions.lock.sha256"
 

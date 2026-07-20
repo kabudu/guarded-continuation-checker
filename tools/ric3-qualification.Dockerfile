@@ -1,4 +1,5 @@
-FROM gcc-rust-1.97-bookworm:v1-arm64
+ARG QUALIFICATION_BASE=gcc-rust-1.97-bookworm:v1-arm64
+FROM ${QUALIFICATION_BASE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \

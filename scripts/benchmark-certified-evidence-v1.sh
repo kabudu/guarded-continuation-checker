@@ -12,6 +12,8 @@ trials=${TRIALS:-3}
 [[ $trials =~ ^[1-9][0-9]*$ && $trials -le 10 ]] || { echo "TRIALS must be in 1..=10" >&2; exit 2; }
 [[ ! -e "$output" ]] || { echo "refusing to overwrite $output" >&2; exit 2; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ric3_image=${RIC3_IMAGE:-gcc-ric3-qualification:v1-arm64}
+certifaiger_image=${CERTIFAIGER_IMAGE:-gcc-certifaiger-qualification:v1-arm64}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-certified-evidence.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 model_bytes=$(wc -c "$repo_root"/corpus/rtl/wmcontroller/certified-baseline-v1/property-*.aag | awk 'END {print $1}')
@@ -31,12 +33,12 @@ for trial in $(seq 1 "$trials"); do
   docker run --rm --network none \
     -v "$ric3_output:/tools:ro" -v "$certifaiger_output/bin:/cert:ro" \
     -v "$repo_root:/repo:ro" -v "$trial_dir:/out" \
-    gcc-ric3-qualification:v1-arm64 \
+    "$ric3_image" \
     /cert/runlim -p -r 300 --sample-rate=1000 -o /out/producer.runlim \
     /repo/scripts/certified-evidence-container-v1.sh produce
   docker run --rm --network none \
     -v "$certifaiger_output/bin:/cert:ro" -v "$repo_root:/repo:ro" \
-    -v "$trial_dir:/out" gcc-certifaiger-qualification:v1-arm64 \
+    -v "$trial_dir:/out" "$certifaiger_image" \
     /cert/runlim -p -r 300 --sample-rate=1000 -o /out/consumer.runlim \
     /repo/scripts/certified-evidence-container-v1.sh consume
   hashes=$(cd "$trial_dir" && sha256sum property-*.witness.aag | sed 's/  .*/ /')

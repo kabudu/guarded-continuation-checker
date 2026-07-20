@@ -10,6 +10,8 @@ certifaiger_output=$(cd "$2" && pwd)
 output=$3
 [[ ! -e "$output" ]] || { echo "refusing to overwrite $output" >&2; exit 2; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ric3_image=${RIC3_IMAGE:-gcc-ric3-qualification:v1-arm64}
+certifaiger_image=${CERTIFAIGER_IMAGE:-gcc-certifaiger-qualification:v1-arm64}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-certified-hostile.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 base="$scratch/base"
@@ -19,14 +21,14 @@ produce() {
   local dir=$1
   docker run --rm --network none \
     -v "$ric3_output:/tools:ro" -v "$certifaiger_output/bin:/cert:ro" \
-    -v "$repo_root:/repo:ro" -v "$dir:/out" gcc-ric3-qualification:v1-arm64 \
+    -v "$repo_root:/repo:ro" -v "$dir:/out" "$ric3_image" \
     /repo/scripts/certified-evidence-container-v1.sh produce >/dev/null 2>&1
 }
 consume() {
   local dir=$1
   docker run --rm --network none \
     -v "$certifaiger_output/bin:/cert:ro" -v "$repo_root:/repo:ro" \
-    -v "$dir:/out" gcc-certifaiger-qualification:v1-arm64 \
+    -v "$dir:/out" "$certifaiger_image" \
     /repo/scripts/certified-evidence-container-v1.sh consume >/dev/null 2>&1
 }
 record_rejection() {
@@ -76,7 +78,7 @@ cp "$repo_root/corpus/rtl/wmcontroller/certified-baseline-v1/property-11.aag" "$
 printf '\001' | dd of="$scratch/drifted.aag" bs=1 seek=40 conv=notrunc status=none
 if docker run --rm --network none \
   -v "$certifaiger_output/bin:/cert:ro" -v "$scratch:/hostile:ro" \
-  gcc-certifaiger-qualification:v1-arm64 \
+  "$certifaiger_image" \
   /cert/aigsim -c -m /hostile/drifted.aag /hostile/base/property-11.witness.aag \
   >/dev/null 2>&1; then
   printf '1,source-drift,false,accepted-hostile-input\n' >> "$output"

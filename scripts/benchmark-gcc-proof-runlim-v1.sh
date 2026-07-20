@@ -12,6 +12,7 @@ trials=${TRIALS:-3}
 [[ $trials =~ ^[1-9][0-9]*$ && $trials -le 10 ]] || { echo "TRIALS must be in 1..=10" >&2; exit 2; }
 [[ ! -e "$output" ]] || { echo "refusing to overwrite $output" >&2; exit 2; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+runtime_image=${GCC_RUNTIME_IMAGE:-rust@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-proof-runlim.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 binary="$gcc_output/guarded-continuation-checker"
@@ -33,7 +34,7 @@ for trial in $(seq 1 "$trials"); do
     docker run --rm --network none \
       -v "$gcc_output:/gcc:ro" -v "$certifaiger_output/bin:/cert:ro" \
       -v "$repo_root:/repo:ro" -v "$scratch:/out" \
-      rust@sha256:8fa55b2f3ddf97471ab6a767bfa3f37e6bad0986ba823e75fea57e2a2a5c3073 \
+      "$runtime_image" \
       /cert/runlim -p -r 300 --sample-rate=1000 \
       -o "/out/$operation-$trial.runlim" \
       /gcc/guarded-continuation-checker "${args[@]}" \

@@ -40,9 +40,10 @@ verify ric3_fvbench_commit examples/fvbench
 vendor_hash=$(cd "$vendor_dir" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
 [[ "$vendor_hash" == "$(value ric3_vendor_sha256)" ]]
 
+qualification_image=${QUALIFICATION_IMAGE:-gcc-ric3-qualification:v1-arm64}
 docker run --rm --network none \
   --volume "$source_dir:/source:ro" --volume "$vendor_dir:/vendor:ro" \
-  --volume "$output_dir:/out" gcc-ric3-qualification:v1-arm64 \
+  --volume "$output_dir:/out" "$qualification_image" \
   bash -euo pipefail -c '
     cp -a /source /tmp/ric3
     mkdir -p /tmp/ric3/.cargo

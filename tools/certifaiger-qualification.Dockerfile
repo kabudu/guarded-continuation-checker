@@ -1,4 +1,5 @@
-FROM gcc-ubuntu-24.04-base:v1-arm64
+ARG QUALIFICATION_BASE=gcc-ubuntu-24.04-base:v1-arm64
+FROM ${QUALIFICATION_BASE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
