@@ -175,6 +175,8 @@ pub enum OperationKind {
     VerifyBoundPlantResultSet,
     DiscoverControllerSplitResource,
     VerifyBoundPlantResultSetResources,
+    DiscoverControllerSplitObservability,
+    VerifyBoundPlantResultSetResourcesObserved,
 }
 
 impl OperationKind {
@@ -228,6 +230,10 @@ impl OperationKind {
             Self::VerifyBoundPlantResultSet => "verify_bound_plant_result_set",
             Self::DiscoverControllerSplitResource => "discover_controller_split_resource",
             Self::VerifyBoundPlantResultSetResources => "verify_bound_plant_result_set_resources",
+            Self::DiscoverControllerSplitObservability => "discover_controller_split_observability",
+            Self::VerifyBoundPlantResultSetResourcesObserved => {
+                "verify_bound_plant_result_set_resources_observed"
+            }
         }
     }
 }
@@ -728,6 +734,40 @@ pub struct ControllerSplitResourceSetSummary {
     pub admission_micros: usize,
     pub elapsed_micros: usize,
     pub batches: Vec<ControllerSplitResourceBatchSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitObservabilityCapabilities {
+    pub cli_version: u32,
+    pub phase_metrics_version: u32,
+    pub resource: ControllerSplitResourceCapabilities,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitPhaseMetrics {
+    pub version: u32,
+    pub policy_and_input_micros: u128,
+    pub controller_admission_micros: u128,
+    pub complete_set_preflight_micros: u128,
+    pub semantic_replay_micros: u128,
+    pub total_micros: u128,
+    pub controller_admissions: usize,
+    pub manifest_loads: usize,
+    pub plant_artifact_reads: usize,
+    pub resource_assessments: usize,
+    pub batch_verifications: usize,
+    pub buffered_result_rows: usize,
+    pub prepared_batches: usize,
+    pub prepared_members: usize,
+    pub controller_evidence_bytes: usize,
+    pub total_plant_artifact_bytes: usize,
+    pub total_transition_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitObservedSummary {
+    pub verification: ControllerSplitResourceSetSummary,
+    pub phases: ControllerSplitPhaseMetrics,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1807,6 +1847,120 @@ impl ControllerSplitResourceTool {
     }
 }
 
+/// Typed, shell-free client for governed split verification with phase metrics.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitObservabilityTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitObservabilityCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitObservabilityTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-observability-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitObservability,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_split_observability_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitObservabilityCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitObservedSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitObservedSummary>, PredicateOperationError> {
+        if batches.is_empty() || batches.len() > self.capabilities.resource.max_batches {
+            let error = PredicateApiError::InvalidPolicy(
+                "observed split-evidence batch count is outside discovered limits".to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResourcesObserved,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-observed-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResourcesObserved,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_observed_summary(output, batches.len(), &self.capabilities)
+            .map_err(classify_controller_split_resource_refusal)
+    }
+}
+
 /// Typed, shell-free client for statically routed controller/plant portfolio v1.
 #[derive(Clone, Debug)]
 pub struct ControllerPlantPortfolioTool {
@@ -2860,6 +3014,18 @@ fn canonical_u32(value: &str, field: &str) -> Result<u32, PredicateApiError> {
     u32::try_from(parsed).map_err(|_| {
         PredicateApiError::InvalidResponse(format!("{field} exceeds canonical u32 range"))
     })
+}
+
+fn canonical_u128(value: &str, field: &str) -> Result<u128, PredicateApiError> {
+    let parsed = value.parse::<u128>().map_err(|_| {
+        PredicateApiError::InvalidResponse(format!("{field} is not an unsigned integer"))
+    })?;
+    if parsed.to_string() != value {
+        return Err(PredicateApiError::InvalidResponse(format!(
+            "{field} is noncanonical"
+        )));
+    }
+    Ok(parsed)
 }
 
 fn token_value<'a>(token: &'a str, key: &str) -> Result<&'a str, PredicateApiError> {
@@ -4454,6 +4620,61 @@ fn parse_controller_split_resource_capabilities(
     })
 }
 
+fn parse_controller_split_observability_capabilities(
+    text: &str,
+) -> Result<ControllerSplitObservabilityCapabilities, PredicateApiError> {
+    if text.contains('\r') || !text.ends_with('\n') || text.lines().count() != 2 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split observability capability response is not canonical".to_string(),
+        ));
+    }
+    let lines = text.lines().collect::<Vec<_>>();
+    let resource = parse_controller_split_resource_capabilities(&format!("{}\n", lines[0]))?;
+    let fields = lines[1].split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_observability_cli_version",
+        "base_cli_version",
+        "phase_metrics_version",
+        "phases",
+        "counters",
+        "timing_calibration",
+        "partial_metrics_on_failure",
+        "result_on_refusal",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split observability capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[0], keys[0])?;
+    let base_cli_version = canonical_u32(values[1], keys[1])?;
+    let phase_metrics_version = canonical_u32(values[2], keys[2])?;
+    if cli_version != 1
+        || base_cli_version != resource.cli_version
+        || phase_metrics_version != 1
+        || values[3]
+            != "policy-and-input,controller-admission,complete-set-preflight,semantic-replay"
+        || values[4]
+            != "controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound"
+        || values[5..] != ["none", "none", "none", "fail-closed"]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split observability contract is unsupported".to_string(),
+        ));
+    }
+    Ok(ControllerSplitObservabilityCapabilities {
+        cli_version,
+        phase_metrics_version,
+        resource,
+    })
+}
+
 fn parse_controller_mtbdd_capabilities(
     line: &str,
 ) -> Result<ControllerMtbddCapabilities, PredicateApiError> {
@@ -5150,6 +5371,155 @@ fn parse_controller_split_resource_set_summary(
     }
 }
 
+fn parse_controller_split_observed_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitObservabilityCapabilities,
+) -> Result<Observed<ControllerSplitObservedSummary>, PredicateOperationError> {
+    let status = output.status;
+    let (stdout, mut invocation_metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitObservedSummary, PredicateApiError> {
+        if stdout.contains('\r')
+            || !stdout.ends_with('\n')
+            || stdout.lines().count() != expected_batches + 2
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split observed response line count is invalid".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let base_stdout = format!("{}\n", lines[..expected_batches + 1].join("\n"));
+        let base_output = ManagedOutput {
+            status,
+            stdout: base_stdout.into_bytes(),
+            stderr: Vec::new(),
+            metrics: invocation_metrics.clone(),
+        };
+        let verification = parse_controller_split_resource_set_summary(
+            base_output,
+            expected_batches,
+            &capabilities.resource,
+        )
+        .map_err(|failure| *failure.error)?
+        .value;
+
+        let fields = lines[expected_batches + 1].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-resource-observability",
+            "status",
+            "cli_version",
+            "phase_metrics_version",
+            "policy_and_input_micros",
+            "controller_admission_micros",
+            "complete_set_preflight_micros",
+            "semantic_replay_micros",
+            "total_micros",
+            "controller_admissions",
+            "manifest_loads",
+            "plant_artifact_reads",
+            "resource_assessments",
+            "batch_verifications",
+            "buffered_result_rows",
+            "prepared_batches",
+            "prepared_members",
+            "controller_evidence_bytes",
+            "total_plant_artifact_bytes",
+            "total_transition_evaluation_bound",
+            "timing_calibration",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split observed metrics fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "MEASURED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || canonical_u32(values[2], keys[3])? != capabilities.phase_metrics_version
+            || values[19] != "none"
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split observed metrics contract changed".to_string(),
+            ));
+        }
+        let timings = values[3..8]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_u128(value, keys[index + 4]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let counts = values[8..19]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 9]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let expected_manifest_loads = expected_batches
+            .checked_mul(2)
+            .and_then(|count| count.checked_add(1));
+        let expected_double_batches = expected_batches.checked_mul(2);
+        let expected_rows = expected_batches.checked_add(1);
+        let phase_sum = timings[..4]
+            .iter()
+            .try_fold(0u128, |total, value| total.checked_add(*value));
+        if phase_sum.is_none_or(|sum| sum > timings[4])
+            || u128::try_from(verification.elapsed_micros) != Ok(timings[4])
+            || counts[0] != 1
+            || Some(counts[1]) != expected_manifest_loads
+            || Some(counts[2]) != expected_double_batches
+            || Some(counts[3]) != expected_double_batches
+            || counts[4] != expected_batches
+            || Some(counts[5]) != expected_rows
+            || counts[6] != expected_batches
+            || counts[7] != verification.members
+            || counts[8] != verification.controller_evidence_bytes
+            || counts[9] != verification.total_plant_artifact_bytes
+            || counts[10] != verification.total_transition_evaluation_bound
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split observed metrics do not reconcile".to_string(),
+            ));
+        }
+        Ok(ControllerSplitObservedSummary {
+            verification,
+            phases: ControllerSplitPhaseMetrics {
+                version: capabilities.phase_metrics_version,
+                policy_and_input_micros: timings[0],
+                controller_admission_micros: timings[1],
+                complete_set_preflight_micros: timings[2],
+                semantic_replay_micros: timings[3],
+                total_micros: timings[4],
+                controller_admissions: counts[0],
+                manifest_loads: counts[1],
+                plant_artifact_reads: counts[2],
+                resource_assessments: counts[3],
+                batch_verifications: counts[4],
+                buffered_result_rows: counts[5],
+                prepared_batches: counts[6],
+                prepared_members: counts[7],
+                controller_evidence_bytes: counts[8],
+                total_plant_artifact_bytes: counts[9],
+                total_transition_evaluation_bound: counts[10],
+            },
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed {
+            value,
+            metrics: invocation_metrics,
+        }),
+        Err(error) => {
+            invocation_metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: invocation_metrics,
+            })
+        }
+    }
+}
+
 fn classify_controller_split_resource_refusal(
     mut failure: PredicateOperationError,
 ) -> PredicateOperationError {
@@ -5740,6 +6110,32 @@ mod tests {
             canonical.replace('\n', "\r\n"),
         ] {
             assert!(parse_controller_split_resource_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_split_observability_capability_parser_is_strict() {
+        let resource = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed";
+        let observability = "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let canonical = format!("{resource}\n{observability}\n");
+        let parsed = parse_controller_split_observability_capabilities(&canonical).unwrap();
+        assert_eq!(parsed.resource.cli_version, 1);
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.phase_metrics_version, 1);
+        for hostile in [
+            canonical.replace("phase_metrics_version=1", "phase_metrics_version=2"),
+            canonical.replace("semantic-replay", "trusted-replay"),
+            canonical.replace("manifest-loads", "manifest-hints"),
+            canonical.replace(
+                "partial_metrics_on_failure=none",
+                "partial_metrics_on_failure=yes",
+            ),
+            canonical.replace("timing_calibration=none", "timing_calibration=per-formula"),
+            canonical.replace('\n', "\r\n"),
+            format!("{resource}\n"),
+            format!("{observability}\n{resource}\n"),
+        ] {
+            assert!(parse_controller_split_observability_capabilities(&hostile).is_err());
         }
     }
 

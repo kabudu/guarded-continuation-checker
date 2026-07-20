@@ -122,6 +122,13 @@ strictly validates discovery and result contracts, applies bounded shell-free
 execution, converts known exit-code-3 reasons into typed `ResourceRefused`
 errors, and rejects inconsistent or overflowing helper summaries.
 
+The separate additive
+[observability v1 interface](CONTROLLER_SPLIT_OBSERVABILITY_V1.md) preserves
+these strict v1 rows and adds reconciled phase and structural work metrics only
+after a complete success. `ControllerSplitObservabilityTool` exposes the same
+contract to Rust callers. Refusals and failures emit no partial observed row or
+logical answer.
+
 ## Typed Rust client
 
 ```rust,no_run

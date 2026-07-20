@@ -7,8 +7,8 @@ use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason,
     ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
     ControllerProofMtbddResourceTool, ControllerProofMtbddTool, ControllerSplitEvidenceTool,
-    ControllerSplitResourceTool, FailureClass, InvocationStatus, OperationKind, PredicateApiError,
-    aggregate_invocation_metrics,
+    ControllerSplitObservabilityTool, ControllerSplitResourceTool, FailureClass, InvocationStatus,
+    OperationKind, PredicateApiError, aggregate_invocation_metrics,
 };
 use sha2::{Digest, Sha256};
 
@@ -172,6 +172,19 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     assert!(resource_discovery.starts_with("controller_split_resource_cli_version=1"));
     assert!(resource_discovery.contains("accounting=conservative-static-per-batch-and-total"));
     assert!(resource_discovery.ends_with("unsupported=fail-closed\n"));
+    let observability_discovery = Command::new(BINARY)
+        .arg("controller-split-observability-cli-version")
+        .output()
+        .unwrap();
+    assert!(observability_discovery.status.success());
+    let observability_discovery = String::from_utf8(observability_discovery.stdout).unwrap();
+    let observability_lines = observability_discovery.lines().collect::<Vec<_>>();
+    assert_eq!(observability_lines.len(), 2);
+    assert_eq!(observability_lines[0], resource_discovery.trim_end());
+    assert_eq!(
+        observability_lines[1],
+        "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    );
 
     let evidence_bytes = fs::metadata(&evidence).unwrap().len() as usize;
     let result_bytes = fs::metadata(&results).unwrap().len() as usize;
@@ -220,6 +233,101 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
             .unwrap()
     };
     let unsat_proof_bytes = governed_value("unsat_proof_bytes");
+
+    let observed_governed = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-observed-v1")
+        .arg(&evidence)
+        .arg(&resource_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results_second)
+        .output()
+        .unwrap();
+    assert!(
+        observed_governed.status.success(),
+        "{:?}",
+        observed_governed.stderr
+    );
+    let observed_governed = String::from_utf8(observed_governed.stdout).unwrap();
+    assert_eq!(observed_governed.lines().count(), 4);
+    let observed_line = observed_governed.lines().last().unwrap();
+    assert!(observed_line.starts_with(
+        "controller-split-resource-observability status=MEASURED cli_version=1 phase_metrics_version=1 "
+    ));
+    let observed_value = |key: &str| -> u128 {
+        observed_line
+            .split_whitespace()
+            .find_map(|field| field.strip_prefix(&format!("{key}=")))
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    let phase_sum = observed_value("policy_and_input_micros")
+        + observed_value("controller_admission_micros")
+        + observed_value("complete_set_preflight_micros")
+        + observed_value("semantic_replay_micros");
+    assert!(phase_sum <= observed_value("total_micros"));
+    assert_eq!(observed_value("controller_admissions"), 1);
+    assert_eq!(observed_value("manifest_loads"), 5);
+    assert_eq!(observed_value("plant_artifact_reads"), 4);
+    assert_eq!(observed_value("resource_assessments"), 4);
+    assert_eq!(observed_value("batch_verifications"), 2);
+    assert_eq!(observed_value("buffered_result_rows"), 3);
+    assert_eq!(observed_value("prepared_batches"), 2);
+    assert_eq!(observed_value("prepared_members"), 4);
+    assert_eq!(
+        observed_value("controller_evidence_bytes"),
+        evidence_bytes as u128
+    );
+    assert_eq!(
+        observed_value("total_plant_artifact_bytes"),
+        (result_bytes + result_second_bytes) as u128
+    );
+    assert_eq!(observed_value("total_transition_evaluation_bound"), 48);
+    assert!(observed_line.ends_with("timing_calibration=none"));
+
+    let observability_tool =
+        ControllerSplitObservabilityTool::discover_observed(BINARY, Default::default()).unwrap();
+    assert_eq!(
+        observability_tool.metrics.operation,
+        OperationKind::DiscoverControllerSplitObservability
+    );
+    assert_eq!(observability_tool.value.capabilities().cli_version, 1);
+    assert_eq!(
+        observability_tool
+            .value
+            .capabilities()
+            .phase_metrics_version,
+        1
+    );
+    assert_eq!(
+        observability_tool.value.capabilities().resource.max_batches,
+        64
+    );
+    let typed_observed = observability_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &resource_policy,
+            &[(&manifest, &results), (&manifest, &results_second)],
+        )
+        .unwrap();
+    assert_eq!(
+        typed_observed.metrics.operation,
+        OperationKind::VerifyBoundPlantResultSetResourcesObserved
+    );
+    assert_eq!(typed_observed.value.verification.members, 4);
+    assert_eq!(typed_observed.value.verification.safe, 2);
+    assert_eq!(typed_observed.value.verification.unsafe_count, 2);
+    assert_eq!(typed_observed.value.phases.controller_admissions, 1);
+    assert_eq!(typed_observed.value.phases.manifest_loads, 5);
+    assert_eq!(typed_observed.value.phases.plant_artifact_reads, 4);
+    assert_eq!(typed_observed.value.phases.resource_assessments, 4);
+    assert_eq!(typed_observed.value.phases.batch_verifications, 2);
+    assert_eq!(typed_observed.value.phases.buffered_result_rows, 3);
+    assert_eq!(typed_observed.value.phases.prepared_batches, 2);
+    assert_eq!(typed_observed.value.phases.prepared_members, 4);
 
     let resource_tool =
         ControllerSplitResourceTool::discover_observed(BINARY, Default::default()).unwrap();
@@ -323,6 +431,39 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
         "discover_controller_split_resource=1;verify_bound_plant_result_set_resources=2"
     ));
     assert!(aggregate_csv.ends_with(",resource_refusal=1"));
+    let observed_refusal = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-observed-v1")
+        .arg(&evidence)
+        .arg(&tight_controller_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .output()
+        .unwrap();
+    assert_eq!(observed_refusal.status.code(), Some(3));
+    assert!(observed_refusal.stdout.is_empty());
+    assert!(
+        String::from_utf8(observed_refusal.stderr)
+            .unwrap()
+            .contains("refusal=controller-artifact-bytes result=none")
+    );
+    let typed_observed_refusal = observability_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &tight_controller_policy,
+            &[(&manifest, &results)],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *typed_observed_refusal.error,
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::ControllerArtifactBytes
+        }
+    ));
+    assert_eq!(
+        typed_observed_refusal.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
 
     let tight_total_policy = root.join("tight-total-policy.txt");
     write_policy(
@@ -657,7 +798,7 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
     let executable = root.join("hostile-helper");
     let maximum = usize::MAX;
     let script = format!(
-        "#!/bin/sh\ncase \"$1\" in\ncontroller-split-evidence-cli-version)\nprintf '%s\\n' 'controller_split_evidence_cli_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_batches=64 admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed'\n;;\ncontroller-split-resource-cli-version)\nprintf '%s\\n' 'controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed'\n;;\nverify-bound-plant-result-set-v1)\nprintf '%s\\n' 'controller-split-batch index=0 status=VERIFIED members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=1 admission_micros=1 elapsed_micros=1'\n;;\nverify-bound-plant-result-set-with-resources-v1)\nprintf '%s\\n' 'controller-split-resource-batch index=0 status=VERIFIED policy_version=1 envelope_version=1 artifact_version=1 members={maximum} maximum_member_horizon=1 maximum_product_states=1 transition_evaluation_bound={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-resource-set status=VERIFIED cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=10 controller_mtbdd_bytes=1 equivalence_artifact_bytes=1 unsat_proof_bytes=1 total_plant_artifact_bytes=1 total_transition_evaluation_bound={maximum} admission_micros=1 elapsed_micros=1'\n;;\n*) exit 2;;\nesac\n"
+        "#!/bin/sh\ncase \"$1\" in\ncontroller-split-evidence-cli-version)\nprintf '%s\\n' 'controller_split_evidence_cli_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_batches=64 admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed'\n;;\ncontroller-split-resource-cli-version)\nprintf '%s\\n' 'controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed'\n;;\ncontroller-split-observability-cli-version)\nprintf '%s\\n' 'controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed'\nprintf '%s\\n' 'controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed'\n;;\nverify-bound-plant-result-set-v1)\nprintf '%s\\n' 'controller-split-batch index=0 status=VERIFIED members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=1 admission_micros=1 elapsed_micros=1'\n;;\nverify-bound-plant-result-set-with-resources-v1)\nprintf '%s\\n' 'controller-split-resource-batch index=0 status=VERIFIED policy_version=1 envelope_version=1 artifact_version=1 members={maximum} maximum_member_horizon=1 maximum_product_states=1 transition_evaluation_bound={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-resource-set status=VERIFIED cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_admissions=1 batches=1 members={maximum} safe={maximum} unsafe={maximum} reachable_product_states={maximum} explored_transitions={maximum} controller_evidence_bytes=10 controller_mtbdd_bytes=1 equivalence_artifact_bytes=1 unsat_proof_bytes=1 total_plant_artifact_bytes=1 total_transition_evaluation_bound={maximum} admission_micros=1 elapsed_micros=1'\n;;\nverify-bound-plant-result-set-with-resources-observed-v1)\nprintf '%s\\n' 'controller-split-resource-batch index=0 status=VERIFIED policy_version=1 envelope_version=1 artifact_version=1 members=1 maximum_member_horizon=1 maximum_product_states=1 transition_evaluation_bound=1 safe=1 unsafe=0 reachable_product_states=1 explored_transitions=1 artifact_bytes=1 verification_micros=1'\nprintf '%s\\n' 'controller-split-resource-set status=VERIFIED cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_admissions=1 batches=1 members=1 safe=1 unsafe=0 reachable_product_states=1 explored_transitions=1 controller_evidence_bytes=10 controller_mtbdd_bytes=1 equivalence_artifact_bytes=2 unsat_proof_bytes=1 total_plant_artifact_bytes=1 total_transition_evaluation_bound=1 admission_micros=0 elapsed_micros=1'\nprintf '%s\\n' 'controller-split-resource-observability status=MEASURED cli_version=1 phase_metrics_version=1 policy_and_input_micros=0 controller_admission_micros=0 complete_set_preflight_micros=0 semantic_replay_micros=0 total_micros=1 controller_admissions=1 manifest_loads=999 plant_artifact_reads=2 resource_assessments=2 batch_verifications=1 buffered_result_rows=2 prepared_batches=1 prepared_members=1 controller_evidence_bytes=10 total_plant_artifact_bytes=1 total_transition_evaluation_bound=1 timing_calibration=none'\n;;\n*) exit 2;;\nesac\n"
     );
     fs::write(&executable, script).unwrap();
     let mut permissions = fs::metadata(&executable).unwrap().permissions();
@@ -694,6 +835,23 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
     ));
     assert_eq!(
         resource_failure.metrics.status,
+        InvocationStatus::Failed(FailureClass::Response)
+    );
+
+    let observability_tool = ControllerSplitObservabilityTool::discover(&executable).unwrap();
+    let observability_failure = observability_tool
+        .verify_set_observed(
+            Path::new("evidence"),
+            Path::new("policy"),
+            &[(Path::new("manifest"), Path::new("results"))],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *observability_failure.error,
+        PredicateApiError::InvalidResponse(_)
+    ));
+    assert_eq!(
+        observability_failure.metrics.status,
         InvocationStatus::Failed(FailureClass::Response)
     );
 

@@ -69,12 +69,15 @@ handling, immutable upgrade and rollback procedures, and an executable split-v1
 baseline. The current candidate establishes the baseline only; cross-tag
 history and registry SemVer evidence remain open.
 The typed clients also expose a bounded
-[process-client observability aggregate](docs/PROCESS_CLIENT_OBSERVABILITY_V1.md).
+[process-client observability aggregate](docs/PROCESS_CLIENT_OBSERVABILITY_V1.md)
+and [governed split phase metrics](docs/CONTROLLER_SPLIT_OBSERVABILITY_V1.md).
 It preserves successful and failed jobs, checked timing and stream totals,
 containment coverage, operation counts, and failure-class counts in canonical
 CSV. A real governed split integration test retains discovery, verification,
-and resource refusal in one three-job aggregate. Internal verifier cache and
-allocation counters remain open.
+and resource refusal in one three-job aggregate. The additive observed split
+path reports reconciled phase durations and structural work counters only after
+a complete success. Internal verifier cache and allocation counters remain
+open.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct

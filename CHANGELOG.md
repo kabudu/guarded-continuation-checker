@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add an additive governed split observability contract without changing the
+  existing strict resource capability or result rows. Report four versioned
+  phase durations and eleven checked structural work counters only after a
+  complete success. Add a bounded shell-free Rust client that strictly parses
+  and reconciles every counter, rejects hostile or overflowing helper output,
+  and preserves typed refusals plus whole-process metrics without returning a
+  partial observed result.
 - Add the first Rust API slice for governed proof-carrying controller MTBDD
   verification. Bound the complete artifact, equivalence artifact, embedded
   UNSAT proof, members, horizons, product states, and transition evaluations

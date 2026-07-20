@@ -327,6 +327,13 @@ the complete process-resource lifecycle on Linux x86_64 with identical evidence
 bytes and answers. Compatibility through a later tag and independent acceptance
 remain open.
 
+The additive governed split observability contract now reports four versioned
+internal phase durations and eleven checked structural work counters after a
+complete success. Its typed client reconciles those counters with the strict
+base result, rejects hostile or overflowing summaries, and returns no partial
+measurement on refusal. Cache behavior, allocator peaks, CPU counters, and
+per-phase peak RSS remain open observability work.
+
 ## Post-production-release deliverables
 
 - Create a visually polished, accessible SVG architecture diagram after the

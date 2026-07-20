@@ -39,6 +39,8 @@ const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_PHASE_METRICS_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
@@ -126,6 +128,30 @@ struct ControllerSplitResourcePolicy {
     max_total_plant_artifact_bytes: usize,
     max_total_members: usize,
     max_total_transition_evaluations: usize,
+}
+
+fn controller_split_resource_capability_line() -> String {
+    format!(
+        "controller_split_resource_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} controller_envelope_version={} plant_envelope_version={} controller_artifact_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_policy_bytes={CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES} max_controller_artifact_bytes={} max_unsat_proof_bytes={} max_plant_artifact_bytes={} max_batches={} max_members_per_batch={} max_horizon={} max_product_states={} refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed",
+        controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION,
+        controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+        controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+        controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+        guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+        guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+        guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+    )
+}
+
+fn increment_controller_split_observation(counter: &mut usize, name: &str) -> Result<(), String> {
+    *counter = counter
+        .checked_add(1)
+        .ok_or_else(|| format!("controller split observability {name} count overflow"))?;
+    Ok(())
 }
 
 fn synthesis_memory_limit_kind() -> &'static str {
@@ -25844,19 +25870,16 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         .to_string(),
                 );
             }
+            println!("{}", controller_split_resource_capability_line());
+            Ok(true)
+        }
+        "controller-split-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker controller-split-observability-cli-version".to_string());
+            }
+            println!("{}", controller_split_resource_capability_line());
             println!(
-                "controller_split_resource_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} controller_envelope_version={} plant_envelope_version={} controller_artifact_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_policy_bytes={CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES} max_controller_artifact_bytes={} max_unsat_proof_bytes={} max_plant_artifact_bytes={} max_batches={} max_members_per_batch={} max_horizon={} max_product_states={} refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed",
-                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION,
-                controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
-                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
-                controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
-                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
-                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
-                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
-                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
-                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
-                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
-                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+                "controller_split_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} base_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
             );
             Ok(true)
         }
@@ -26068,11 +26091,23 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
-        "verify-bound-plant-result-set-with-resources-v1" => {
+        "verify-bound-plant-result-set-with-resources-v1"
+        | "verify-bound-plant-result-set-with-resources-observed-v1" => {
             if args.len() < 5 || !(args.len() - 3).is_multiple_of(2) {
-                return Err("usage: guarded-continuation-checker verify-bound-plant-result-set-with-resources-v1 INPUT.controller-evidence POLICY.txt MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]".to_string());
+                return Err(format!(
+                    "usage: guarded-continuation-checker {} INPUT.controller-evidence POLICY.txt MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]",
+                    args[0]
+                ));
             }
+            let emit_observability =
+                args[0] == "verify-bound-plant-result-set-with-resources-observed-v1";
             let started = Instant::now();
+            let mut manifest_loads = 0usize;
+            let mut plant_artifact_reads = 0usize;
+            let mut resource_assessments = 0usize;
+            let mut batch_verifications = 0usize;
+            let mut buffered_result_rows = 0usize;
+            let mut prepared_batch_count = 0usize;
             let policy = parse_controller_split_resource_policy(Path::new(&args[2]))?;
             let batch_count = (args.len() - 3) / 2;
             if batch_count > policy.max_batches {
@@ -26091,6 +26126,8 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     controller_mtbdd::MAX_MTBDD_INPUTS,
                     controller_mtbdd::MAX_MTBDD_OUTPUTS,
                 )?;
+            increment_controller_split_observation(&mut manifest_loads, "manifest-load")?;
+            let policy_and_input_micros = started.elapsed().as_micros();
             let admission_started = Instant::now();
             let governed_admission =
                 controller_plant_artifact::admit_controller_proof_evidence_with_resources(
@@ -26111,6 +26148,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 results_sha256: [u8; 32],
             }
             let mut prepared_batches = Vec::with_capacity(batch_count);
+            let preflight_started = Instant::now();
             for (batch_index, pair) in args[3..].chunks_exact(2).enumerate() {
                 let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
                     load_controller_plant_manifest(
@@ -26118,6 +26156,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         controller_mtbdd::MAX_MTBDD_INPUTS,
                         controller_mtbdd::MAX_MTBDD_OUTPUTS,
                     )?;
+                increment_controller_split_observation(&mut manifest_loads, "manifest-load")?;
                 if controller != admitted_controller
                     || controller_digest != admitted_digest
                     || governed_admission.admitted.relevant_inputs() != manifest.relevant_inputs
@@ -26146,6 +26185,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
                     "bound plant results",
                 )?;
+                increment_controller_split_observation(&mut plant_artifact_reads, "artifact-read")?;
                 let resources = controller_plant_artifact::assess_bound_plant_results_resources(
                     &controller,
                     &inputs,
@@ -26153,6 +26193,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     policy.plant,
                 )
                 .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+                increment_controller_split_observation(
+                    &mut resource_assessments,
+                    "resource-assessment",
+                )?;
                 total_plant_artifact_bytes = total_plant_artifact_bytes
                     .checked_add(resources.artifact_bytes)
                     .ok_or_else(|| {
@@ -26197,12 +26241,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     resources,
                     results_sha256: Sha256::digest(&encoded).into(),
                 });
+                increment_controller_split_observation(
+                    &mut prepared_batch_count,
+                    "prepared-batch",
+                )?;
             }
+            let complete_set_preflight_micros = preflight_started.elapsed().as_micros();
             let mut total_safe = 0usize;
             let mut total_unsafe = 0usize;
             let mut total_reachable = 0usize;
             let mut total_explored = 0usize;
             let mut verified_batches = Vec::with_capacity(batch_count);
+            let replay_started = Instant::now();
             for (batch_index, (pair, prepared)) in
                 args[3..].chunks_exact(2).zip(&prepared_batches).enumerate()
             {
@@ -26212,6 +26262,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         controller_mtbdd::MAX_MTBDD_INPUTS,
                         controller_mtbdd::MAX_MTBDD_OUTPUTS,
                     )?;
+                increment_controller_split_observation(&mut manifest_loads, "manifest-load")?;
                 if manifest != prepared.manifest
                     || snapshot != prepared.snapshot
                     || controller != admitted_controller
@@ -26240,6 +26291,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
                     "bound plant results",
                 )?;
+                increment_controller_split_observation(&mut plant_artifact_reads, "artifact-read")?;
                 if <[u8; 32]>::from(Sha256::digest(&encoded)) != prepared.results_sha256 {
                     return Err(format!(
                         "controller split resource batch {batch_index} changed after preflight"
@@ -26252,6 +26304,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     policy.plant,
                 )
                 .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+                increment_controller_split_observation(
+                    &mut resource_assessments,
+                    "resource-assessment",
+                )?;
                 if resources != prepared.resources {
                     return Err(format!(
                         "controller split resource batch {batch_index} changed after preflight"
@@ -26265,6 +26321,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         &encoded,
                     )
                     .map_err(|error| error.to_string())?;
+                increment_controller_split_observation(
+                    &mut batch_verifications,
+                    "batch-verification",
+                )?;
                 let verification_micros = batch_started.elapsed().as_micros();
                 total_safe = total_safe
                     .checked_add(verification.safe)
@@ -26290,7 +26350,17 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     },
                     verification_micros,
                 ));
+                increment_controller_split_observation(
+                    &mut buffered_result_rows,
+                    "buffered-result-row",
+                )?;
             }
+            let semantic_replay_micros = replay_started.elapsed().as_micros();
+            let total_micros = started.elapsed().as_micros();
+            increment_controller_split_observation(
+                &mut buffered_result_rows,
+                "buffered-result-row",
+            )?;
             for (batch_index, governed, verification_micros) in &verified_batches {
                 println!(
                     "controller-split-resource-batch index={batch_index} status=VERIFIED policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} verification_micros={verification_micros}",
@@ -26315,8 +26385,14 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 governed_admission.resources.mtbdd_bytes,
                 governed_admission.resources.equivalence_artifact_bytes,
                 governed_admission.resources.unsat_proof_bytes,
-                started.elapsed().as_micros(),
+                total_micros,
             );
+            if emit_observability {
+                println!(
+                    "controller-split-resource-observability status=MEASURED cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} policy_and_input_micros={policy_and_input_micros} controller_admission_micros={admission_micros} complete_set_preflight_micros={complete_set_preflight_micros} semantic_replay_micros={semantic_replay_micros} total_micros={total_micros} controller_admissions=1 manifest_loads={manifest_loads} plant_artifact_reads={plant_artifact_reads} resource_assessments={resource_assessments} batch_verifications={batch_verifications} buffered_result_rows={buffered_result_rows} prepared_batches={prepared_batch_count} prepared_members={total_members} controller_evidence_bytes={} total_plant_artifact_bytes={total_plant_artifact_bytes} total_transition_evaluation_bound={total_transition_bound} timing_calibration=none",
+                    governed_admission.resources.artifact_bytes,
+                );
+            }
             Ok(true)
         }
         "controller-plant-portfolio-cli-version" => {
