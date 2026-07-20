@@ -37,6 +37,8 @@ pub const DIRECT_PLANT_ARTIFACT_VERSION: u32 = 1;
 const DIRECT_MAGIC: &[u8; 8] = b"GCCDPA01";
 pub const MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
 const PORTFOLIO_MAGIC: &[u8; 8] = b"GCCMPP01";
+pub const PROOF_MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
+const PROOF_PORTFOLIO_MAGIC: &[u8; 8] = b"GCCPGP01";
 pub const CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION: u32 = 1;
 pub const CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION: u32 = 1;
 
@@ -112,6 +114,34 @@ pub struct ControllerMtbddPlantPortfolioArtifact {
     pub relevant_inputs: Vec<usize>,
     pub observed_outputs: Vec<usize>,
     pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerProofMtbddPlantPortfolioBackend {
+    ProofMtbdd,
+    DirectExact,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPlantPortfolioArtifact {
+    pub version: u32,
+    pub backend: ControllerProofMtbddPlantPortfolioBackend,
+    pub reason: ControllerMtbddPlantSelectionReason,
+    pub relevant_inputs: Vec<usize>,
+    pub observed_outputs: Vec<usize>,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPlantPortfolioSummary {
+    pub backend: ControllerProofMtbddPlantPortfolioBackend,
+    pub reason: ControllerMtbddPlantSelectionReason,
+    pub members: Vec<ControllerPlantResult>,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub assignments_checked: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1483,6 +1513,194 @@ pub fn produce_controller_mtbdd_plant_portfolio(
     })
 }
 
+fn proof_portfolio_backend_tag(backend: ControllerProofMtbddPlantPortfolioBackend) -> u8 {
+    match backend {
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => 0,
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact => 1,
+    }
+}
+
+pub fn encode_controller_proof_mtbdd_plant_portfolio(
+    artifact: &ControllerProofMtbddPlantPortfolioArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    let route_is_valid = matches!(
+        (artifact.backend, artifact.reason),
+        (
+            ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd,
+            ControllerMtbddPlantSelectionReason::MtbddAdmitted
+        ) | (
+            ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+            ControllerMtbddPlantSelectionReason::BoundaryLimit
+                | ControllerMtbddPlantSelectionReason::TerminalLimit
+                | ControllerMtbddPlantSelectionReason::NodeLimit
+        )
+    );
+    if artifact.version != PROOF_MTBDD_PLANT_PORTFOLIO_VERSION
+        || !route_is_valid
+        || artifact.relevant_inputs.is_empty()
+        || artifact.observed_outputs.is_empty()
+        || artifact.payload.is_empty()
+    {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio dimensions are invalid",
+        ));
+    }
+    match artifact.backend {
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
+            decode_controller_proof_mtbdd_plant_artifact(&artifact.payload)?;
+        }
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact => {
+            decode_controller_direct_plant_artifact(&artifact.payload)?;
+        }
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(PROOF_PORTFOLIO_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.push(proof_portfolio_backend_tag(artifact.backend));
+    bytes.push(portfolio_reason_tag(artifact.reason));
+    put_vec(&mut bytes, &artifact.relevant_inputs)?;
+    put_vec(&mut bytes, &artifact.observed_outputs)?;
+    bytes.extend_from_slice(
+        &narrow(artifact.payload.len(), "proof portfolio payload length")?.to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.payload);
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio exceeds byte limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_controller_proof_mtbdd_plant_portfolio(
+    bytes: &[u8],
+) -> Result<ControllerProofMtbddPlantPortfolioArtifact, ControllerPlantArtifactError> {
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES || bytes.len() < 52 {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio size is invalid",
+        ));
+    }
+    let payload_len = bytes.len() - 32;
+    let (payload, integrity) = bytes.split_at(payload_len);
+    if Sha256::digest(payload).as_slice() != integrity {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio integrity mismatch",
+        ));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, PROOF_PORTFOLIO_MAGIC.len())? != PROOF_PORTFOLIO_MAGIC {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio magic mismatch",
+        ));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != PROOF_MTBDD_PLANT_PORTFOLIO_VERSION {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio version mismatch",
+        ));
+    }
+    let backend = match read_u8(payload, &mut cursor)? {
+        0 => ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd,
+        1 => ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+        _ => {
+            return Err(reject(
+                "proof-carrying controller MTBDD portfolio backend is invalid",
+            ));
+        }
+    };
+    let reason = match read_u8(payload, &mut cursor)? {
+        0 => ControllerMtbddPlantSelectionReason::MtbddAdmitted,
+        1 => ControllerMtbddPlantSelectionReason::BoundaryLimit,
+        2 => ControllerMtbddPlantSelectionReason::TerminalLimit,
+        3 => ControllerMtbddPlantSelectionReason::NodeLimit,
+        _ => {
+            return Err(reject(
+                "proof-carrying controller MTBDD portfolio reason is invalid",
+            ));
+        }
+    };
+    let relevant_inputs = read_vec(payload, &mut cursor)?;
+    let observed_outputs = read_vec(payload, &mut cursor)?;
+    let embedded_len = read_u32(payload, &mut cursor)? as usize;
+    let embedded = take(payload, &mut cursor, embedded_len)?.to_vec();
+    if cursor != payload.len() {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio has trailing bytes",
+        ));
+    }
+    let artifact = ControllerProofMtbddPlantPortfolioArtifact {
+        version,
+        backend,
+        reason,
+        relevant_inputs,
+        observed_outputs,
+        payload: embedded,
+    };
+    encode_controller_proof_mtbdd_plant_portfolio(&artifact)?;
+    Ok(artifact)
+}
+
+/// Produce a proof-carrying MTBDD portfolio when the exact MTBDD boundary is
+/// statically admitted. Only a narrow MTBDD admission failure selects direct
+/// exact fallback; proof production and encoding failures propagate.
+pub fn produce_controller_proof_mtbdd_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio member boundary mismatch",
+        ));
+    }
+    let (backend, reason, payload) = match produce_controller_mtbdd(
+        controller_model,
+        controller_source_sha256,
+        relevant_inputs,
+        observed_outputs,
+    ) {
+        Ok(mtbdd) => {
+            let artifact = produce_controller_proof_mtbdd_plant_artifact(
+                controller_model,
+                controller_source_sha256,
+                &mtbdd,
+                members,
+            )?;
+            (
+                ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd,
+                ControllerMtbddPlantSelectionReason::MtbddAdmitted,
+                encode_controller_proof_mtbdd_plant_artifact(&artifact)?,
+            )
+        }
+        Err(error) => {
+            let failure = error
+                .admission_failure()
+                .ok_or_else(|| reject(error.to_string()))?;
+            let artifact = produce_controller_direct_plant_artifact(
+                controller_model,
+                controller_source_sha256,
+                members,
+            )?;
+            (
+                ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+                portfolio_reason_from_failure(failure),
+                encode_controller_direct_plant_artifact(&artifact)?,
+            )
+        }
+    };
+    encode_controller_proof_mtbdd_plant_portfolio(&ControllerProofMtbddPlantPortfolioArtifact {
+        version: PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+        backend,
+        reason,
+        relevant_inputs: relevant_inputs.to_vec(),
+        observed_outputs: observed_outputs.to_vec(),
+        payload,
+    })
+}
+
 fn portfolio_boundary_matches_members(
     relevant_inputs: &[usize],
     observed_outputs: &[usize],
@@ -1863,5 +2081,110 @@ pub fn verify_controller_mtbdd_plant_portfolio(
         unsafe_count,
         reachable_product_states,
         explored_transitions,
+    })
+}
+
+pub fn verify_controller_proof_mtbdd_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+) -> Result<ControllerProofMtbddPlantPortfolioSummary, ControllerPlantArtifactError> {
+    let artifact = decode_controller_proof_mtbdd_plant_portfolio(bytes)?;
+    if artifact.relevant_inputs != relevant_inputs || artifact.observed_outputs != observed_outputs
+    {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio boundary mismatch",
+        ));
+    }
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio member boundary mismatch",
+        ));
+    }
+    let plants = members
+        .iter()
+        .map(|member| (member.plant, member.plant_source_sha256))
+        .collect::<Vec<_>>();
+    let (results, safe, unsafe_count, reachable, explored, assignments_checked) =
+        match artifact.backend {
+            ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
+                let outer = decode_controller_proof_mtbdd_plant_artifact(&artifact.payload)?;
+                let inner = decode_controller_mtbdd_plant_artifact(&outer.controller_mtbdd_plant)?;
+                if !portfolio_members_match(&inner.members, members) {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio member mismatch",
+                    ));
+                }
+                let summary = verify_controller_proof_mtbdd_plant_artifact(
+                    controller_model,
+                    controller_source_sha256,
+                    &plants,
+                    &artifact.payload,
+                )?;
+                (
+                    summary.members,
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                    summary.assignments_checked,
+                )
+            }
+            ControllerProofMtbddPlantPortfolioBackend::DirectExact => {
+                let expected_reason = match produce_controller_mtbdd(
+                    controller_model,
+                    controller_source_sha256,
+                    relevant_inputs,
+                    observed_outputs,
+                ) {
+                    Ok(_) => {
+                        return Err(reject(
+                            "proof-carrying controller MTBDD portfolio downgrade detected",
+                        ));
+                    }
+                    Err(error) => error
+                        .admission_failure()
+                        .map(portfolio_reason_from_failure)
+                        .ok_or_else(|| reject(error.to_string()))?,
+                };
+                if artifact.reason != expected_reason {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio reason mismatch",
+                    ));
+                }
+                let decoded = decode_controller_direct_plant_artifact(&artifact.payload)?;
+                if !portfolio_members_match(&decoded.members, members) {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio member mismatch",
+                    ));
+                }
+                let summary = verify_controller_direct_plant_artifact(
+                    controller_model,
+                    controller_source_sha256,
+                    &plants,
+                    &artifact.payload,
+                )?;
+                (
+                    summary.members,
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                    0,
+                )
+            }
+        };
+    Ok(ControllerProofMtbddPlantPortfolioSummary {
+        backend: artifact.backend,
+        reason: artifact.reason,
+        members: results,
+        safe,
+        unsafe_count,
+        reachable_product_states: reachable,
+        explored_transitions: explored,
+        assignments_checked,
     })
 }

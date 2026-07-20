@@ -10,8 +10,11 @@
   controller assignments. Add canonical policy and capability contracts, a
   governed verification command, seven stable refusal reasons, exit code 3
   without a logical answer, strict response parsing, and a typed shell-free
-  process client. Portfolio, public-product, and compatibility gates remain
-  open.
+  process client. Add a canonical proof/direct portfolio whose fallback is
+  limited to the three structural MTBDD rejection classes. Reproduce the route
+  during verification, reject forced downgrade, preserve both answer classes,
+  and reject every retained outer-artifact mutation. Portfolio file/process,
+  public-product, and compatibility gates remain open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

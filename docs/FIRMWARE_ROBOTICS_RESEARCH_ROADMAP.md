@@ -154,7 +154,9 @@ The next proof-delivery cycle now has a first
 It separately preflights the equivalence artifact and embedded UNSAT proof,
 then preserves exact proof verification and plant composition under the
 existing conservative work envelope. Canonical self-service policy and typed
-process integration are now implemented. Static portfolio fallback,
+process integration are now implemented. The first library portfolio selects
+proof-carrying MTBDD or direct exact replay from the existing structural
+admission result and rejects forced downgrade. Its file/process integration,
 public-product acceptance, and compatibility history remain open.
 
 The order can change when evidence falsifies an assumption. Cycles are not

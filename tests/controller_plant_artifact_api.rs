@@ -6,17 +6,20 @@ use guarded_continuation_checker::controller_plant::{
 use guarded_continuation_checker::controller_plant_artifact::{
     ControllerMtbddPlantPortfolioArtifact, ControllerMtbddPlantPortfolioBackend,
     ControllerMtbddPlantSelectionReason, ControllerPlantArtifactInput,
-    ControllerPlantResourceEnvelope, ControllerProofMtbddResourceEnvelope,
+    ControllerPlantResourceEnvelope, ControllerProofMtbddPlantPortfolioArtifact,
+    ControllerProofMtbddPlantPortfolioBackend, ControllerProofMtbddResourceEnvelope,
     assess_controller_proof_mtbdd_plant_resources, decode_controller_direct_plant_artifact,
     decode_controller_mtbdd_plant_portfolio, decode_controller_plant_artifact,
-    decode_controller_proof_mtbdd_plant_artifact, encode_controller_direct_plant_artifact,
-    encode_controller_mtbdd_plant_portfolio, encode_controller_plant_artifact,
-    encode_controller_proof_mtbdd_plant_artifact, produce_controller_direct_plant_artifact,
+    decode_controller_proof_mtbdd_plant_artifact, decode_controller_proof_mtbdd_plant_portfolio,
+    encode_controller_direct_plant_artifact, encode_controller_mtbdd_plant_portfolio,
+    encode_controller_plant_artifact, encode_controller_proof_mtbdd_plant_artifact,
+    encode_controller_proof_mtbdd_plant_portfolio, produce_controller_direct_plant_artifact,
     produce_controller_mtbdd_plant_portfolio, produce_controller_plant_artifact,
-    produce_controller_proof_mtbdd_plant_artifact, verify_controller_direct_plant_artifact,
-    verify_controller_mtbdd_plant_portfolio, verify_controller_plant_artifact,
-    verify_controller_proof_mtbdd_plant_artifact,
+    produce_controller_proof_mtbdd_plant_artifact, produce_controller_proof_mtbdd_plant_portfolio,
+    verify_controller_direct_plant_artifact, verify_controller_mtbdd_plant_portfolio,
+    verify_controller_plant_artifact, verify_controller_proof_mtbdd_plant_artifact,
     verify_controller_proof_mtbdd_plant_artifact_with_resources,
+    verify_controller_proof_mtbdd_plant_portfolio,
 };
 use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
 
@@ -316,6 +319,108 @@ fn proof_carrying_mtbdd_resources_bound_proof_and_composition_before_replay() {
             .0
             .contains("member mismatch")
     );
+}
+
+#[test]
+fn proof_carrying_portfolio_uses_proof_and_falls_back_only_on_static_rejection() {
+    let controller = controller();
+    let plant = plant();
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![0],
+        controller_action_outputs: vec![0],
+        plant_sensor_outputs: vec![0],
+        plant_action_inputs: vec![0],
+    };
+    let inputs = portfolio_inputs(&plant, &wiring);
+    let encoded = produce_controller_proof_mtbdd_plant_portfolio(
+        &controller,
+        [0xe0; 32],
+        &[0],
+        &[0],
+        &inputs,
+    )
+    .unwrap();
+    let decoded = decode_controller_proof_mtbdd_plant_portfolio(&encoded).unwrap();
+    assert_eq!(
+        decoded.backend,
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd
+    );
+    assert_eq!(
+        decoded.reason,
+        ControllerMtbddPlantSelectionReason::MtbddAdmitted
+    );
+    assert_eq!(
+        encode_controller_proof_mtbdd_plant_portfolio(&decoded).unwrap(),
+        encoded
+    );
+    let summary = verify_controller_proof_mtbdd_plant_portfolio(
+        &controller,
+        [0xe0; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &encoded,
+    )
+    .unwrap();
+    assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+    assert_eq!(summary.assignments_checked, 0);
+
+    let wide = wide_state_controller();
+    let fallback =
+        produce_controller_proof_mtbdd_plant_portfolio(&wide, [0xe1; 32], &[0], &[0], &inputs)
+            .unwrap();
+    let decoded_fallback = decode_controller_proof_mtbdd_plant_portfolio(&fallback).unwrap();
+    assert_eq!(
+        decoded_fallback.backend,
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact
+    );
+    assert_eq!(
+        decoded_fallback.reason,
+        ControllerMtbddPlantSelectionReason::BoundaryLimit
+    );
+    let fallback_summary = verify_controller_proof_mtbdd_plant_portfolio(
+        &wide,
+        [0xe1; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &fallback,
+    )
+    .unwrap();
+    assert_eq!(
+        (fallback_summary.safe, fallback_summary.unsafe_count),
+        (1, 1)
+    );
+
+    let forced = encode_controller_proof_mtbdd_plant_portfolio(
+        &ControllerProofMtbddPlantPortfolioArtifact {
+            version: decoded.version,
+            backend: ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+            reason: ControllerMtbddPlantSelectionReason::BoundaryLimit,
+            relevant_inputs: vec![0],
+            observed_outputs: vec![0],
+            payload: decoded_fallback.payload,
+        },
+    )
+    .unwrap();
+    assert!(
+        verify_controller_proof_mtbdd_plant_portfolio(
+            &controller,
+            [0xe0; 32],
+            &[0],
+            &[0],
+            &inputs,
+            &forced,
+        )
+        .unwrap_err()
+        .0
+        .contains("downgrade detected")
+    );
+    for index in 0..encoded.len() {
+        let mut mutated = encoded.clone();
+        mutated[index] ^= 1;
+        assert!(decode_controller_proof_mtbdd_plant_portfolio(&mutated).is_err());
+    }
 }
 
 #[test]

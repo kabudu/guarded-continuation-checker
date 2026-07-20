@@ -69,7 +69,9 @@ extends the Rust resource boundary to the equivalence artifact and embedded
 UNSAT proof while preserving zero exhaustive controller assignments. A
 canonical policy CLI and typed bounded process client expose the same contract
 with seven stable refusal reasons and no answer on refusal. Portfolio routing
-and public-product gates remain open.
+now has a first Rust API that selects proof-carrying MTBDD only after static
+admission and otherwise preserves the exact direct query. File/process
+portfolio integration and public-product gates remain open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

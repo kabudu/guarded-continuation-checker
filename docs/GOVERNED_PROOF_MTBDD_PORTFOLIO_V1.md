@@ -1,8 +1,9 @@
 # Governed proof-carrying MTBDD portfolio v1
 
-Status: experimental Rust API, canonical file policy and CLI, and typed process
-client. Portfolio routing, public-product acceptance, and compatibility gates
-remain open.
+Status: experimental Rust API, canonical file policy and CLI, typed process
+client, and first library-level proof/direct portfolio. Portfolio file and
+process integration, public-product acceptance, and compatibility gates remain
+open.
 
 ## Problem
 
@@ -59,6 +60,21 @@ every aggregate and member field, and maps valid refusals to typed invocation
 metrics. CRLF, NUL, missing, trailing, noncanonical, zero, and over-limit policy
 controls fail closed.
 
+## Static proof/direct portfolio
+
+The `GCCPGP01` outer artifact records the selected backend, structural reason,
+controller boundary, and complete payload. Production selects the
+proof-carrying MTBDD backend only when MTBDD construction is admitted. The
+three existing structural rejections select the direct exact payload. Proof
+production, proof encoding, malformed-model, semantic, and checker failures
+propagate and never trigger fallback.
+
+Verification replays the same structural admission decision. A direct payload
+for an admitted MTBDD is rejected as a downgrade. Both routes bind the complete
+ordered member query and return identical SAFE and UNSAFE results. The proof
+route requires zero exhaustive controller assignments. Every mutation of the
+retained outer artifact fails closed.
+
 ## Predeclared gates
 
 | Gate | Required result |
@@ -68,7 +84,7 @@ controls fail closed.
 | Composition governance | Member, horizon, product-state, and transition limits reject before semantic replay |
 | Query binding | Ordered source digests, wiring, initial states, property, and horizon cannot drift |
 | Stable self-service API | Implemented experimentally with policy, capability, CLI response, typed process client, and refusal classes versioned |
-| Static portfolio | Unsupported proof production preserves the unchanged exact query without trial timing |
+| Static portfolio | Library mechanism implemented for narrow MTBDD structural rejection; governed file/process integration remains open |
 | Hostile input | Truncation, mutation, noncanonical policy, boundary drift, and oversize inputs fail closed |
 | Public product | The revision-pinned washing controller and physical-plant batch pass the governed proof path |
 | Strong baseline | Report proof checking against exhaustive equivalence and maintained proof consumers at identical scope |

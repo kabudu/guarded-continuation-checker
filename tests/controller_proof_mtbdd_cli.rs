@@ -154,7 +154,10 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     );
     let canonical_policy = fs::read_to_string(&policy).unwrap();
     for (name, body) in [
-        ("crlf-proof-resource.policy", canonical_policy.replace('\n', "\r\n")),
+        (
+            "crlf-proof-resource.policy",
+            canonical_policy.replace('\n', "\r\n"),
+        ),
         (
             "trailing-proof-resource.policy",
             canonical_policy.replace("status=complete\n", "status=complete\nextra=1\n"),
