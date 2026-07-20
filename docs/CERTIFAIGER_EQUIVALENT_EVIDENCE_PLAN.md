@@ -142,3 +142,23 @@ invalid witness was rejected. The upstream-test log digest is
 build-log digest is
 `3177300821a1e3e209330689fb4bc9926e7d40e78b13c779728b780a22949736`.
 These hashes qualify the toolchain only; they are not comparison measurements.
+
+The producer is rIC3 1.5.2 at commit
+`7149d568785b039134f0b2baa58358c8af63e70d`, with all 12 recursive submodule
+commits, its Cargo lockfile, and a checksum-locked vendor tree recorded in the
+qualification lock. It passed its test suite and release build without network
+access under Rust 1.97.0. The qualified arm64 image ID is
+`sha256:800edccd857d5a514f983b2292d29bd0db8e56eff6efcceccc7fc6a8ad92d92f` and
+the rIC3 binary digest is
+`3bddece2e0beeebb3b116158968f51ddf4345a8a346ba77679538729d30c11bb`.
+
+An end-to-end fixture then exercised both evidence classes with independently
+built consumers. rIC3 proved the infusion-pump safe controller and emitted a
+69-byte SAFE witness with digest
+`ff90aa1367dc428f85045ca519febdee4371ab63d729acfbed68f0b1f0f4f48e`;
+Certifaiger accepted it after CaDiCaL and `lrat_isa` checked all obligations.
+rIC3 also found the door-interlock regression at depth 1 and emitted a 15-byte
+UNSAFE witness with digest
+`b9216a7ad88c824155e6b7a865e3575a3b608e928c4963dd2efeb02c985d12cc`;
+`aigsim -c -m` replayed it successfully. These are qualification fixtures, not
+the predeclared six-property comparison.
