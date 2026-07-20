@@ -16,6 +16,7 @@ pub mod btor2_search;
 pub mod controller_mtbdd;
 pub mod controller_mtbdd_proof;
 pub mod controller_plant;
+pub mod controller_plant_aiger;
 pub mod controller_plant_artifact;
 pub mod controller_transducer;
 pub mod dense_relation;

@@ -216,6 +216,14 @@ Equivalent-certificate evidence remains the next proof-profile gate. The
 competition-standard SAFE witness and UNSAFE trace checking before any portfolio
 or novelty conclusion.
 
+The local arm64 equivalent-certificate qualification now passes for the six
+frozen horizon-32 exports. Independent replay preserves the four shortest bad
+frames and two SAFE answers, rIC3 emits both evidence classes, Certifaiger
+accepts the SAFE witnesses, and `aigsim` accepts the UNSAFE traces. This closes
+the local semantic and tool-interface portions of the gate only. Comparative
+resources, hostile controls, deterministic clean-directory reproduction,
+hosted amd64 evidence, and integration policy remain open.
+
 ## Rules
 
 - No timing-based per-formula calibration.

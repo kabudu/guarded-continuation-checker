@@ -49,8 +49,10 @@ Primary starting points:
    ordering, truncation and source-binding tampering.
 4. **Partially closed:** compare certificate generation/checking cost and trust
    base with the closest maintained certifying tools. The obligation-equivalent
-   CaDiCaL/DRAT-trim comparison is complete; whole-certificate comparison with
-   Certifaiger and a formally verified checker remain open.
+   CaDiCaL/DRAT-trim comparison is complete. The whole-certificate Certifaiger
+   interface and semantic-equivalence gates now pass locally, but comparative
+   resource, hostile-control, and hosted evidence remain open. Comparison with
+   a formally verified checker also remains open.
 5. Search papers, tools, patents and current implementations for the complete
    proposed combination, recording both confirming and disconfirming evidence.
 6. Obtain external expert review of the scoped claim.

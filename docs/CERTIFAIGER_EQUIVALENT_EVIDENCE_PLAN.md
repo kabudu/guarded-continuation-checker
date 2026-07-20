@@ -162,3 +162,23 @@ UNSAFE witness with digest
 `b9216a7ad88c824155e6b7a865e3575a3b608e928c4963dd2efeb02c985d12cc`;
 `aigsim -c -m` replayed it successfully. These are qualification fixtures, not
 the predeclared six-property comparison.
+
+## Frozen equivalent models and evidence
+
+The six bounded-equivalent exports are frozen under
+`corpus/rtl/wmcontroller/certified-baseline-v1`. Each combines the original
+controller and plant latches with four external disturbance inputs and a
+six-bit checked frame counter. Frames 0 through 32 preserve the selected bad
+output; frame 33 is absorbing and suppresses bad. A separate integration-test
+parser explored the emitted transition systems and reproduced the source
+results and shortest bad frames: UNSAFE at 4, 7, 15, and 15, then two SAFE
+properties whose reachable layers converge after completion.
+
+All six models are 2,488 bytes. Their canonical digests and source bindings are
+in `manifest-v1.txt`. The qualified rIC3 producer returned SAT, SAT, SAT, SAT,
+UNSAT, and UNSAT. The four traces were replayed with `aigsim -c -m`; the two
+SAFE witnesses were accepted by Certifaiger with CaDiCaL and `lrat_isa`. Total
+external evidence is 5,270 bytes: 51, 66, 176, 176, 2,412, and 2,389 bytes.
+This closes semantic equivalence and both evidence-class qualification gates.
+Resource comparison, deterministic clean-directory reproduction, hostile
+controls, and hosted amd64 replication remain open.

@@ -8,6 +8,11 @@
 - Pinned and offline-qualified rIC3 1.5.2 with its recursive source and Cargo
   dependency graph, then independently replayed one SAFE certificate with
   Certifaiger and one UNSAFE trace with `aigsim`.
+- Add bounded-equivalent AIGER export v1 for sampled controller and plant
+  queries. Freeze six horizon-32 washing-controller models only after an
+  independently implemented parser and reachable-state replay reproduced all
+  answers and shortest bad frames. Validate all four UNSAFE traces with
+  `aigsim` and both SAFE witnesses with Certifaiger, CaDiCaL, and `lrat_isa`.
 
 - Add proof-carrying controller MTBDD CLI v1 and the typed
   `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the
