@@ -50,11 +50,12 @@ Primary starting points:
 4. **Partially closed:** compare certificate generation/checking cost and trust
    base with the closest maintained certifying tools. The obligation-equivalent
    CaDiCaL/DRAT-trim comparison is complete. The whole-certificate Certifaiger
-   interface and semantic-equivalence gates now pass locally, but comparative
-   resource and hostile-control gates now also pass locally. The result is
-   negative on speed, size, and packaging, with a provisional low-memory GCC
-   advantage. Hosted evidence and comparison with a formally verified checker
-   remain open.
+   interface, semantic-equivalence, resource, hostile-control, and hosted
+   replication gates pass on the frozen corpus. The result is negative on
+   speed, size, and packaging. A low-memory GCC verifier profile reproduces on
+   arm64 and amd64, and both evidence paths reproduce byte-identical artifacts
+   across architectures. Comparison with a formally verified checker remains
+   open.
 5. Search papers, tools, patents and current implementations for the complete
    proposed combination, recording both confirming and disconfirming evidence.
 6. Obtain external expert review of the scoped claim.

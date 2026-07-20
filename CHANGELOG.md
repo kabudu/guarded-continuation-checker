@@ -20,6 +20,14 @@
   space. Reject seven hostile package controls. Record that plain IC3 and
   first-answer portfolio traces do not reliably preserve shortest bad frames;
   use one static BMC/IC3 minimality race for every external formula.
+- Reproduce the Certifaiger-equivalent comparison on hosted Linux amd64 from
+  clean pinned sources. Standard evidence remains 48.97 times smaller, is
+  13.00 times faster to produce and 2.21 times faster to check. GCC retains a
+  40.0% producer-space and 16.43-times verifier-space advantage. Retain exact
+  per-property sizes and digests, all seven hostile-control results, tool and
+  image provenance, and byte-identical external witnesses and GCC proof across
+  arm64 and amd64. Add no automatic portfolio route from this narrow memory
+  result.
 
 - Add proof-carrying controller MTBDD CLI v1 and the typed
   `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the

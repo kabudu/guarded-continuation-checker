@@ -219,15 +219,16 @@ or novelty conclusion.
 The local arm64 equivalent-certificate qualification now passes for the six
 frozen horizon-32 exports. Independent replay preserves the four shortest bad
 frames and two SAFE answers, rIC3 emits both evidence classes, Certifaiger
-accepts the SAFE witnesses, and `aigsim` accepts the UNSAFE traces. This closes
-the local semantic and tool-interface portions of the gate only. Comparative
-resources, hostile controls, deterministic clean-directory reproduction,
-hosted amd64 evidence and integration policy remain open. The completed local
-comparison is negative on GCC runtime, evidence size, and executable footprint,
-but positive on producer and verifier memory. Seven external-package hostile
-controls pass only after adding explicit shortest-frame binding to the standard
-witness checks. This is evidence for a narrow low-memory consumer profile, not
-for broad production superiority.
+accepts the SAFE witnesses, and `aigsim` accepts the UNSAFE traces. Hosted
+amd64 qualification now reproduces the semantic results, all seven hostile
+controls, all six external witness digests, and GCC's exact batch-proof digest.
+The comparison is negative on GCC runtime, evidence size, and executable
+footprint on both hosts, but positive on producer and verifier memory. The
+amd64 verifier uses 7 MB versus 115 MB for the standard consumer. This closes
+the comparison's hosted and deterministic-evidence gates. Integration policy,
+formally verified checker comparison, constrained-device acceptance, and
+external expert review remain open. This is evidence for a narrow low-memory
+consumer profile, not for broad production superiority.
 
 ## Rules
 

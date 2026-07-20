@@ -109,9 +109,10 @@ The immutable qualification inputs are recorded in
 clean checkouts at those exact commits, disables container networking, and
 passes every dependency as a local CMake source directory. This makes an
 unexpected fetch or moving-branch resolution fail instead of silently changing
-the comparison. The first cached base is the arm64 Ubuntu 24.04 image with
+the comparison. Both qualification hosts use the Ubuntu 24.04 base with
 digest `sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90`.
-An independently pinned amd64 image remains required for hosted Linux evidence.
+The hosted amd64 reconstruction passed from clean checkouts on 20 July 2026;
+its complete image and binary provenance is retained under `results`.
 
 The first offline arm64 compile reached all local dependency builds and then
 failed because `lrat_isa` invokes `clang++` directly. This exposed an undeclared
@@ -151,6 +152,10 @@ access under Rust 1.97.0. The qualified arm64 image ID is
 `sha256:800edccd857d5a514f983b2292d29bd0db8e56eff6efcceccc7fc6a8ad92d92f` and
 the rIC3 binary digest is
 `3bddece2e0beeebb3b116158968f51ddf4345a8a346ba77679538729d30c11bb`.
+The independently rebuilt amd64 image ID is
+`sha256:8afe7af40e7d5cdfb6fcb2d3f5c9f62f671006544d363d469f5205887a5198b8`
+and its rIC3 binary digest is
+`12a1351c482b448e9eb8c9522ff2de4f5c1eea22a900ef7fedaffc7bd0492a71`.
 
 An end-to-end fixture then exercised both evidence classes with independently
 built consumers. rIC3 proved the infusion-pump safe controller and emitted a
@@ -182,8 +187,8 @@ external evidence is 5,130 bytes: 51, 66, 106, 106, 2,412, and 2,389 bytes.
 The retained companion manifest binds those member sizes and digests to the
 frozen model manifest, qualification lock, producer binary, and consumer tree.
 This closes semantic equivalence and both evidence-class qualification gates.
-Resource comparison, deterministic clean-directory reproduction, hostile
-controls, and hosted amd64 replication remain open.
+The retained manifests now make clean-directory and cross-platform certificate
+identity directly auditable rather than reducing it to a Boolean result flag.
 
 A single-engine IC3 negative control produced valid but nonminimal traces for
 properties 13 and 14 at frame 29 instead of the independently established
@@ -219,11 +224,53 @@ smaller at the sampler's 1 MB resolution. GCC's unstripped 78,167,632-byte
 executable is also much larger
 than the 7,353,840-byte rIC3 binary or 10,280,960-byte Certifaiger tool
 directory. No speed, size, or packaging advantage may be claimed from this
-experiment. The memory result remains provisional until hosted amd64
-replication passes.
+experiment. Hosted amd64 replication is reported separately below.
 
 The local hostile suite accepts the unchanged six-member package and rejects
 witness mutation, truncation, cross-property substitution, member reordering,
 stale evidence, output collision, and model source drift. The frame-binding
 control is material: without it, `aigsim` correctly accepts some later valid
 traces that do not preserve GCC's shortest-trace result.
+
+## Hosted amd64 replication finding
+
+The exact-head [GitHub-hosted run 29741875233](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29741875233)
+rebuilt every pinned producer and consumer dependency, passed upstream tests
+without container networking, ran
+three native amd64 trials, and repeated all seven hostile controls. The standard
+path has median production time 0.17 seconds, consumer time 0.34 seconds,
+producer space 25 MB, consumer space 115 MB, and 5,130 bytes of evidence. GCC
+has median creation time 2.21 seconds, verification time 0.75 seconds, producer
+space 15 MB, verifier space 7 MB, and 251,221 bytes of evidence.
+
+The standard path is therefore 48.97 times smaller, 13.00 times faster to
+produce, 2.21 times faster to check, and its combined producer and consumer
+binary footprint is 3.96 times smaller than the GCC executable. GCC uses 40.0%
+less producer space and 16.43 times less verifier space. The low-memory direction
+replicates, but the runtime, transfer-size, and packaging results remain strong
+negatives.
+
+All six external witness sizes and SHA-256 digests are identical between the
+arm64 and amd64 manifests. GCC's batch proof digest is also identical between
+an exact-head macOS arm64 creation and the hosted Linux amd64 creation:
+`b80aff5de88bfe7e42dbe1b531ef9b48046a3c129c7b5dce243987423dfe655a`.
+Both independently verified the same 251,221-byte artifact. This closes hosted
+replication, hostile-control, and cross-platform deterministic-evidence gates
+for this bounded corpus.
+
+The durable records are the
+[standard-path measurements](../results/certified-evidence-equivalent-amd64-v1.csv),
+[standard-path manifest](../results/certified-evidence-equivalent-amd64-v1.manifest-v1.txt),
+[GCC measurements](../results/gcc-proof-equivalent-amd64-v1.csv),
+[GCC manifest](../results/gcc-proof-equivalent-amd64-v1.manifest-v1.txt),
+[hostile controls](../results/certified-evidence-hostile-amd64-v1.csv),
+[cross-platform proof record](../results/gcc-proof-cross-platform-v1.txt), and
+[hosted provenance](../results/certified-evidence-hosted-amd64-v1-provenance.txt).
+CI checks their agreement with `scripts/check-certified-evidence-retained-v1.sh`.
+
+The predeclared lower-resource criterion advances only a narrow constrained
+memory verifier profile. It does not support a general speed, size, packaging,
+or solver-performance claim, and it does not establish novelty. No automatic
+portfolio route is added from this result. A production route would first need
+an explicit resource policy and external acceptance on a genuinely constrained
+firmware or robotics workflow.

@@ -83,7 +83,10 @@ jobs:
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
-            scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
+            scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh \
+            scripts/check-certified-evidence-retained-v1.sh
+      - name: Check retained certified evidence
+        run: scripts/check-certified-evidence-retained-v1.sh
       - name: Exercise proof-carrying MTBDD plant benchmark
         run: |
           scripts/benchmark-controller-proof-mtbdd-plant.sh \
