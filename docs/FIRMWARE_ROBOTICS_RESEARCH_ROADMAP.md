@@ -158,8 +158,10 @@ process integration are now implemented. The first library portfolio selects
 proof-carrying MTBDD or direct exact replay from the existing structural
 admission result and rejects forced downgrade. Versioned portfolio file commands
 and a strict typed process client now cover the admitted proof route, governed
-proof refusal, and exact direct fallback. Public-product acceptance and
-compatibility history remain open.
+proof refusal, and exact direct fallback. A deterministic six-job acceptance pipeline
+now passes the public washing-controller proof route and exact fallback on macOS
+and Linux, including typed refusal and hostile-input controls. Hosted Linux
+reproduction and compatibility history remain open.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.

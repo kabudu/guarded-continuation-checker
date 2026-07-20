@@ -309,6 +309,13 @@ jobs:
             /tmp/controller-plant-resource.csv
           diff -u results/controller-plant-resource-acceptance-v1.csv \
             /tmp/controller-plant-resource.csv
+      - name: Reproduce governed proof portfolio acceptance
+        run: |
+          scripts/run-governed-proof-portfolio-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/governed-proof-portfolio.csv
+          diff -u results/governed-proof-mtbdd-portfolio-acceptance-linux-v1.csv \
+            /tmp/governed-proof-portfolio.csv
       - name: Exercise controller plant phase observability
         env:
           TRIALS: 1

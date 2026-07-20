@@ -97,6 +97,22 @@ every response field without invoking a shell. It reports bounded process
 metrics, converts exit-code-3 refusals into typed reasons, rejects inconsistent
 backend/reason pairs, and accepts the exact fallback route with zero proof bytes.
 
+## Public workflow acceptance
+
+`scripts/run-governed-proof-portfolio-acceptance.sh` exercises six release-build
+jobs through documented file interfaces. The positive jobs cover the pinned
+public washing controller with six stateful plant properties and a structurally
+rejected seven-latch controller routed to exact replay. They preserve 3 SAFE and
+5 UNSAFE results. The public proof route checks zero exhaustive assignments.
+
+The negative jobs require a typed proof-budget refusal, a typed transition-budget
+refusal, malformed-policy rejection, and corrupt-artifact rejection. Refusal and
+invalid-input rows carry no logical answer. The retained Linux result is
+[`results/governed-proof-mtbdd-portfolio-acceptance-linux-v1.csv`](../results/governed-proof-mtbdd-portfolio-acceptance-linux-v1.csv).
+CI regenerates it under a 64 MiB address-space ceiling and requires byte equality.
+The same six rows are byte-identical on macOS and Linux; timing is deliberately
+excluded from the acceptance record.
+
 ## Predeclared gates
 
 | Gate | Required result |
@@ -108,9 +124,9 @@ backend/reason pairs, and accepts the exact fallback route with zero proof bytes
 | Stable self-service API | Implemented experimentally with policy, capability, CLI response, typed process client, and refusal classes versioned |
 | Static portfolio | Library, file CLI, strict typed process client, and proof/direct acceptance implemented |
 | Hostile input | Truncation, mutation, noncanonical policy, boundary drift, and oversize inputs fail closed |
-| Public product | The revision-pinned washing controller and physical-plant batch pass the governed proof path |
+| Public product | Passed locally and in Linux for the revision-pinned washing controller and physical-plant batch |
 | Strong baseline | Report proof checking against exhaustive equivalence and maintained proof consumers at identical scope |
-| Resource evidence | Local and hosted Linux enforce process limits around every governed job |
+| Resource evidence | Local Linux enforces process limits around every governed job; hosted reproduction remains required |
 | Compatibility | Frozen v1 fixtures survive at least one subsequent release |
 | Independent acceptance | A non-repository-authored constrained workflow reports outcome and suitability |
 

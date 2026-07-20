@@ -20,7 +20,9 @@
   both answer classes and zero exhaustive assignments, and refuses a tight
   proof budget before proof checking. Add a strict typed portfolio process
   client and direct-route CLI acceptance with proof limits deliberately ignored
-  only when no proof is present. Public-product and compatibility gates remain
+  only when no proof is present. Add deterministic macOS/Linux acceptance for the six-property public
+  washing-controller proof route, exact fallback, two typed refusals, malformed
+  policy, and corrupt evidence. Hosted reproduction and compatibility remain
   open.
 
 - Add experimental controller/plant verification resource envelope v1 through

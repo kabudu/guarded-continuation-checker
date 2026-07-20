@@ -1,0 +1,8 @@
+schema_version,job,outcome,backend,reason,safe,unsafe,artifact_bytes,equivalence_bytes,unsat_proof_bytes,transition_bound,assignments_checked,exit_code,result,status
+1,public-washing-batch,verified,PROOF_MTBDD,MTBDD_ADMITTED,2,4,251288,242620,242496,12976128,0,0,answers-retained,accepted
+1,direct-fallback-batch,verified,DIRECT_EXACT,BOUNDARY_LIMIT,1,1,322,0,0,2560,0,0,answers-retained,accepted
+1,proof-budget-control,refused,NONE,unsat-proof-bytes,0,0,0,0,0,0,0,3,none,accepted
+1,transition-budget-control,refused,NONE,transition-evaluations,0,0,0,0,0,0,0,3,none,accepted
+1,malformed-policy-control,invalid,NONE,noncanonical-policy,0,0,0,0,0,0,0,2,none,accepted
+1,corrupt-evidence-control,invalid,NONE,integrity,0,0,0,0,0,0,0,2,none,accepted
+1,aggregate,summary,MIXED,none,3,5,251610,242620,242496,12978688,0,0,2-verified-2-refused-2-invalid,accepted
