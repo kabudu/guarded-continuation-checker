@@ -287,6 +287,9 @@ jobs:
           git -C /tmp/yosys-attestation fetch --depth 1 origin \
             b8e7da6f40ae8f552c116bf6c359b07c6533e159
           git -C /tmp/yosys-attestation checkout --detach FETCH_HEAD
+          git -C /tmp/yosys-attestation submodule update --init --depth 1 -- \
+            libs/cxxopts libs/fmt libs/tomlplusplus libs/boost_regex \
+            libs/slang frontends/slang/lib
           cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
             -DCMAKE_BUILD_TYPE=Release \
             -DYOSYS_WITHOUT_ABC=ON \
