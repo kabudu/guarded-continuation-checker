@@ -76,7 +76,14 @@
   Certifaiger plus `lrat_isa`. The composed total is 9,665 bytes versus 19,164
   bytes separately, a 49.57% reduction and a negative result for any broad GCC
   evidence-size claim. Incremental plant-replacement cost remains the active
-  candidate distinction.
+  candidate distinction. Add canonical split artifacts for content-addressed
+  controller MTBDD equivalence evidence and separately replaceable plant
+  results. A typed admitted-controller capability checks the controller proof
+  once per process and permits later plant batches to reuse that verified state;
+  the stateless convenience path remains fail closed. Bind plant results to the
+  exact controller-evidence SHA-256 and reject stale evidence, source drift,
+  cross-plant substitution, mutation, and truncation. Real-family marginal-cost
+  measurement and resource-envelope integration remain open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

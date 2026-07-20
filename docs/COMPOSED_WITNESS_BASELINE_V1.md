@@ -158,6 +158,14 @@ faithful baseline leaves the gate open and produces no positive result.
    a 49.57% reduction. This is disconfirming evidence against a broad GCC
    evidence-size advantage.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
+   In progress: GCC now has canonical controller-only evidence and a separate
+   plant-results artifact bound to the controller-evidence SHA-256. A typed
+   admitted-controller capability independently checks the controller proof
+   once and reuses the verified state for subsequent plant batches. The public
+   API rejects stale controller evidence, source drift, cross-plant
+   substitution, mutation, and truncation. The current test uses synthetic
+   models only; it is mechanism evidence, not the required four-plant
+   measurement.
 6. Retain manifests, raw measurements, hostile results, and tool provenance.
 7. Update the novelty register with the result, including a negative result.
 
