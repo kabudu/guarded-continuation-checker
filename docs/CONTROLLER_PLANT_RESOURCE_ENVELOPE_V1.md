@@ -127,9 +127,8 @@ The Rust integration test covers:
 This first slice does not yet close the production resource-governance row.
 Before it can be used as a production deployment policy, GCC still needs:
 
-1. hosted Linux reproduction of the local process-limit correlation;
-2. correlation on an independently sourced constrained firmware workflow; and
-3. independent use and suitability assessment.
+1. correlation on an independently sourced constrained firmware workflow; and
+2. independent use and suitability assessment.
 
 The local Linux regression exercises the typed direct-exact route under a
 30-second deadline, 64 KiB output cap, 16 MiB file cap, 64 MiB address-space
@@ -137,7 +136,10 @@ ceiling, and process-group containment. It preserves both a successful exact
 answer and a typed transition-evaluation refusal. The six-job release-build
 acceptance pipeline applies the same address-space ceiling to every governed
 verification and preserves its two verified, two refused, and two invalid
-classifications. The ceiling bounds virtual address space, not peak RSS.
+classifications. The
+[hosted Linux run](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29750776535)
+reproduces that pipeline. The ceiling bounds virtual address space, not peak
+RSS.
 
 The arithmetic envelope is conservative. Admission means the requested static
 work bound fits the caller's policy, not that a wall-clock deadline or exact

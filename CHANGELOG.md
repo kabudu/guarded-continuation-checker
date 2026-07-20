@@ -17,7 +17,8 @@
   deadline, 64 KiB output cap, 16 MiB file cap, 64 MiB Linux address-space
   ceiling, and process-group containment. Run every governed verification in
   the release-build acceptance pipeline under the same Linux address-space
-  ceiling. Independent constrained-workflow acceptance remains open. Add a reproducible six-job
+  ceiling locally and on a hosted Linux runner. Independent
+  constrained-workflow acceptance remains open. Add a reproducible six-job
   release-build acceptance pipeline with two exact verified batches, two valid
   policy refusals, malformed-policy and corrupt-evidence controls, and a
   byte-stable aggregate retaining every row. Preserve 3 SAFE and 5 UNSAFE

@@ -56,8 +56,9 @@ self-service integrations. Resource refusals use a versioned reason, exit code
 3, and no logical answer, while malformed input remains a tool error. Linux
 enforcement now covers a typed direct-exact regression and every governed job
 in the release-build acceptance pipeline under a 64 MiB address-space ceiling.
-That ceiling is not an RSS measurement. Independent constrained acceptance is
-still open.
+The [hosted Linux run](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29750776535)
+reproduces the governed pipeline. That ceiling is not an RSS measurement.
+Independent constrained acceptance is still open.
 The retained six-job acceptance pipeline aggregates two verified batches, two
 valid refusals, and two invalid-input controls without dropping any row or
 inventing a logical answer for rejected work. This is simulated self-service

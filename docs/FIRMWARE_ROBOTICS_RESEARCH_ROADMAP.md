@@ -138,15 +138,16 @@ through public Rust, canonical file CLI, and typed process APIs without timing
 calibration. Policy refusal now has a distinct versioned exit and typed failure
 class. Local Linux correlation now preserves the direct-exact answer and typed
 refusal under deadline, output, file, 64 MiB address-space, and process-group
-controls. Hosted reproduction remains required before using it as a
-constrained-workflow guarantee.
+controls. Hosted Linux reproduces the governed pipeline. An independently
+sourced workflow remains required before using it as a constrained-workflow
+guarantee.
 
 The first six-job release-build pipeline now retains admitted, refused, and
 invalid observations with exact per-job rows and a byte-stable aggregate. It
 closes local aggregation and simulated self-service mechanics. Linux
 process enforcement now passes locally for every governed verification in the
-pipeline. Hosted reproduction, an independently sourced constrained workflow,
-and external suitability assessment remain open.
+pipeline and is reproduced in hosted Linux CI. An independently sourced
+constrained workflow and external suitability assessment remain open.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
