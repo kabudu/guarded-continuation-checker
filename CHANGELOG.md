@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add proof-carrying controller MTBDD CLI v1 and the typed
+  `ControllerProofMtbddTool`. Keep compact discovery unchanged, reuse the
+  canonical plant manifest, enforce create-new output, source and query binding,
+  bounded UNSAT-miter verification, deterministic bytes, typed observations,
+  and fail-closed mutation and drift handling.
+
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch
   artifacts. On the public 131,072-assignment controller, one retained arm64

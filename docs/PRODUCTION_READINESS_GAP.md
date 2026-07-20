@@ -195,9 +195,10 @@ remain open, so no production-readiness row changes.
 The proof-carrying MTBDD experiment removes exhaustive assignment replay from
 one local checker path and provides canonical, bounded, source-bound proof and
 plant-batch artifacts. Its public-controller in-process result is strong, but
-the path lacks CLI integration, hosted process measurements, compatibility
-history, and independent-tool comparison. It remains outside the production
-portfolio and changes no readiness row.
+the new versioned CLI and typed process client close local integration and begin
+compatibility history. Hosted process measurements, retained self-service
+acceptance, and independent-tool comparison remain open. It stays outside the
+production portfolio and changes no readiness row.
 
 ## Rules
 

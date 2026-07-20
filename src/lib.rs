@@ -152,6 +152,9 @@ pub enum OperationKind {
     DiscoverControllerMtbdd,
     CertifyControllerMtbddPlantBatch,
     VerifyControllerMtbddPlantBatch,
+    DiscoverControllerProofMtbdd,
+    CertifyControllerProofMtbddPlantBatch,
+    VerifyControllerProofMtbddPlantBatch,
     DiscoverControllerPlantPortfolio,
     CertifyControllerPlantPortfolio,
     VerifyControllerPlantPortfolio,
@@ -173,6 +176,13 @@ impl OperationKind {
             Self::DiscoverControllerMtbdd => "discover_controller_mtbdd",
             Self::CertifyControllerMtbddPlantBatch => "certify_controller_mtbdd_plant_batch",
             Self::VerifyControllerMtbddPlantBatch => "verify_controller_mtbdd_plant_batch",
+            Self::DiscoverControllerProofMtbdd => "discover_controller_proof_mtbdd",
+            Self::CertifyControllerProofMtbddPlantBatch => {
+                "certify_controller_proof_mtbdd_plant_batch"
+            }
+            Self::VerifyControllerProofMtbddPlantBatch => {
+                "verify_controller_proof_mtbdd_plant_batch"
+            }
             Self::DiscoverControllerPlantPortfolio => "discover_controller_plant_portfolio",
             Self::CertifyControllerPlantPortfolio => "certify_controller_plant_portfolio",
             Self::VerifyControllerPlantPortfolio => "verify_controller_plant_portfolio",
@@ -356,6 +366,47 @@ pub struct ControllerMtbddCapabilities {
     pub max_terminals: usize,
     pub max_assignments: usize,
     pub max_horizon: usize,
+}
+
+/// Machine-discovered limits for proof-carrying controller MTBDD CLI v1.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddCapabilities {
+    pub cli_version: u32,
+    pub mtbdd_version: u32,
+    pub equivalence_proof_version: u32,
+    pub plant_artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_manifest_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_proof_bytes: usize,
+    pub max_members: usize,
+    pub max_state_bits: usize,
+    pub max_inputs: usize,
+    pub max_outputs: usize,
+    pub max_nodes: usize,
+    pub max_terminals: usize,
+    pub max_horizon: usize,
+}
+
+impl ControllerProofMtbddCapabilities {
+    fn common(&self) -> ControllerMtbddCapabilities {
+        ControllerMtbddCapabilities {
+            cli_version: self.cli_version,
+            mtbdd_version: self.mtbdd_version,
+            plant_artifact_version: self.plant_artifact_version,
+            manifest_version: self.manifest_version,
+            max_manifest_bytes: self.max_manifest_bytes,
+            max_artifact_bytes: self.max_artifact_bytes,
+            max_members: self.max_members,
+            max_state_bits: self.max_state_bits,
+            max_inputs: self.max_inputs,
+            max_outputs: self.max_outputs,
+            max_nodes: self.max_nodes,
+            max_terminals: self.max_terminals,
+            max_assignments: 0,
+            max_horizon: self.max_horizon,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -780,7 +831,14 @@ impl ControllerMtbddTool {
             command,
             self.policy,
         )?;
-        parse_controller_mtbdd_summary(output, "CREATED", Some(artifact), &self.capabilities)
+        parse_controller_mtbdd_summary(
+            output,
+            "CREATED",
+            Some(artifact),
+            &self.capabilities,
+            "controller-mtbdd-plant-batch",
+            "controller-mtbdd-plant-member",
+        )
     }
 
     pub fn verify(
@@ -808,7 +866,150 @@ impl ControllerMtbddTool {
             command,
             self.policy,
         )?;
-        parse_controller_mtbdd_summary(output, "VERIFIED", None, &self.capabilities)
+        parse_controller_mtbdd_summary(
+            output,
+            "VERIFIED",
+            None,
+            &self.capabilities,
+            "controller-mtbdd-plant-batch",
+            "controller-mtbdd-plant-member",
+        )
+    }
+}
+
+/// Typed, shell-free client for proof-carrying controller MTBDD plant CLI v1.
+#[derive(Clone, Debug)]
+pub struct ControllerProofMtbddTool {
+    executable: PathBuf,
+    capabilities: ControllerProofMtbddCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerProofMtbddTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, ControllerMtbddApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, ControllerMtbddApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, ControllerMtbddOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-proof-mtbdd-cli-version");
+        let output = run_bounded(OperationKind::DiscoverControllerProofMtbdd, command, policy)?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_controller_proof_mtbdd_capabilities(&stdout).map_err(|error| {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            PredicateOperationError {
+                error: Box::new(error),
+                metrics: metrics.clone(),
+            }
+        })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn executable(&self) -> &Path {
+        &self.executable
+    }
+
+    pub fn capabilities(&self) -> &ControllerProofMtbddCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerMtbddBatchSummary, ControllerMtbddApiError> {
+        self.certify_observed(manifest, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerMtbddBatchSummary>, ControllerMtbddOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("certify-controller-proof-mtbdd-plant-batch")
+            .arg(manifest)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::CertifyControllerProofMtbddPlantBatch,
+            command,
+            self.policy,
+        )?;
+        parse_controller_mtbdd_summary(
+            output,
+            "CREATED",
+            Some(artifact),
+            &self.capabilities.common(),
+            "controller-proof-mtbdd-plant-batch",
+            "controller-proof-mtbdd-plant-member",
+        )
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerMtbddBatchSummary, ControllerMtbddApiError> {
+        self.verify_observed(manifest, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerMtbddBatchSummary>, ControllerMtbddOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-plant-batch")
+            .arg(manifest)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPlantBatch,
+            command,
+            self.policy,
+        )?;
+        parse_controller_mtbdd_summary(
+            output,
+            "VERIFIED",
+            None,
+            &self.capabilities.common(),
+            "controller-proof-mtbdd-plant-batch",
+            "controller-proof-mtbdd-plant-member",
+        )
     }
 }
 
@@ -1931,11 +2132,96 @@ fn parse_controller_mtbdd_capabilities(
     Ok(capabilities)
 }
 
+fn parse_controller_proof_mtbdd_capabilities(
+    line: &str,
+) -> Result<ControllerProofMtbddCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "proof-carrying controller MTBDD capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_proof_mtbdd_cli_version",
+        "mtbdd_version",
+        "equivalence_proof_version",
+        "plant_artifact_version",
+        "manifest_version",
+        "max_manifest_bytes",
+        "max_artifact_bytes",
+        "max_proof_bytes",
+        "max_members",
+        "max_state_bits",
+        "max_inputs",
+        "max_outputs",
+        "max_nodes",
+        "max_terminals",
+        "max_horizon",
+        "verification",
+        "exhaustive_replay",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "proof-carrying controller MTBDD capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[15] != "unsat-miter" || values[16] != "no" || values[17] != "fail-closed" {
+        return Err(PredicateApiError::IncompatibleContract(
+            "proof-carrying controller MTBDD verification contract changed".to_string(),
+        ));
+    }
+    let versions = values[..5]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if versions != [1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "proof-carrying controller MTBDD version tuple is unsupported".to_string(),
+        ));
+    }
+    let limits = values[5..15]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 5]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if limits.contains(&0) {
+        return Err(PredicateApiError::InvalidResponse(
+            "proof-carrying controller MTBDD discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerProofMtbddCapabilities {
+        cli_version: versions[0],
+        mtbdd_version: versions[1],
+        equivalence_proof_version: versions[2],
+        plant_artifact_version: versions[3],
+        manifest_version: versions[4],
+        max_manifest_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_proof_bytes: limits[2],
+        max_members: limits[3],
+        max_state_bits: limits[4],
+        max_inputs: limits[5],
+        max_outputs: limits[6],
+        max_nodes: limits[7],
+        max_terminals: limits[8],
+        max_horizon: limits[9],
+    })
+}
+
 fn parse_controller_mtbdd_summary(
     output: ManagedOutput,
     expected_action: &str,
     expected_output: Option<&Path>,
     capabilities: &ControllerMtbddCapabilities,
+    summary_prefix: &str,
+    member_prefix: &str,
 ) -> Result<Observed<ControllerMtbddBatchSummary>, PredicateOperationError> {
     let (stdout, mut metrics) = successful_stdout(output)?;
     let parsed = (|| -> Result<ControllerMtbddBatchSummary, PredicateApiError> {
@@ -1970,7 +2256,7 @@ fn parse_controller_mtbdd_summary(
         };
         let fields = summary_text.split(' ').collect::<Vec<_>>();
         let keys = [
-            "controller-mtbdd-plant-batch",
+            summary_prefix,
             "status",
             "cli_version",
             "artifact_version",
@@ -2031,7 +2317,7 @@ fn parse_controller_mtbdd_summary(
             })?;
             let fields = line.split(' ').collect::<Vec<_>>();
             let keys = [
-                "controller-mtbdd-plant-member",
+                member_prefix,
                 "index",
                 "answer",
                 "horizon",
@@ -2402,6 +2688,23 @@ mod tests {
             .is_err()
         );
         assert!(parse_controller_mtbdd_capabilities(&canonical.replace('\n', "\r\n")).is_err());
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_capability_parser_is_strict() {
+        let canonical = "controller_proof_mtbdd_cli_version=1 mtbdd_version=1 equivalence_proof_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_proof_bytes=2097152 max_members=64 max_state_bits=6 max_inputs=12 max_outputs=8 max_nodes=512 max_terminals=1024 max_horizon=1024 verification=unsat-miter exhaustive_replay=no unsupported=fail-closed\n";
+        let parsed = parse_controller_proof_mtbdd_capabilities(canonical).unwrap();
+        assert_eq!(parsed.equivalence_proof_version, 1);
+        assert_eq!(parsed.max_proof_bytes, 2_097_152);
+        for hostile in [
+            canonical.replace("verification=unsat-miter", "verification=trusted"),
+            canonical.replace("exhaustive_replay=no", "exhaustive_replay=yes"),
+            canonical.replace("max_proof_bytes=2097152", "max_proof_bytes=0"),
+            canonical.replace("unsupported=fail-closed", "unsupported=best-effort"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_proof_mtbdd_capabilities(&hostile).is_err());
+        }
     }
 
     #[test]

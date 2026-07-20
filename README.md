@@ -51,6 +51,9 @@ semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.
 The follow-up [equivalence-proof experiment](docs/CONTROLLER_MTBDD_EQUIVALENCE_PROOF_V1.md)
 replaces exhaustive controller replay with a source-bound UNSAT miter proof.
+Its separate [proof-carrying CLI v1](docs/CONTROLLER_PROOF_MTBDD_CLI_V1.md)
+provides create-new file workflows and a typed, bounded Rust process client
+without changing the compact CLI contract.
 One retained arm64 run checks that proof about 121.6 times faster. Its
 [full plant integration](docs/PROOF_CARRYING_MTBDD_EQUIVALENCE_V1.md) reduces
 median verification for the six-member public physical-plant batch from 1.749
