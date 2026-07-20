@@ -24,7 +24,7 @@ if [ -e "$output" ]; then
   exit 2
 fi
 
-repository=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+repository=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 manifest=$repository/corpus/rtl/wmcontroller/physical-plant-batch-v1.txt
 oracle=$repository/scripts/test-public-washing-controller-physical-oracle.sh
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-controller-resource.XXXXXXXX")

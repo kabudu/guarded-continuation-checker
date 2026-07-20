@@ -8,7 +8,7 @@ fi
 
 sby=$1
 test -f "$sby"
-repository=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+repository=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 source_corpus=$repository/corpus/rtl/wmcontroller
 work=$(mktemp -d "${TMPDIR:-/tmp}/gcc-wm-physical-oracle.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM

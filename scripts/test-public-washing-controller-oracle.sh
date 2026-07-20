@@ -12,7 +12,7 @@ if [ ! -f "$sby" ]; then
   exit 2
 fi
 
-repository=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+repository=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 source_dir="$repository/corpus/rtl/wmcontroller"
 work=$(mktemp -d "${TMPDIR:-/tmp}/gcc-wm-oracle.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM

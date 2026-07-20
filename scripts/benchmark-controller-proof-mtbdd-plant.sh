@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
-repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repository=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 output=${1:-"$repository/results/public-washing-controller-proof-mtbdd-plant-v1.csv"}
 if [ -e "$output" ]; then
   echo "refusing to overwrite $output" >&2
