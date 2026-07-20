@@ -10,6 +10,15 @@ use guarded_continuation_checker::controller_plant_aiger::{
 
 const CONTROLLER: &[u8] = include_bytes!("../corpus/rtl/wmcontroller/generated/controller.aag");
 const PLANT: &[u8] = include_bytes!("../corpus/rtl/wmcontroller/plant/physical-plant.aag");
+const SENSOR_STUCK_PLANT: &[u8] = include_bytes!(
+    "../corpus/rtl/wmcontroller/composed-witness-plants-v1/sensor-stuck/physical-plant.aag"
+);
+const ACTUATOR_DELAY_PLANT: &[u8] = include_bytes!(
+    "../corpus/rtl/wmcontroller/composed-witness-plants-v1/actuator-delay/physical-plant.aag"
+);
+const PERSISTENT_DISTURBANCE_PLANT: &[u8] = include_bytes!(
+    "../corpus/rtl/wmcontroller/composed-witness-plants-v1/persistent-disturbance/physical-plant.aag"
+);
 
 struct IndependentAag {
     inputs: Vec<usize>,
@@ -147,6 +156,60 @@ fn six_exports_preserve_answers_and_shortest_bad_frames() {
         let independent = parse_independently(&export.bytes);
         let (actual_bad, _) = independent.shortest_bad_and_convergence();
         assert_eq!(actual_bad, expected_bad, "plant output {bad_output}");
+    }
+}
+
+#[test]
+fn changing_plant_family_preserves_two_safe_properties() {
+    let controller = parse_ascii_aiger_transition(CONTROLLER).unwrap();
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: (1..12).collect(),
+        controller_action_outputs: vec![2, 6, 7, 9],
+        plant_sensor_outputs: (0..11).collect(),
+        plant_action_inputs: vec![1, 2, 3, 4],
+    };
+    for (name, bytes, expected) in [
+        (
+            "nominal",
+            PLANT,
+            [Some(4), Some(7), Some(15), Some(15), None, None],
+        ),
+        (
+            "sensor-stuck",
+            SENSOR_STUCK_PLANT,
+            [Some(4), Some(7), Some(15), Some(15), None, None],
+        ),
+        (
+            "actuator-delay",
+            ACTUATOR_DELAY_PLANT,
+            [Some(5), Some(11), Some(19), Some(19), None, None],
+        ),
+        (
+            "persistent-disturbance",
+            PERSISTENT_DISTURBANCE_PLANT,
+            [Some(4), Some(7), Some(15), Some(15), None, None],
+        ),
+    ] {
+        let plant = parse_ascii_aiger_transition(bytes).unwrap();
+        let mut answers = Vec::new();
+        for bad_output in 11..17 {
+            let export = export_bounded_controller_plant_aag(
+                &controller,
+                &plant,
+                &wiring,
+                0,
+                0,
+                bad_output,
+                32,
+            )
+            .unwrap();
+            answers.push(
+                parse_independently(&export.bytes)
+                    .shortest_bad_and_convergence()
+                    .0,
+            );
+        }
+        assert_eq!(answers, expected, "plant {name}");
     }
 }
 

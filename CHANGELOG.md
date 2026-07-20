@@ -53,6 +53,11 @@
   hostile controls, and explicit falsification criteria. Record that no public
   `aigmerge` implementation was present in the inspected upstream branches, so
   ordinary per-property Certifaiger checking cannot stand in for composition.
+  Freeze the first four-plant comparison family with nominal, sensor-stuck,
+  actuator-delay, and persistent-disturbance semantics. Reproduce each model
+  byte-for-byte from source with pinned Yosys, independently replay all 24
+  horizon-32 answers and shortest traces, preserve two SAFE properties per
+  plant, and add source, model, and member-substitution hostile controls.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

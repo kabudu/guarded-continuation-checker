@@ -133,11 +133,13 @@ faithful baseline leaves the gate open and produces no positive result.
 
 ## Implementation sequence
 
-1. Freeze and independently replay the four attested plant variants.
+1. Freeze and independently replay the four attested plant variants. Complete:
+   all four source-to-model regenerations are byte-identical, all 24 bounded
+   answers are independently replayed, and every plant retains two SAFE
+   properties.
 2. Obtain or implement the exact composed-witness construction.
 3. Add parser, collision, section-preservation, and deterministic-byte tests.
 4. Validate every SAFE output with qualified Certifaiger and `lrat_isa`.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
 6. Retain manifests, raw measurements, hostile results, and tool provenance.
 7. Update the novelty register with the result, including a negative result.
-

@@ -301,6 +301,8 @@ jobs:
           PATH="/tmp/yosys-attestation/build:$PATH" \
             scripts/test-source-model-provenance.sh \
             results/public-washing-source-model-attestation-v1.csv
+          PATH="/tmp/yosys-attestation/build:$PATH" \
+            scripts/test-composed-witness-plant-provenance-v1.sh
       - name: Compare proof profile with maintained formal workflow
         env:
           TRIALS: 1

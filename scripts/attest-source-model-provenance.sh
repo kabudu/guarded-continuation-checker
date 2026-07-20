@@ -55,7 +55,7 @@ member_count=$REPLY
   echo "provenance member count is outside limits" >&2; exit 2;
 }
 
-declare -a workdirs sources recipes models
+declare -a workdirs sources recipes models subjects
 validate_path() {
   local value=$1 allow_dot=$2 segment
   [[ -n "$value" && "$value" != /* && "$value" != *//* ]] || return 1
@@ -75,6 +75,13 @@ for ((index = 0; index < member_count; index++)); do
   validate_path "${sources[index]}" no || { echo "provenance source path is invalid" >&2; exit 2; }
   validate_path "${recipes[index]}" no || { echo "provenance recipe path is invalid" >&2; exit 2; }
   validate_path "${models[index]}" no || { echo "provenance model path is invalid" >&2; exit 2; }
+  subjects[index]="${workdirs[index]}|${sources[index]}|${recipes[index]}|${models[index]}"
+  for ((prior = 0; prior < index; prior++)); do
+    [[ "${subjects[prior]}" != "${subjects[index]}" ]] || {
+      echo "provenance manifest contains duplicate member subject" >&2
+      exit 2
+    }
+  done
 done
 take status
 [[ "$REPLY" == complete ]] || { echo "provenance manifest status is incomplete" >&2; exit 2; }
