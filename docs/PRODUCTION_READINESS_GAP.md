@@ -14,7 +14,7 @@ sufficient.
 | Stable interface | Predicate CLI v1 freezes discovery, commands and exit meanings; typed Rust API v1 validates capabilities and exposes shell-free v1/v2 production/verification; a separate integration-test crate proves discovery, production and checking against the real binary | Preserve API compatibility across a tagged release; add an in-process verifier only if deployment evidence shows the process boundary is unsuitable | Closed for candidate CLI/Rust API v1; release evidence open |
 | Observability | Portfolio/cost reports preserve backend decisions and timings; predicate Rust API metrics schema v1 records every observed operation's duration, stream sizes, configured limits, exit status and stable failure class; bounded aggregate schema v1 preserves operation, containment, and failure distributions; governed split observability adds four internal phase durations, eleven checked work counters, system-allocation events, and integrity-preserving process-local cache counters | Retain phase, resource, allocation, and cache acceptance across supported releases; allocator peaks remain covered only by the separate process-resource benchmark | Closed for the governed split candidate surface |
 | Cross-platform distribution | Candidate Linux bundle v1 defines static x86_64 musl archives, SPDX 2.3 SBOM, deterministic provenance, non-executing offline verification, and two-source-path reproducibility; [signed candidate run 29675023822](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29675023822) passes exact SLSA and SPDX identity policy with [retained evidence](../results/linux-evaluation-candidate-v1.md) | Add a justified macOS distribution decision, tagged-release compatibility, and release-level verification evidence | In progress; first Linux candidate gate closed |
-| Real product validity | Public synthetic/product-shaped fixtures | Multiple unmodified public firmware/robotics designs plus independent self-service evaluation outcomes | Open |
+| Real product validity | Public synthetic/product-shaped fixtures plus one source-bound, production-tagged OpenTitan AON watchdog core under a narrow authored wrapper; pinned regeneration and both-answer acceptance pass | Multiple materially distinct unmodified public firmware/robotics designs at representative integration scope plus independent self-service evaluation outcomes | Open; first public embedded-core mechanism closed |
 | Operational guidance | [Operations runbook](OPERATIONS.md), [isolation profile](ISOLATION_PROFILE_V1.md), and executable Linux qualification cover installation, sizing, failure handling, upgrade, rollback, incident response, restoration, and evidence retention | Retain the executable qualification and runbook drills across supported releases; independent operator execution remains part of the external-acceptance gate | Closed for the documented evaluation scope |
 | Release governance | Claim-bounded tagged releases; the external production gate binds the exact register and release to an independently authenticated OpenSSH attestation | Production release checklist requires every row above closed or explicitly excludes the capability from production support; exercise the authenticated gate with real independent evidence | In progress; authenticated fail-closed mechanism complete |
 
@@ -350,6 +350,17 @@ dependency, and reproducible-package companion jobs. Hosted run 29782315590
 reproduces the retained multi-job CSV on exact commit `7b9e024`, with every
 companion job green. Hosted run 29783651272 validates allocation observation on
 exact commit `2c68e5e`, with every required job green.
+Hosted run 29784705375 validates the cache contract on exact commit `eb8b6fd`,
+including the portable API matrix, public RTL corpus, maintained Bitwuzla
+baseline, dependency audit, and reproducible Linux bundle.
+
+The [OpenTitan AON watchdog experiment](OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md)
+adds the first production-tagged public embedded core to the word-level path.
+Pinned source and Yosys regeneration produce byte-identical models; retained
+SAFE, UNSAFE, and billion-frame SAFE certificates verify independently; and
+five hostile controls fail closed or route to exact fallback. The wrapper fixes
+one watchdog configuration and supplies reduced register types, so it does not
+close the real-product row or substitute for independent operator acceptance.
 
 ## Post-production-release deliverables
 

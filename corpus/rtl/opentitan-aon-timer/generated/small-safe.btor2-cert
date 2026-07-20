@@ -1,0 +1,17 @@
+region_certificate_version=1
+source_sha256=560dad3ea46c0bc67c6cc100cdcac0065276722e3d0fcfc9d648591f95a20b84
+query_horizon=8
+bad_property=15
+input=3
+state=6
+width=32
+family=reset_add
+initial=0
+reset=0
+delta=1
+saturation=none
+predicate=ugte
+predicate_literal=9
+max_index=8
+result=SAFE
+status=complete

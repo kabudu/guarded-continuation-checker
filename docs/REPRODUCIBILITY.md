@@ -882,3 +882,24 @@ member-result agreement and reports artifact size, production cost, and median
 verification time across three trials. The retained arm64 observation is
 `results/public-washing-controller-proof-mtbdd-plant-v1.csv`. Timings vary by
 host and are evidence, not an acceptance threshold.
+
+### Production-tagged OpenTitan AON watchdog
+
+Build Yosys at commit `b8e7da6f40ae8f552c116bf6c359b07c6533e159`, build GCC,
+then reproduce the source-bound models, certificates, exact boundary answers,
+and hostile controls:
+
+```sh
+cargo build --locked
+scripts/run-opentitan-aon-watchdog-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  /path/to/pinned/yosys \
+  /tmp/opentitan-aon-watchdog-acceptance.csv
+diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
+  /tmp/opentitan-aon-watchdog-acceptance.csv
+```
+
+The script accepts only the pinned OpenTitan source digest and Yosys revision,
+regenerates two BTOR2 files and three certificates byte for byte, independently
+verifies every answer, and runs five fail-closed controls. Exact upstream and
+wrapper boundaries are documented under `corpus/rtl/opentitan-aon-timer`.

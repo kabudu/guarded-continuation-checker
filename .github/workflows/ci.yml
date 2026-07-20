@@ -61,9 +61,11 @@ jobs:
         run: scripts/test-composed-witness-model-exports-v1.sh
       - name: Check BTOR2 baseline scripts
         run: |
+          shellcheck -s bash scripts/build-opentitan-aon-watchdog-btor2.sh
           shellcheck -s sh \
             scripts/test-btor2tools-baseline.sh \
             scripts/test-bitwuzla-phase-baseline.sh \
+            scripts/run-opentitan-aon-watchdog-acceptance.sh \
             scripts/run-btor2-search-cohort.sh \
             scripts/run-btor2-region-cohort.sh \
             scripts/run-btor2-motion-cohort.sh \
@@ -279,6 +281,7 @@ jobs:
         run: |
           cargo test --locked --lib btor2_component
           cargo test --locked --test btor2_component_api
+          cargo test --locked --test opentitan_aon_watchdog_api
 
   public-rtl-corpus:
     runs-on: ubuntu-latest
@@ -332,6 +335,14 @@ jobs:
             results/public-washing-source-model-attestation-v1.csv
           PATH="/tmp/yosys-attestation/build:$PATH" \
             scripts/test-composed-witness-plant-provenance-v1.sh
+      - name: Reproduce OpenTitan AON watchdog acceptance
+        run: |
+          scripts/run-opentitan-aon-watchdog-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-watchdog-acceptance.csv
+          diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
+            /tmp/opentitan-aon-watchdog-acceptance.csv
       - name: Compare proof profile with maintained formal workflow
         env:
           TRIALS: 1

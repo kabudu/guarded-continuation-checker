@@ -399,6 +399,22 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
             continue;
         }
 
+        // BTOR2 outputs are named observation roots, not transition-system
+        // semantics. Accept and validate them so standard Yosys `write_btor`
+        // output can be consumed without treating an output as a property.
+        if operation == "output" {
+            let expression = parse_u64(tokens.next().as_deref(), line, "output expression")?;
+            if !nodes.contains_key(&expression) {
+                return Err(ParseError::new(
+                    line,
+                    format!("unknown or non-prior output expression {expression}"),
+                ));
+            }
+            let _symbol = tokens.next();
+            expect_end(&mut tokens, line)?;
+            continue;
+        }
+
         let sort = parse_u64(tokens.next().as_deref(), line, "sort identifier")?;
         let width = *sorts
             .get(&sort)
@@ -460,6 +476,15 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
             ));
         }
     }
+    let semantic_inputs = semantic_input_support(
+        &nodes,
+        next_values
+            .values()
+            .copied()
+            .chain(constraints.iter().map(|(_, expression)| *expression))
+            .chain(bad.iter().map(|(_, expression, _)| *expression)),
+    );
+    inputs.retain(|input| semantic_inputs.contains(input));
     Ok(Btor2Model {
         nodes,
         inputs,
@@ -469,6 +494,39 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
         constraints,
         bad,
     })
+}
+
+fn semantic_input_support(
+    nodes: &BTreeMap<NodeId, Node>,
+    roots: impl IntoIterator<Item = NodeId>,
+) -> BTreeSet<NodeId> {
+    let mut stack = roots.into_iter().collect::<Vec<_>>();
+    let mut visited = BTreeSet::new();
+    let mut inputs = BTreeSet::new();
+    while let Some(id) = stack.pop() {
+        if !visited.insert(id) {
+            continue;
+        }
+        match &nodes[&id].kind {
+            NodeKind::Input => {
+                inputs.insert(id);
+            }
+            NodeKind::State | NodeKind::Constant(_) => {}
+            NodeKind::Unary(_, value)
+            | NodeKind::Slice { value, .. }
+            | NodeKind::Uext { value, .. } => stack.push(*value),
+            NodeKind::Binary(_, left, right) => {
+                stack.push(*left);
+                stack.push(*right);
+            }
+            NodeKind::Ite(condition, then_value, else_value) => {
+                stack.push(*condition);
+                stack.push(*then_value);
+                stack.push(*else_value);
+            }
+        }
+    }
+    inputs
 }
 
 fn is_constant_expression(nodes: &BTreeMap<NodeId, Node>, root: NodeId) -> bool {
@@ -694,8 +752,9 @@ fn parse_node_kind(
             ));
         }
     };
+    let symbol = tokens.next();
     expect_end(tokens, line)?;
-    Ok((kind, None))
+    Ok((kind, symbol))
 }
 
 fn parse_constant(
@@ -758,6 +817,42 @@ mod tests {
         assert_eq!(model.active_bad(&state, &inputs).unwrap(), vec![13]);
         inputs.insert(3, 1);
         assert_eq!(model.step(&state, &inputs).unwrap().get(&5), Some(&0));
+    }
+
+    #[test]
+    fn accepts_yosys_outputs_and_prunes_unused_clock_inputs() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 8\n3 input 1 reset\n4 input 1 clk\n5 zero 2\n6 state 2 count\n7 init 2 6 5\n8 one 2\n9 add 2 6 8\n10 ite 2 3 5 9\n11 next 2 6 10\n12 constd 2 9\n13 ugte 1 6 12\n14 output 13 bad\n15 bad 13 watchdog\n";
+        let model = parse(source).unwrap();
+        assert_eq!(model.inputs(), &[3]);
+        assert_eq!(model.states(), &[6]);
+        assert_eq!(
+            model.bad_properties(),
+            &[(15, 13, Some("watchdog".to_string()))]
+        );
+
+        for hostile in [
+            source.replace("14 output 13 bad", "14 output 99 bad"),
+            source.replace("14 output 13 bad", "14 output 13 bad extra"),
+            source.replace("14 output 13 bad", "14 output"),
+        ] {
+            assert!(parse(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn semantic_input_support_is_iterative_for_deep_valid_graphs() {
+        let mut source = String::from("1 sort bitvec 1\n2 input 1 signal\n");
+        let mut previous = 2;
+        for id in 3..20_003 {
+            source.push_str(&format!("{id} not 1 {previous}\n"));
+            previous = id;
+        }
+        source.push_str(&format!(
+            "20003 state 1 held\n20004 zero 1\n20005 init 1 20003 20004\n20006 next 1 20003 20003\n20007 bad {previous} deep\n"
+        ));
+
+        let model = parse(&source).unwrap();
+        assert_eq!(model.inputs(), &[2]);
     }
 
     #[test]

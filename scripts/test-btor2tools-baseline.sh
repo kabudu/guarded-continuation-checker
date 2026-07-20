@@ -27,6 +27,8 @@ component_semi_implicit=examples/btor2/components/semi-implicit-motion-plant-v1.
 component_contract=examples/btor2/components/braking-motion-contract-v1.txt
 component_admitted_batch=examples/btor2/components/braking-batch-admitted-v1.txt
 component_mixed_batch=examples/btor2/components/braking-batch-mixed-v1.txt
+opentitan_small=corpus/rtl/opentitan-aon-timer/generated/watchdog-small.btor2
+opentitan_scale=corpus/rtl/opentitan-aon-timer/generated/watchdog-scale.btor2
 certificate=${TMPDIR:-/tmp}/gcc-btor2-phase-$$.cert
 actuator_witness=${TMPDIR:-/tmp}/gcc-btor2-actuator-$$.witness
 saturating_witness=${TMPDIR:-/tmp}/gcc-btor2-saturating-$$.witness
@@ -80,6 +82,8 @@ printf '%s\n' "$inspection" | grep -q ' word_semantics=preserved$'
 "$btor2tools_bin_dir/catbtor" "$component_motor_controller" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$component_motor_plant" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$component_semi_implicit" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$opentitan_small" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$opentitan_scale" >/dev/null
 "$btor2tools_bin_dir/btorsim" -c "$model" "$witness"
 write_zero_input_witness "$actuator_witness" 201 home
 write_zero_input_witness "$saturating_witness" 255 reset

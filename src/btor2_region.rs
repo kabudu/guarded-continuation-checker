@@ -95,6 +95,43 @@ fn constant(model: &Btor2Model, id: NodeId) -> Option<u64> {
     }
 }
 
+fn boolean_identity_root(model: &Btor2Model, mut id: NodeId) -> NodeId {
+    loop {
+        let replacement = match model.nodes().get(&id).map(|node| &node.kind) {
+            Some(NodeKind::Uext { value, amount: 0 }) => Some(*value),
+            Some(NodeKind::Unary(btor2::UnaryOp::Not, inner)) => {
+                match model.nodes().get(inner).map(|node| &node.kind) {
+                    Some(NodeKind::Unary(btor2::UnaryOp::Not, value)) => Some(*value),
+                    _ => None,
+                }
+            }
+            Some(NodeKind::Binary(BinaryOp::And, left, right)) => {
+                if constant(model, *left) == Some(1) {
+                    Some(*right)
+                } else if constant(model, *right) == Some(1) {
+                    Some(*left)
+                } else {
+                    None
+                }
+            }
+            Some(NodeKind::Binary(BinaryOp::Or, left, right)) => {
+                if constant(model, *left) == Some(0) {
+                    Some(*right)
+                } else if constant(model, *right) == Some(0) {
+                    Some(*left)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let Some(replacement) = replacement else {
+            return id;
+        };
+        id = replacement;
+    }
+}
+
 fn add_delta(model: &Btor2Model, expression: NodeId, state: NodeId) -> Option<u64> {
     match model.nodes().get(&expression)?.kind {
         NodeKind::Binary(BinaryOp::Add, left, right) if left == state => constant(model, right),
@@ -174,6 +211,7 @@ fn recognise_predicate(
         .bad_properties()
         .iter()
         .find_map(|(id, expression, _)| (*id == bad_property).then_some(*expression))?;
+    let expression = boolean_identity_root(model, expression);
     match model.nodes().get(&expression)?.kind {
         NodeKind::Binary(BinaryOp::Eq, left, right) if left == state => {
             Some((RegionPredicate::Equal, constant(model, right)?))
@@ -296,6 +334,7 @@ fn verify_claimed_predicate(
         .iter()
         .find_map(|(id, expression, _)| (*id == certificate.bad_property).then_some(*expression))
         .ok_or_else(|| reject("certificate bad property is absent from source"))?;
+    let expression = boolean_identity_root(model, expression);
     let matches = match (
         certificate.predicate,
         model.nodes()[&expression].kind.clone(),
@@ -612,6 +651,30 @@ mod tests {
         assert!(try_produce_safe(ACTUATOR, 13, 201).unwrap().is_none());
         assert!(try_produce_safe(SATURATING, 15, 255).unwrap().is_none());
         assert!(try_produce_safe(WATCHDOG, 13, 256).unwrap().is_none());
+    }
+
+    #[test]
+    fn admits_exact_yosys_boolean_identity_wrappers_only() {
+        let source = b"1 sort bitvec 1\n2 input 1 reset\n3 input 1 clk\n4 sort bitvec 32\n5 const 4 00000000000000000000000000000000\n6 state 4 count\n7 init 4 6 5\n8 const 4 00000000000000000000000000001001\n9 ugte 1 6 8\n10 output 9 bad\n11 not 1 9\n12 const 1 1\n13 not 1 11\n14 and 1 12 13\n15 bad 14 watchdog\n16 const 4 00000000000000000000000000000001\n17 add 4 6 16\n18 uext 4 17 0 count_next\n19 ite 4 2 5 17\n20 next 4 6 19\n";
+        let certificate = try_produce_safe(source, 15, 8).unwrap().unwrap();
+        assert_eq!(certificate.input, 2);
+        assert_eq!(certificate.width, 32);
+        assert_eq!(
+            verify(source, &certificate)
+                .unwrap()
+                .logical_reachable_states,
+            45
+        );
+        assert!(try_produce_safe(source, 15, 9).unwrap().is_none());
+
+        let hostile = String::from_utf8(source.to_vec())
+            .unwrap()
+            .replace("14 and 1 12 13", "14 xor 1 12 13");
+        assert!(
+            try_produce_safe(hostile.as_bytes(), 15, 8)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

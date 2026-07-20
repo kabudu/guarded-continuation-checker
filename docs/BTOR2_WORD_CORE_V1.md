@@ -11,6 +11,8 @@ Version 1 accepts canonical newline-terminated BTOR2 text containing:
 
 - bit-vector sorts of width 1 to 64;
 - input and state nodes;
+- standard `output` observation statements, validated but not treated as bad
+  properties;
 - `zero`, `one`, `ones`, binary, decimal, and hexadecimal constants;
 - word-level Boolean operations, modular add, subtract, and multiply;
 - unsigned equality and order comparisons;
@@ -18,6 +20,13 @@ Version 1 accepts canonical newline-terminated BTOR2 text containing:
 - exactly one constant initialiser and next expression per state;
 - Boolean constraints; and
 - one or more bad properties.
+
+Optional symbols on ordinary expression nodes are accepted. `Btor2Model::inputs`
+returns only declared inputs that can reach a next-state expression, constraint,
+or bad property. Unused synthesis artifacts such as a clock consumed only by the
+BTOR transition convention are validated during parsing but omitted from the
+semantic input vector. This support calculation does not remove any live node or
+alter model semantics.
 
 The parser requires unique strictly increasing identifiers, prior definitions,
 exact operand and result widths, canonical constants, at most 8 MiB, 100,000
@@ -88,6 +97,12 @@ shrink by more than 99.9%.
 
 The next gate must extend exact composition across interacting states or
 multiple inputs without turning the proof back into explicit state enumeration.
+
+The [OpenTitan AON watchdog experiment](OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md)
+now exercises standard Yosys observations, optional symbols, unused-clock
+pruning, exact Boolean wrapper recognition, portfolio fallback, and independent
+certificate checking on a production-tagged public RTL core. It closes only this
+narrow source-to-proof integration gate.
 
 The [coupled-motion curve certificate v1](BTOR2_MOTION_CURVE_CERTIFICATE_V1.md)
 closes the first two-state subcase by preserving a velocity-position polynomial

@@ -30,6 +30,14 @@ The resource and phase-observability v1 responses remain unchanged.
 The split cache-observability v1 interface follows the same additive pattern
 and leaves every preceding command on its original uncached execution path.
 
+Before the first production tag, the BTOR2 parser was extended to accept
+standard `output` observations and optional expression symbols.
+`Btor2Model::inputs()` now reports semantic inputs reachable from transitions,
+constraints, or bad properties rather than unused declared synthesis inputs.
+Callers that need a raw declaration inventory must not infer it from this API.
+The change is covered by external-consumer tests on every hosted platform and
+will become part of the first tagged compatibility baseline.
+
 ## First production-line guarantee
 
 Beginning with the first production tag:

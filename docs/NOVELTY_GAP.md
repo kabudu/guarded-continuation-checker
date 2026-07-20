@@ -413,3 +413,15 @@ accounting, independent review of the paper-derived merger, a search for systems
 with the same proof-cache boundary, and a non-repository-authored changing plant
 remain open. The narrow hypothesis advances; every broader novelty or product
 superiority claim remains prohibited.
+
+## Production-tagged OpenTitan watchdog
+
+The OpenTitan AON watchdog experiment demonstrates pinned public-source
+integration, exact fail-closed routing, and a constant-size proof for a very
+large bounded reset-add recurrence. Yosys BTOR export, affine recurrence
+acceleration, interval reachability, word-level SMT, and proof-carrying model
+checking are established. The result is therefore product mechanism evidence,
+not a novelty claim. A credible next claim still requires compact proof
+composition across multiple interacting dense predicates or separately changing
+public controller and plant contracts, plus equivalent-scope maintained-tool
+and prior-art comparisons.

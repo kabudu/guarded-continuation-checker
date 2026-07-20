@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Accept standard Yosys BTOR2 observation statements and optional node symbols,
+  while exposing only inputs that reach transition, constraint, or bad-property
+  semantics. Admit exact Boolean identity wrappers in the independently checked
+  word-region route and reject an XOR near-neighbour to exact fallback. Add a
+  source-bound, production-tagged OpenTitan AON watchdog target with pinned
+  Yosys regeneration, deterministic SAFE and UNSAFE certificates, a
+  billion-frame compact proof, BTOR2Tools and Bitwuzla controls, public Rust API
+  coverage, five hostile controls, and retained self-service acceptance. This
+  closes a narrow public-RTL integration mechanism, not product validity,
+  production readiness, or scholarly novelty.
 - Add an additive governed split observability contract without changing the
   existing strict resource capability or result rows. Report four versioned
   phase durations and eleven checked structural work counters only after a

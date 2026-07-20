@@ -36,6 +36,9 @@ check_result unsat examples/btor2/braking-phases-h255-safe-v1.smt2
 check_result sat examples/btor2/braking-phases-h256-unsafe-v1.smt2
 check_result unsat examples/btor2/motor-stop-h159-safe-v1.smt2
 check_result sat examples/btor2/motor-stop-h160-unsafe-v1.smt2
+check_result unsat corpus/rtl/opentitan-aon-timer/baselines/small-h8-safe.smt2
+check_result sat corpus/rtl/opentitan-aon-timer/baselines/small-h9-unsafe.smt2
+check_result unsat corpus/rtl/opentitan-aon-timer/baselines/scale-h1000000000-safe.smt2
 
 version=$($bitwuzla --version)
 printf 'bitwuzla_phase_baseline=PASS version=%s\n' "$version"

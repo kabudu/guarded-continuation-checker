@@ -171,6 +171,16 @@ near-neighbour cases, and agrees with official BTOR2Tools plus independent SMT
 controls. This is a narrow piecewise-affine result with established prior art,
 not a general robotics or novelty claim.
 
+The [OpenTitan AON watchdog experiment](docs/OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md)
+takes an unchanged production-tagged public RTL core through pinned Yosys BTOR2
+export and GCC's exact portfolio. It reproduces both boundary answers and proves
+a one-billion-frame SAFE query with a 326-byte independently checked certificate
+representing 500,000,001,500,000,001 logical reachable states. The corpus binds
+the exact upstream source, compatibility transformation, generated models, and
+certificates, then rejects source substitution and recogniser near-neighbours.
+It covers one configured watchdog path, not the complete OpenTitan product, and
+does not establish a novel algorithm or production validity.
+
 The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
 keeps controller, plant, and synchronous wiring contract as separately hashed
 sources. Its specialised checker verifies the feedback relation without

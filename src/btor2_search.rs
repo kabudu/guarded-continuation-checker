@@ -615,7 +615,14 @@ mod tests {
         for state in 5..205 {
             many_states.push_str(&format!("{id} init 2 {state} 4\n"));
             id += 1;
-            many_states.push_str(&format!("{id} next 2 {state} {state}\n"));
+            let next = if state == 5 {
+                many_states.push_str(&format!("{id} ite 2 3 4 {state}\n"));
+                id += 1;
+                id - 1
+            } else {
+                state
+            };
+            many_states.push_str(&format!("{id} next 2 {state} {next}\n"));
             id += 1;
         }
         many_states.push_str(&format!("{id} neq 1 5 4\n"));

@@ -85,7 +85,12 @@ close either register by itself.
    an exact compact batch, and a measured local win for fully admitted batches.
    Mixed fallback batches do not win, and public-product validity remains open.
    A pinned Bitwuzla 0.9.1 gate agrees on counter, motion, and braking
-   boundaries.
+   boundaries. The first production-tagged public target now carries
+   [OpenTitan's AON watchdog](OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md) through
+   pinned Yosys export, a compact billion-frame proof, exact unsafe fallback,
+   deterministic certificates, and hostile controls. This is one configured
+   watchdog path, so broader public-product and independent acceptance remain
+   open.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
