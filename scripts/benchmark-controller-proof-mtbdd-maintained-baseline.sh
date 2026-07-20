@@ -76,6 +76,9 @@ measure() {
   test -n "$elapsed"
   test -n "$peak_bytes"
   "$answer_checker" "$stdout"
+  if [ "$evidence_bytes" = artifact ]; then
+    evidence_bytes=$(wc -c <"$artifact" | tr -d ' ')
+  fi
   printf '1,%s,%s,%s,%s,%s,%s,%s,%s,true,ok\n' \
     "$profile" "$operation" "$trial" "$elapsed" "$peak_bytes" \
     "$evidence_bytes" "$time_style" "$platform" >>"$output"
@@ -87,11 +90,9 @@ printf '%s\n' \
 trial=1
 while [ "$trial" -le "$trials" ]; do
   artifact=$scratch/batch-$trial.proof-mtbdd-plant
-  measure proof create "$trial" pending check_proof_answers "$binary" \
+  measure proof create "$trial" artifact check_proof_answers "$binary" \
     certify-controller-proof-mtbdd-plant-batch "$manifest" "$artifact"
   artifact_bytes=$(wc -c <"$artifact" | tr -d ' ')
-  sed -i.bak "s/,pending,\([^,]*,[^,]*,true,ok\)$/,$artifact_bytes,\1/" "$output"
-  rm -f "$output.bak"
   measure proof verify "$trial" "$artifact_bytes" check_proof_answers "$binary" \
     verify-controller-proof-mtbdd-plant-batch "$manifest" "$artifact"
   measure maintained-formal oracle "$trial" 0 check_oracle_answers "$oracle" "$sby"
