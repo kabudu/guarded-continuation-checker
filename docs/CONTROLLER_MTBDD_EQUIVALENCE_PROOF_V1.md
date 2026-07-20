@@ -31,6 +31,9 @@ noncanonical dimensions, truncation, trailing bytes, and mutation.
 `GCCMPF01` combines the proof with an ordered source-bound MTBDD plant batch.
 Its verifier checks the equivalence proof once and then recomputes every plant
 member result without exhaustive controller assignment replay.
+Its `assignments_checked` observation is therefore zero. The 131,072
+assignments are the equivalence scope represented by the miter, not an
+iteration count performed by the proof verifier.
 
 ## Public-controller result
 

@@ -9,7 +9,9 @@
   byte tradeoff and established equivalence-checking prior art explicit; the
   proof path is not yet the portfolio default. The integrated six-property
   physical-plant path verifies in 49.7% of compact exhaustive time with exact
-  agreement, while its artifact is 29.39 times larger.
+  agreement, while its artifact is 29.39 times larger. Report zero exhaustive
+  assignments checked on this path so represented miter scope is not
+  misreported as replay work.
 
 - Add phase-level portfolio observability for model loading, artifact handling,
   semantic verification, publication, and complete elapsed time. Retain the

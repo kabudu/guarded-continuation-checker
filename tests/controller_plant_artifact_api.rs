@@ -190,6 +190,7 @@ fn proof_carrying_mtbdd_batch_is_canonical_bound_and_independently_checked() {
     )
     .unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+    assert_eq!(summary.assignments_checked, 0);
 
     for length in 0..encoded.len() {
         assert!(decode_controller_proof_mtbdd_plant_artifact(&encoded[..length]).is_err());

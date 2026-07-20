@@ -67,6 +67,7 @@ fn proof_carrying_api_checks_equivalence_without_assignment_replay() {
     )
     .unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 0));
+    assert_eq!(summary.assignments_checked, 0);
 
     let mut corrupted = encoded;
     let middle = corrupted.len() / 2;

@@ -560,17 +560,15 @@ pub fn verify_proof_carrying_mtbdd_for_composition<'a>(
     .map_err(|error| reject(error.to_string()))?;
     let state_bits =
         validate_controller_mtbdd_structure(artifact).map_err(|error| reject(error.to_string()))?;
-    let assignments_checked = artifact
-        .state_count
-        .checked_shl(artifact.relevant_inputs.len() as u32)
-        .ok_or_else(|| reject("controller MTBDD assignment count overflow"))?;
     let summary = ControllerMtbddSummary {
         state_bits,
         inputs: artifact.relevant_inputs.len(),
         outputs: artifact.observed_outputs.len(),
         terminals: artifact.terminals.len(),
         nodes: artifact.nodes.len(),
-        assignments_checked,
+        // The UNSAT miter establishes equivalence without replaying individual
+        // state/input assignments. Do not report represented scope as work.
+        assignments_checked: 0,
     };
     Ok(VerifiedControllerMtbdd { artifact, summary })
 }
