@@ -23,6 +23,15 @@ root=$(cd "$root" && pwd -P)
 manifest=$(cd "$(dirname "$manifest")" && pwd -P)/$(basename "$manifest")
 mkdir -p "$(dirname "$output")"
 output=$(cd "$(dirname "$output")" && pwd -P)/$(basename "$output")
+[[ -z $(find "$root" -type l -print -quit) ]] || { echo "source tree must not contain symlinks" >&2; exit 2; }
+tree_files=$(find "$root" -type f -print | wc -l | tr -d ' ')
+tree_kib=$(du -sk "$root" | awk '{print $1}')
+[[ "$tree_files" =~ ^[0-9]+$ && "$tree_files" -le 4096 ]] || {
+  echo "source tree file count exceeds 4096" >&2; exit 2;
+}
+[[ "$tree_kib" =~ ^[0-9]+$ && "$tree_kib" -le 262144 ]] || {
+  echo "source tree exceeds 256 MiB" >&2; exit 2;
+}
 
 exec 3<"$manifest"
 take() {

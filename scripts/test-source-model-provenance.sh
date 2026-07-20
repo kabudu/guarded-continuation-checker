@@ -57,4 +57,9 @@ printf '\000' >>"$scratch/nul.txt"
 expect_failure 2 'provenance manifest contains prohibited bytes' \
   "$attester" "$source_root" "$scratch/nul.txt" "$scratch/nul.csv"
 
-echo 'source-model provenance tests status=PASS attested=2 mismatch=1 hostile=4'
+mkdir "$scratch/symlink-root"
+ln -s "$source_root/upstream" "$scratch/symlink-root/upstream"
+expect_failure 2 'source tree must not contain symlinks' \
+  "$attester" "$scratch/symlink-root" "$source_manifest" "$scratch/symlink.csv"
+
+echo 'source-model provenance tests status=PASS attested=2 mismatch=1 hostile=5'
