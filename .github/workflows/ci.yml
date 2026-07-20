@@ -54,7 +54,8 @@ jobs:
             scripts/benchmark-controller-proof-mtbdd-plant.sh \
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
             scripts/benchmark-controller-proof-mtbdd-process.sh \
-            scripts/benchmark-controller-proof-mtbdd-resources.sh
+            scripts/benchmark-controller-proof-mtbdd-resources.sh \
+            scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
       - name: Exercise proof-carrying MTBDD plant benchmark
         run: |
           scripts/benchmark-controller-proof-mtbdd-plant.sh \
@@ -244,6 +245,16 @@ jobs:
         run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Cross-check stateful physical-plant batch with SymbiYosys
         run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Compare proof profile with maintained formal workflow
+        env:
+          TRIALS: 1
+        run: |
+          scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/sby/sbysrc/sby.py /tmp/controller-proof-maintained.csv
+          awk -F, 'NR > 1 { if ($5 <= 0 || $6 <= 0 || $10 != "true" || $11 != "ok") exit 1; if ($2 == "proof" && $7 <= 0) exit 1; if ($2 == "maintained-formal" && $7 != 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["proof:create"] == 1 && seen["proof:verify"] == 1 && seen["maintained-formal:oracle"] == 1) }' \
+            /tmp/controller-proof-maintained.csv
+          cat /tmp/controller-proof-maintained.csv
       - name: Reproduce controller MTBDD self-service acceptance
         run: |
           scripts/run-controller-mtbdd-self-service-acceptance.sh \

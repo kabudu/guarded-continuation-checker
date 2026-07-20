@@ -82,3 +82,13 @@ run, while adding 242,496 raw proof bytes. SAT-based circuit equivalence and
 proof logging are established, so the improvement is an engineering tradeoff,
 not a new verification principle. Whole-process hosted comparison against the
 maintained formal route is required before admitting it to the portfolio.
+
+The follow-up
+[identical-query maintained-tool baseline](CONTROLLER_PROOF_MTBDD_MAINTAINED_BASELINE_V1.md)
+is negative on runtime. The maintained SymbiYosys/Yosys/Z3 oracle is 1.33 times
+faster than a fresh proof verifier and about 5.39 times faster than initial proof
+creation plus verification. Proof verification uses 65.5% less peak RSS and
+supplies portable evidence, but proof-carrying hardware already establishes that
+general value. This closes the local maintained-tool runtime question without
+supporting a novelty claim. Hosted Linux reproduces the runtime loss and
+verifier-memory advantage.

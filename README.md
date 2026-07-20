@@ -65,7 +65,14 @@ times larger, so this is an explicit fast-verification profile rather than the
 compact portfolio default. A hosted Linux whole-process run reproduces 1.62x
 faster creation and 1.95x faster verification, while retaining the negative
 verification-memory tradeoff. Identical-scope maintained-tool comparison and
-independent acceptance remain open.
+independent acceptance remain open at equivalent certificate scope.
+The first
+[identical-query maintained-tool baseline](docs/CONTROLLER_PROOF_MTBDD_MAINTAINED_BASELINE_V1.md)
+is deliberately negative on runtime: the maintained SymbiYosys/Yosys/Z3 oracle
+is 1.33 times faster than fresh proof verification on the retained arm64 host.
+The proof verifier uses 65.5% less peak RSS and consumes portable evidence, but
+that operational tradeoff is not a novelty claim. Hosted Linux independently
+reproduces the runtime loss and records 79.8% lower proof-verifier peak RSS.
 The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
 rejects a speed-win claim on the small public physical-plant batch. It records
 lower peak RSS for GCC production and verification while explicitly separating

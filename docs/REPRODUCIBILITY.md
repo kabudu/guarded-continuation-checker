@@ -21,6 +21,21 @@ three-trial hosted Linux results are retained separately as
 `results/controller-proof-mtbdd-process-linux-v1.csv` and
 `results/controller-proof-mtbdd-resources-linux-v1.csv`.
 
+Compare the proof profile with the identical six bounded queries in the pinned
+maintained formal workflow:
+
+```sh
+TRIALS=5 scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh \
+  target/release/guarded-continuation-checker /path/to/sby.py \
+  target/controller-proof-maintained.csv
+```
+
+The retained arm64 rows are
+`results/controller-proof-mtbdd-maintained-baseline-v1.csv`. The benchmark
+requires exact answer and shortest-frame agreement before recording a row. The
+hosted Linux reproduction is retained in
+`results/controller-proof-mtbdd-maintained-baseline-linux-v1.csv`.
+
 ## Environment
 
 - Rust 1.97.0 (pinned by `rust-toolchain.toml`)
