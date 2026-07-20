@@ -27,6 +27,8 @@ use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
+mod observed_allocator;
+
 const RTL_ARTIFACT_SCHEMA_VERSION: usize = 4;
 const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
 const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
@@ -41,6 +43,7 @@ const CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_PHASE_METRICS_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION: u32 = 1;
 const CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
@@ -144,6 +147,18 @@ fn controller_split_resource_capability_line() -> String {
         controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
         guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
         guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+    )
+}
+
+fn controller_split_observability_capability_line() -> String {
+    format!(
+        "controller_split_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} base_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    )
+}
+
+fn controller_split_allocation_observability_capability_line() -> String {
+    format!(
+        "controller_split_allocation_observability_cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} base_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
     )
 }
 
@@ -25878,8 +25893,18 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 return Err("usage: guarded-continuation-checker controller-split-observability-cli-version".to_string());
             }
             println!("{}", controller_split_resource_capability_line());
+            println!("{}", controller_split_observability_capability_line());
+            Ok(true)
+        }
+        "controller-split-allocation-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker controller-split-allocation-observability-cli-version".to_string());
+            }
+            println!("{}", controller_split_resource_capability_line());
+            println!("{}", controller_split_observability_capability_line());
             println!(
-                "controller_split_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} base_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+                "{}",
+                controller_split_allocation_observability_capability_line()
             );
             Ok(true)
         }
@@ -26092,15 +26117,21 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             Ok(true)
         }
         "verify-bound-plant-result-set-with-resources-v1"
-        | "verify-bound-plant-result-set-with-resources-observed-v1" => {
+        | "verify-bound-plant-result-set-with-resources-observed-v1"
+        | "verify-bound-plant-result-set-with-resources-allocation-observed-v1" => {
             if args.len() < 5 || !(args.len() - 3).is_multiple_of(2) {
                 return Err(format!(
                     "usage: guarded-continuation-checker {} INPUT.controller-evidence POLICY.txt MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]",
                     args[0]
                 ));
             }
-            let emit_observability =
-                args[0] == "verify-bound-plant-result-set-with-resources-observed-v1";
+            let emit_allocation_observability =
+                args[0] == "verify-bound-plant-result-set-with-resources-allocation-observed-v1";
+            let emit_observability = emit_allocation_observability
+                || args[0] == "verify-bound-plant-result-set-with-resources-observed-v1";
+            let allocation_observation = emit_allocation_observability
+                .then(observed_allocator::AllocationObservationGuard::start)
+                .transpose()?;
             let started = Instant::now();
             let mut manifest_loads = 0usize;
             let mut plant_artifact_reads = 0usize;
@@ -26361,6 +26392,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 &mut buffered_result_rows,
                 "buffered-result-row",
             )?;
+            let allocation_observation = allocation_observation
+                .map(observed_allocator::AllocationObservationGuard::finish)
+                .transpose()?;
             for (batch_index, governed, verification_micros) in &verified_batches {
                 println!(
                     "controller-split-resource-batch index={batch_index} status=VERIFIED policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} verification_micros={verification_micros}",
@@ -26391,6 +26425,17 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 println!(
                     "controller-split-resource-observability status=MEASURED cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} policy_and_input_micros={policy_and_input_micros} controller_admission_micros={admission_micros} complete_set_preflight_micros={complete_set_preflight_micros} semantic_replay_micros={semantic_replay_micros} total_micros={total_micros} controller_admissions=1 manifest_loads={manifest_loads} plant_artifact_reads={plant_artifact_reads} resource_assessments={resource_assessments} batch_verifications={batch_verifications} buffered_result_rows={buffered_result_rows} prepared_batches={prepared_batch_count} prepared_members={total_members} controller_evidence_bytes={} total_plant_artifact_bytes={total_plant_artifact_bytes} total_transition_evaluation_bound={total_transition_bound} timing_calibration=none",
                     governed_admission.resources.artifact_bytes,
+                );
+            }
+            if let Some(allocation) = allocation_observation {
+                println!(
+                    "controller-split-allocation-observability status=MEASURED cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} allocator=system scope=policy-through-replay allocation_calls={} allocated_bytes={} deallocation_calls={} deallocated_bytes={} reallocation_calls={} reallocated_bytes={} overflow=none timing_calibration=none",
+                    allocation.allocation_calls,
+                    allocation.allocated_bytes,
+                    allocation.deallocation_calls,
+                    allocation.deallocated_bytes,
+                    allocation.reallocation_calls,
+                    allocation.reallocated_bytes,
                 );
             }
             Ok(true)

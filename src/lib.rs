@@ -177,6 +177,8 @@ pub enum OperationKind {
     VerifyBoundPlantResultSetResources,
     DiscoverControllerSplitObservability,
     VerifyBoundPlantResultSetResourcesObserved,
+    DiscoverControllerSplitAllocationObservability,
+    VerifyBoundPlantResultSetResourcesAllocationObserved,
 }
 
 impl OperationKind {
@@ -233,6 +235,12 @@ impl OperationKind {
             Self::DiscoverControllerSplitObservability => "discover_controller_split_observability",
             Self::VerifyBoundPlantResultSetResourcesObserved => {
                 "verify_bound_plant_result_set_resources_observed"
+            }
+            Self::DiscoverControllerSplitAllocationObservability => {
+                "discover_controller_split_allocation_observability"
+            }
+            Self::VerifyBoundPlantResultSetResourcesAllocationObserved => {
+                "verify_bound_plant_result_set_resources_allocation_observed"
             }
         }
     }
@@ -768,6 +776,29 @@ pub struct ControllerSplitPhaseMetrics {
 pub struct ControllerSplitObservedSummary {
     pub verification: ControllerSplitResourceSetSummary,
     pub phases: ControllerSplitPhaseMetrics,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitAllocationObservabilityCapabilities {
+    pub cli_version: u32,
+    pub observability: ControllerSplitObservabilityCapabilities,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitAllocationMetrics {
+    pub version: u32,
+    pub allocation_calls: u64,
+    pub allocated_bytes: u64,
+    pub deallocation_calls: u64,
+    pub deallocated_bytes: u64,
+    pub reallocation_calls: u64,
+    pub reallocated_bytes: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitAllocationObservedSummary {
+    pub observed: ControllerSplitObservedSummary,
+    pub allocations: ControllerSplitAllocationMetrics,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1961,6 +1992,127 @@ impl ControllerSplitObservabilityTool {
     }
 }
 
+/// Typed client for governed split verification with allocator accounting.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitAllocationObservabilityTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitAllocationObservabilityCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitAllocationObservabilityTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-allocation-observability-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitAllocationObservability,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_controller_split_allocation_observability_capabilities(&stdout)
+            .map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitAllocationObservabilityCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitAllocationObservedSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitAllocationObservedSummary>, PredicateOperationError> {
+        if batches.is_empty()
+            || batches.len() > self.capabilities.observability.resource.max_batches
+        {
+            let error = PredicateApiError::InvalidPolicy(
+                "allocation-observed split-evidence batch count is outside discovered limits"
+                    .to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResourcesAllocationObserved,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-allocation-observed-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResourcesAllocationObserved,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_allocation_observed_summary(
+            output,
+            batches.len(),
+            &self.capabilities,
+        )
+        .map_err(classify_controller_split_resource_refusal)
+    }
+}
+
 /// Typed, shell-free client for statically routed controller/plant portfolio v1.
 #[derive(Clone, Debug)]
 pub struct ControllerPlantPortfolioTool {
@@ -3018,6 +3170,18 @@ fn canonical_u32(value: &str, field: &str) -> Result<u32, PredicateApiError> {
 
 fn canonical_u128(value: &str, field: &str) -> Result<u128, PredicateApiError> {
     let parsed = value.parse::<u128>().map_err(|_| {
+        PredicateApiError::InvalidResponse(format!("{field} is not an unsigned integer"))
+    })?;
+    if parsed.to_string() != value {
+        return Err(PredicateApiError::InvalidResponse(format!(
+            "{field} is noncanonical"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn canonical_u64(value: &str, field: &str) -> Result<u64, PredicateApiError> {
+    let parsed = value.parse::<u64>().map_err(|_| {
         PredicateApiError::InvalidResponse(format!("{field} is not an unsigned integer"))
     })?;
     if parsed.to_string() != value {
@@ -4675,6 +4839,62 @@ fn parse_controller_split_observability_capabilities(
     })
 }
 
+fn parse_controller_split_allocation_observability_capabilities(
+    text: &str,
+) -> Result<ControllerSplitAllocationObservabilityCapabilities, PredicateApiError> {
+    if text.contains('\r') || !text.ends_with('\n') || text.lines().count() != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split allocation capability response is not canonical".to_string(),
+        ));
+    }
+    let lines = text.lines().collect::<Vec<_>>();
+    let observability = parse_controller_split_observability_capabilities(&format!(
+        "{}\n{}\n",
+        lines[0], lines[1]
+    ))?;
+    let fields = lines[2].split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_allocation_observability_cli_version",
+        "base_observability_cli_version",
+        "allocator",
+        "scope",
+        "counters",
+        "overflow",
+        "timing_calibration",
+        "partial_metrics_on_failure",
+        "result_on_refusal",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split allocation capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[0], keys[0])?;
+    let base_version = canonical_u32(values[1], keys[1])?;
+    if cli_version != 1
+        || base_version != observability.cli_version
+        || values[2] != "system"
+        || values[3] != "policy-through-replay"
+        || values[4]
+            != "allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes"
+        || values[5..] != ["fail-closed", "none", "none", "none", "fail-closed"]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split allocation observability contract is unsupported".to_string(),
+        ));
+    }
+    Ok(ControllerSplitAllocationObservabilityCapabilities {
+        cli_version,
+        observability,
+    })
+}
+
 fn parse_controller_mtbdd_capabilities(
     line: &str,
 ) -> Result<ControllerMtbddCapabilities, PredicateApiError> {
@@ -5520,6 +5740,113 @@ fn parse_controller_split_observed_summary(
     }
 }
 
+fn parse_controller_split_allocation_observed_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitAllocationObservabilityCapabilities,
+) -> Result<Observed<ControllerSplitAllocationObservedSummary>, PredicateOperationError> {
+    let status = output.status;
+    let (stdout, mut invocation_metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitAllocationObservedSummary, PredicateApiError> {
+        if stdout.contains('\r')
+            || !stdout.ends_with('\n')
+            || stdout.lines().count() != expected_batches + 3
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split allocation response line count is invalid".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let observed_stdout = format!("{}\n", lines[..expected_batches + 2].join("\n"));
+        let observed_output = ManagedOutput {
+            status,
+            stdout: observed_stdout.into_bytes(),
+            stderr: Vec::new(),
+            metrics: invocation_metrics.clone(),
+        };
+        let observed = parse_controller_split_observed_summary(
+            observed_output,
+            expected_batches,
+            &capabilities.observability,
+        )
+        .map_err(|failure| *failure.error)?
+        .value;
+
+        let fields = lines[expected_batches + 2].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-allocation-observability",
+            "status",
+            "cli_version",
+            "allocator",
+            "scope",
+            "allocation_calls",
+            "allocated_bytes",
+            "deallocation_calls",
+            "deallocated_bytes",
+            "reallocation_calls",
+            "reallocated_bytes",
+            "overflow",
+            "timing_calibration",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split allocation metrics fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "MEASURED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || values[2] != "system"
+            || values[3] != "policy-through-replay"
+            || values[10] != "none"
+            || values[11] != "none"
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split allocation metrics contract changed".to_string(),
+            ));
+        }
+        let counts = values[4..10]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_u64(value, keys[index + 5]))
+            .collect::<Result<Vec<_>, _>>()?;
+        if counts[0] == 0 || counts[1] == 0 {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split allocation metrics are empty".to_string(),
+            ));
+        }
+        Ok(ControllerSplitAllocationObservedSummary {
+            observed,
+            allocations: ControllerSplitAllocationMetrics {
+                version: capabilities.cli_version,
+                allocation_calls: counts[0],
+                allocated_bytes: counts[1],
+                deallocation_calls: counts[2],
+                deallocated_bytes: counts[3],
+                reallocation_calls: counts[4],
+                reallocated_bytes: counts[5],
+            },
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed {
+            value,
+            metrics: invocation_metrics,
+        }),
+        Err(error) => {
+            invocation_metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: invocation_metrics,
+            })
+        }
+    }
+}
+
 fn classify_controller_split_resource_refusal(
     mut failure: PredicateOperationError,
 ) -> PredicateOperationError {
@@ -6136,6 +6463,34 @@ mod tests {
             format!("{observability}\n{resource}\n"),
         ] {
             assert!(parse_controller_split_observability_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_split_allocation_capability_parser_is_strict() {
+        let resource = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed";
+        let observability = "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let allocation = "controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let canonical = format!("{resource}\n{observability}\n{allocation}\n");
+        let parsed =
+            parse_controller_split_allocation_observability_capabilities(&canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.observability.cli_version, 1);
+        for hostile in [
+            canonical.replace("allocator=system", "allocator=jemalloc"),
+            canonical.replace("scope=policy-through-replay", "scope=whole-process"),
+            canonical.replace("allocated-bytes", "live-bytes"),
+            canonical.replace("overflow=fail-closed", "overflow=saturate"),
+            canonical.replace(
+                "base_observability_cli_version=1",
+                "base_observability_cli_version=2",
+            ),
+            canonical.replace('\n', "\r\n"),
+            format!("{resource}\n{observability}\n"),
+        ] {
+            assert!(
+                parse_controller_split_allocation_observability_capabilities(&hostile).is_err()
+            );
         }
     }
 

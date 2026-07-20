@@ -24,6 +24,10 @@ Capability responses are strict records. Adding a field to an existing strict
 response is therefore breaking and requires a new discovery version. New
 commands may be added without changing an existing command.
 
+The split allocation-observability v1 interface follows that rule: it has a
+separate discovery command, verification command, typed client, and final row.
+The resource and phase-observability v1 responses remain unchanged.
+
 ## First production-line guarantee
 
 Beginning with the first production tag:

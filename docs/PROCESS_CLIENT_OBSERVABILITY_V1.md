@@ -73,7 +73,8 @@ This aggregation API reports process-client observations and configured
 containment. The additive
 [controller split observability contract](CONTROLLER_SPLIT_OBSERVABILITY_V1.md)
 now exposes versioned internal phase durations and structural work counters for
-the governed split path. It does not yet expose cache hit rates, allocator
+the governed split path. Its additive allocation contract reports bounded
+system-allocator events. It does not yet expose cache hit rates, allocator
 peaks, CPU counters, or per-phase peak RSS. The external process-resource
 benchmark remains the source for architecture-labelled peak RSS and must not be
 mixed into deterministic compatibility results or routing decisions.

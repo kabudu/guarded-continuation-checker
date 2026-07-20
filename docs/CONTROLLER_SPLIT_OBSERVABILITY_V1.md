@@ -94,11 +94,20 @@ Hosted run
 passes the CLI and typed observability contract, hostile-response controls,
 portable APIs on Linux, macOS, and Windows, the public RTL corpus, dependency
 audit, and reproducible Linux packaging on exact commit `6393ccf`.
+Hosted run
+[29782315590](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29782315590)
+then reproduces the retained five-invocation structural CSV on exact commit
+`7b9e024`, with every companion job green.
+
+The additive
+[allocation observability contract](CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_V1.md)
+extends this workflow without modifying either v1 row.
 
 ## Boundary
 
 This contract exposes deterministic work counts and elapsed phase observations.
-It does not report allocator peak usage, cache hit rates, CPU counters, or
+The separate allocation contract reports system-allocator event counts. Neither
+contract reports allocator peak usage, cache hit rates, CPU counters, or
 per-phase peak RSS. Architecture-labelled whole-process peak RSS remains in the
 separate process-resource benchmark. Neither source is valid as a per-formula
 calibration or an answer-selection signal.

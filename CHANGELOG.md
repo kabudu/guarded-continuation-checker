@@ -13,6 +13,14 @@
   batches, and a refusal that emits no partial metrics. Reproduce their
   deterministic structural aggregate in ordinary Linux CI while excluding
   host-dependent timings.
+  Add a separate allocation-observability v1 discovery, command, strict final
+  row, and typed Rust client without changing either existing observability v1
+  response. Count successful system-allocation, deallocation, and reallocation
+  events plus requested bytes across the policy-through-replay scope. Use an
+  opt-in concurrency barrier, fail closed on overflow or hostile summaries, and
+  emit no partial metrics on refusal. Exercise positive allocation evidence in
+  every successful retained observed request while keeping allocator-dependent
+  totals out of portable CSV evidence.
 - Add the first Rust API slice for governed proof-carrying controller MTBDD
   verification. Bound the complete artifact, equivalence artifact, embedded
   UNSAT proof, members, horizons, product states, and transition evaluations

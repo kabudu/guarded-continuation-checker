@@ -6,7 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use guarded_continuation_checker::{
     ControllerPlantPortfolioBackend, ControllerPlantPortfolioReason,
     ControllerPlantResourceRefusalReason, ControllerProofMtbddPortfolioTool,
-    ControllerProofMtbddResourceTool, ControllerProofMtbddTool, ControllerSplitEvidenceTool,
+    ControllerProofMtbddResourceTool, ControllerProofMtbddTool,
+    ControllerSplitAllocationObservabilityTool, ControllerSplitEvidenceTool,
     ControllerSplitObservabilityTool, ControllerSplitResourceTool, FailureClass, InvocationStatus,
     OperationKind, PredicateApiError, aggregate_invocation_metrics,
 };
@@ -185,6 +186,19 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
         observability_lines[1],
         "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
     );
+    let allocation_discovery = Command::new(BINARY)
+        .arg("controller-split-allocation-observability-cli-version")
+        .output()
+        .unwrap();
+    assert!(allocation_discovery.status.success());
+    let allocation_discovery = String::from_utf8(allocation_discovery.stdout).unwrap();
+    let allocation_lines = allocation_discovery.lines().collect::<Vec<_>>();
+    assert_eq!(allocation_lines.len(), 3);
+    assert_eq!(allocation_lines[..2], observability_lines);
+    assert_eq!(
+        allocation_lines[2],
+        "controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    );
 
     let evidence_bytes = fs::metadata(&evidence).unwrap().len() as usize;
     let result_bytes = fs::metadata(&results).unwrap().len() as usize;
@@ -287,6 +301,48 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     assert_eq!(observed_value("total_transition_evaluation_bound"), 48);
     assert!(observed_line.ends_with("timing_calibration=none"));
 
+    let allocation_governed = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-allocation-observed-v1")
+        .arg(&evidence)
+        .arg(&resource_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results_second)
+        .output()
+        .unwrap();
+    assert!(
+        allocation_governed.status.success(),
+        "{:?}",
+        allocation_governed.stderr
+    );
+    let allocation_governed = String::from_utf8(allocation_governed.stdout).unwrap();
+    assert_eq!(allocation_governed.lines().count(), 5);
+    assert!(
+        allocation_governed
+            .lines()
+            .nth(3)
+            .unwrap()
+            .starts_with("controller-split-resource-observability status=MEASURED cli_version=1 ")
+    );
+    let allocation_line = allocation_governed.lines().last().unwrap();
+    assert!(allocation_line.starts_with(
+        "controller-split-allocation-observability status=MEASURED cli_version=1 allocator=system scope=policy-through-replay "
+    ));
+    let allocation_value = |key: &str| -> u64 {
+        allocation_line
+            .split_whitespace()
+            .find_map(|field| field.strip_prefix(&format!("{key}=")))
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    assert!(allocation_value("allocation_calls") > 0);
+    assert!(allocation_value("allocated_bytes") > 0);
+    assert!(allocation_value("deallocation_calls") > 0);
+    assert!(allocation_value("deallocated_bytes") > 0);
+    assert!(allocation_line.ends_with("overflow=none timing_calibration=none"));
+
     let observability_tool =
         ControllerSplitObservabilityTool::discover_observed(BINARY, Default::default()).unwrap();
     assert_eq!(
@@ -328,6 +384,38 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     assert_eq!(typed_observed.value.phases.buffered_result_rows, 3);
     assert_eq!(typed_observed.value.phases.prepared_batches, 2);
     assert_eq!(typed_observed.value.phases.prepared_members, 4);
+
+    let allocation_tool =
+        ControllerSplitAllocationObservabilityTool::discover_observed(BINARY, Default::default())
+            .unwrap();
+    assert_eq!(
+        allocation_tool.metrics.operation,
+        OperationKind::DiscoverControllerSplitAllocationObservability
+    );
+    assert_eq!(allocation_tool.value.capabilities().cli_version, 1);
+    assert_eq!(
+        allocation_tool
+            .value
+            .capabilities()
+            .observability
+            .phase_metrics_version,
+        1
+    );
+    let typed_allocation = allocation_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &resource_policy,
+            &[(&manifest, &results), (&manifest, &results_second)],
+        )
+        .unwrap();
+    assert_eq!(
+        typed_allocation.metrics.operation,
+        OperationKind::VerifyBoundPlantResultSetResourcesAllocationObserved
+    );
+    assert_eq!(typed_allocation.value.observed.verification.members, 4);
+    assert!(typed_allocation.value.allocations.allocation_calls > 0);
+    assert!(typed_allocation.value.allocations.allocated_bytes > 0);
 
     let resource_tool =
         ControllerSplitResourceTool::discover_observed(BINARY, Default::default()).unwrap();
@@ -462,6 +550,34 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
     ));
     assert_eq!(
         typed_observed_refusal.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
+    let allocation_refusal = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-with-resources-allocation-observed-v1")
+        .arg(&evidence)
+        .arg(&tight_controller_policy)
+        .arg(&manifest)
+        .arg(&results)
+        .output()
+        .unwrap();
+    assert_eq!(allocation_refusal.status.code(), Some(3));
+    assert!(allocation_refusal.stdout.is_empty());
+    let typed_allocation_refusal = allocation_tool
+        .value
+        .verify_set_observed(
+            &evidence,
+            &tight_controller_policy,
+            &[(&manifest, &results)],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *typed_allocation_refusal.error,
+        PredicateApiError::ResourceRefused {
+            reason: ControllerPlantResourceRefusalReason::ControllerArtifactBytes
+        }
+    ));
+    assert_eq!(
+        typed_allocation_refusal.metrics.status,
         InvocationStatus::Failed(FailureClass::ResourceRefusal)
     );
 
@@ -1325,5 +1441,76 @@ fn proof_mtbdd_portfolio_typed_client_accepts_exact_static_fallback() {
     assert_eq!((governed.safe, governed.unsafe_count), (1, 1));
     assert_eq!(governed.transition_evaluation_bound, 2560);
     assert_eq!(governed.assignments_checked, 0);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn typed_allocation_observability_rejects_empty_hostile_metrics() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = fixture();
+    let executable = root.join("hostile-allocation-helper");
+    let script = r#"#!/bin/sh
+case "$1" in
+controller-split-allocation-observability-cli-version)
+printf '%s\n' 'controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed'
+printf '%s\n' 'controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed'
+printf '%s\n' 'controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed'
+;;
+verify-bound-plant-result-set-with-resources-allocation-observed-v1)
+printf '%s\n' 'controller-split-resource-batch index=0 status=VERIFIED policy_version=1 envelope_version=1 artifact_version=1 members=1 maximum_member_horizon=1 maximum_product_states=1 transition_evaluation_bound=1 safe=1 unsafe=0 reachable_product_states=1 explored_transitions=1 artifact_bytes=1 verification_micros=1'
+printf '%s\n' 'controller-split-resource-set status=VERIFIED cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_admissions=1 batches=1 members=1 safe=1 unsafe=0 reachable_product_states=1 explored_transitions=1 controller_evidence_bytes=10 controller_mtbdd_bytes=1 equivalence_artifact_bytes=2 unsat_proof_bytes=1 total_plant_artifact_bytes=1 total_transition_evaluation_bound=1 admission_micros=0 elapsed_micros=1'
+printf '%s\n' 'controller-split-resource-observability status=MEASURED cli_version=1 phase_metrics_version=1 policy_and_input_micros=0 controller_admission_micros=0 complete_set_preflight_micros=0 semantic_replay_micros=0 total_micros=1 controller_admissions=1 manifest_loads=3 plant_artifact_reads=2 resource_assessments=2 batch_verifications=1 buffered_result_rows=2 prepared_batches=1 prepared_members=1 controller_evidence_bytes=10 total_plant_artifact_bytes=1 total_transition_evaluation_bound=1 timing_calibration=none'
+printf '%s\n' 'controller-split-allocation-observability status=MEASURED cli_version=1 allocator=system scope=policy-through-replay allocation_calls=0 allocated_bytes=0 deallocation_calls=0 deallocated_bytes=0 reallocation_calls=0 reallocated_bytes=0 overflow=none timing_calibration=none'
+;;
+*) exit 2;;
+esac
+"#;
+    fs::write(&executable, script).unwrap();
+    let mut permissions = fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(&executable, permissions).unwrap();
+
+    let tool = ControllerSplitAllocationObservabilityTool::discover(&executable).unwrap();
+    let failure = tool
+        .verify_set_observed(
+            Path::new("evidence"),
+            Path::new("policy"),
+            &[(Path::new("manifest"), Path::new("results"))],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *failure.error,
+        PredicateApiError::InvalidResponse(_)
+    ));
+    assert_eq!(
+        failure.metrics.status,
+        InvocationStatus::Failed(FailureClass::Response)
+    );
+
+    fs::write(
+        &executable,
+        script.replace(
+            "allocation_calls=0",
+            "allocation_calls=18446744073709551616",
+        ),
+    )
+    .unwrap();
+    let overflow = tool
+        .verify_set_observed(
+            Path::new("evidence"),
+            Path::new("policy"),
+            &[(Path::new("manifest"), Path::new("results"))],
+        )
+        .unwrap_err();
+    assert!(matches!(
+        *overflow.error,
+        PredicateApiError::InvalidResponse(_)
+    ));
+    assert_eq!(
+        overflow.metrics.status,
+        InvocationStatus::Failed(FailureClass::Response)
+    );
     fs::remove_dir_all(root).unwrap();
 }

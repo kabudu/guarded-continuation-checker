@@ -23,10 +23,10 @@ results_a=$scratch/physical-a.plant-results
 results_b=$scratch/physical-b.plant-results
 policy=$scratch/permissive.policy
 
-capabilities=$("$binary" controller-split-observability-cli-version)
-test "$(printf '%s\n' "$capabilities" | wc -l | tr -d ' ')" -eq 2
+capabilities=$("$binary" controller-split-allocation-observability-cli-version)
+test "$(printf '%s\n' "$capabilities" | wc -l | tr -d ' ')" -eq 3
 printf '%s\n' "$capabilities" | tail -n 1 | grep -q \
-  '^controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 .* timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed$'
+  '^controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay .* overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed$'
 
 "$binary" certify-controller-proof-evidence-v1 "$manifest_a" "$evidence" >/dev/null
 "$binary" certify-bound-plant-results-v1 "$manifest_a" "$evidence" "$results_a" >/dev/null
@@ -54,7 +54,7 @@ status=complete
 EOF
 
 field() {
-  printf '%s\n' "$1" | tail -n 1 | sed -n "s/.* $2=\\([^ ]*\\).*/\\1/p"
+  printf '%s\n' "$1" | sed -n "s/.* $2=\\([^ ]*\\).*/\\1/p" | tail -n 1
 }
 
 check_phases() {
@@ -71,10 +71,13 @@ check_phases() {
   total=$(field "$observed" total_micros)
   test "$phase_sum" -le "$total"
   test "$(field "$observed" timing_calibration)" = none
+  test "$(field "$observed" allocation_calls)" -gt 0
+  test "$(field "$observed" allocated_bytes)" -gt 0
+  test "$(field "$observed" overflow)" = none
 }
 
 run_observed() {
-  "$binary" verify-bound-plant-result-set-with-resources-observed-v1 \
+  "$binary" verify-bound-plant-result-set-with-resources-allocation-observed-v1 \
     "$evidence" "$policy" "$@"
 }
 
@@ -121,7 +124,7 @@ sed "s/max_controller_artifact_bytes=$controller_bytes/max_controller_artifact_b
   "$policy" >"$tight"
 refusal_stdout=$scratch/refusal.stdout
 refusal_stderr=$scratch/refusal.stderr
-if "$binary" verify-bound-plant-result-set-with-resources-observed-v1 \
+if "$binary" verify-bound-plant-result-set-with-resources-allocation-observed-v1 \
   "$evidence" "$tight" "$manifest_a" "$results_a" \
   >"$refusal_stdout" 2>"$refusal_stderr"; then
   echo "observed governed split verification unexpectedly succeeded" >&2
