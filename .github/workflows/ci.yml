@@ -69,13 +69,15 @@ jobs:
             /tmp/controller-proof-mtbdd-acceptance.csv
       - name: Exercise proof-carrying MTBDD whole-process comparison
         env:
-          TRIALS: 1
+          TRIALS: 3
         run: |
+          cargo build --release --locked
           scripts/benchmark-controller-proof-mtbdd-process.sh \
-            target/debug/guarded-continuation-checker \
+            target/release/guarded-continuation-checker \
             /tmp/controller-proof-mtbdd-process.csv
-          awk -F, 'NR > 1 { if ($8 != "true" || $9 != "ok" || $5 <= 0 || $6 <= 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["compact:create"] == 1 && seen["compact:verify"] == 1 && seen["proof:create"] == 1 && seen["proof:verify"] == 1) }' \
+          awk -F, -v trials="$TRIALS" 'NR > 1 { if ($8 != "true" || $9 != "ok" || $5 <= 0 || $6 <= 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["compact:create"] == trials && seen["compact:verify"] == trials && seen["proof:create"] == trials && seen["proof:verify"] == trials) }' \
             /tmp/controller-proof-mtbdd-process.csv
+          cat /tmp/controller-proof-mtbdd-process.csv
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
