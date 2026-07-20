@@ -252,7 +252,7 @@ jobs:
           scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh \
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             /tmp/sby/sbysrc/sby.py /tmp/controller-proof-maintained.csv
-          awk -F, 'NR > 1 { if ($5 <= 0 || $6 <= 0 || $10 != "true" || $11 != "ok") exit 1; seen[$2 ":" $3]++ } END { exit !(seen["proof:create"] == 1 && seen["proof:verify"] == 1 && seen["maintained-formal:oracle"] == 1) }' \
+          awk -F, 'NR > 1 { if ($5 <= 0 || $6 <= 0 || $10 != "true" || $11 != "ok") exit 1; if ($2 == "proof" && $7 <= 0) exit 1; if ($2 == "maintained-formal" && $7 != 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["proof:create"] == 1 && seen["proof:verify"] == 1 && seen["maintained-formal:oracle"] == 1) }' \
             /tmp/controller-proof-maintained.csv
           cat /tmp/controller-proof-maintained.csv
       - name: Reproduce controller MTBDD self-service acceptance
