@@ -287,11 +287,14 @@ jobs:
           git -C /tmp/yosys-attestation fetch --depth 1 origin \
             b8e7da6f40ae8f552c116bf6c359b07c6533e159
           git -C /tmp/yosys-attestation checkout --detach FETCH_HEAD
-          make -C /tmp/yosys-attestation config-gcc
-          make -C /tmp/yosys-attestation -j2 ENABLE_ABC=0 yosys
+          cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DYOSYS_WITHOUT_ABC=ON \
+            -DYOSYS_WITHOUT_SLANG=ON
+          cmake --build /tmp/yosys-attestation/build --parallel 2 --target yosys
       - name: Reproduce public source-to-model attestation
         run: |
-          PATH="/tmp/yosys-attestation:$PATH" \
+          PATH="/tmp/yosys-attestation/build:$PATH" \
             scripts/test-source-model-provenance.sh \
             results/public-washing-source-model-attestation-v1.csv
       - name: Compare proof profile with maintained formal workflow
