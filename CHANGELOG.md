@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add experimental controller/plant verification resource envelope v1 through
+  the public Rust API. Preflight artifact bytes, members, horizons, product
+  states, external-input branches, and direct-backend controller evaluations
+  with checked conservative arithmetic before semantic replay. Preserve the
+  existing exact MTBDD/direct portfolio, return the assessment separately from
+  the verification answer, and fail closed at every caller-selected limit.
+  CLI policy files, stable process refusal classes, Linux enforcement evidence,
+  aggregation, and constrained-workflow acceptance remain open.
+
 - Pinned and offline-qualified the Certifaiger 10.2.0, AIGER, CaDiCaL,
   `lrat_isa`, and runlim comparison stack on local arm64 Linux, including all
   upstream Certifaiger witness fixtures and the intentionally invalid control.

@@ -343,3 +343,9 @@ The next predeclared experiment compares GCC evidence with the
 competition-standard Certifaiger and `aigsim` path at equivalent bounded scope.
 The [comparison plan](CERTIFAIGER_EQUIVALENT_EVIDENCE_PLAN.md) explicitly allows
 the portable-batch distinction to be falsified.
+
+Controller/plant resource envelope v1 converts the narrow low-memory result
+into an explicit conservative consumer policy boundary. Static work estimates,
+resource admission, exact fallback, and fail-closed verification are established
+systems techniques. This is production hardening, not novelty evidence, and it
+does not change any scholarly claim gate.

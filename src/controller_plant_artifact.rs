@@ -37,6 +37,7 @@ pub const DIRECT_PLANT_ARTIFACT_VERSION: u32 = 1;
 const DIRECT_MAGIC: &[u8; 8] = b"GCCDPA01";
 pub const MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
 const PORTFOLIO_MAGIC: &[u8; 8] = b"GCCMPP01";
+pub const CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ControllerPlantArtifactInput<'a> {
@@ -121,6 +122,101 @@ pub struct ControllerMtbddPlantPortfolioSummary {
     pub unsafe_count: usize,
     pub reachable_product_states: usize,
     pub explored_transitions: usize,
+}
+
+/// Caller-selected hard bounds checked before controller/plant semantic replay.
+///
+/// The transition bound is a conservative upper bound over the complete product
+/// state space, every requested frame, every external plant input, and, for the
+/// direct backend, every omitted controller input evaluation. It is deliberately
+/// independent of measured runtime and formula-specific calibration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerPlantResourceEnvelope {
+    max_artifact_bytes: usize,
+    max_members: usize,
+    max_member_horizon: usize,
+    max_product_states_per_member: usize,
+    max_transition_evaluations: usize,
+}
+
+impl ControllerPlantResourceEnvelope {
+    pub fn new(
+        max_artifact_bytes: usize,
+        max_members: usize,
+        max_member_horizon: usize,
+        max_product_states_per_member: usize,
+        max_transition_evaluations: usize,
+    ) -> Result<Self, ControllerPlantArtifactError> {
+        if max_artifact_bytes == 0
+            || max_artifact_bytes > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+            || max_members == 0
+            || max_members > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+            || max_member_horizon > MAX_COMPOSITION_HORIZON
+            || max_product_states_per_member == 0
+            || max_product_states_per_member > crate::controller_plant::MAX_PRODUCT_STATES
+            || max_transition_evaluations == 0
+        {
+            return Err(reject(
+                "controller-plant resource envelope is outside static limits",
+            ));
+        }
+        Ok(Self {
+            max_artifact_bytes,
+            max_members,
+            max_member_horizon,
+            max_product_states_per_member,
+            max_transition_evaluations,
+        })
+    }
+
+    pub fn max_artifact_bytes(self) -> usize {
+        self.max_artifact_bytes
+    }
+
+    pub fn max_members(self) -> usize {
+        self.max_members
+    }
+
+    pub fn max_member_horizon(self) -> usize {
+        self.max_member_horizon
+    }
+
+    pub fn max_product_states_per_member(self) -> usize {
+        self.max_product_states_per_member
+    }
+
+    pub fn max_transition_evaluations(self) -> usize {
+        self.max_transition_evaluations
+    }
+}
+
+impl Default for ControllerPlantResourceEnvelope {
+    fn default() -> Self {
+        Self {
+            max_artifact_bytes: MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+            max_members: MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+            max_member_horizon: MAX_COMPOSITION_HORIZON,
+            max_product_states_per_member: crate::controller_plant::MAX_PRODUCT_STATES,
+            max_transition_evaluations: usize::MAX,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerPlantResourceAssessment {
+    pub version: u32,
+    pub backend: ControllerMtbddPlantPortfolioBackend,
+    pub artifact_bytes: usize,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GovernedControllerMtbddPlantPortfolioSummary {
+    pub resources: ControllerPlantResourceAssessment,
+    pub verification: ControllerMtbddPlantPortfolioSummary,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1345,6 +1441,139 @@ fn portfolio_members_match(
                 && claimed.bad_plant_output == expected.bad_plant_output
                 && claimed.horizon == expected.horizon
         })
+}
+
+fn bounded_state_count(latches: usize) -> Result<usize, ControllerPlantArtifactError> {
+    1usize
+        .checked_shl(
+            u32::try_from(latches)
+                .map_err(|_| reject("controller-plant resource state width exceeds range"))?,
+        )
+        .ok_or_else(|| reject("controller-plant resource state width exceeds range"))
+}
+
+/// Conservatively preflight one portfolio verification against caller-selected
+/// resource bounds. This validates the canonical outer artifact but performs no
+/// controller/plant reachability replay.
+pub fn assess_controller_mtbdd_plant_portfolio_resources(
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerPlantResourceEnvelope,
+) -> Result<ControllerPlantResourceAssessment, ControllerPlantArtifactError> {
+    if bytes.len() > envelope.max_artifact_bytes {
+        return Err(reject(
+            "controller-plant resource envelope artifact-byte limit exceeded",
+        ));
+    }
+    if members.is_empty() || members.len() > envelope.max_members {
+        return Err(reject(
+            "controller-plant resource envelope member limit exceeded",
+        ));
+    }
+    let artifact = decode_controller_mtbdd_plant_portfolio(bytes)?;
+    let controller_states = bounded_state_count(controller_model.latches.len())?;
+    let omitted_controller_inputs = controller_model
+        .inputs
+        .len()
+        .checked_sub(artifact.relevant_inputs.len())
+        .ok_or_else(|| reject("controller-plant resource boundary is invalid"))?;
+    let direct_multiplier = match artifact.backend {
+        ControllerMtbddPlantPortfolioBackend::Mtbdd => 1,
+        ControllerMtbddPlantPortfolioBackend::DirectExact => 1usize
+            .checked_shl(
+                u32::try_from(omitted_controller_inputs)
+                    .map_err(|_| reject("controller-plant resource input width exceeds range"))?,
+            )
+            .ok_or_else(|| reject("controller-plant resource input width exceeds range"))?,
+    };
+    let mut maximum_member_horizon = 0usize;
+    let mut maximum_product_states = 0usize;
+    let mut transition_evaluation_bound = 0usize;
+    for member in members {
+        if member.horizon > envelope.max_member_horizon {
+            return Err(reject(
+                "controller-plant resource envelope horizon limit exceeded",
+            ));
+        }
+        maximum_member_horizon = maximum_member_horizon.max(member.horizon);
+        let plant_states = bounded_state_count(member.plant.latches.len())?;
+        let product_states = controller_states
+            .checked_mul(plant_states)
+            .ok_or_else(|| reject("controller-plant resource product-state bound overflow"))?;
+        if product_states > envelope.max_product_states_per_member {
+            return Err(reject(
+                "controller-plant resource envelope product-state limit exceeded",
+            ));
+        }
+        maximum_product_states = maximum_product_states.max(product_states);
+        let external_inputs = member
+            .plant
+            .inputs
+            .len()
+            .checked_sub(member.wiring.plant_action_inputs.len())
+            .ok_or_else(|| reject("controller-plant resource wiring is invalid"))?;
+        let external_patterns = 1usize
+            .checked_shl(
+                u32::try_from(external_inputs)
+                    .map_err(|_| reject("controller-plant resource input width exceeds range"))?,
+            )
+            .ok_or_else(|| reject("controller-plant resource input width exceeds range"))?;
+        let member_bound = product_states
+            .checked_mul(member.horizon.saturating_add(1))
+            .and_then(|value| value.checked_mul(external_patterns))
+            .and_then(|value| value.checked_mul(direct_multiplier))
+            .ok_or_else(|| reject("controller-plant resource transition bound overflow"))?;
+        transition_evaluation_bound = transition_evaluation_bound
+            .checked_add(member_bound)
+            .ok_or_else(|| reject("controller-plant resource transition bound overflow"))?;
+        if transition_evaluation_bound > envelope.max_transition_evaluations {
+            return Err(reject(
+                "controller-plant resource envelope transition limit exceeded",
+            ));
+        }
+    }
+    Ok(ControllerPlantResourceAssessment {
+        version: CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+        backend: artifact.backend,
+        artifact_bytes: bytes.len(),
+        members: members.len(),
+        maximum_member_horizon,
+        maximum_product_states,
+        transition_evaluation_bound,
+    })
+}
+
+/// Verify through the existing exact portfolio only after its conservative
+/// workload fits the supplied resource envelope.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_controller_mtbdd_plant_portfolio_with_resources(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerPlantResourceEnvelope,
+) -> Result<GovernedControllerMtbddPlantPortfolioSummary, ControllerPlantArtifactError> {
+    let resources = assess_controller_mtbdd_plant_portfolio_resources(
+        controller_model,
+        members,
+        bytes,
+        envelope,
+    )?;
+    let verification = verify_controller_mtbdd_plant_portfolio(
+        controller_model,
+        controller_source_sha256,
+        relevant_inputs,
+        observed_outputs,
+        members,
+        bytes,
+    )?;
+    Ok(GovernedControllerMtbddPlantPortfolioSummary {
+        resources,
+        verification,
+    })
 }
 
 pub fn verify_controller_mtbdd_plant_portfolio(

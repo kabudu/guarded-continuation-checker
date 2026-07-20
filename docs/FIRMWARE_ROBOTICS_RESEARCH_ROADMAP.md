@@ -133,5 +133,11 @@ passes exact source, workflow, runner, SLSA, and SPDX verification. The macOS
 distribution decision, tagged-release evidence, and independent evaluation
 remain open.
 
+The first controller/plant resource envelope now preflights conservative work
+through a public Rust API without timing calibration. The next release-path
+cycle must make the policy canonical and self-service through the CLI, correlate
+its static bounds with Linux process enforcement, and retain admitted/refused
+multi-job observations before using it in a constrained firmware workflow.
+
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
