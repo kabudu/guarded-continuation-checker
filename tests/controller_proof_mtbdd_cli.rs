@@ -81,6 +81,108 @@ fn direct_fixture() -> PathBuf {
 }
 
 #[test]
+fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
+    let discovery = Command::new(BINARY)
+        .arg("controller-split-evidence-cli-version")
+        .output()
+        .unwrap();
+    assert!(discovery.status.success());
+    let discovery = String::from_utf8(discovery.stdout).unwrap();
+    assert!(discovery.starts_with("controller_split_evidence_cli_version=1"));
+    assert!(discovery.contains("admission=once"));
+    assert!(discovery.ends_with("unsupported=fail-closed\n"));
+
+    let root = fixture();
+    let manifest = root.join("manifest.txt");
+    let evidence = root.join("controller.controller-evidence");
+    let evidence_second = root.join("controller-second.controller-evidence");
+    for output in [&evidence, &evidence_second] {
+        let created = Command::new(BINARY)
+            .arg("certify-controller-proof-evidence-v1")
+            .arg(&manifest)
+            .arg(output)
+            .output()
+            .unwrap();
+        assert!(created.status.success(), "{:?}", created.stderr);
+        assert!(
+            String::from_utf8(created.stdout)
+                .unwrap()
+                .contains("status=CREATED")
+        );
+    }
+    assert_eq!(
+        fs::read(&evidence).unwrap(),
+        fs::read(&evidence_second).unwrap()
+    );
+    let collision = Command::new(BINARY)
+        .arg("certify-controller-proof-evidence-v1")
+        .arg(&manifest)
+        .arg(&evidence)
+        .output()
+        .unwrap();
+    assert!(!collision.status.success());
+
+    let results = root.join("batch.plant-results");
+    let results_second = root.join("batch-second.plant-results");
+    for output in [&results, &results_second] {
+        let created = Command::new(BINARY)
+            .arg("certify-bound-plant-results-v1")
+            .arg(&manifest)
+            .arg(&evidence)
+            .arg(output)
+            .output()
+            .unwrap();
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let stdout = String::from_utf8(created.stdout).unwrap();
+        assert!(stdout.contains("status=CREATED"));
+        assert!(stdout.contains("members=2"));
+    }
+    assert_eq!(
+        fs::read(&results).unwrap(),
+        fs::read(&results_second).unwrap()
+    );
+
+    let verified = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-v1")
+        .arg(&evidence)
+        .arg(&manifest)
+        .arg(&results)
+        .arg(&manifest)
+        .arg(&results_second)
+        .output()
+        .unwrap();
+    assert!(verified.status.success(), "{:?}", verified.stderr);
+    let verified = String::from_utf8(verified.stdout).unwrap();
+    assert!(verified.contains("controller-split-batch index=0 status=VERIFIED"));
+    assert!(verified.contains("controller-split-batch index=1 status=VERIFIED"));
+    assert!(verified.contains(
+        "controller-split-set status=VERIFIED cli_version=1 controller_admissions=1 batches=2 members=4 safe=2 unsafe=2"
+    ));
+
+    let mut corrupt = fs::read(&results).unwrap();
+    let middle = corrupt.len() / 2;
+    corrupt[middle] ^= 1;
+    let corrupt_path = root.join("corrupt.plant-results");
+    fs::write(&corrupt_path, corrupt).unwrap();
+    let rejected = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-v1")
+        .arg(&evidence)
+        .arg(&manifest)
+        .arg(&corrupt_path)
+        .output()
+        .unwrap();
+    assert!(!rejected.status.success());
+
+    let incomplete = Command::new(BINARY)
+        .arg("verify-bound-plant-result-set-v1")
+        .arg(&evidence)
+        .arg(&manifest)
+        .output()
+        .unwrap();
+    assert!(!incomplete.status.success());
+}
+
+#[test]
 fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     let discovery = Command::new(BINARY)
         .arg("controller-proof-mtbdd-cli-version")

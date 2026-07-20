@@ -293,8 +293,12 @@ proof bytes before admission, then independently preflights plant artifact
 bytes, complete ordered obligations, horizon, product states, and conservative
 transition evaluations before replay. Exact boundaries pass and tighter limits
 fail closed. This closes the in-process resource-governance mechanism only.
-Stable CLI policy files, typed process containment, metrics aggregation, and
-cross-platform acceptance remain open.
+The versioned file CLI now creates deterministic split artifacts and admits one
+controller proof for multiple manifest/result pairs in a single process. It
+reports per-batch verification time and one aggregate while failing closed on
+controller, boundary, obligation, integrity, and argument drift. Caller-selected
+CLI policy files, typed process containment, retained metrics aggregation,
+compatibility through a later tag, and cross-platform acceptance remain open.
 
 ## Post-production-release deliverables
 

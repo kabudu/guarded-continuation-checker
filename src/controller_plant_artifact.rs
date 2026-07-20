@@ -182,6 +182,14 @@ impl AdmittedControllerProofEvidence {
     pub fn summary(&self) -> &ControllerMtbddSummary {
         &self.summary
     }
+
+    pub fn relevant_inputs(&self) -> &[usize] {
+        &self.controller.relevant_inputs
+    }
+
+    pub fn observed_outputs(&self) -> &[usize] {
+        &self.controller.observed_outputs
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

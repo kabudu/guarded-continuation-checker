@@ -37,6 +37,7 @@ const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
 const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_POLICY_VERSION: u32 = 1;
@@ -25657,6 +25658,230 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 controller_mtbdd::MAX_MTBDD_NODES,
                 controller_mtbdd::MAX_MTBDD_TERMINALS,
                 guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+            );
+            Ok(true)
+        }
+        "controller-split-evidence-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-split-evidence-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_split_evidence_cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} controller_artifact_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_batches={} admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+                controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+            );
+            Ok(true)
+        }
+        "certify-controller-proof-evidence-v1" => {
+            if args.len() != 3 {
+                return Err("usage: guarded-continuation-checker certify-controller-proof-evidence-v1 MANIFEST.txt OUTPUT.controller-evidence".to_string());
+            }
+            let started = Instant::now();
+            let (manifest, controller, controller_digest, _plants, _plant_digests, _snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let mtbdd = controller_mtbdd::produce_controller_mtbdd(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+            )
+            .map_err(|error| error.to_string())?;
+            let artifact = controller_plant_artifact::produce_controller_proof_evidence_artifact(
+                &controller,
+                controller_digest,
+                &mtbdd,
+            )
+            .map_err(|error| error.to_string())?;
+            let encoded =
+                controller_plant_artifact::encode_controller_proof_evidence_artifact(&artifact)
+                    .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[2]), &encoded)?;
+            println!(
+                "controller-split-evidence status=CREATED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} artifact_version={} mtbdd_nodes={} mtbdd_terminals={} artifact_bytes={} elapsed_micros={} output={}",
+                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+                mtbdd.nodes.len(),
+                mtbdd.terminals.len(),
+                encoded.len(),
+                started.elapsed().as_micros(),
+                Path::new(&args[2]).display(),
+            );
+            Ok(true)
+        }
+        "certify-bound-plant-results-v1" => {
+            if args.len() != 4 {
+                return Err("usage: guarded-continuation-checker certify-bound-plant-results-v1 MANIFEST.txt INPUT.controller-evidence OUTPUT.plant-results".to_string());
+            }
+            let started = Instant::now();
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let evidence = read_bounded_regular_file(
+                Path::new(&args[2]),
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                "controller proof evidence",
+            )?;
+            let admitted = controller_plant_artifact::admit_controller_proof_evidence(
+                &controller,
+                controller_digest,
+                &evidence,
+            )
+            .map_err(|error| error.to_string())?;
+            if admitted.relevant_inputs() != manifest.relevant_inputs
+                || admitted.observed_outputs() != manifest.observed_outputs
+            {
+                return Err(
+                    "controller proof evidence does not match manifest boundary".to_string()
+                );
+            }
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact =
+                controller_plant_artifact::produce_bound_plant_results_with_admitted_controller(
+                    &admitted, &inputs,
+                )
+                .map_err(|error| error.to_string())?;
+            let encoded = controller_plant_artifact::encode_bound_plant_results_artifact(&artifact)
+                .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[3]), &encoded)?;
+            println!(
+                "controller-split-plant status=CREATED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} artifact_version={} members={} artifact_bytes={} elapsed_micros={} output={}",
+                controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                inputs.len(),
+                encoded.len(),
+                started.elapsed().as_micros(),
+                Path::new(&args[3]).display(),
+            );
+            Ok(true)
+        }
+        "verify-bound-plant-result-set-v1" => {
+            if args.len() < 4
+                || !(args.len() - 2).is_multiple_of(2)
+                || (args.len() - 2) / 2
+                    > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+            {
+                return Err("usage: guarded-continuation-checker verify-bound-plant-result-set-v1 INPUT.controller-evidence MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]".to_string());
+            }
+            let started = Instant::now();
+            let evidence = read_bounded_regular_file(
+                Path::new(&args[1]),
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                "controller proof evidence",
+            )?;
+            let (_, admitted_controller, admitted_digest, _, _, _) =
+                load_controller_plant_manifest(
+                    Path::new(&args[2]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let admission_started = Instant::now();
+            let admitted = controller_plant_artifact::admit_controller_proof_evidence(
+                &admitted_controller,
+                admitted_digest,
+                &evidence,
+            )
+            .map_err(|error| error.to_string())?;
+            let admission_micros = admission_started.elapsed().as_micros();
+            let mut total_members = 0usize;
+            let mut total_safe = 0usize;
+            let mut total_unsafe = 0usize;
+            let mut total_reachable = 0usize;
+            let mut total_transitions = 0usize;
+            for (batch_index, pair) in args[2..].chunks_exact(2).enumerate() {
+                let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
+                    load_controller_plant_manifest(
+                        Path::new(&pair[0]),
+                        controller_mtbdd::MAX_MTBDD_INPUTS,
+                        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                    )?;
+                if controller != admitted_controller
+                    || controller_digest != admitted_digest
+                    || admitted.relevant_inputs() != manifest.relevant_inputs
+                    || admitted.observed_outputs() != manifest.observed_outputs
+                {
+                    return Err(format!(
+                        "controller split evidence batch {batch_index} does not match admitted controller"
+                    ));
+                }
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let encoded = read_bounded_regular_file(
+                    Path::new(&pair[1]),
+                    controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                    "bound plant results",
+                )?;
+                let batch_started = Instant::now();
+                let summary =
+                    controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
+                        &admitted, &inputs, &encoded,
+                    )
+                    .map_err(|error| error.to_string())?;
+                println!(
+                    "controller-split-batch index={batch_index} status=VERIFIED members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} verification_micros={}",
+                    summary.members.len(),
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                    encoded.len(),
+                    batch_started.elapsed().as_micros(),
+                );
+                total_members = total_members
+                    .checked_add(summary.members.len())
+                    .ok_or_else(|| "controller split member count overflow".to_string())?;
+                total_safe = total_safe
+                    .checked_add(summary.safe)
+                    .ok_or_else(|| "controller split SAFE count overflow".to_string())?;
+                total_unsafe = total_unsafe
+                    .checked_add(summary.unsafe_count)
+                    .ok_or_else(|| "controller split UNSAFE count overflow".to_string())?;
+                total_reachable = total_reachable
+                    .checked_add(summary.reachable_product_states)
+                    .ok_or_else(|| "controller split reachable count overflow".to_string())?;
+                total_transitions = total_transitions
+                    .checked_add(summary.explored_transitions)
+                    .ok_or_else(|| "controller split transition count overflow".to_string())?;
+            }
+            println!(
+                "controller-split-set status=VERIFIED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} controller_admissions=1 batches={} members={total_members} safe={total_safe} unsafe={total_unsafe} reachable_product_states={total_reachable} explored_transitions={total_transitions} controller_evidence_bytes={} admission_micros={admission_micros} elapsed_micros={}",
+                (args.len() - 2) / 2,
+                evidence.len(),
+                started.elapsed().as_micros(),
             );
             Ok(true)
         }

@@ -42,6 +42,13 @@ local provenance evidence.
 Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
 shell-free production and verification, typed batch and member results, and
 invocation metrics without parsing command output.
+The experimental
+[split-evidence CLI v1](docs/CONTROLLER_SPLIT_EVIDENCE_CLI_V1.md) separates one
+proof-carrying controller artifact from replaceable plant-result batches. Its
+multi-batch verifier admits the controller proof once per process, checks every
+controller and obligation binding, and emits per-batch plus aggregate results.
+Caller-selected CLI policies, a typed bounded-process client, tagged
+compatibility, and independent acceptance remain open.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct

@@ -100,6 +100,12 @@
   obligations, horizons, product states, and conservative transition work are
   bounded before semantic replay. Exact inclusive boundaries pass and each
   tighter byte, proof, horizon, state, or transition limit fails closed.
+  Add split-evidence CLI v1 with strict capability discovery, deterministic
+  controller-evidence and plant-result producers, exclusive output creation,
+  and one multi-batch verifier process. The verifier admits the controller proof
+  exactly once, rejects controller or boundary drift across batches, replays
+  every complete ordered obligation, emits per-batch timings and an aggregate,
+  and returns no aggregate on malformed, stale, mutated, or incomplete input.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
