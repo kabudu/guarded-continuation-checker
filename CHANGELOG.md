@@ -91,7 +91,10 @@
   composed-witness path, a 49.75% reduction, but its initial package is 8.71
   times larger and breaks even only after 58 observed replacements. Hosted
   replacement reproduction, controlled resource accounting, file and process
-  APIs, and resource-envelope integration remain open.
+  APIs, and resource-envelope integration remain open. Add the replacement
+  baseline and split-evidence measurement to the exact hosted amd64 evidence
+  workflow; a successful exact-head run is still required before treating the
+  cross-platform gate as closed.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

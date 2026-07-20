@@ -76,6 +76,16 @@ RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   /tmp/gcc-output/guarded-continuation-checker \
   /tmp/ric3-output /tmp/certifaiger-output \
   "$output/changing-plant-composed-witness-amd64-v1.csv"
+GCC_COMPOSED_WITNESS_PLANTS=actuator-transport-lag \
+  RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-changing-plant-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/changing-plant-replacement-composed-witness-amd64-v1.csv"
+cargo run --release --locked --quiet \
+  --example changing_plant_controller_evidence_reuse \
+  >"$output/changing-plant-controller-evidence-reuse-amd64-v1.csv"
 
 TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
