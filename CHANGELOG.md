@@ -106,6 +106,11 @@
   exactly once, rejects controller or boundary drift across batches, replays
   every complete ordered obligation, emits per-batch timings and an aggregate,
   and returns no aggregate on malformed, stale, mutated, or incomplete input.
+  Hosted amd64 run 29773273695 reproduces the arm64 split controller and
+  replacement artifact SHA-256 values, structural byte accounting, ten SAFE
+  results, unchanged-member identity, and all three independently checked
+  replacement-witness hashes. Timing observations differ by host and are not
+  represented as reproducible measurements.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

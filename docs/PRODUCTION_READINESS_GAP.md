@@ -299,6 +299,12 @@ reports per-batch verification time and one aggregate while failing closed on
 controller, boundary, obligation, integrity, and argument drift. Caller-selected
 CLI policy files, typed process containment, retained metrics aggregation,
 compatibility through a later tag, and cross-platform acceptance remain open.
+Hosted amd64 run 29773273695 now reproduces the split controller and replacement
+artifact hashes, structural byte accounting, independent composed-witness
+hashes, and all logical answers from arm64. This closes the mechanism's second
+architecture reproduction gate. Compatibility through a later tag, governed
+CLI policy files, typed process containment, and independent acceptance remain
+open.
 
 ## Post-production-release deliverables
 

@@ -168,7 +168,7 @@ faithful baseline leaves the gate open and produces no positive result.
    values exactly. Platform-specific executable and checker-tree digests are
    retained separately and are not represented as reproducible binaries.
 5. Run the predeclared replacement experiment on arm64 and hosted amd64 Linux.
-   Complete locally and open on hosted amd64: GCC now has canonical
+   Complete on both architectures: GCC now has canonical
    controller-only evidence and a separate
    plant-results artifact bound to the controller-evidence SHA-256. A typed
    admitted-controller capability independently checks the controller proof
@@ -196,6 +196,13 @@ faithful baseline leaves the gate open and produces no positive result.
    4,118-byte marginal saving, the initial byte deficit is recovered only after
    58 replacements. This is a narrow repeated-change regime, not a broad size
    advantage.
+
+   Hosted run
+   [29773273695](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29773273695)
+   reproduced every structural byte count, both split-artifact SHA-256 values,
+   all three replacement witness SHA-256 values, ten SAFE answers, and unchanged
+   member identity exactly. Timing fields are retained as observations and are
+   not expected to be byte-identical across hosts.
 6. Retain manifests, raw measurements, hostile results, and tool provenance.
 7. Update the novelty register with the result, including a negative result.
 
