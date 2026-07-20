@@ -78,6 +78,7 @@ jobs:
             scripts/run-controller-mtbdd-self-service-acceptance.sh \
             scripts/benchmark-controller-mtbdd-process-resources.sh \
             scripts/run-controller-plant-portfolio-acceptance.sh \
+            scripts/run-controller-plant-resource-acceptance.sh \
             scripts/benchmark-controller-plant-portfolio-phases.sh \
             scripts/benchmark-controller-proof-mtbdd-plant.sh \
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
@@ -301,6 +302,13 @@ jobs:
             /tmp/controller-plant-portfolio.csv
           diff -u results/controller-plant-portfolio-acceptance-v1.csv \
             /tmp/controller-plant-portfolio.csv
+      - name: Reproduce governed controller plant acceptance
+        run: |
+          scripts/run-controller-plant-resource-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/controller-plant-resource.csv
+          diff -u results/controller-plant-resource-acceptance-v1.csv \
+            /tmp/controller-plant-resource.csv
       - name: Exercise controller plant phase observability
         env:
           TRIALS: 1

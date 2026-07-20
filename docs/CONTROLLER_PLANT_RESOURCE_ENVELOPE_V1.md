@@ -87,6 +87,28 @@ The typed client maps that contract to `PredicateApiError::ResourceRefused` and
 the `resource_refusal` metrics class. Malformed input, corrupt evidence, and
 ordinary tool failures remain exit code 2. No refusal carries SAFE or UNSAFE.
 
+## Multi-job acceptance pipeline
+
+`scripts/run-controller-plant-resource-acceptance.sh` exercises six clean
+release-build jobs through only documented file interfaces:
+
+- the public washing controller with six stateful physical-plant properties;
+- the two-property direct exact fallback fixture;
+- a valid member-budget refusal;
+- a valid transition-budget refusal;
+- a malformed-policy control; and
+- a corrupt-evidence control.
+
+The retained CSV preserves every job before its final summary. The two verified
+jobs retain 3 SAFE and 5 UNSAFE answers, 8,978 transferred artifact bytes, and a
+12,976,168 conservative transition-evaluation bound. The summary records exactly
+two verified, two refused, and two invalid jobs. Refused and invalid rows add no
+logical answer. CI regenerates the file and requires byte equality.
+
+This closes the local multi-job aggregation and simulated self-service
+acceptance mechanism gates. The physical plant remains repository-authored and
+the run is not independent partner acceptance.
+
 ## Retained mechanism tests
 
 The Rust integration test covers:
@@ -107,8 +129,8 @@ Before it can be used as a production deployment policy, GCC still needs:
 
 1. Linux process-limit tests showing the conservative envelope agrees with
    enforced memory, file, output, and deadline controls;
-2. multi-job aggregation with admitted and refused workload counters; and
-3. simulated constrained firmware-CI acceptance followed by independent use.
+2. correlation on an independently sourced constrained firmware workflow; and
+3. independent use and suitability assessment.
 
 The arithmetic envelope is conservative. Admission means the requested static
 work bound fits the caller's policy, not that a wall-clock deadline or exact

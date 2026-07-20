@@ -1,0 +1,8 @@
+schema_version,job,outcome,backend,reason,safe,unsafe,artifact_bytes,transition_bound,exit_code,result,status
+1,public-washing-batch,verified,MTBDD,none,2,4,8616,12976128,0,answers-retained,accepted
+1,direct-fallback-batch,verified,DIRECT_EXACT,none,1,1,362,40,0,answers-retained,accepted
+1,member-budget-control,refused,NONE,members,0,0,0,0,3,none,accepted
+1,transition-budget-control,refused,NONE,transition-evaluations,0,0,0,0,3,none,accepted
+1,malformed-policy-control,invalid,NONE,noncanonical-policy,0,0,0,0,2,none,accepted
+1,corrupt-evidence-control,invalid,NONE,integrity,0,0,0,0,2,none,accepted
+1,aggregate,summary,MIXED,none,3,5,8978,12976168,0,2-verified-2-refused-2-invalid,accepted

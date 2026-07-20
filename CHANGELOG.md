@@ -13,8 +13,13 @@
   `ControllerPlantResourceTool` with strict response parsing and invocation
   metrics. Distinguish policy refusal with exit code 3, five versioned refusal
   reasons, no logical answer, a typed `ResourceRefused` error, and the
-  `resource_refusal` metrics class. Linux enforcement evidence, aggregation,
-  and constrained-workflow acceptance remain open.
+  `resource_refusal` metrics class. Linux enforcement evidence and independent
+  constrained-workflow acceptance remain open. Add a reproducible six-job
+  release-build acceptance pipeline with two exact verified batches, two valid
+  policy refusals, malformed-policy and corrupt-evidence controls, and a
+  byte-stable aggregate retaining every row. Preserve 3 SAFE and 5 UNSAFE
+  answers and distinguish two verified, two refused, and two invalid jobs. Gate
+  the retained result in Linux CI.
 
 - Pinned and offline-qualified the Certifaiger 10.2.0, AIGER, CaDiCaL,
   `lrat_isa`, and runlim comparison stack on local arm64 Linux, including all

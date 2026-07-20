@@ -238,9 +238,14 @@ explicit policy layer for the low-memory consumer profile. Canonical CLI policy
 files, strict capability and result parsing, hostile policy rejection, and a
 typed bounded process client are now implemented. Policy refusal has a separate
 exit code, five versioned reasons, no logical answer, and a typed metrics class.
-Linux enforcement correlation, multi-job aggregation, and constrained-workflow
-acceptance remain open, so the general resource-governance and observability
-rows do not change.
+The release-build acceptance pipeline now retains six process jobs: two
+verified, two valid policy refusals, one malformed policy, and one corrupt
+artifact. Its byte-stable aggregate preserves 3 SAFE and 5 UNSAFE results from
+verified jobs only and records every negative row. This closes local multi-job
+aggregation and simulated self-service acceptance for the controller/plant
+resource surface. Linux process-enforcement correlation, independently sourced
+workflow evidence, compatibility history, and independent acceptance remain
+open, so no production-readiness row closes.
 
 ## Rules
 
