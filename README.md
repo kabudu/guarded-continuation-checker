@@ -36,7 +36,9 @@ provides a self-service producer and independent verifier for one public
 controller composed with an ordered plant-property batch. Its canonical
 manifest, exact query binding, stable per-member results, no-clobber output and
 hostile-input controls close a local integration gap. Independent acceptance,
-tagged compatibility and source-to-model attestation remain open.
+tagged compatibility and general partner source-to-model attestation remain
+open; the pinned public controller and physical plant now have deterministic
+local provenance evidence.
 Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
 shell-free production and verification, typed batch and member results, and
 invocation metrics without parsing command output.
@@ -75,7 +77,10 @@ portfolio commands and a typed bounded process client now cover capability
 discovery and governed verification for both the proof and exact fallback
 routes. A deterministic six-job acceptance pipeline now passes the pinned public
 washing-controller batch and the exact fallback under Linux process limits.
-Hosted reproduction and compatibility gates remain open.
+The pinned controller and physical-plant AIGER files now also have
+[deterministic source-to-model attestation](docs/SOURCE_MODEL_ATTESTATION_V1.md)
+through their exact Yosys revision and synthesis recipes. Hosted reproduction,
+general project provenance, and compatibility gates remain open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.

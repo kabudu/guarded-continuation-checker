@@ -1,0 +1,13 @@
+source_model_provenance_manifest_version=1
+tool=yosys
+tool_revision=b8e7da6f40ae8f552c116bf6c359b07c6533e159
+member_count=2
+workdir=.
+source_path=upstream/Controller.v
+recipe_path=synthesize.ys
+model_path=generated/controller.aag
+workdir=plant
+source_path=physical-plant.v
+recipe_path=synthesize.ys
+model_path=physical-plant.aag
+status=complete

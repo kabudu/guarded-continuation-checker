@@ -268,8 +268,12 @@ byte-identical on macOS and an offline Linux container under a 64 MiB
 address-space ceiling. This closes the local public-workflow, process-integration,
 and compatibility-baseline mechanism gates. Exact-head hosted reproduction,
 compatibility through a subsequent tagged release, independently sourced plant
-validity, source-to-model attestation, and independent suitability assessment
-remain open. No production-readiness row closes yet.
+validity, general partner source-to-model attestation, and independent suitability
+assessment remain open. The pinned public controller and physical plant now
+have deterministic exact-revision Yosys regeneration with retained source,
+recipe, model, and regenerated-model SHA-256 evidence. This closes their local
+source-to-model provenance mechanism gap, but does not independently prove Yosys
+correct or cover external designs. No production-readiness row closes yet.
 
 ## Rules
 

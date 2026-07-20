@@ -27,6 +27,9 @@
   tagged release can prove byte compatibility.
   Bind standalone portfolio resource assessment to caller-supplied relevant
   inputs, observed outputs, and member wiring before workload calculation.
+  Add canonical source-to-model provenance for the public controller and plant,
+  with exact-revision isolated Yosys regeneration, deterministic SHA-256
+  evidence, CI reproduction, and hostile manifest/model controls.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

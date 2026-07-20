@@ -355,3 +355,8 @@ boundary to the equivalence artifact and embedded UNSAT proof. This is also
 production integration, not a new algorithmic claim. Its public-product and
 strong-baseline results may supply evidence for later work, but cannot close
 the novelty register by themselves.
+
+Deterministic source-to-model attestation for the public controller and plant is
+reproducible-build provenance, not a new verification algorithm. It strengthens
+the benchmark trust chain without changing any novelty claim or closest-prior-art
+conclusion.

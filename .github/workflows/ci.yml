@@ -278,6 +278,10 @@ jobs:
         run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Cross-check stateful physical-plant batch with SymbiYosys
         run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Reproduce public source-to-model attestation
+        run: |
+          scripts/test-source-model-provenance.sh \
+            results/public-washing-source-model-attestation-v1.csv
       - name: Compare proof profile with maintained formal workflow
         env:
           TRIALS: 1

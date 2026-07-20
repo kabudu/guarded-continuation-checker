@@ -163,5 +163,12 @@ now passes the public washing-controller proof route and exact fallback on macOS
 and Linux, including typed refusal and hostile-input controls. Hosted Linux
 reproduction and compatibility history remain open.
 
+The pinned public controller and physical plant now have deterministic
+source-to-model attestation through their exact Yosys revision, canonical
+synthesis recipes, and byte-identical regenerated AIGER models. This closes the
+public benchmark's local provenance mechanism gap. General signed partner build
+provenance, independent synthesis equivalence, and compatibility history remain
+open.
+
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
