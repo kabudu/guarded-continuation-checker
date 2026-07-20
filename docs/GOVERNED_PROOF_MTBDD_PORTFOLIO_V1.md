@@ -1,9 +1,8 @@
 # Governed proof-carrying MTBDD portfolio v1
 
 Status: experimental Rust API, canonical file policy and CLI, typed process
-client, and first library-level proof/direct portfolio. Portfolio file and
-process integration, public-product acceptance, and compatibility gates remain
-open.
+client, proof/direct portfolio, and portfolio file CLI. Typed portfolio process
+integration, public-product acceptance, and compatibility gates remain open.
 
 ## Problem
 
@@ -75,6 +74,24 @@ ordered member query and return identical SAFE and UNSAFE results. The proof
 route requires zero exhaustive controller assignments. Every mutation of the
 retained outer artifact fails closed.
 
+The outer portfolio has its own capability, certification, verification, and
+governed-verification commands:
+
+```sh
+guarded-continuation-checker controller-proof-mtbdd-portfolio-cli-version
+guarded-continuation-checker certify-controller-proof-mtbdd-portfolio \
+  MANIFEST.txt OUTPUT.proof-mtbdd-portfolio
+guarded-continuation-checker verify-controller-proof-mtbdd-portfolio \
+  MANIFEST.txt INPUT.proof-mtbdd-portfolio
+guarded-continuation-checker verify-controller-proof-mtbdd-portfolio-resources \
+  MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-portfolio
+```
+
+The admitted proof route passes all four file interfaces, preserves both answer
+classes, reports its structural route, and checks zero exhaustive controller
+assignments. A proof budget below the embedded proof returns the same typed
+exit-code-3 refusal contract before proof checking.
+
 ## Predeclared gates
 
 | Gate | Required result |
@@ -84,7 +101,7 @@ retained outer artifact fails closed.
 | Composition governance | Member, horizon, product-state, and transition limits reject before semantic replay |
 | Query binding | Ordered source digests, wiring, initial states, property, and horizon cannot drift |
 | Stable self-service API | Implemented experimentally with policy, capability, CLI response, typed process client, and refusal classes versioned |
-| Static portfolio | Library mechanism implemented for narrow MTBDD structural rejection; governed file/process integration remains open |
+| Static portfolio | Library and file CLI implemented; typed portfolio process integration and direct-route CLI acceptance remain open |
 | Hostile input | Truncation, mutation, noncanonical policy, boundary drift, and oversize inputs fail closed |
 | Public product | The revision-pinned washing controller and physical-plant batch pass the governed proof path |
 | Strong baseline | Report proof checking against exhaustive equivalence and maintained proof consumers at identical scope |

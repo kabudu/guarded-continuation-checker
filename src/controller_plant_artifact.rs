@@ -316,6 +316,25 @@ pub struct GovernedControllerProofMtbddPlantSummary {
     pub verification: ControllerMtbddPlantBatchSummary,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPortfolioResourceAssessment {
+    pub version: u32,
+    pub backend: ControllerProofMtbddPlantPortfolioBackend,
+    pub artifact_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GovernedControllerProofMtbddPortfolioSummary {
+    pub resources: ControllerProofMtbddPortfolioResourceAssessment,
+    pub verification: ControllerProofMtbddPlantPortfolioSummary,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerMtbddPlantBatchSummary {
     pub members: Vec<ControllerPlantResult>,
@@ -1866,6 +1885,154 @@ pub fn verify_controller_proof_mtbdd_plant_artifact_with_resources(
         bytes,
     )?;
     Ok(GovernedControllerProofMtbddPlantSummary {
+        resources,
+        verification,
+    })
+}
+
+pub fn assess_controller_proof_mtbdd_plant_portfolio_resources(
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerProofMtbddResourceEnvelope,
+) -> Result<ControllerProofMtbddPortfolioResourceAssessment, ControllerPlantArtifactError> {
+    let composition = envelope.composition;
+    if bytes.len() > composition.max_artifact_bytes {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource artifact-byte limit exceeded",
+        ));
+    }
+    if members.is_empty() || members.len() > composition.max_members {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource member limit exceeded",
+        ));
+    }
+    let portfolio = decode_controller_proof_mtbdd_plant_portfolio(bytes)?;
+    match portfolio.backend {
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
+            let assessment = assess_controller_proof_mtbdd_plant_resources(
+                controller_model,
+                members,
+                &portfolio.payload,
+                envelope,
+            )?;
+            Ok(ControllerProofMtbddPortfolioResourceAssessment {
+                version: CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                backend: portfolio.backend,
+                artifact_bytes: bytes.len(),
+                equivalence_artifact_bytes: assessment.equivalence_artifact_bytes,
+                unsat_proof_bytes: assessment.unsat_proof_bytes,
+                members: assessment.members,
+                maximum_member_horizon: assessment.maximum_member_horizon,
+                maximum_product_states: assessment.maximum_product_states,
+                transition_evaluation_bound: assessment.transition_evaluation_bound,
+            })
+        }
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact => {
+            let artifact = decode_controller_direct_plant_artifact(&portfolio.payload)?;
+            if !portfolio_members_match(&artifact.members, members) {
+                return Err(reject(
+                    "proof-carrying controller MTBDD portfolio resource member mismatch",
+                ));
+            }
+            let controller_states = bounded_state_count(controller_model.latches.len())?;
+            let omitted_controller_inputs = controller_model
+                .inputs
+                .len()
+                .checked_sub(portfolio.relevant_inputs.len())
+                .ok_or_else(|| reject("proof-carrying portfolio resource boundary is invalid"))?;
+            let direct_multiplier = 1usize
+                .checked_shl(
+                    u32::try_from(omitted_controller_inputs)
+                        .map_err(|_| reject("proof-carrying input width exceeds range"))?,
+                )
+                .ok_or_else(|| reject("proof-carrying input width exceeds range"))?;
+            let mut maximum_member_horizon = 0usize;
+            let mut maximum_product_states = 0usize;
+            let mut transition_evaluation_bound = 0usize;
+            for member in members {
+                if member.horizon > composition.max_member_horizon {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio resource horizon limit exceeded",
+                    ));
+                }
+                maximum_member_horizon = maximum_member_horizon.max(member.horizon);
+                let plant_states = bounded_state_count(member.plant.latches.len())?;
+                let product_states = controller_states
+                    .checked_mul(plant_states)
+                    .ok_or_else(|| reject("proof-carrying product-state bound overflow"))?;
+                if product_states > composition.max_product_states_per_member {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio resource product-state limit exceeded",
+                    ));
+                }
+                maximum_product_states = maximum_product_states.max(product_states);
+                let external_inputs = member
+                    .plant
+                    .inputs
+                    .len()
+                    .checked_sub(member.wiring.plant_action_inputs.len())
+                    .ok_or_else(|| reject("proof-carrying portfolio resource wiring is invalid"))?;
+                let external_patterns = 1usize
+                    .checked_shl(
+                        u32::try_from(external_inputs)
+                            .map_err(|_| reject("proof-carrying input width exceeds range"))?,
+                    )
+                    .ok_or_else(|| reject("proof-carrying input width exceeds range"))?;
+                let member_bound = product_states
+                    .checked_mul(member.horizon.saturating_add(1))
+                    .and_then(|value| value.checked_mul(external_patterns))
+                    .and_then(|value| value.checked_mul(direct_multiplier))
+                    .ok_or_else(|| reject("proof-carrying transition bound overflow"))?;
+                transition_evaluation_bound = transition_evaluation_bound
+                    .checked_add(member_bound)
+                    .ok_or_else(|| reject("proof-carrying transition bound overflow"))?;
+                if transition_evaluation_bound > composition.max_transition_evaluations {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio resource transition limit exceeded",
+                    ));
+                }
+            }
+            Ok(ControllerProofMtbddPortfolioResourceAssessment {
+                version: CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                backend: portfolio.backend,
+                artifact_bytes: bytes.len(),
+                equivalence_artifact_bytes: 0,
+                unsat_proof_bytes: 0,
+                members: members.len(),
+                maximum_member_horizon,
+                maximum_product_states,
+                transition_evaluation_bound,
+            })
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerProofMtbddResourceEnvelope,
+) -> Result<GovernedControllerProofMtbddPortfolioSummary, ControllerPlantArtifactError> {
+    let resources = assess_controller_proof_mtbdd_plant_portfolio_resources(
+        controller_model,
+        members,
+        bytes,
+        envelope,
+    )?;
+    let verification = verify_controller_proof_mtbdd_plant_portfolio(
+        controller_model,
+        controller_source_sha256,
+        relevant_inputs,
+        observed_outputs,
+        members,
+        bytes,
+    )?;
+    Ok(GovernedControllerProofMtbddPortfolioSummary {
         resources,
         verification,
     })

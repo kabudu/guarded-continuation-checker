@@ -8,6 +8,7 @@ use guarded_continuation_checker::controller_plant_artifact::{
     ControllerMtbddPlantSelectionReason, ControllerPlantArtifactInput,
     ControllerPlantResourceEnvelope, ControllerProofMtbddPlantPortfolioArtifact,
     ControllerProofMtbddPlantPortfolioBackend, ControllerProofMtbddResourceEnvelope,
+    assess_controller_proof_mtbdd_plant_portfolio_resources,
     assess_controller_proof_mtbdd_plant_resources, decode_controller_direct_plant_artifact,
     decode_controller_mtbdd_plant_portfolio, decode_controller_plant_artifact,
     decode_controller_proof_mtbdd_plant_artifact, decode_controller_proof_mtbdd_plant_portfolio,
@@ -20,6 +21,7 @@ use guarded_continuation_checker::controller_plant_artifact::{
     verify_controller_plant_artifact, verify_controller_proof_mtbdd_plant_artifact,
     verify_controller_proof_mtbdd_plant_artifact_with_resources,
     verify_controller_proof_mtbdd_plant_portfolio,
+    verify_controller_proof_mtbdd_plant_portfolio_with_resources,
 };
 use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
 
@@ -210,7 +212,6 @@ fn proof_carrying_mtbdd_batch_is_canonical_bound_and_independently_checked() {
     .unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
     assert_eq!(summary.assignments_checked, 0);
-
     for length in 0..encoded.len() {
         assert!(decode_controller_proof_mtbdd_plant_artifact(&encoded[..length]).is_err());
     }
@@ -364,6 +365,47 @@ fn proof_carrying_portfolio_uses_proof_and_falls_back_only_on_static_rejection()
     .unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
     assert_eq!(summary.assignments_checked, 0);
+    let proof_composition =
+        ControllerPlantResourceEnvelope::new(encoded.len(), 2, 8, 4, 72).unwrap();
+    let proof_envelope = ControllerProofMtbddResourceEnvelope::new(
+        proof_composition,
+        guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+        guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+    )
+    .unwrap();
+    let governed = verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+        &controller,
+        [0xe0; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &encoded,
+        proof_envelope,
+    )
+    .unwrap();
+    assert_eq!(
+        governed.resources.backend,
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd
+    );
+    assert!(governed.resources.unsat_proof_bytes > 1);
+    assert_eq!(governed.verification.assignments_checked, 0);
+    let tight_proof = ControllerProofMtbddResourceEnvelope::new(
+        proof_composition,
+        governed.resources.equivalence_artifact_bytes,
+        governed.resources.unsat_proof_bytes - 1,
+    )
+    .unwrap();
+    assert!(
+        assess_controller_proof_mtbdd_plant_portfolio_resources(
+            &controller,
+            &inputs,
+            &encoded,
+            tight_proof,
+        )
+        .unwrap_err()
+        .0
+        .contains("UNSAT-proof limit exceeded")
+    );
 
     let wide = wide_state_controller();
     let fallback =
@@ -390,6 +432,30 @@ fn proof_carrying_portfolio_uses_proof_and_falls_back_only_on_static_rejection()
     assert_eq!(
         (fallback_summary.safe, fallback_summary.unsafe_count),
         (1, 1)
+    );
+    let fallback_composition =
+        ControllerPlantResourceEnvelope::new(fallback.len(), 2, 8, 256, 4608).unwrap();
+    let fallback_envelope =
+        ControllerProofMtbddResourceEnvelope::new(fallback_composition, 1, 1).unwrap();
+    let governed_fallback = verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+        &wide,
+        [0xe1; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &fallback,
+        fallback_envelope,
+    )
+    .unwrap();
+    assert_eq!(
+        governed_fallback.resources.backend,
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact
+    );
+    assert_eq!(governed_fallback.resources.equivalence_artifact_bytes, 0);
+    assert_eq!(governed_fallback.resources.unsat_proof_bytes, 0);
+    assert_eq!(
+        governed_fallback.resources.transition_evaluation_bound,
+        4608
     );
 
     let forced = encode_controller_proof_mtbdd_plant_portfolio(

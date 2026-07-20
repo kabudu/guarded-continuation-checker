@@ -43,6 +43,7 @@ const CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
+const CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
@@ -25119,6 +25120,8 @@ fn controller_proof_mtbdd_resource_refusal(error: &str) -> Option<&'static str> 
     if error.contains("resource artifact-byte limit exceeded")
         || (error.starts_with("proof-carrying controller MTBDD governed artifact exceeds ")
             && error.ends_with(" bytes"))
+        || (error.starts_with("proof-carrying controller MTBDD governed portfolio exceeds ")
+            && error.ends_with(" bytes"))
     {
         Some("artifact-bytes")
     } else if error.contains("resource equivalence-artifact limit exceeded") {
@@ -25366,6 +25369,221 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
                 guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
             );
+            Ok(true)
+        }
+        "controller-proof-mtbdd-portfolio-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-proof-mtbdd-portfolio-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_proof_mtbdd_portfolio_cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} artifact_version={} proof_artifact_version={} direct_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_artifact_bytes={} max_members={} backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed unsupported=fail-closed",
+                controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::DIRECT_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+            );
+            Ok(true)
+        }
+        "certify-controller-proof-mtbdd-portfolio" | "verify-controller-proof-mtbdd-portfolio" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-proof-mtbdd-portfolio" {
+                        "OUTPUT.proof-mtbdd-portfolio"
+                    } else {
+                        "INPUT.proof-mtbdd-portfolio"
+                    }
+                ));
+            }
+            let started = Instant::now();
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let (encoded, action) = if command == "certify-controller-proof-mtbdd-portfolio" {
+                let encoded =
+                    controller_plant_artifact::produce_controller_proof_mtbdd_plant_portfolio(
+                        &controller,
+                        controller_digest,
+                        &manifest.relevant_inputs,
+                        &manifest.observed_outputs,
+                        &inputs,
+                    )
+                    .map_err(|error| error.to_string())?;
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED")
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "proof-carrying controller MTBDD portfolio",
+                    )?,
+                    "VERIFIED",
+                )
+            };
+            let summary = controller_plant_artifact::verify_controller_proof_mtbdd_plant_portfolio(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+                &inputs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            println!(
+                "controller-proof-mtbdd-portfolio status={action} cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} assignments_checked={} artifact_bytes={} elapsed_micros={}{}",
+                controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+                match summary.backend {
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => "PROOF_MTBDD",
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::DirectExact => "DIRECT_EXACT",
+                },
+                match summary.reason {
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::MtbddAdmitted => "MTBDD_ADMITTED",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::BoundaryLimit => "BOUNDARY_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::TerminalLimit => "TERMINAL_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::NodeLimit => "NODE_LIMIT",
+                },
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                summary.assignments_checked,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if action == "CREATED" { format!(" output={}", args[2]) } else { String::new() },
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-portfolio-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe => "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe => "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
+        "verify-controller-proof-mtbdd-portfolio-resources" => {
+            if args.len() != 4 {
+                return Err(
+                    "usage: guarded-continuation-checker verify-controller-proof-mtbdd-portfolio-resources MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-portfolio"
+                        .to_string(),
+                );
+            }
+            let invocation_started = Instant::now();
+            let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let load_micros = invocation_started.elapsed().as_micros();
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact_started = Instant::now();
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[3]),
+                policy.envelope.composition().max_artifact_bytes(),
+                "proof-carrying controller MTBDD governed portfolio",
+            )
+            .map_err(classify_controller_proof_mtbdd_resource_error)?;
+            let artifact_micros = artifact_started.elapsed().as_micros();
+            let verification_started = Instant::now();
+            let governed = controller_plant_artifact::verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+                &inputs,
+                &encoded,
+                policy.envelope,
+            )
+            .map_err(|error| classify_controller_proof_mtbdd_resource_error(error.to_string()))?;
+            let verification_micros = verification_started.elapsed().as_micros();
+            let resources = governed.resources;
+            let summary = governed.verification;
+            println!(
+                "controller-proof-mtbdd-portfolio-resource status=VERIFIED cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} backend={} reason={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} equivalence_artifact_bytes={} unsat_proof_bytes={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} assignments_checked={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}",
+                resources.version,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+                match summary.backend {
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => "PROOF_MTBDD",
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::DirectExact => "DIRECT_EXACT",
+                },
+                match summary.reason {
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::MtbddAdmitted => "MTBDD_ADMITTED",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::BoundaryLimit => "BOUNDARY_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::TerminalLimit => "TERMINAL_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::NodeLimit => "NODE_LIMIT",
+                },
+                resources.members,
+                resources.maximum_member_horizon,
+                resources.maximum_product_states,
+                resources.transition_evaluation_bound,
+                resources.equivalence_artifact_bytes,
+                resources.unsat_proof_bytes,
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                resources.artifact_bytes,
+                summary.assignments_checked,
+                invocation_started.elapsed().as_micros(),
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-portfolio-resource-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe => "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe => "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
             Ok(true)
         }
         "verify-controller-proof-mtbdd-plant-resources" => {

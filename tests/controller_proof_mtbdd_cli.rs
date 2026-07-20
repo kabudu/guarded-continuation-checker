@@ -97,6 +97,62 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
         b"controller_proof_mtbdd_resource_policy_version=1\nmax_artifact_bytes=16777216\nmax_equivalence_artifact_bytes=2097152\nmax_unsat_proof_bytes=1048576\nmax_members=64\nmax_member_horizon=1024\nmax_product_states_per_member=4096\nmax_transition_evaluations=18446744073709551615\nstatus=complete\n",
     )
     .unwrap();
+    let portfolio_discovery = Command::new(BINARY)
+        .arg("controller-proof-mtbdd-portfolio-cli-version")
+        .output()
+        .unwrap();
+    assert!(portfolio_discovery.status.success());
+    let portfolio_discovery = String::from_utf8(portfolio_discovery.stdout).unwrap();
+    assert!(
+        portfolio_discovery
+            .starts_with("controller_proof_mtbdd_portfolio_cli_version=1 artifact_version=1")
+    );
+    assert!(portfolio_discovery.ends_with(
+        "routing=static fallback=exact proof_failure=fail-closed unsupported=fail-closed\n"
+    ));
+    let portfolio = root.join("batch.proof-mtbdd-portfolio");
+    let portfolio_created = Command::new(BINARY)
+        .arg("certify-controller-proof-mtbdd-portfolio")
+        .arg(&manifest)
+        .arg(&portfolio)
+        .output()
+        .unwrap();
+    assert!(
+        portfolio_created.status.success(),
+        "{:?}",
+        portfolio_created.stderr
+    );
+    let portfolio_created = String::from_utf8(portfolio_created.stdout).unwrap();
+    assert!(portfolio_created.contains("backend=PROOF_MTBDD reason=MTBDD_ADMITTED"));
+    assert!(portfolio_created.contains("safe=1 unsafe=1"));
+    assert!(portfolio_created.contains("assignments_checked=0"));
+    let portfolio_verified = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-portfolio")
+        .arg(&manifest)
+        .arg(&portfolio)
+        .output()
+        .unwrap();
+    assert!(portfolio_verified.status.success());
+    assert!(
+        String::from_utf8(portfolio_verified.stdout)
+            .unwrap()
+            .contains("backend=PROOF_MTBDD reason=MTBDD_ADMITTED")
+    );
+    let governed_portfolio = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-portfolio-resources")
+        .arg(&manifest)
+        .arg(&policy)
+        .arg(&portfolio)
+        .output()
+        .unwrap();
+    assert!(
+        governed_portfolio.status.success(),
+        "{:?}",
+        governed_portfolio.stderr
+    );
+    let governed_portfolio = String::from_utf8(governed_portfolio.stdout).unwrap();
+    assert!(governed_portfolio.contains("backend=PROOF_MTBDD reason=MTBDD_ADMITTED"));
+    assert!(governed_portfolio.contains("assignments_checked=0"));
     let governed = Command::new(BINARY)
         .arg("verify-controller-proof-mtbdd-plant-resources")
         .arg(&manifest)
@@ -129,6 +185,18 @@ fn proof_mtbdd_cli_is_versioned_deterministic_and_fail_closed() {
     assert_eq!(refused.status.code(), Some(3));
     assert_eq!(
         String::from_utf8(refused.stderr).unwrap(),
+        "error: controller-proof-mtbdd-resource refusal=unsat-proof-bytes result=none\n"
+    );
+    let refused_portfolio = Command::new(BINARY)
+        .arg("verify-controller-proof-mtbdd-portfolio-resources")
+        .arg(&manifest)
+        .arg(&tight)
+        .arg(&portfolio)
+        .output()
+        .unwrap();
+    assert_eq!(refused_portfolio.status.code(), Some(3));
+    assert_eq!(
+        String::from_utf8(refused_portfolio.stderr).unwrap(),
         "error: controller-proof-mtbdd-resource refusal=unsat-proof-bytes result=none\n"
     );
 

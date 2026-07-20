@@ -13,8 +13,13 @@
   process client. Add a canonical proof/direct portfolio whose fallback is
   limited to the three structural MTBDD rejection classes. Reproduce the route
   during verification, reject forced downgrade, preserve both answer classes,
-  and reject every retained outer-artifact mutation. Portfolio file/process,
-  public-product, and compatibility gates remain open.
+  and reject every retained outer-artifact mutation. Portfolio typed-process,
+  public-product, and compatibility gates remain open. Add versioned portfolio
+  capability, certification, verification, and governed-verification file
+  commands. The admitted proof route reports its structural decision, preserves
+  both answer classes and zero exhaustive assignments, and refuses a tight
+  proof budget before proof checking. Typed portfolio process integration and
+  direct-route CLI acceptance remain open.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
