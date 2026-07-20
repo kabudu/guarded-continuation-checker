@@ -69,7 +69,7 @@ TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
   scripts/benchmark-certified-evidence-v1.sh \
   /tmp/ric3-output /tmp/certifaiger-output "$output/certified-evidence-amd64.csv"
-TRIALS=3 GCC_RUNTIME_IMAGE=rust:1.97.0-bookworm \
+TRIALS=3 GCC_RUNTIME_IMAGE=gcc-ubuntu-24.04-base:v1-amd64 \
   scripts/benchmark-gcc-proof-runlim-v1.sh \
   /tmp/gcc-output /tmp/certifaiger-output "$output/gcc-proof-amd64.csv"
 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
