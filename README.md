@@ -31,6 +31,37 @@ Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
 
+The experimental [controller MTBDD plant CLI v1](docs/CONTROLLER_MTBDD_CLI_V1.md)
+provides a self-service producer and independent verifier for one public
+controller composed with an ordered plant-property batch. Its canonical
+manifest, exact query binding, stable per-member results, no-clobber output and
+hostile-input controls close a local integration gap. Independent acceptance,
+tagged compatibility and source-to-model attestation remain open.
+Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
+shell-free production and verification, typed batch and member results, and
+invocation metrics without parsing command output.
+The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
+now selects the reusable MTBDD path when its frozen structural limits admit the
+controller, and otherwise preserves the identical bounded query through direct
+exact evaluation through both Rust and file interfaces. Only three explicit
+resource-limit rejections permit fallback; malformed models, semantic errors,
+query drift, and forced downgrades fail closed.
+Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
+semantic replay, rather than model loading, dominates the admitted public
+workflow. Phase observations remain excluded from routing decisions.
+The follow-up [equivalence-proof experiment](docs/CONTROLLER_MTBDD_EQUIVALENCE_PROOF_V1.md)
+replaces exhaustive controller replay with a source-bound UNSAT miter proof.
+One retained arm64 run checks that proof about 121.6 times faster. Its
+[full plant integration](docs/PROOF_CARRYING_MTBDD_EQUIVALENCE_V1.md) reduces
+median verification for the six-member public physical-plant batch from 1.749
+seconds to 0.870 seconds with exact answer agreement. The artifact is 29.39
+times larger, so this is an explicit fast-verification profile rather than the
+compact portfolio default. Hosted and whole-process validation remain open.
+The first [process-resource baseline](docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
+rejects a speed-win claim on the small public physical-plant batch. It records
+lower peak RSS for GCC production and verification while explicitly separating
+their stronger evidence scope from the bounded SymbiYosys property oracle.
+
 The experimental [BTOR2 braking-phase certificate](docs/BTOR2_BRAKING_PHASE_CERTIFICATE_V1.md)
 now composes exact accelerate, brake, and stopped regions for a resettable
 controller. Bounded portfolio v3 proves both bundled SAFE boundaries with
@@ -46,7 +77,15 @@ building a monolithic BTOR2 product, while exact composed search preserves both
 answers for rejected shapes. The first cohort proves modular correctness but
 falsifies a single-pair performance claim: component checking is 35% to 38%
 slower and about 108 bytes larger than the equivalent monolithic specialised
-proof. Reusable controller-local obligations remain the open candidate.
+proof. The follow-up
+[controller-obligation reuse experiment](docs/BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md)
+now verifies one controller obligation across a bounded plant batch. Against a
+parse-once shared-model baseline, fully admitted 64-member batches produce a
+34.0% smaller artifact and check 11.5% to 13.4% faster across five local runs.
+A static portfolio keeps ordinary exact certificates for singleton or mixed
+fallback batches, where the reuse hypothesis did not win. Public-product,
+external-tool, and cross-platform evidence remain open, so this is not yet a
+novelty or production-readiness claim.
 
 Validated findings:
 

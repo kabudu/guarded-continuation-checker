@@ -5,16 +5,24 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
+use std::sync::Arc;
 
 pub const COMPONENT_CONTRACT_VERSION: u32 = 1;
 pub const COMPONENT_CERTIFICATE_VERSION: u32 = 1;
+pub const CONTROLLER_OBLIGATION_VERSION: u32 = 1;
+pub const REUSABLE_COMPONENT_BATCH_VERSION: u32 = 1;
+pub const COMPONENT_BATCH_PORTFOLIO_VERSION: u32 = 1;
 pub const MAX_COMPONENT_CONTRACT_BYTES: usize = 4096;
+pub const MAX_CONTROLLER_OBLIGATION_BYTES: usize = 2048;
 pub const MAX_COMPONENT_PHASE_HORIZON: u32 = 1_000_000_000;
 pub const MAX_COMPONENT_SEARCH_HORIZON: u32 = 256;
 pub const MAX_COMPONENT_STATES_PER_LAYER: usize = 65_536;
 pub const MAX_COMPONENT_TOTAL_STATES: usize = 262_144;
 pub const MAX_COMPONENT_NODE_STEPS: u64 = 30_000_000;
 pub const MAX_COMPONENT_CERTIFICATE_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_COMPONENT_BATCH_MEMBERS: usize = 64;
+pub const MAX_REUSABLE_COMPONENT_BATCH_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_COMPONENT_BATCH_PORTFOLIO_BYTES: usize = 65 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentContract {
@@ -27,6 +35,17 @@ pub struct ComponentContract {
     pub plant_velocity_state: NodeId,
     pub plant_position_state: NodeId,
     pub plant_bad_property: NodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerObligation {
+    pub controller_sha256: String,
+    pub reset_input: NodeId,
+    pub velocity_input: NodeId,
+    pub braking_state: NodeId,
+    pub brake_output: NodeId,
+    pub velocity_width: u32,
+    pub brake_velocity: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,6 +133,79 @@ pub struct ComponentSummary {
     pub logical_reachable_states: u64,
 }
 
+#[derive(Clone, Copy)]
+pub struct ComponentBatchInput<'a> {
+    pub plant_source: &'a [u8],
+    pub contract_source: &'a [u8],
+    pub horizon: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NaiveComponentBatchCertificate {
+    pub controller_sha256: String,
+    pub members: Vec<ComponentCertificate>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReusedPhaseMember {
+    pub plant_sha256: String,
+    pub contract_sha256: String,
+    pub query_horizon: u32,
+    pub acceleration: u64,
+    pub deceleration: u64,
+    pub position_threshold: u64,
+    pub switch_frame: u64,
+    pub stop_frame: u64,
+    pub max_velocity: u64,
+    pub max_position: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReusableBatchMember {
+    ReusedPhase(ReusedPhaseMember),
+    ExactFallback(ComponentCertificate),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReusableComponentBatchCertificate {
+    pub controller_obligation: ControllerObligation,
+    pub members: Vec<ReusableBatchMember>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ComponentBatchSelectionReason {
+    FullyAdmittedReuse,
+    SingletonOrExactFallback,
+}
+
+impl ComponentBatchSelectionReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FullyAdmittedReuse => "fully-admitted-reuse",
+            Self::SingletonOrExactFallback => "singleton-or-exact-fallback",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ComponentBatchPortfolioCertificate {
+    Reusable(ReusableComponentBatchCertificate),
+    Ordinary(NaiveComponentBatchCertificate),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComponentBatchPortfolioProduction {
+    pub certificate: ComponentBatchPortfolioCertificate,
+    pub selection_reason: ComponentBatchSelectionReason,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComponentBatchSummary {
+    pub members: Vec<ComponentSummary>,
+    pub safe: usize,
+    pub unsafe_count: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentError(pub String);
 
@@ -144,7 +236,7 @@ struct Endpoint {
 }
 
 struct Composition<'a> {
-    controller: Btor2Model,
+    controller: Arc<Btor2Model>,
     plant: Btor2Model,
     contract: &'a ComponentContract,
 }
@@ -290,7 +382,16 @@ fn build_composition<'a>(
     contract: &'a ComponentContract,
 ) -> Result<Composition<'a>, ComponentError> {
     let controller =
-        btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?;
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
+    build_composition_with_controller(&controller, plant_source, contract)
+}
+
+fn build_composition_with_controller<'a>(
+    controller: &Arc<Btor2Model>,
+    plant_source: &[u8],
+    contract: &'a ComponentContract,
+) -> Result<Composition<'a>, ComponentError> {
+    let controller = Arc::clone(controller);
     let plant = btor2::parse_bytes(plant_source).map_err(|error| reject(error.to_string()))?;
     if controller.inputs()
         != [
@@ -641,7 +742,14 @@ fn verify_search(
         ));
     }
     let composition = build_composition(controller_source, plant_source, contract)?;
-    let initial = initial_state(&composition)?;
+    verify_search_composition(&composition, certificate)
+}
+
+fn verify_search_composition(
+    composition: &Composition<'_>,
+    certificate: &ComponentSearchCertificate,
+) -> Result<ComponentSummary, ComponentError> {
+    let initial = initial_state(composition)?;
     match certificate.result {
         ComponentResult::Unsafe => {
             let frame = certificate
@@ -654,13 +762,13 @@ fn verify_search(
                 return Err(reject("unsafe component witness shape is invalid"));
             }
             let mut state = initial;
-            if frame == 0 && !bad_active(&composition, &state)? {
+            if frame == 0 && !bad_active(composition, &state)? {
                 return Err(reject("component initial state is not bad"));
             }
             for reset in &certificate.witness_resets {
-                state = step(&composition, &state, *reset)?;
+                state = step(composition, &state, *reset)?;
             }
-            if !bad_active(&composition, &state)? {
+            if !bad_active(composition, &state)? {
                 return Err(reject("component witness does not reach bad property"));
             }
             Ok(ComponentSummary {
@@ -686,11 +794,11 @@ fn verify_search(
                     return Err(reject("safe component layer is not canonical or safe"));
                 }
                 for state in layer {
-                    if bad_active(&composition, state)? {
+                    if bad_active(composition, state)? {
                         return Err(reject("safe component layer contains a bad state"));
                     }
                 }
-                budget.add_layer(&composition, layer.len())?;
+                budget.add_layer(composition, layer.len())?;
                 total = total
                     .checked_add(layer.len() as u64)
                     .ok_or_else(|| reject("component logical state count overflowed"))?;
@@ -698,7 +806,7 @@ fn verify_search(
                     let mut expected = BTreeSet::new();
                     for state in layer {
                         for reset in [false, true] {
-                            expected.insert(step(&composition, state, reset)?);
+                            expected.insert(step(composition, state, reset)?);
                         }
                     }
                     if expected.into_iter().collect::<Vec<_>>() != certificate.layers[frame + 1] {
@@ -737,6 +845,195 @@ fn reset_advance(model: &Btor2Model, state: NodeId, reset: NodeId) -> Option<Nod
         }
         _ => None,
     }
+}
+
+fn controller_obligation_shape(
+    controller: &Btor2Model,
+    contract: &ComponentContract,
+) -> Result<(u32, u64), ComponentError> {
+    if controller.inputs()
+        != [
+            contract.controller_reset_input,
+            contract.controller_velocity_input,
+        ]
+        || controller.states() != [contract.controller_braking_state]
+        || !controller.constraints().is_empty()
+        || controller
+            .bad_properties()
+            .iter()
+            .any(|(_, expression, _)| !zero(controller, *expression))
+    {
+        return Err(reject(
+            "controller vectors or properties are outside obligation language",
+        ));
+    }
+    let velocity_width = node_width(controller, contract.controller_velocity_input)
+        .ok_or_else(|| reject("controller velocity input is absent"))?;
+    if velocity_width == 0
+        || velocity_width > 64
+        || node_width(controller, contract.controller_reset_input) != Some(1)
+        || node_width(controller, contract.controller_braking_state) != Some(1)
+        || node_width(controller, contract.controller_brake_output) != Some(1)
+    {
+        return Err(reject("controller obligation widths are invalid"));
+    }
+    let initialiser = controller
+        .initialiser(contract.controller_braking_state)
+        .ok_or_else(|| reject("controller braking initialiser is absent"))?;
+    if !zero(controller, initialiser) {
+        return Err(reject(
+            "controller braking state does not initialise to zero",
+        ));
+    }
+    let advance = reset_advance(
+        controller,
+        contract.controller_braking_state,
+        contract.controller_reset_input,
+    )
+    .ok_or_else(|| reject("controller reset transition is outside obligation language"))?;
+    if advance != contract.controller_brake_output {
+        return Err(reject("controller output is not its latched next control"));
+    }
+    let guard = match controller
+        .nodes()
+        .get(&contract.controller_brake_output)
+        .map(|node| &node.kind)
+    {
+        Some(NodeKind::Binary(BinaryOp::Or, left, right))
+            if *left == contract.controller_braking_state =>
+        {
+            *right
+        }
+        Some(NodeKind::Binary(BinaryOp::Or, left, right))
+            if *right == contract.controller_braking_state =>
+        {
+            *left
+        }
+        _ => {
+            return Err(reject(
+                "controller brake output is outside obligation language",
+            ));
+        }
+    };
+    let brake_velocity = match controller.nodes().get(&guard).map(|node| &node.kind) {
+        Some(NodeKind::Binary(BinaryOp::Ugte, velocity, threshold))
+            if *velocity == contract.controller_velocity_input =>
+        {
+            constant(controller, *threshold)
+                .filter(|value| *value != 0)
+                .ok_or_else(|| reject("controller threshold is not a nonzero literal"))?
+        }
+        _ => return Err(reject("controller guard is outside obligation language")),
+    };
+    Ok((velocity_width, brake_velocity))
+}
+
+pub fn produce_controller_obligation(
+    controller_source: &[u8],
+    contract_source: &[u8],
+) -> Result<ControllerObligation, ComponentError> {
+    let contract = parse_contract(contract_source)?;
+    let controller =
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
+    let (velocity_width, brake_velocity) = controller_obligation_shape(&controller, &contract)?;
+    Ok(ControllerObligation {
+        controller_sha256: digest(controller_source),
+        reset_input: contract.controller_reset_input,
+        velocity_input: contract.controller_velocity_input,
+        braking_state: contract.controller_braking_state,
+        brake_output: contract.controller_brake_output,
+        velocity_width,
+        brake_velocity,
+    })
+}
+
+pub fn verify_controller_obligation(
+    controller_source: &[u8],
+    obligation: &ControllerObligation,
+) -> Result<(), ComponentError> {
+    if obligation.controller_sha256 != digest(controller_source) {
+        return Err(reject("controller obligation source binding is invalid"));
+    }
+    let controller =
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
+    let projection = ComponentContract {
+        controller_reset_input: obligation.reset_input,
+        controller_velocity_input: obligation.velocity_input,
+        controller_braking_state: obligation.braking_state,
+        controller_brake_output: obligation.brake_output,
+        plant_reset_input: 0,
+        plant_brake_input: 0,
+        plant_velocity_state: 0,
+        plant_position_state: 0,
+        plant_bad_property: 0,
+    };
+    let (velocity_width, brake_velocity) = controller_obligation_shape(&controller, &projection)?;
+    if velocity_width != obligation.velocity_width || brake_velocity != obligation.brake_velocity {
+        return Err(reject("controller obligation claim does not match source"));
+    }
+    Ok(())
+}
+
+pub fn encode_controller_obligation(
+    obligation: &ControllerObligation,
+) -> Result<String, ComponentError> {
+    if !valid_digest(&obligation.controller_sha256) {
+        return Err(reject("controller obligation digest is not canonical"));
+    }
+    let text = format!(
+        "controller_obligation_version={CONTROLLER_OBLIGATION_VERSION}\ncontroller_sha256={}\nreset_input={}\nvelocity_input={}\nbraking_state={}\nbrake_output={}\nvelocity_width={}\nbrake_velocity={}\nstatus=complete\n",
+        obligation.controller_sha256,
+        obligation.reset_input,
+        obligation.velocity_input,
+        obligation.braking_state,
+        obligation.brake_output,
+        obligation.velocity_width,
+        obligation.brake_velocity,
+    );
+    if text.len() > MAX_CONTROLLER_OBLIGATION_BYTES {
+        return Err(reject("controller obligation exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+pub fn decode_controller_obligation(bytes: &[u8]) -> Result<ControllerObligation, ComponentError> {
+    let text = canonical_text(
+        bytes,
+        "controller obligation",
+        MAX_CONTROLLER_OBLIGATION_BYTES,
+    )?;
+    let mut lines = text.lines();
+    fn take<'a>(lines: &mut std::str::Lines<'a>, key: &str) -> Result<&'a str, ComponentError> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| reject(format!("expected {key}")))
+    }
+    let version = parse_number::<u32>(
+        take(&mut lines, "controller_obligation_version")?,
+        "controller obligation version",
+    )?;
+    if version != CONTROLLER_OBLIGATION_VERSION {
+        return Err(reject("unsupported controller obligation version"));
+    }
+    let obligation = ControllerObligation {
+        controller_sha256: take(&mut lines, "controller_sha256")?.to_string(),
+        reset_input: parse_number(take(&mut lines, "reset_input")?, "reset input")?,
+        velocity_input: parse_number(take(&mut lines, "velocity_input")?, "velocity input")?,
+        braking_state: parse_number(take(&mut lines, "braking_state")?, "braking state")?,
+        brake_output: parse_number(take(&mut lines, "brake_output")?, "brake output")?,
+        velocity_width: parse_number(take(&mut lines, "velocity_width")?, "velocity width")?,
+        brake_velocity: parse_number(take(&mut lines, "brake_velocity")?, "brake velocity")?,
+    };
+    if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
+        return Err(reject(
+            "controller obligation is incomplete or has trailing fields",
+        ));
+    }
+    if encode_controller_obligation(&obligation)? != text {
+        return Err(reject("controller obligation is not canonical"));
+    }
+    Ok(obligation)
 }
 
 fn add_literal(model: &Btor2Model, expression: NodeId, state: NodeId) -> Option<u64> {
@@ -1009,6 +1306,153 @@ fn checker_phase_shape(
     Ok(shape)
 }
 
+fn contract_matches_obligation(
+    contract: &ComponentContract,
+    obligation: &ControllerObligation,
+) -> bool {
+    contract.controller_reset_input == obligation.reset_input
+        && contract.controller_velocity_input == obligation.velocity_input
+        && contract.controller_braking_state == obligation.braking_state
+        && contract.controller_brake_output == obligation.brake_output
+}
+
+fn checker_reused_phase_shape(
+    plant_source: &[u8],
+    contract: &ComponentContract,
+    obligation: &ControllerObligation,
+    member: &ReusedPhaseMember,
+) -> Result<PhaseShape, ComponentError> {
+    if !contract_matches_obligation(contract, obligation) {
+        return Err(reject(
+            "component contract controller projection does not match obligation",
+        ));
+    }
+    let plant = btor2::parse_bytes(plant_source).map_err(|error| reject(error.to_string()))?;
+    if plant.inputs() != [contract.plant_reset_input, contract.plant_brake_input]
+        || plant.states() != [contract.plant_velocity_state, contract.plant_position_state]
+        || !plant.constraints().is_empty()
+    {
+        return Err(reject("plant state or input vectors do not match contract"));
+    }
+    if node_width(&plant, contract.plant_reset_input) != Some(1)
+        || node_width(&plant, contract.plant_brake_input) != Some(1)
+        || node_width(&plant, contract.plant_velocity_state) != Some(obligation.velocity_width)
+        || node_width(&plant, contract.plant_position_state) != Some(obligation.velocity_width)
+    {
+        return Err(reject(
+            "plant wire widths do not match controller obligation",
+        ));
+    }
+    let bad_expression = plant
+        .bad_properties()
+        .iter()
+        .find_map(|(id, expression, _)| (*id == contract.plant_bad_property).then_some(*expression))
+        .ok_or_else(|| reject("plant bad property is absent"))?;
+    if depends_on_input(&plant, bad_expression, &mut BTreeMap::new()) {
+        return Err(reject("reused phase requires a state-only plant property"));
+    }
+    if !zero(
+        &plant,
+        plant
+            .initialiser(contract.plant_velocity_state)
+            .ok_or_else(|| reject("plant velocity initialiser is absent"))?,
+    ) || !zero(
+        &plant,
+        plant
+            .initialiser(contract.plant_position_state)
+            .ok_or_else(|| reject("plant position initialiser is absent"))?,
+    ) {
+        return Err(reject("plant initial values are not literal zero"));
+    }
+    let velocity_next = reset_advance(
+        &plant,
+        contract.plant_velocity_state,
+        contract.plant_reset_input,
+    )
+    .ok_or_else(|| reject("plant velocity update is outside contract language"))?;
+    let (brake_expression, acceleration_expression) = match plant.nodes()[&velocity_next].kind {
+        NodeKind::Ite(input, brake, accelerate) if input == contract.plant_brake_input => {
+            (brake, accelerate)
+        }
+        _ => {
+            return Err(reject(
+                "plant control selection is outside contract language",
+            ));
+        }
+    };
+    let acceleration = add_literal(
+        &plant,
+        acceleration_expression,
+        contract.plant_velocity_state,
+    )
+    .filter(|value| *value != 0)
+    .ok_or_else(|| reject("plant acceleration is not nonzero literal addition"))?;
+    let (near_zero, subtraction) = match plant.nodes()[&brake_expression].kind {
+        NodeKind::Ite(guard, zero_value, subtraction) if zero(&plant, zero_value) => {
+            (guard, subtraction)
+        }
+        _ => {
+            return Err(reject(
+                "plant braking expression is outside contract language",
+            ));
+        }
+    };
+    let literal = match plant.nodes()[&subtraction].kind {
+        NodeKind::Binary(BinaryOp::Sub, state, literal)
+            if state == contract.plant_velocity_state =>
+        {
+            literal
+        }
+        _ => return Err(reject("plant deceleration is outside contract language")),
+    };
+    let deceleration = constant(&plant, literal)
+        .filter(|value| *value != 0)
+        .ok_or_else(|| reject("plant deceleration is not a nonzero literal"))?;
+    match plant.nodes()[&near_zero].kind {
+        NodeKind::Binary(BinaryOp::Ulte, state, bound)
+            if state == contract.plant_velocity_state
+                && constant(&plant, bound) == Some(deceleration) => {}
+        _ => return Err(reject("plant saturation guard does not match deceleration")),
+    }
+    let position_next = reset_advance(
+        &plant,
+        contract.plant_position_state,
+        contract.plant_reset_input,
+    )
+    .ok_or_else(|| reject("plant position update is outside contract language"))?;
+    if !is_sum(
+        &plant,
+        position_next,
+        contract.plant_position_state,
+        contract.plant_velocity_state,
+    ) {
+        return Err(reject("plant position is not updated from old velocity"));
+    }
+    let position_threshold = match plant.nodes()[&bad_expression].kind {
+        NodeKind::Binary(BinaryOp::Ugte, state, threshold)
+            if state == contract.plant_position_state =>
+        {
+            constant(&plant, threshold)
+                .ok_or_else(|| reject("plant bad threshold is not literal"))?
+        }
+        _ => return Err(reject("plant bad property is outside contract language")),
+    };
+    let shape = PhaseShape {
+        width: obligation.velocity_width,
+        acceleration,
+        brake_velocity: obligation.brake_velocity,
+        deceleration,
+        position_threshold,
+    };
+    if member.acceleration != shape.acceleration
+        || member.deceleration != shape.deceleration
+        || member.position_threshold != shape.position_threshold
+    {
+        return Err(reject("reused phase constants do not match plant source"));
+    }
+    Ok(shape)
+}
+
 fn ceil_div(numerator: u128, denominator: u128) -> Option<u128> {
     numerator
         .checked_add(denominator.checked_sub(1)?)?
@@ -1196,7 +1640,14 @@ fn verify_phase(
         ));
     }
     let composition = build_composition(controller_source, plant_source, contract)?;
-    let shape = checker_phase_shape(&composition, certificate)?;
+    verify_phase_composition(&composition, certificate)
+}
+
+fn verify_phase_composition(
+    composition: &Composition<'_>,
+    certificate: &ComponentPhaseCertificate,
+) -> Result<ComponentSummary, ComponentError> {
+    let shape = checker_phase_shape(composition, certificate)?;
     let endpoint = checker_endpoint(shape, u64::from(certificate.query_horizon))
         .ok_or_else(|| reject("component phase arithmetic is not exact"))?;
     if endpoint.switch_frame != certificate.switch_frame
@@ -1275,6 +1726,599 @@ pub fn verify(
             certificate,
         ),
     }
+}
+
+pub fn produce_naive_component_batch(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+) -> Result<NaiveComponentBatchCertificate, ComponentError> {
+    if inputs.is_empty() || inputs.len() > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let mut members = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        members.push(
+            produce(
+                controller_source,
+                input.plant_source,
+                input.contract_source,
+                input.horizon,
+            )?
+            .certificate,
+        );
+    }
+    Ok(NaiveComponentBatchCertificate {
+        controller_sha256: digest(controller_source),
+        members,
+    })
+}
+
+pub fn verify_naive_component_batch(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+    certificate: &NaiveComponentBatchCertificate,
+) -> Result<ComponentBatchSummary, ComponentError> {
+    if inputs.is_empty()
+        || inputs.len() > MAX_COMPONENT_BATCH_MEMBERS
+        || certificate.members.len() != inputs.len()
+        || certificate.controller_sha256 != digest(controller_source)
+    {
+        return Err(reject("component batch binding or member count is invalid"));
+    }
+    let controller =
+        Arc::new(btor2::parse_bytes(controller_source).map_err(|error| reject(error.to_string()))?);
+    let mut members = Vec::with_capacity(inputs.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    for (input, member) in inputs.iter().zip(&certificate.members) {
+        let member_horizon = match member {
+            ComponentCertificate::Phase(member) => member.query_horizon,
+            ComponentCertificate::Search(member) => member.query_horizon,
+        };
+        if member_horizon != input.horizon {
+            return Err(reject("component batch horizon binding is invalid"));
+        }
+        let contract = parse_contract(input.contract_source)?;
+        let composition =
+            build_composition_with_controller(&controller, input.plant_source, &contract)?;
+        let summary = match member {
+            ComponentCertificate::Phase(member) => {
+                if member.controller_sha256 != digest(controller_source)
+                    || member.plant_sha256 != digest(input.plant_source)
+                    || member.contract_sha256 != digest(input.contract_source)
+                    || member.query_horizon > MAX_COMPONENT_PHASE_HORIZON
+                {
+                    return Err(reject(
+                        "component phase source binding or horizon is invalid",
+                    ));
+                }
+                verify_phase_composition(&composition, member)?
+            }
+            ComponentCertificate::Search(member) => {
+                if member.controller_sha256 != digest(controller_source)
+                    || member.plant_sha256 != digest(input.plant_source)
+                    || member.contract_sha256 != digest(input.contract_source)
+                    || member.query_horizon > MAX_COMPONENT_SEARCH_HORIZON
+                {
+                    return Err(reject(
+                        "component search source binding or horizon is invalid",
+                    ));
+                }
+                verify_search_composition(&composition, member)?
+            }
+        };
+        match summary.result {
+            ComponentResult::Safe => safe += 1,
+            ComponentResult::Unsafe => unsafe_count += 1,
+        }
+        members.push(summary);
+    }
+    Ok(ComponentBatchSummary {
+        members,
+        safe,
+        unsafe_count,
+    })
+}
+
+pub fn produce_reusable_component_batch(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+) -> Result<ReusableComponentBatchCertificate, ComponentError> {
+    if inputs.is_empty() || inputs.len() > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let controller_obligation =
+        produce_controller_obligation(controller_source, inputs[0].contract_source)?;
+    let mut members = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        let contract = parse_contract(input.contract_source)?;
+        if !contract_matches_obligation(&contract, &controller_obligation) {
+            return Err(reject(
+                "component contract controller projection does not match shared obligation",
+            ));
+        }
+        let production = produce(
+            controller_source,
+            input.plant_source,
+            input.contract_source,
+            input.horizon,
+        )?;
+        let member = match production.certificate {
+            ComponentCertificate::Phase(phase) => {
+                if phase.controller_sha256 != controller_obligation.controller_sha256
+                    || phase.width != controller_obligation.velocity_width
+                    || phase.brake_velocity != controller_obligation.brake_velocity
+                {
+                    return Err(reject(
+                        "phase certificate does not match shared controller obligation",
+                    ));
+                }
+                ReusableBatchMember::ReusedPhase(ReusedPhaseMember {
+                    plant_sha256: phase.plant_sha256,
+                    contract_sha256: phase.contract_sha256,
+                    query_horizon: phase.query_horizon,
+                    acceleration: phase.acceleration,
+                    deceleration: phase.deceleration,
+                    position_threshold: phase.position_threshold,
+                    switch_frame: phase.switch_frame,
+                    stop_frame: phase.stop_frame,
+                    max_velocity: phase.max_velocity,
+                    max_position: phase.max_position,
+                })
+            }
+            fallback => ReusableBatchMember::ExactFallback(fallback),
+        };
+        members.push(member);
+    }
+    Ok(ReusableComponentBatchCertificate {
+        controller_obligation,
+        members,
+    })
+}
+
+pub fn verify_reusable_component_batch(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+    certificate: &ReusableComponentBatchCertificate,
+) -> Result<ComponentBatchSummary, ComponentError> {
+    if inputs.is_empty()
+        || inputs.len() > MAX_COMPONENT_BATCH_MEMBERS
+        || certificate.members.len() != inputs.len()
+    {
+        return Err(reject("component batch binding or member count is invalid"));
+    }
+    verify_controller_obligation(controller_source, &certificate.controller_obligation)?;
+    let mut members = Vec::with_capacity(inputs.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    for (input, member) in inputs.iter().zip(&certificate.members) {
+        let summary = match member {
+            ReusableBatchMember::ReusedPhase(member) => {
+                if member.query_horizon != input.horizon
+                    || member.query_horizon > MAX_COMPONENT_PHASE_HORIZON
+                    || member.plant_sha256 != digest(input.plant_source)
+                    || member.contract_sha256 != digest(input.contract_source)
+                {
+                    return Err(reject("reused phase source binding or horizon is invalid"));
+                }
+                let contract = parse_contract(input.contract_source)?;
+                let shape = checker_reused_phase_shape(
+                    input.plant_source,
+                    &contract,
+                    &certificate.controller_obligation,
+                    member,
+                )?;
+                let endpoint = checker_endpoint(shape, u64::from(member.query_horizon))
+                    .ok_or_else(|| reject("reused phase arithmetic is not exact"))?;
+                if endpoint.switch_frame != member.switch_frame
+                    || endpoint.stop_frame != member.stop_frame
+                    || endpoint.max_velocity != member.max_velocity
+                    || endpoint.position != member.max_position
+                    || endpoint.position >= member.position_threshold
+                {
+                    return Err(reject("reused phase claim is not exact and safe"));
+                }
+                ComponentSummary {
+                    backend: ComponentBackend::PhaseContract,
+                    result: ComponentResult::Safe,
+                    query_horizon: member.query_horizon,
+                    bad_frame: None,
+                    logical_reachable_states: logical_state_count(
+                        member.query_horizon,
+                        endpoint.stop_frame,
+                    )
+                    .ok_or_else(|| reject("component logical state count overflowed"))?,
+                }
+            }
+            ReusableBatchMember::ExactFallback(member) => {
+                let horizon = match member {
+                    ComponentCertificate::Phase(member) => member.query_horizon,
+                    ComponentCertificate::Search(member) => member.query_horizon,
+                };
+                if horizon != input.horizon {
+                    return Err(reject("component batch horizon binding is invalid"));
+                }
+                verify(
+                    controller_source,
+                    input.plant_source,
+                    input.contract_source,
+                    member,
+                )?
+            }
+        };
+        match summary.result {
+            ComponentResult::Safe => safe += 1,
+            ComponentResult::Unsafe => unsafe_count += 1,
+        }
+        members.push(summary);
+    }
+    Ok(ComponentBatchSummary {
+        members,
+        safe,
+        unsafe_count,
+    })
+}
+
+pub fn produce_component_batch_portfolio(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+) -> Result<ComponentBatchPortfolioProduction, ComponentError> {
+    let reusable = produce_reusable_component_batch(controller_source, inputs)?;
+    if reusable.members.len() >= 2
+        && reusable
+            .members
+            .iter()
+            .all(|member| matches!(member, ReusableBatchMember::ReusedPhase(_)))
+    {
+        return Ok(ComponentBatchPortfolioProduction {
+            certificate: ComponentBatchPortfolioCertificate::Reusable(reusable),
+            selection_reason: ComponentBatchSelectionReason::FullyAdmittedReuse,
+        });
+    }
+    let obligation = &reusable.controller_obligation;
+    let members = reusable
+        .members
+        .into_iter()
+        .map(|member| match member {
+            ReusableBatchMember::ReusedPhase(member) => {
+                ComponentCertificate::Phase(ComponentPhaseCertificate {
+                    controller_sha256: obligation.controller_sha256.clone(),
+                    plant_sha256: member.plant_sha256,
+                    contract_sha256: member.contract_sha256,
+                    query_horizon: member.query_horizon,
+                    width: obligation.velocity_width,
+                    acceleration: member.acceleration,
+                    brake_velocity: obligation.brake_velocity,
+                    deceleration: member.deceleration,
+                    position_threshold: member.position_threshold,
+                    switch_frame: member.switch_frame,
+                    stop_frame: member.stop_frame,
+                    max_velocity: member.max_velocity,
+                    max_position: member.max_position,
+                })
+            }
+            ReusableBatchMember::ExactFallback(member) => member,
+        })
+        .collect();
+    Ok(ComponentBatchPortfolioProduction {
+        certificate: ComponentBatchPortfolioCertificate::Ordinary(NaiveComponentBatchCertificate {
+            controller_sha256: obligation.controller_sha256.clone(),
+            members,
+        }),
+        selection_reason: ComponentBatchSelectionReason::SingletonOrExactFallback,
+    })
+}
+
+pub fn verify_component_batch_portfolio(
+    controller_source: &[u8],
+    inputs: &[ComponentBatchInput<'_>],
+    certificate: &ComponentBatchPortfolioCertificate,
+) -> Result<ComponentBatchSummary, ComponentError> {
+    match certificate {
+        ComponentBatchPortfolioCertificate::Reusable(certificate) => {
+            if certificate.members.len() < 2
+                || certificate
+                    .members
+                    .iter()
+                    .any(|member| !matches!(member, ReusableBatchMember::ReusedPhase(_)))
+            {
+                return Err(reject(
+                    "reusable portfolio route violates static selection gate",
+                ));
+            }
+            verify_reusable_component_batch(controller_source, inputs, certificate)
+        }
+        ComponentBatchPortfolioCertificate::Ordinary(certificate) => {
+            verify_naive_component_batch(controller_source, inputs, certificate)
+        }
+    }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_decode(value: &str, label: &str) -> Result<Vec<u8>, ComponentError> {
+    if !value.len().is_multiple_of(2)
+        || value
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+    {
+        return Err(reject(format!("{label} is not canonical lowercase hex")));
+    }
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|text| u8::from_str_radix(text, 16).ok())
+                .ok_or_else(|| reject(format!("invalid {label}")))
+        })
+        .collect()
+}
+
+pub fn encode_reusable_component_batch(
+    certificate: &ReusableComponentBatchCertificate,
+) -> Result<String, ComponentError> {
+    if certificate.members.is_empty() || certificate.members.len() > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let obligation = encode_controller_obligation(&certificate.controller_obligation)?;
+    let mut text = format!(
+        "reusable_component_batch_version={REUSABLE_COMPONENT_BATCH_VERSION}\ncontroller_obligation_hex={}\nmember_count={}\n",
+        hex_encode(obligation.as_bytes()),
+        certificate.members.len(),
+    );
+    for member in &certificate.members {
+        match member {
+            ReusableBatchMember::ReusedPhase(member) => {
+                if !valid_digest(&member.plant_sha256) || !valid_digest(&member.contract_sha256) {
+                    return Err(reject("reused phase digest is not canonical"));
+                }
+                text.push_str(&format!(
+                    "member=reused-phase\nplant_sha256={}\ncontract_sha256={}\nquery_horizon={}\nacceleration={}\ndeceleration={}\nposition_threshold={}\nswitch_frame={}\nstop_frame={}\nmax_velocity={}\nmax_position={}\n",
+                    member.plant_sha256,
+                    member.contract_sha256,
+                    member.query_horizon,
+                    member.acceleration,
+                    member.deceleration,
+                    member.position_threshold,
+                    member.switch_frame,
+                    member.stop_frame,
+                    member.max_velocity,
+                    member.max_position,
+                ));
+            }
+            ReusableBatchMember::ExactFallback(member) => {
+                text.push_str("member=exact-fallback\ncertificate_hex=");
+                text.push_str(&hex_encode(encode(member)?.as_bytes()));
+                text.push('\n');
+            }
+        }
+        if text.len() > MAX_REUSABLE_COMPONENT_BATCH_BYTES {
+            return Err(reject("reusable component batch exceeds byte limit"));
+        }
+    }
+    text.push_str("status=complete\n");
+    if text.len() > MAX_REUSABLE_COMPONENT_BATCH_BYTES {
+        return Err(reject("reusable component batch exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+pub fn decode_reusable_component_batch(
+    bytes: &[u8],
+) -> Result<ReusableComponentBatchCertificate, ComponentError> {
+    let text = canonical_text(
+        bytes,
+        "reusable component batch",
+        MAX_REUSABLE_COMPONENT_BATCH_BYTES,
+    )?;
+    let mut lines = text.lines();
+    fn take<'a>(lines: &mut std::str::Lines<'a>, key: &str) -> Result<&'a str, ComponentError> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| reject(format!("expected {key}")))
+    }
+    let version: u32 = parse_number(
+        take(&mut lines, "reusable_component_batch_version")?,
+        "reusable component batch version",
+    )?;
+    if version != REUSABLE_COMPONENT_BATCH_VERSION {
+        return Err(reject("unsupported reusable component batch version"));
+    }
+    let obligation_bytes = hex_decode(
+        take(&mut lines, "controller_obligation_hex")?,
+        "controller obligation",
+    )?;
+    if obligation_bytes.len() > MAX_CONTROLLER_OBLIGATION_BYTES {
+        return Err(reject("controller obligation exceeds byte limit"));
+    }
+    let controller_obligation = decode_controller_obligation(&obligation_bytes)?;
+    let count: usize = parse_number(take(&mut lines, "member_count")?, "member count")?;
+    if count == 0 || count > MAX_COMPONENT_BATCH_MEMBERS {
+        return Err(reject("component batch member count is outside limit"));
+    }
+    let mut members = Vec::with_capacity(count);
+    for _ in 0..count {
+        let member = match take(&mut lines, "member")? {
+            "reused-phase" => {
+                let member = ReusedPhaseMember {
+                    plant_sha256: take(&mut lines, "plant_sha256")?.to_string(),
+                    contract_sha256: take(&mut lines, "contract_sha256")?.to_string(),
+                    query_horizon: parse_number(
+                        take(&mut lines, "query_horizon")?,
+                        "query horizon",
+                    )?,
+                    acceleration: parse_number(take(&mut lines, "acceleration")?, "acceleration")?,
+                    deceleration: parse_number(take(&mut lines, "deceleration")?, "deceleration")?,
+                    position_threshold: parse_number(
+                        take(&mut lines, "position_threshold")?,
+                        "position threshold",
+                    )?,
+                    switch_frame: parse_number(take(&mut lines, "switch_frame")?, "switch frame")?,
+                    stop_frame: parse_number(take(&mut lines, "stop_frame")?, "stop frame")?,
+                    max_velocity: parse_number(take(&mut lines, "max_velocity")?, "max velocity")?,
+                    max_position: parse_number(take(&mut lines, "max_position")?, "max position")?,
+                };
+                if !valid_digest(&member.plant_sha256) || !valid_digest(&member.contract_sha256) {
+                    return Err(reject("reused phase digest is not canonical"));
+                }
+                ReusableBatchMember::ReusedPhase(member)
+            }
+            "exact-fallback" => {
+                let certificate = hex_decode(
+                    take(&mut lines, "certificate_hex")?,
+                    "component certificate",
+                )?;
+                if certificate.len() > MAX_COMPONENT_CERTIFICATE_BYTES {
+                    return Err(reject("component certificate exceeds byte limit"));
+                }
+                ReusableBatchMember::ExactFallback(decode(&certificate)?)
+            }
+            _ => return Err(reject("unknown reusable component batch member")),
+        };
+        members.push(member);
+    }
+    if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
+        return Err(reject(
+            "reusable component batch is incomplete or has trailing fields",
+        ));
+    }
+    let certificate = ReusableComponentBatchCertificate {
+        controller_obligation,
+        members,
+    };
+    if encode_reusable_component_batch(&certificate)? != text {
+        return Err(reject("reusable component batch is not canonical"));
+    }
+    Ok(certificate)
+}
+
+pub fn encode_component_batch_portfolio(
+    certificate: &ComponentBatchPortfolioCertificate,
+) -> Result<String, ComponentError> {
+    if let ComponentBatchPortfolioCertificate::Reusable(certificate) = certificate {
+        if certificate.members.len() < 2
+            || certificate
+                .members
+                .iter()
+                .any(|member| !matches!(member, ReusableBatchMember::ReusedPhase(_)))
+        {
+            return Err(reject(
+                "reusable portfolio route violates static selection gate",
+            ));
+        }
+        return encode_reusable_component_batch(certificate);
+    }
+    let mut text =
+        format!("component_batch_portfolio_version={COMPONENT_BATCH_PORTFOLIO_VERSION}\n");
+    match certificate {
+        ComponentBatchPortfolioCertificate::Reusable(_) => unreachable!(),
+        ComponentBatchPortfolioCertificate::Ordinary(certificate) => {
+            if certificate.members.is_empty()
+                || certificate.members.len() > MAX_COMPONENT_BATCH_MEMBERS
+                || !valid_digest(&certificate.controller_sha256)
+            {
+                return Err(reject("ordinary portfolio batch is not canonical"));
+            }
+            text.push_str(&format!(
+                "route=ordinary\ncontroller_sha256={}\nmember_count={}\n",
+                certificate.controller_sha256,
+                certificate.members.len(),
+            ));
+            for member in &certificate.members {
+                text.push_str("certificate_hex=");
+                text.push_str(&hex_encode(encode(member)?.as_bytes()));
+                text.push('\n');
+                if text.len() > MAX_COMPONENT_BATCH_PORTFOLIO_BYTES {
+                    return Err(reject("component batch portfolio exceeds byte limit"));
+                }
+            }
+        }
+    }
+    text.push_str("status=complete\n");
+    if text.len() > MAX_COMPONENT_BATCH_PORTFOLIO_BYTES {
+        return Err(reject("component batch portfolio exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+pub fn decode_component_batch_portfolio(
+    bytes: &[u8],
+) -> Result<ComponentBatchPortfolioCertificate, ComponentError> {
+    if bytes.starts_with(b"reusable_component_batch_version=") {
+        let certificate = decode_reusable_component_batch(bytes)?;
+        if certificate.members.len() < 2
+            || certificate
+                .members
+                .iter()
+                .any(|member| !matches!(member, ReusableBatchMember::ReusedPhase(_)))
+        {
+            return Err(reject(
+                "reusable portfolio route violates static selection gate",
+            ));
+        }
+        return Ok(ComponentBatchPortfolioCertificate::Reusable(certificate));
+    }
+    let text = canonical_text(
+        bytes,
+        "component batch portfolio",
+        MAX_COMPONENT_BATCH_PORTFOLIO_BYTES,
+    )?;
+    let mut lines = text.lines();
+    fn take<'a>(lines: &mut std::str::Lines<'a>, key: &str) -> Result<&'a str, ComponentError> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| reject(format!("expected {key}")))
+    }
+    let version: u32 = parse_number(
+        take(&mut lines, "component_batch_portfolio_version")?,
+        "component batch portfolio version",
+    )?;
+    if version != COMPONENT_BATCH_PORTFOLIO_VERSION {
+        return Err(reject("unsupported component batch portfolio version"));
+    }
+    let certificate = match take(&mut lines, "route")? {
+        "ordinary" => {
+            let controller_sha256 = take(&mut lines, "controller_sha256")?.to_string();
+            if !valid_digest(&controller_sha256) {
+                return Err(reject("ordinary portfolio digest is not canonical"));
+            }
+            let count: usize = parse_number(take(&mut lines, "member_count")?, "member count")?;
+            if count == 0 || count > MAX_COMPONENT_BATCH_MEMBERS {
+                return Err(reject("component batch member count is outside limit"));
+            }
+            let mut members = Vec::with_capacity(count);
+            for _ in 0..count {
+                let bytes = hex_decode(
+                    take(&mut lines, "certificate_hex")?,
+                    "component certificate",
+                )?;
+                if bytes.len() > MAX_COMPONENT_CERTIFICATE_BYTES {
+                    return Err(reject("component certificate exceeds byte limit"));
+                }
+                members.push(decode(&bytes)?);
+            }
+            ComponentBatchPortfolioCertificate::Ordinary(NaiveComponentBatchCertificate {
+                controller_sha256,
+                members,
+            })
+        }
+        _ => return Err(reject("unknown component batch portfolio route")),
+    };
+    if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
+        return Err(reject(
+            "component batch portfolio is incomplete or has trailing fields",
+        ));
+    }
+    if encode_component_batch_portfolio(&certificate)? != text {
+        return Err(reject("component batch portfolio is not canonical"));
+    }
+    Ok(certificate)
 }
 
 fn encode_state(state: &ComponentState) -> String {
@@ -1549,6 +2593,48 @@ mod tests {
     }
 
     #[test]
+    fn controller_obligation_is_source_bound_canonical_and_reusable() {
+        let obligation = produce_controller_obligation(CONTROLLER, CONTRACT).unwrap();
+        assert_eq!(obligation.velocity_width, 16);
+        assert_eq!(obligation.brake_velocity, 256);
+        let encoded = encode_controller_obligation(&obligation).unwrap();
+        assert!(encoded.len() < 350);
+        let decoded = decode_controller_obligation(encoded.as_bytes()).unwrap();
+        verify_controller_obligation(CONTROLLER, &decoded).unwrap();
+
+        let mut changed_source = CONTROLLER.to_vec();
+        let position = changed_source
+            .iter()
+            .position(|byte| *byte == b'8')
+            .unwrap();
+        changed_source[position] = b'9';
+        assert!(verify_controller_obligation(&changed_source, &decoded).is_err());
+
+        let mut changed_claim = decoded;
+        changed_claim.brake_velocity += 1;
+        assert!(verify_controller_obligation(CONTROLLER, &changed_claim).is_err());
+    }
+
+    #[test]
+    fn every_controller_obligation_mutation_and_truncation_fails_closed() {
+        let encoded = encode_controller_obligation(
+            &produce_controller_obligation(CONTROLLER, CONTRACT).unwrap(),
+        )
+        .unwrap()
+        .into_bytes();
+        for end in 0..encoded.len() {
+            assert!(decode_controller_obligation(&encoded[..end]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.clone();
+            mutated[index] = if mutated[index] == b'!' { b'?' } else { b'!' };
+            if let Ok(obligation) = decode_controller_obligation(&mutated) {
+                assert!(verify_controller_obligation(CONTROLLER, &obligation).is_err());
+            }
+        }
+    }
+
+    #[test]
     fn exact_composed_search_preserves_unsafe_and_near_neighbour_answers() {
         let unsafe_production = produce(CONTROLLER, PLANT, CONTRACT, 256).unwrap();
         assert_eq!(
@@ -1573,6 +2659,351 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn naive_batch_baseline_preserves_mixed_exact_answers() {
+        let inputs = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 256,
+            },
+            ComponentBatchInput {
+                plant_source: SEMI_IMPLICIT,
+                contract_source: CONTRACT,
+                horizon: 127,
+            },
+        ];
+        let certificate = produce_naive_component_batch(CONTROLLER, &inputs).unwrap();
+        let summary = verify_naive_component_batch(CONTROLLER, &inputs, &certificate).unwrap();
+        assert_eq!(summary.safe, 2);
+        assert_eq!(summary.unsafe_count, 1);
+        assert_eq!(summary.members[0].backend, ComponentBackend::PhaseContract);
+        assert_eq!(summary.members[1].backend, ComponentBackend::ComposedSearch);
+        assert_eq!(summary.members[2].backend, ComponentBackend::ComposedSearch);
+
+        let mut reordered = inputs;
+        reordered.swap(0, 1);
+        assert!(verify_naive_component_batch(CONTROLLER, &reordered, &certificate).is_err());
+    }
+
+    #[test]
+    fn reusable_batch_shares_controller_proof_and_preserves_exact_fallback() {
+        let inputs = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 256,
+            },
+            ComponentBatchInput {
+                plant_source: SEMI_IMPLICIT,
+                contract_source: CONTRACT,
+                horizon: 127,
+            },
+        ];
+        let certificate = produce_reusable_component_batch(CONTROLLER, &inputs).unwrap();
+        assert!(matches!(
+            certificate.members[0],
+            ReusableBatchMember::ReusedPhase(_)
+        ));
+        assert!(matches!(
+            certificate.members[1],
+            ReusableBatchMember::ExactFallback(ComponentCertificate::Search(_))
+        ));
+        assert!(matches!(
+            certificate.members[2],
+            ReusableBatchMember::ExactFallback(ComponentCertificate::Search(_))
+        ));
+        let summary = verify_reusable_component_batch(CONTROLLER, &inputs, &certificate).unwrap();
+        assert_eq!(summary.safe, 2);
+        assert_eq!(summary.unsafe_count, 1);
+        assert_eq!(summary.members[0].backend, ComponentBackend::PhaseContract);
+        assert_eq!(summary.members[1].backend, ComponentBackend::ComposedSearch);
+        assert_eq!(summary.members[2].backend, ComponentBackend::ComposedSearch);
+    }
+
+    #[test]
+    fn reusable_batch_rejects_shared_and_member_tampering() {
+        let inputs = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 254,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+        ];
+        let certificate = produce_reusable_component_batch(CONTROLLER, &inputs).unwrap();
+
+        let mut changed_obligation = certificate.clone();
+        changed_obligation.controller_obligation.brake_velocity += 1;
+        assert!(verify_reusable_component_batch(CONTROLLER, &inputs, &changed_obligation).is_err());
+
+        let mut changed_member = certificate.clone();
+        let ReusableBatchMember::ReusedPhase(member) = &mut changed_member.members[0] else {
+            panic!("expected reused phase member")
+        };
+        member.max_position += 1;
+        assert!(verify_reusable_component_batch(CONTROLLER, &inputs, &changed_member).is_err());
+
+        let mut reordered = inputs;
+        reordered.swap(0, 1);
+        assert!(verify_reusable_component_batch(CONTROLLER, &reordered, &certificate).is_err());
+    }
+
+    #[test]
+    fn reusable_batch_codec_is_canonical_bounded_and_fail_closed() {
+        let inputs = [ComponentBatchInput {
+            plant_source: PLANT,
+            contract_source: CONTRACT,
+            horizon: 255,
+        }];
+        let certificate = produce_reusable_component_batch(CONTROLLER, &inputs).unwrap();
+        let encoded = encode_reusable_component_batch(&certificate).unwrap();
+        let decoded = decode_reusable_component_batch(encoded.as_bytes()).unwrap();
+        assert_eq!(decoded, certificate);
+        verify_reusable_component_batch(CONTROLLER, &inputs, &decoded).unwrap();
+
+        for end in 0..encoded.len() {
+            assert!(decode_reusable_component_batch(&encoded.as_bytes()[..end]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.as_bytes().to_vec();
+            mutated[index] = if mutated[index] == b'!' { b'?' } else { b'!' };
+            if let Ok(decoded) = decode_reusable_component_batch(&mutated) {
+                assert!(verify_reusable_component_batch(CONTROLLER, &inputs, &decoded).is_err());
+            }
+        }
+        assert!(
+            decode_reusable_component_batch(&vec![b'x'; MAX_REUSABLE_COMPONENT_BATCH_BYTES + 1])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn component_batch_portfolio_statically_selects_only_measured_win_regime() {
+        let admitted = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 254,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+        ];
+        let production = produce_component_batch_portfolio(CONTROLLER, &admitted).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            ComponentBatchSelectionReason::FullyAdmittedReuse
+        );
+        assert!(matches!(
+            production.certificate,
+            ComponentBatchPortfolioCertificate::Reusable(_)
+        ));
+        let encoded = encode_component_batch_portfolio(&production.certificate).unwrap();
+        let decoded = decode_component_batch_portfolio(encoded.as_bytes()).unwrap();
+        assert_eq!(
+            verify_component_batch_portfolio(CONTROLLER, &admitted, &decoded)
+                .unwrap()
+                .safe,
+            2
+        );
+
+        let mixed = [
+            admitted[0],
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 256,
+            },
+        ];
+        let production = produce_component_batch_portfolio(CONTROLLER, &mixed).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            ComponentBatchSelectionReason::SingletonOrExactFallback
+        );
+        assert!(matches!(
+            production.certificate,
+            ComponentBatchPortfolioCertificate::Ordinary(_)
+        ));
+        let encoded = encode_component_batch_portfolio(&production.certificate).unwrap();
+        let decoded = decode_component_batch_portfolio(encoded.as_bytes()).unwrap();
+        let summary = verify_component_batch_portfolio(CONTROLLER, &mixed, &decoded).unwrap();
+        assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+    }
+
+    #[test]
+    fn component_batch_portfolio_rejects_noncanonical_route_and_mutation() {
+        let inputs = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 254,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+        ];
+        let production = produce_component_batch_portfolio(CONTROLLER, &inputs).unwrap();
+        let encoded = encode_component_batch_portfolio(&production.certificate).unwrap();
+        for end in 0..encoded.len() {
+            assert!(decode_component_batch_portfolio(&encoded.as_bytes()[..end]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.as_bytes().to_vec();
+            mutated[index] = if mutated[index] == b'!' { b'?' } else { b'!' };
+            if let Ok(certificate) = decode_component_batch_portfolio(&mutated) {
+                assert!(
+                    verify_component_batch_portfolio(CONTROLLER, &inputs, &certificate).is_err()
+                );
+            }
+        }
+        let ComponentBatchPortfolioCertificate::Reusable(mut reusable) = production.certificate
+        else {
+            panic!("expected reusable route")
+        };
+        reusable.members.push(ReusableBatchMember::ExactFallback(
+            produce(CONTROLLER, PLANT, CONTRACT, 256)
+                .unwrap()
+                .certificate,
+        ));
+        assert!(
+            encode_component_batch_portfolio(&ComponentBatchPortfolioCertificate::Reusable(
+                reusable
+            ))
+            .is_err()
+        );
+
+        let singleton = [inputs[0]];
+        let ordinary = produce_component_batch_portfolio(CONTROLLER, &singleton).unwrap();
+        let encoded = encode_component_batch_portfolio(&ordinary.certificate).unwrap();
+        for end in 0..encoded.len() {
+            assert!(decode_component_batch_portfolio(&encoded.as_bytes()[..end]).is_err());
+        }
+        for index in 0..encoded.len() {
+            let mut mutated = encoded.as_bytes().to_vec();
+            mutated[index] = if mutated[index] == b'!' { b'?' } else { b'!' };
+            if let Ok(certificate) = decode_component_batch_portfolio(&mutated) {
+                assert!(
+                    verify_component_batch_portfolio(CONTROLLER, &singleton, &certificate).is_err()
+                );
+            }
+        }
+        assert!(
+            decode_component_batch_portfolio(&vec![b'x'; MAX_COMPONENT_BATCH_PORTFOLIO_BYTES + 1])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn admitted_portfolio_preserves_deterministic_artifact_break_even() {
+        for count in [2usize, 4, 8, 16, 32, 64] {
+            let inputs = (0..count)
+                .map(|index| ComponentBatchInput {
+                    plant_source: PLANT,
+                    contract_source: CONTRACT,
+                    horizon: 192 + index as u32,
+                })
+                .collect::<Vec<_>>();
+            let naive = produce_naive_component_batch(CONTROLLER, &inputs).unwrap();
+            let production = produce_component_batch_portfolio(CONTROLLER, &inputs).unwrap();
+            assert_eq!(
+                production.selection_reason,
+                ComponentBatchSelectionReason::FullyAdmittedReuse
+            );
+            let ComponentBatchPortfolioCertificate::Reusable(reusable) = &production.certificate
+            else {
+                panic!("expected reusable route")
+            };
+            let naive_bytes = encode_controller_obligation(&reusable.controller_obligation)
+                .unwrap()
+                .len()
+                + naive
+                    .members
+                    .iter()
+                    .map(|member| encode(member).unwrap().len())
+                    .sum::<usize>();
+            let portfolio_bytes = encode_component_batch_portfolio(&production.certificate)
+                .unwrap()
+                .len();
+            assert_eq!(
+                portfolio_bytes,
+                encode_reusable_component_batch(reusable).unwrap().len()
+            );
+            assert!(portfolio_bytes < naive_bytes);
+        }
+    }
+
+    #[test]
+    fn component_batch_v1_compatibility_fingerprints_are_frozen() {
+        let admitted = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 254,
+            },
+            ComponentBatchInput {
+                plant_source: include_bytes!(
+                    "../examples/btor2/components/fast-motion-plant-v1.btor2"
+                ),
+                contract_source: CONTRACT,
+                horizon: 127,
+            },
+        ];
+        let admitted = encode_component_batch_portfolio(
+            &produce_component_batch_portfolio(CONTROLLER, &admitted)
+                .unwrap()
+                .certificate,
+        )
+        .unwrap();
+        assert_eq!(admitted.len(), 1_194);
+        assert_eq!(
+            digest(admitted.as_bytes()),
+            "1d7ea348ee0c9f91ccdaa28a96894330ca7ca6e3ce36be41f55728f96095759f"
+        );
+
+        let mixed = [
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 255,
+            },
+            ComponentBatchInput {
+                plant_source: PLANT,
+                contract_source: CONTRACT,
+                horizon: 256,
+            },
+        ];
+        let mixed = encode_component_batch_portfolio(
+            &produce_component_batch_portfolio(CONTROLLER, &mixed)
+                .unwrap()
+                .certificate,
+        )
+        .unwrap();
+        assert_eq!(mixed.len(), 2_989);
+        assert_eq!(
+            digest(mixed.as_bytes()),
+            "adeca56001a004a3d3b2860ec79587576783150d09b47de96d0ff5fbc69af763"
+        );
     }
 
     #[test]

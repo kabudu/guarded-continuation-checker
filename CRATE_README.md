@@ -77,12 +77,16 @@ guarded-continuation-checker firmware-cli-version
 guarded-continuation-checker predicate-cli-version
 guarded-continuation-checker event-contract-cli-version
 guarded-continuation-checker btor2-cli-version
+guarded-continuation-checker controller-mtbdd-cli-version
 ```
 
 ## Rust API
 
 ```rust,no_run
-use guarded_continuation_checker::{EventContractTool, ExecutionPolicy, PredicateTool};
+use guarded_continuation_checker::{
+    ControllerMtbddTool, ControllerPlantPortfolioTool, EventContractTool,
+    ExecutionPolicy, PredicateTool,
+};
 
 # fn discover() -> Result<(), Box<dyn std::error::Error>> {
 let policy = ExecutionPolicy::default();
@@ -97,6 +101,16 @@ let event_contracts = EventContractTool::discover_with_policy(
     policy,
 )?;
 assert_eq!(event_contracts.capabilities().cli_version, 1);
+let controller_mtbdd = ControllerMtbddTool::discover_with_policy(
+    "guarded-continuation-checker",
+    policy,
+)?;
+assert_eq!(controller_mtbdd.capabilities().cli_version, 1);
+let controller_portfolio = ControllerPlantPortfolioTool::discover_with_policy(
+    "guarded-continuation-checker",
+    policy,
+)?;
+assert_eq!(controller_portfolio.capabilities().cli_version, 1);
 # Ok(())
 # }
 ```
@@ -107,7 +121,19 @@ reports stable failure classes and invocation metrics. See the
 [Rust API contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/PREDICATE_RUST_API_V1.md)
 for predicate certificate examples and the
 [event-contract API contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/EVENT_CONTRACT_CLI_V1.md)
-for certificate v3, exact portfolio fallback, and report replay.
+for certificate v3, exact portfolio fallback, and report replay. The
+[controller MTBDD CLI contract](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_CLI_V1.md)
+covers source-bound controller-plus-plant batch production and verification.
+The
+[exact controller plant portfolio](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
+uses deterministic MTBDD admission with direct exact fallback and downgrade
+detection.
+Its typed summaries include non-routing phase observations so integrations can
+attribute loading, artifact, replay, publication, and total command cost.
+The retained
+[process-resource baseline](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/CONTROLLER_MTBDD_PROCESS_RESOURCES_V1.md)
+records a negative small-batch speed result and lower peak-memory observations
+without equating the different GCC and formal-oracle scopes.
 
 ## Self-service evaluation
 

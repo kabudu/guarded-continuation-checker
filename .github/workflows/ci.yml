@@ -42,7 +42,22 @@ jobs:
             scripts/run-btor2-braking-cost.sh \
             scripts/run-btor2-component-cohort.sh \
             scripts/run-btor2-component-self-service-acceptance.sh \
-            scripts/run-btor2-component-cost.sh
+            scripts/run-btor2-component-cost.sh \
+            scripts/run-btor2-component-batch-acceptance.sh \
+            scripts/run-btor2-component-reuse-benchmark.sh \
+            scripts/test-public-washing-controller-oracle.sh \
+            scripts/test-public-washing-controller-physical-oracle.sh \
+            scripts/run-controller-mtbdd-self-service-acceptance.sh \
+            scripts/benchmark-controller-mtbdd-process-resources.sh \
+            scripts/run-controller-plant-portfolio-acceptance.sh \
+            scripts/benchmark-controller-plant-portfolio-phases.sh \
+            scripts/benchmark-controller-proof-mtbdd-plant.sh
+      - name: Exercise proof-carrying MTBDD plant benchmark
+        run: |
+          scripts/benchmark-controller-proof-mtbdd-plant.sh \
+            /tmp/controller-proof-mtbdd-plant.csv
+          awk -F, 'NR == 2 { exit !($11 == "true" && $12 == "ok" && $8 > 0 && $9 > 0) }' \
+            /tmp/controller-proof-mtbdd-plant.csv
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -98,6 +113,13 @@ jobs:
             target/debug/guarded-continuation-checker /tmp/btor2-component-acceptance.csv
           diff -u results/btor2-component-self-service-acceptance-v1.csv \
             /tmp/btor2-component-acceptance.csv
+      - name: Reproduce BTOR2 component batch acceptance
+        run: |
+          scripts/run-btor2-component-batch-acceptance.sh \
+            target/debug/guarded-continuation-checker \
+            /tmp/btor2-component-batch-acceptance.csv
+          diff -u results/btor2-component-batch-acceptance-v1.csv \
+            /tmp/btor2-component-batch-acceptance.csv
       - name: Test external production evidence gate
         run: scripts/test-external-evidence-register.sh
       - name: Production-evaluation qualification smoke test
@@ -150,6 +172,20 @@ jobs:
           test -f /tmp/sby-assumed/PASS
           test -f /tmp/sby-regression/FAIL
 
+  portable-component-api:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Test portable component library and downstream API
+        run: |
+          cargo test --locked --lib btor2_component
+          cargo test --locked --test btor2_component_api
+
   public-rtl-corpus:
     runs-on: ubuntu-latest
     steps:
@@ -173,6 +209,42 @@ jobs:
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             corpus/rtl/yosys-simple /tmp/corpus-current /tmp/sby/sbysrc/sby.py
           cat /tmp/corpus-current/results.csv
+      - name: Cross-check public controller compositions with SymbiYosys
+        run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Cross-check stateful physical-plant batch with SymbiYosys
+        run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Reproduce controller MTBDD self-service acceptance
+        run: |
+          scripts/run-controller-mtbdd-self-service-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/controller-mtbdd-acceptance.csv
+          diff -u results/controller-mtbdd-self-service-acceptance-v1.csv \
+            /tmp/controller-mtbdd-acceptance.csv
+      - name: Reproduce controller plant exact portfolio acceptance
+        run: |
+          scripts/run-controller-plant-portfolio-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/controller-plant-portfolio.csv
+          diff -u results/controller-plant-portfolio-acceptance-v1.csv \
+            /tmp/controller-plant-portfolio.csv
+      - name: Exercise controller plant phase observability
+        env:
+          TRIALS: 1
+        run: |
+          scripts/benchmark-controller-plant-portfolio-phases.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/controller-plant-phases.csv
+          test "$(wc -l < /tmp/controller-plant-phases.csv)" -eq 5
+      - name: Measure controller MTBDD process resources
+        env:
+          TRIALS: 1
+        run: |
+          scripts/benchmark-controller-mtbdd-process-resources.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/sby/sbysrc/sby.py /tmp/controller-resources.csv
+          awk -F, 'NR > 1 { if ($4 <= 0 || $5 <= 0) exit 1; seen[$2]++ } END { exit !(seen["gcc_produce"] == 1 && seen["gcc_verify"] == 1 && seen["symbiyosys_oracle"] == 1) }' \
+            /tmp/controller-resources.csv
+          cat /tmp/controller-resources.csv
       - name: Run pinned historical Yosys 0.36
         run: |
           docker run --rm \

@@ -1,0 +1,15 @@
+[options]
+mode bmc
+depth 32
+
+[engines]
+smtbmc z3
+
+[script]
+read_aiger -module_name Controller -wideports controller.aag
+read -formal safe-monitor.sv
+prep -top washing_controller_safe_oracle
+
+[files]
+generated/controller.aag
+oracle/safe-monitor.sv

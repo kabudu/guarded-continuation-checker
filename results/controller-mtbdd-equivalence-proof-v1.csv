@@ -1,0 +1,2 @@
+schema_version,assignments,cnf_variables,cnf_clauses,cnf_literals,proof_bytes,proof_production_nanos,exhaustive_verification_nanos,proof_verification_nanos,verification_ratio,status
+1,131072,2690,8078,21509,242496,29377375,875032417,7197583,0.008226,ok

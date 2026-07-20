@@ -2,6 +2,81 @@
 
 ## Unreleased
 
+- Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
+  plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch
+  artifacts. On the public 131,072-assignment controller, one retained arm64
+  run checks the 242,496-byte proof in 0.82% of exhaustive replay time. Keep the
+  byte tradeoff and established equivalence-checking prior art explicit; the
+  proof path is not yet the portfolio default. The integrated six-property
+  physical-plant path verifies in 49.7% of compact exhaustive time with exact
+  agreement, while its artifact is 29.39 times larger. Report zero exhaustive
+  assignments checked on this path so represented miter scope is not
+  misreported as replay work.
+
+- Add phase-level portfolio observability for model loading, artifact handling,
+  semantic verification, publication, and complete elapsed time. Retain the
+  finding that semantic replay, not source/model loading, dominates the public
+  admitted batch and keep every timing field outside routing decisions.
+
+- Make both washing-controller formal oracles portable across Yosys versions.
+  Require byte-identical controller and plant regeneration only with the
+  recorded Yosys 0.67 build; other hosts still verify pinned source and model
+  digests plus formal properties and explicitly report source-to-model
+  regeneration as skipped.
+
+- Add a timing-free controller MTBDD plant portfolio through public Rust and
+  self-service file interfaces. Select the
+  reusable MTBDD artifact when admitted and preserve the identical ordered
+  bounded query through independently replayed direct exact evidence only for
+  explicit boundary, terminal, or node-limit rejection. Bind the selected
+  backend, reason, boundary, member queries, sources, and payload; reject
+  malformed models, semantic errors, query drift, mutation, and downgrade
+  attempts. Add typed capability discovery, bounded subprocess execution,
+  stable route and member results, and a six-case Linux acceptance gate.
+
+- Add a portable three-way process-resource harness for controller MTBDD
+  production, independent verification, and the maintained SymbiYosys oracle.
+  Retain the negative 2.67-times verification-speed result and the positive
+  85.2% peak-RSS reduction on one arm64 host without treating the different
+  checked scopes as equivalent.
+
+- Add experimental controller MTBDD plant CLI v1 with machine-readable
+  discovery, a strict canonical source and query manifest, create-new batch
+  production, independent file verification, exact per-member reports, hostile
+  input regressions, and a six-member self-service acceptance harness.
+  Add the typed, shell-free `ControllerMtbddTool` Rust client with strict
+  capability and result parsing, bounded subprocess execution, ordered member
+  results, aggregate consistency checks, and invocation metrics.
+
+- Add a maintained single-session SymbiYosys, Yosys, and Z3 baseline for the
+  six-property stateful plant. Reuse one compiled closed-loop model, reproduce
+  all four shortest bad frames, prove the other two properties through frame
+  32, retain machine-readable agreement, and gate the batch in CI.
+
+- Expand the controller MTBDD static boundary from four to eight observed
+  actions without relaxing assignment, node, terminal, or artifact limits. Add
+  a seven-action fill-to-spin process whose 254-node, 189-terminal MTBDD checks
+  three stateful safety properties through horizon 64 with exact direct-model
+  agreement.
+
+- Add a six-state-bit washing-machine physical plant with nondeterministic door,
+  imbalance, and motor-failure events. Retain exact two-SAFE/four-UNSAFE
+  agreement and a three-way shared, repeated-evidence, and checked in-process
+  MTBDD reuse benchmark without relaxing the frozen controller gates.
+- Add a complementary five-state-bit full-action process model, expand the
+  bounded MTBDD action-output limit from four to eight, and retain exact direct
+  agreement for three expected-SAFE properties using seven controller actions.
+
+- Add a primary-source closest-system analysis for the public controller MTBDD
+  result. Reject MTBDD and compile-once reuse as novelty, identify the ordinary
+  in-process symbolic model as the missing strong runtime baseline, and define
+  the next representative-plant trust-transfer experiment.
+
+- Add a pinned SymbiYosys, maintained-Yosys, and Z3 oracle for both public
+  washing-controller MTBDD composition answers. Match GCC's explicit zero
+  initial state, reproduce the SAFE depth-32 result and the UNSAFE step-10
+  result, retain machine-readable agreement, and gate it in CI.
+
 - Add experimental BTOR2 word semantic core v1. Preserve strict 1 to 64-bit
   counter and timer expressions, exact modular evaluation, deterministic state
   transitions, constraints, bad properties, resource bounds, and a versioned

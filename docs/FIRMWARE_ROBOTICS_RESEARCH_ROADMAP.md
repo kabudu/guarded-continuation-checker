@@ -80,15 +80,21 @@ close either register by itself.
    binds controller, plant, and wiring independently and preserves exact
    composed fallback. It closes the source-separation primitive but falsifies
    single-pair performance novelty. Cross-certificate controller-proof reuse
-   remains open. A pinned Bitwuzla
-   0.9.1 gate agrees on counter, motion, and braking boundaries.
+   now has a source-bound
+   [controller-obligation format and predeclared strong baselines](BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md),
+   an exact compact batch, and a measured local win for fully admitted batches.
+   Mixed fallback batches do not win, and public-product validity remains open.
+   A pinned Bitwuzla 0.9.1 gate agrees on counter, motion, and braking
+   boundaries.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
    monitors; identify which component invalidates a system guarantee. The
    first exact controller/plant wiring contract and both-answer fallback are
-   implemented. Reusable local obligations, contract refinement, multiple
-   components, and blame assignment remain open.
+   implemented. The first reusable controller-local obligation and compact
+   plant-member batch are implemented for one controller family. Contract
+   refinement, multiple interacting components, and blame assignment remain
+   open.
 
 7. **Robotics controller verification.** The first exact coupled-motion
    envelope and resettable braking-phase primitives are implemented. Extend
@@ -102,10 +108,19 @@ close either register by itself.
    minimal input-contract, guard, or state-machine changes that eliminate it,
    with the repaired design independently reverified.
 
-9. **Real-time and probabilistic extensions.** Explore timed interfaces and
+9. **Proof-carrying dense controller relations.** Generalise the narrow braking
+   obligation into a source-bound finite controller relation with witnessed
+   edges and independently checked row-completeness proofs. Reuse it across
+   multiple plant, bus, scheduler, or fault environments, while preserving exact
+   fallback and trace reconstruction. The
+   [v1 experiment specification](DENSE_CONTROLLER_RELATION_V1_EXPERIMENT.md)
+   predeclares strong parse-once, proof-carrying, public-product, hostile-input,
+   and cross-platform gates before implementation.
+
+10. **Real-time and probabilistic extensions.** Explore timed interfaces and
    bounded uncertainty only after exact Boolean/bit-vector evidence is mature.
 
-10. **External validation and novelty review.** Compare against maintained
+11. **External validation and novelty review.** Compare against maintained
     model checkers and explanation tools on public and confidential partner
     designs; commission independent technical, security, and scholarly review.
 

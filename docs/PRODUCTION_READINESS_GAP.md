@@ -83,6 +83,15 @@ reachability and its SAFE
   run. It has only one feedback word, one control bit, and one shared reset. It
   lacks tagged compatibility, proof reuse, contract refinement, public-product
   evidence, independent acceptance, and operational deployment guidance.
+  The controller-obligation v1 prototype is canonical, bounded, source-bound,
+  independently checked, and exposed through Rust and CLI interfaces. It now
+  drives a bounded exact mixed-answer batch with canonical artifacts and a
+  normalized manifest workflow. Fully admitted local batches pass the strong
+  artifact and checking baselines, while the 25% fallback control correctly
+  records no efficiency claim. A static top-level portfolio now selects reuse
+  only for at least two fully admitted members and retains ordinary exact
+  certificates otherwise. Cross-platform packaging, maintained external
+  controls, public-product evidence, and independent acceptance remain open.
   A six-case self-service acceptance harness proves the bundled workflow can be
   repeated without formula calibration, but it is simulated rather than
   independent evidence. Portfolio v3 exposes a stable typed selection reason
@@ -90,6 +99,105 @@ reachability and its SAFE
   observations; repository-wide multi-job aggregation remains open.
   It cannot change any production-readiness row until those gaps, stable release
 compatibility, full hostile-input coverage, and public product evidence close.
+
+## Proof-carrying controller transducer experimental boundary
+
+Controller transducer v1 is not a production-supported interface. Its public
+Rust API has bounded exact AIGER evaluation, complete next-state and selected
+output obligations, independently checked UNSAT proofs, deterministic symbolic
+partitioning, source binding, a canonical bounded codec, retained truncation and
+single-byte mutation rejection, sampled plant composition, external-input
+exploration, unsafe trace reconstruction, and a timing-free direct exact
+fallback. Its complete canonical batch artifact binds plant sources and wiring,
+recomputes all claimed results, and rejects every truncation and single-bit
+mutation of the retained fixture. The local synthetic strong artifact and
+checking baselines now pass. Supplied invalid evidence fails closed. Current
+evidence is limited to small repository-authored controllers and plants. CLI
+file integration, a broad generated hostile corpus, unmodified public-product
+designs, maintained model-checker agreement, cross-platform replication,
+release compatibility, and independent acceptance remain open. This capability
+cannot change any production-readiness row until those gates close.
+
+The first pinned public washing-controller candidate fails the controller
+transducer admission gate with 1,028 canonical cells. It is retained as a
+negative product-scale regression, not counted as public-product support.
+The separate fixed-order MTBDD backend admits the same exact relation in 6,217
+bytes and independently checks all 131,072 assignments. It does not yet compose
+with representative physical product environments, expose a CLI file workflow,
+or carry release compatibility, so it does not close a readiness row. Two
+minimal appliance monitors now cover exact SAFE and UNSAFE composition,
+direct-controller agreement, and maintained SymbiYosys plus Z3 agreement, but
+remain repository-authored mechanism tests.
+The public-controller complete-artifact reuse benchmark passes through 16
+members, where shared bytes are 10.6% and checking time is 6.2% of repeated
+artifacts. This closes the local strong-baseline mechanism gate only. Maintained
+SymbiYosys/Yosys/Z3 now independently agrees on both minimal monitor answers and
+the unsafe frame-10 result. This closes the maintained external agreement gate
+for this narrow fixture only. Realistic physical environments, CLI integration,
+compatibility history, and independent acceptance remain open.
+
+The repository-authored stateful washing plant adds six physical state bits,
+three nondeterministic disturbance events, six ordered safety properties, and
+exact agreement for two SAFE plus four UNSAFE results. Its shared artifact is
+78.6% smaller and checks 70.8% faster than repeated complete evidence, while
+remaining at practical parity with checked in-process reuse in the retained
+run. This closes a representative mechanism and stronger local-baseline gate.
+It does not close real-product validity because the plant is not independently
+sourced or physically calibrated. Hosted resource replication, compatibility
+history, and acceptance remain open.
+Pinned SymbiYosys with maintained Yosys and Z3 now reproduces the four exact bad
+frames and two bounded SAFE results in one compiled formal session. This closes
+maintained answer agreement for the disturbance fixture only. Independent plant
+provenance and acceptance remain open.
+
+An additional five-state-bit full-action plant checks all seven physical
+controller actions against three expected-SAFE process properties through
+horizon 64. It validates the expanded eight-output MTBDD boundary but remains a
+repository-authored mechanism model and does not change a production gate.
+
+The complete-cycle follow-up expands the fixed MTBDD action boundary to eight
+and exercises seven fill-to-spin actions while preserving all other resource
+caps. Three stateful process properties exactly match direct evaluation through
+horizon 64. This closes the local complete-action-surface mechanism gate only.
+
+Controller MTBDD CLI v1 adds machine-readable discovery, a canonical 64-KiB
+source and query manifest, create-new production, independent verification,
+exact per-member results, normalized paths, bounded no-follow file reads, and
+hostile manifest, source-drift, artifact-mutation, and no-clobber regressions.
+A six-member simulated self-service acceptance run reproduces all answers and
+bad frames using only repository instructions. This closes local file
+integration and simulated acceptance mechanism gates. The typed subprocess API
+now applies existing execution controls, validates discovered limits and exact
+result aggregates, and reports per-operation metrics. Portfolio fallback,
+multi-job metrics aggregation, hosted cross-platform replication, tagged
+compatibility, source-to-model attestation, calibrated plant validity, and
+independent acceptance remain open.
+
+The first whole-process resource comparison closes the local peak-memory
+mechanism gap. On one arm64 development host, fresh GCC verification is 2.67
+times slower but uses 85.2% less peak RSS than the maintained formal oracle.
+Hosted Linux replication, phase-level attribution and independent measurement
+remain open, so no production-readiness row changes.
+
+Phase-level portfolio observations now separate bounded input loading, artifact
+handling, semantic replay, publication, and total command time. The public
+admitted batch shows replay dominates while loading is negligible. This closes
+local phase attribution, not multi-job aggregation, hosted comparability, or
+the controller-replay optimisation gap.
+
+The library-level controller MTBDD plant portfolio now preserves valid bounded
+queries through exact direct fallback for three explicit static resource-limit
+rejections. Malformed models, semantic errors, query drift, and forced
+downgrades fail closed. This closes the local fallback-integrity mechanism gap.
+Hosted compatibility, independent acceptance, and source-to-model attestation
+remain open, so no production-readiness row changes.
+
+The proof-carrying MTBDD experiment removes exhaustive assignment replay from
+one local checker path and provides canonical, bounded, source-bound proof and
+plant-batch artifacts. Its public-controller in-process result is strong, but
+the path lacks CLI integration, hosted process measurements, compatibility
+history, and independent-tool comparison. It remains outside the production
+portfolio and changes no readiness row.
 
 ## Rules
 

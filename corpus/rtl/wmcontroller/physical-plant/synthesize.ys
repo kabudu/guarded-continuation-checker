@@ -1,0 +1,12 @@
+read_verilog -sv WashingPlant.sv
+hierarchy -check -top WashingPlant
+proc
+formalff -clk2ff
+flatten
+opt
+setundef -zero
+techmap
+opt
+dffunmap
+aigmap
+write_aiger -ascii -symbols washing-plant.aag

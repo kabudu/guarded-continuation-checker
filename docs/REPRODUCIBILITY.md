@@ -677,3 +677,172 @@ committed reference summaries are
 
 Each CSV in `results` is a compact summary. Seeds, cohort sizes, admission,
 agreement, and witness-validity columns are part of the experimental contract.
+
+### Proof-carrying controller batch benchmark
+
+Compare repeated public composition calls with the verified-controller batch
+path in an optimised build:
+
+```sh
+cargo run --release --example controller_plant_batch_benchmark
+```
+
+The benchmark uses 101 interleaved trials at batch sizes 1 through 64, requires
+exact agreement for every member, and reports both median checking time and
+complete canonical artifact byte ratios. The baseline carries one independently
+verified controller-plant artifact per member. The shared path carries one
+controller transducer plus all source-bound member results.
+
+### Public controller MTBDD reuse benchmark
+
+Run the complete-artifact baseline for the pinned public washing controller:
+
+```sh
+cargo run --release --example public_washing_controller_mtbdd_reuse_benchmark
+```
+
+The benchmark uses three interleaved trials for 1, 2, 4, 8, and 16 appliance
+monitor members. It requires every complete shared result to equal the repeated
+independently verified result and reports encoded bytes plus median release-mode
+checking time. The committed reference is
+`results/public-washing-controller-mtbdd-reuse-v1.csv`.
+
+Cross-check the two retained public-controller composition answers with a
+SymbiYosys checkout at revision
+`fea6e467d067b3ea84b6b5ac08cd48beb59f0d42`, maintained Yosys, and Z3:
+
+```sh
+scripts/test-public-washing-controller-oracle.sh /path/to/sby.py
+```
+
+The expected result is one depth-32 PASS and one step-10 FAIL, recorded in
+`results/public-washing-controller-mtbdd-oracle-v1.csv`. The script verifies
+the pinned inputs and regenerates the AIGER file byte for byte before checking.
+
+### Stateful physical-plant three-way baseline
+
+Regenerate the repository-authored physical plant and verify its digests:
+
+```sh
+cd corpus/rtl/wmcontroller/plant
+shasum -a 256 -c SHA256SUMS
+yosys -Q -q -s synthesize.ys
+shasum -a 256 -c SHA256SUMS
+cd ../../../..
+```
+
+Run the six-property shared, repeated, and checked in-process comparison:
+
+```sh
+cargo run --release --locked \
+  --example public_washing_controller_physical_plant_benchmark
+```
+
+Every run must report two SAFE and four UNSAFE answers, exact agreement, and
+`status=ok`. Timing values are observations and are expected to vary.
+
+Cross-check all six properties in one compiled SymbiYosys and Z3 session:
+
+```sh
+scripts/test-public-washing-controller-physical-oracle.sh /path/to/sby.py
+```
+
+The script regenerates both generated AIGER inputs byte for byte, requires the
+four exact bad frames, and checks that both expected-SAFE assertions survive
+through frame 32. The committed reference is
+`results/public-washing-controller-physical-oracle-v1.csv`.
+
+Regenerate and check the seven-action complete-cycle plant, then run its exact
+composition regression:
+
+```sh
+cd corpus/rtl/wmcontroller/physical-plant
+shasum -a 256 -c SHA256SUMS
+yosys -Q -q -s synthesize.ys
+shasum -a 256 -c SHA256SUMS
+cd ../../../..
+cargo test --locked --test public_washing_controller_physical_plant_api
+```
+
+### Controller MTBDD self-service acceptance
+
+```sh
+cargo build --release --locked
+scripts/run-controller-mtbdd-self-service-acceptance.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-mtbdd-acceptance.csv
+diff -u results/controller-mtbdd-self-service-acceptance-v1.csv \
+  target/controller-mtbdd-acceptance.csv
+```
+
+The harness requires exact answers and bad frames in a fresh verifier process,
+then rejects manifest drift and artifact mutation.
+
+Exercise the same contract through the typed, shell-free Rust API:
+
+```sh
+cargo test --locked --test controller_mtbdd_tool_api
+```
+
+This test discovers capabilities, produces and verifies a two-member artifact,
+checks ordered SAFE and UNSAFE results, and records the operation and success
+status exposed by invocation metrics schema v1.
+
+### Controller MTBDD whole-process resources
+
+With the pinned SymbiYosys checkout and an optimised GCC binary:
+
+```sh
+scripts/benchmark-controller-mtbdd-process-resources.sh \
+  target/release/guarded-continuation-checker /path/to/sby.py \
+  /tmp/controller-resources.csv
+```
+
+The no-overwrite CSV records wall time, peak RSS, timing backend and platform
+for GCC artifact production, fresh verification and the maintained formal
+oracle. `TRIALS` defaults to 3 and is bounded to 100. Exact timings are host
+observations and must not be used as portfolio inputs. The retained arm64
+reference is `results/controller-mtbdd-process-resources-v1.csv`.
+
+### Controller plant exact portfolio acceptance
+
+```sh
+cargo build --release --locked
+scripts/run-controller-plant-portfolio-acceptance.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-plant-portfolio.csv
+diff -u results/controller-plant-portfolio-acceptance-v1.csv \
+  target/controller-plant-portfolio.csv
+```
+
+The harness requires the public six-member batch to take the MTBDD route and a
+nine-action boundary fixture to take direct exact fallback. It preserves both
+answers, then rejects mutation and output collision. Unit and downstream tests
+add reason-tampering, downgrade, truncation, and complete mutation coverage.
+
+Measure portfolio phase attribution without changing static routing:
+
+```sh
+cargo build --release --locked
+TRIALS=3 scripts/benchmark-controller-plant-portfolio-phases.sh \
+  target/release/guarded-continuation-checker \
+  target/controller-plant-portfolio-phases.csv
+```
+
+The retained host observations are
+`results/controller-plant-portfolio-phases-v1.csv`. Timing rows vary by host
+and are exercised, but not compared byte for byte, in CI.
+
+### Proof-carrying MTBDD plant verification
+
+```sh
+scripts/benchmark-controller-proof-mtbdd-plant.sh \
+  target/controller-proof-mtbdd-plant.csv
+```
+
+The benchmark compares the compact exhaustive verifier with the proof-carrying
+verifier on the same six-member public physical-plant batch. It requires exact
+member-result agreement and reports artifact size, production cost, and median
+verification time across three trials. The retained arm64 observation is
+`results/public-washing-controller-proof-mtbdd-plant-v1.csv`. Timings vary by
+host and are evidence, not an acceptance threshold.

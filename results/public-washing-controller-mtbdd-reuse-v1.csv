@@ -1,0 +1,6 @@
+schema_version,members,trials,repeated_artifact_bytes,shared_artifact_bytes,artifact_ratio,repeated_verify_median_nanos,shared_verify_median_nanos,verify_ratio,answers_agree,status
+1,1,3,6369,6369,1.000,477712208,476554250,0.998,true,ok
+1,2,3,13145,6879,0.523,948589292,473676500,0.499,true,ok
+1,4,3,26290,7492,0.285,1900992000,477510916,0.251,true,ok
+1,8,3,52580,8718,0.166,3826968667,482100917,0.126,true,ok
+1,16,3,105160,11170,0.106,7641739542,475454542,0.062,true,ok

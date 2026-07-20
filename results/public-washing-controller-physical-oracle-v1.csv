@@ -1,0 +1,7 @@
+schema_version,property,gcc_answer,gcc_bad_frame,symbiyosys_answer,symbiyosys_bad_step,agreement,status
+1,door_water,UNSAFE,4,FAIL,4,true,ok
+1,overfill,UNSAFE,7,FAIL,7,true,ok
+1,unbalanced_spin,UNSAFE,15,FAIL,15,true,ok
+1,motor_spin,UNSAFE,15,FAIL,15,true,ok
+1,fault_actuation,SAFE,,PASS,,true,ok
+1,conflicting_actions,SAFE,,PASS,,true,ok

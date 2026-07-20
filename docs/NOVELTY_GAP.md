@@ -193,4 +193,138 @@ specialisation. Assume-guarantee contracts, simulation relations, compositional
 invariance, witness circuits, and BTOR2 certificates are established prior art.
 No novelty claim is made. The candidate now requires independently reusable
 controller-local obligations that materially beat repeated monolithic checking
-and straightforward certificate bundling.
+and straightforward certificate bundling. The first
+[controller-obligation reuse specification](BTOR2_CONTROLLER_OBLIGATION_REUSE_V1.md)
+now fixes a stronger parse-once, shared-model baseline and implements the
+standalone source-bound obligation, compact batch, independent verifier,
+canonical artifact, and self-service CLI. The first local result passes the
+artifact and checking gates for fully admitted batches: at 64 members the
+artifact is 34.0% smaller and checking is 12.1% faster in the retained run,
+with five-run checking ratios from 0.866 to 0.885. A 25% fallback control fails
+the artifact gate and has no stable checking win, so universal selection is
+falsified. A public unmodified product family, maintained external-tool
+agreement, cross-platform replication, and external review remain unproven.
+No novelty claim is made.
+
+The seven-action complete-cycle follow-up retains a 254-node MTBDD and exact
+agreement on three horizon-64 process properties. It strengthens product-shaped
+coverage but does not alter the closest-system conclusion: MTBDD compilation
+and reuse are established, and the physical plant is repository-authored.
+
+The maintained single-session SymbiYosys/Yosys/Z3 oracle now exactly reproduces
+all six disturbance-aware answers and four shortest bad frames. This removes
+the external semantic agreement gap for the fixture, but it is validation
+evidence rather than novelty evidence. Comparable memory measurement and a
+non-repository-authored physical environment remain open.
+
+The seven-action complete-cycle follow-up retains a 254-node MTBDD and exact
+agreement on three horizon-64 process properties. It strengthens product-shaped
+coverage but does not alter the closest-system conclusion: MTBDD compilation
+and reuse are established, and the physical plant is repository-authored.
+
+The next [dense controller relation v1 experiment](DENSE_CONTROLLER_RELATION_V1_EXPERIMENT.md)
+tests a broader candidate boundary: reuse the existing witnessed-edge and UNSAT
+row-completeness proof primitives as one source-bound controller relation across
+several environments. Finite relations, relational composition, reusable
+assumptions, and proof-carrying model checking are prior art. Only a measured
+win on revision-pinned, unmodified embedded RTL with strong ordinary baselines
+could narrow the novelty gap. No such result exists yet.
+
+The first [proof-carrying controller transducer v1](PROOF_CARRYING_CONTROLLER_TRANSDUCER_V1.md)
+implementation now retains sensed-input to next-state and actuator-output
+correlation, proves every symbolic cell complete, checks a source-bound
+canonical artifact independently, composes it with sampled plants, and agrees
+with an independent direct-controller baseline across the retained small query
+grid. Its first complete canonical batch artifact passes the local strong reuse
+baselines: at 64 members it is 71.5% smaller and checks 74.5% faster than one
+complete independently verified artifact per member. Symbolic transducers, cube
+partitions, SAT proof logging, and synchronous product exploration are
+established. A synthetic one-bit win closes an implementation and baseline gap,
+not the novelty gap. An unmodified public embedded controller, maintained
+external-tool agreement, closest-system comparison, and expert review remain
+open. No novelty claim is made.
+
+The first revision-pinned public-controller attempt is recorded in
+[public washing-controller experiment v1](PUBLIC_WASHING_CONTROLLER_EXPERIMENT_V1.md).
+The unmodified GPL-2.0 source synthesizes to six latches, but all 64 states are
+reachable and its exact input-response relation needs 1,028 canonical cube
+leaves. It is rejected by the frozen 256-cell gate before proof production.
+This falsifies straightforward state-limit expansion for that candidate and
+points toward non-cube equivalence predicates or a cleaner public controller.
+It supplies no novelty evidence.
+
+The fixed state-first
+[controller MTBDD v1](PROOF_CARRYING_MTBDD_V1.md) then represents the identical
+public relation with 254 shared decision nodes and 153 terminals, and verifies
+all 131,072 assignments independently. This is a substantial internal
+representation improvement over the failed cube vocabularies. Reduced ordered
+multi-terminal BDDs and exhaustive equivalence checking are established, so the
+result is not itself novel. The candidate novelty boundary moves to reusable
+source-bound composition evidence that beats ordinary complete artifacts and
+the closest maintained compositional checker on realistic environments.
+The first complete-artifact reuse baseline now passes on the public controller
+and repository-authored appliance monitors. At 16 members, shared bytes are
+10.6% and checking time is 6.2% of repeated complete artifacts, with exact
+agreement. This is meaningful reusable-certificate evidence, but BDD sharing,
+model compilation, and amortized equivalence checking are established. Pinned
+SymbiYosys with maintained Yosys and Z3 now reproduces both minimal composition
+answers and the unsafe step-10 boundary through a separate checking path. This
+removes an implementation-trust gap but supplies no novelty evidence. A
+closest-system review and comparisons on representative physical environments
+remain mandatory before narrowing or asserting novelty.
+
+The primary-source
+[controller MTBDD closest-system analysis](CONTROLLER_MTBDD_CLOSEST_SYSTEMS.md)
+finds that MTBDD representation, compile-once symbolic reuse,
+assume-guarantee composition, and proof-carrying hardware are all established.
+It also identifies a weakness in the current comparison: repeated complete
+artifacts are the right evidence-transfer baseline but not the strongest
+runtime baseline. The next experiment must additionally compare one ordinary
+compiled symbolic model reused in-process and must demonstrate a concrete
+producer-consumer trust-transfer advantage. Until then, the current result is
+useful engineering and not a novel algorithm or verification method.
+
+The first [stateful physical-plant experiment](PUBLIC_WASHING_PHYSICAL_PLANT_V1.md)
+passes exact agreement across six disturbance-aware properties and retains the
+shared evidence advantage: 78.6% fewer boundary bytes and 70.8% less checking
+time than repeated complete evidence. Shared checking is at practical parity
+with GCC's checked in-process reuse in the retained run. This isolates a useful
+portable-evidence result, but the in-process control uses the same GCC MTBDD
+implementation. A maintained external symbolic-session cost baseline,
+peak-memory measurement, and a non-repository-authored physical environment
+remain open. No novelty claim is made.
+
+Pinned SymbiYosys with maintained Yosys and Z3 now checks the six disturbance
+properties in one compiled closed-loop session. It reproduces all four shortest
+bad frames and preserves both bounded SAFE results. This closes external answer
+agreement for the fixture, not the missing external cost comparison. Peak
+memory, a non-repository-authored environment, and expert review remain open.
+
+The versioned [controller MTBDD file workflow](CONTROLLER_MTBDD_CLI_V1.md) makes
+the reusable evidence contract self-service and independently consumable.
+Strict manifests, source-bound artifacts, hostile-input rejection, and
+per-member reports are productisation properties, not novelty. They enable a
+fair process-level cost and memory comparison but do not change the prior-art
+conclusion.
+
+That process comparison is now retained on one arm64 host. The maintained
+formal route is 2.67 times faster than fresh GCC verification, while GCC uses
+85.2% less peak RSS and supplies a portable 8,549-byte artifact. The negative
+speed result rules out a solver-performance distinction. The lower-memory
+trust-transfer result is useful engineering, but proof-carrying model checking
+and portable evidence are established, so the novelty gap remains open.
+
+The controller MTBDD plant portfolio adds timing-free selection and exact
+fallback with downgrade detection. This is useful integrity engineering, but
+static portfolio routing and exact fallback are established techniques. It does
+not change the novelty assessment.
+
+The proof-carrying MTBDD equivalence integration removes exhaustive controller
+assignment replay from the consumer. On the public six-property physical-plant
+batch it produces exact agreement and a 2.01x median end-to-end verification
+speed-up, at a 29.39x artifact-size cost. This is a meaningful product trade-off
+and the strongest current consumer-speed result. SAT miters, UNSAT proof
+checking, and decision diagrams are established, so the result does not by
+itself establish scholarly novelty. Hosted replication, established-tool
+comparison on identical evidence scope, and independent expert review remain
+required.

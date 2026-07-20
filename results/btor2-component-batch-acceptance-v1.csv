@@ -1,0 +1,6 @@
+schema_version,case,expected_route,actual_route,safe,unsafe,artifact_verified,rejection_observed,status
+1,admitted-batch,reusable,reusable,2,0,true,false,accepted
+1,mixed-batch,ordinary,ordinary,1,1,true,false,accepted
+1,query-drift,rejected,rejected,0,0,false,true,accepted
+1,controller-drift,rejected,rejected,0,0,false,true,accepted
+1,artifact-mutation,rejected,rejected,0,0,false,true,accepted

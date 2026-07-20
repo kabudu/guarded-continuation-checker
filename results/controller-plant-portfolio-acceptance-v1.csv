@@ -1,0 +1,7 @@
+schema_version,case,expected_backend,actual_backend,expected_answer,actual_answer,verified,status
+1,admitted-route,MTBDD,MTBDD,4-UNSAFE-2-SAFE,4-UNSAFE-2-SAFE,true,accepted
+1,fallback-route,DIRECT_EXACT,DIRECT_EXACT,1-UNSAFE-1-SAFE,1-UNSAFE-1-SAFE,true,accepted
+1,fallback-safe,DIRECT_EXACT,DIRECT_EXACT,SAFE,SAFE,true,accepted
+1,fallback-unsafe,DIRECT_EXACT,DIRECT_EXACT,UNSAFE@0,UNSAFE@0,true,accepted
+1,artifact-mutation,REJECTED,REJECTED,REJECTED,REJECTED,false,accepted
+1,output-collision,REJECTED,REJECTED,REJECTED,REJECTED,false,accepted

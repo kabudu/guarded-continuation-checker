@@ -1,6 +1,11 @@
 use guarded_continuation_checker::{
+    aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search,
+    btor2_search, controller_mtbdd,
+    controller_plant::ControllerPlantWiring,
+    controller_plant_artifact::{self, ControllerPlantArtifactInput},
+    dense_relation::DenseRelation,
+    unsat_proof::{self, CnfClause as Clause},
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -19,8 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::Instant;
-use varisat::{ExtendFormula, Lit, ProofFormat, Solver, Var};
-use varisat_checker::Checker as VarisatProofChecker;
+use varisat::{ExtendFormula, Lit, Solver, Var};
 
 const RTL_ARTIFACT_SCHEMA_VERSION: usize = 4;
 const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
@@ -28,6 +32,39 @@ const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 const YOSYS_MEMORY_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const YOSYS_FILE_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
 const EVIDENCE_TOTAL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
+const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
+const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
+const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
+const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+
+#[derive(Debug)]
+struct ComponentBatchManifestMember {
+    plant_path: PathBuf,
+    contract_path: PathBuf,
+    horizon: u32,
+}
+
+#[derive(Debug)]
+struct ControllerMtbddPlantManifestMember {
+    plant_source_path: PathBuf,
+    plant_aiger_path: PathBuf,
+    wiring: ControllerPlantWiring,
+    initial_controller_state: usize,
+    initial_plant_state: usize,
+    bad_plant_output: usize,
+    horizon: usize,
+}
+
+#[derive(Debug)]
+struct ControllerMtbddPlantManifest {
+    controller_source_path: PathBuf,
+    controller_aiger_path: PathBuf,
+    relevant_inputs: Vec<usize>,
+    observed_outputs: Vec<usize>,
+    members: Vec<ControllerMtbddPlantManifestMember>,
+}
 
 fn synthesis_memory_limit_kind() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -44,9 +81,6 @@ fn synthesis_memory_limit_bytes() -> u64 {
         YOSYS_MEMORY_LIMIT_BYTES
     }
 }
-
-#[derive(Clone, Debug)]
-struct Clause(Vec<(usize, bool)>);
 
 #[derive(Clone, Debug)]
 struct CachedHelperFormula {
@@ -9350,12 +9384,12 @@ impl PredicateQuotient {
             return Ok(None);
         };
 
-        let mut reachable = vec![vec![false; relation.states]; horizon + 1];
-        let mut predecessor = vec![vec![None; relation.states]; horizon + 1];
+        let mut reachable = vec![vec![false; relation.states()]; horizon + 1];
+        let mut predecessor = vec![vec![None; relation.states()]; horizon + 1];
         reachable[0][initial_state] = true;
         for frame in 0..horizon {
             let step = self.relation(&constraints[frame])?;
-            for source in 0..step.states {
+            for source in 0..step.states() {
                 if !reachable[frame][source] {
                     continue;
                 }
@@ -9700,6 +9734,31 @@ impl<'a> IndependentPredicateChecker<'a> {
     }
 }
 
+fn aiger_obligation_transition(model: &AagModel) -> AigerTransition {
+    AigerTransition {
+        max_variable: model.max_variable,
+        inputs: model.inputs.clone(),
+        latches: model
+            .latches
+            .iter()
+            .map(|latch| AigerLatch {
+                current: latch.current,
+                next: latch.next,
+            })
+            .collect(),
+        outputs: model.outputs.clone(),
+        ands: model
+            .ands
+            .iter()
+            .map(|gate| AigerAnd {
+                output: gate.output,
+                left: gate.left,
+                right: gate.right,
+            })
+            .collect(),
+    }
+}
+
 fn predicate_relation_completeness_clauses(
     model: &AagModel,
     relevant_inputs: &[usize],
@@ -9733,71 +9792,21 @@ fn predicate_relation_completeness_clauses_for_predicate(
     predicate: &InputPredicate,
     claimed_targets: u16,
 ) -> Result<Vec<Clause>, String> {
-    if predicate
-        .clauses
-        .iter()
-        .flatten()
-        .any(|(input, _)| *input >= relevant_inputs.len())
-        || model.latches.len() > u16::BITS as usize
-        || source >= 1usize << model.latches.len()
-    {
-        return Err("predicate proof obligation dimensions mismatch".to_string());
-    }
-    let mut clauses = Vec::with_capacity(
-        model.ands.len() * 3
-            + model.latches.len()
-            + predicate.clauses.len()
-            + claimed_targets.count_ones() as usize,
-    );
-    for (bit, latch) in model.latches.iter().enumerate() {
-        push_simplified_clause(
-            &mut clauses,
-            &[AagCnfLiteral::Variable((
-                latch.current / 2 - 1,
-                source >> bit & 1 == 1,
-            ))],
-        );
-    }
-    for clause in &predicate.clauses {
-        let mapped = clause
-            .iter()
-            .map(|(projected, positive)| {
-                AagCnfLiteral::Variable((
-                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
-                    *positive,
-                ))
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &mapped);
-    }
-    for gate in &model.ands {
-        let output = aag_cnf_literal(model, 0, gate.output);
-        let left = aag_cnf_literal(model, 0, gate.left);
-        let right = aag_cnf_literal(model, 0, gate.right);
-        push_simplified_clause(&mut clauses, &[output.negate(), left]);
-        push_simplified_clause(&mut clauses, &[output.negate(), right]);
-        push_simplified_clause(&mut clauses, &[output, left.negate(), right.negate()]);
-    }
-    for target in 0..(1usize << model.latches.len()) {
-        if claimed_targets & (1u16 << target) == 0 {
-            continue;
-        }
-        let differs = model
-            .latches
-            .iter()
-            .enumerate()
-            .map(|(bit, latch)| {
-                let next = aag_cnf_literal(model, 0, latch.next);
-                if target >> bit & 1 == 1 {
-                    next.negate()
-                } else {
-                    next
-                }
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &differs);
-    }
-    Ok(clauses)
+    let transition = aiger_obligation_transition(model);
+    let predicate = AigerInputPredicate {
+        clauses: predicate.clauses.clone(),
+    };
+    let targets = (0..(1usize << model.latches.len()))
+        .filter(|target| claimed_targets & (1u16 << target) != 0)
+        .collect::<Vec<_>>();
+    aiger_obligation::relation_row_completeness_cnf(
+        &transition,
+        relevant_inputs,
+        source,
+        &predicate,
+        &targets,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn predicate_terminal_completeness_clauses(
@@ -9833,87 +9842,28 @@ fn predicate_terminal_completeness_clauses_for_predicate(
     bad_output: usize,
     claimed_safe_states: u16,
 ) -> Result<Vec<Clause>, String> {
-    if predicate
-        .clauses
-        .iter()
-        .flatten()
-        .any(|(input, _)| *input >= relevant_inputs.len())
-        || model.latches.len() > u16::BITS as usize
-        || bad_output >= model.outputs.len()
-    {
-        return Err("predicate terminal proof obligation dimensions mismatch".to_string());
-    }
-    let mut clauses = Vec::with_capacity(
-        model.ands.len() * 3
-            + predicate.clauses.len()
-            + claimed_safe_states.count_ones() as usize
-            + 1,
-    );
-    for clause in &predicate.clauses {
-        let mapped = clause
-            .iter()
-            .map(|(projected, positive)| {
-                AagCnfLiteral::Variable((
-                    model.inputs[relevant_inputs[*projected]] / 2 - 1,
-                    *positive,
-                ))
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &mapped);
-    }
-    for gate in &model.ands {
-        let output = aag_cnf_literal(model, 0, gate.output);
-        let left = aag_cnf_literal(model, 0, gate.left);
-        let right = aag_cnf_literal(model, 0, gate.right);
-        push_simplified_clause(&mut clauses, &[output.negate(), left]);
-        push_simplified_clause(&mut clauses, &[output.negate(), right]);
-        push_simplified_clause(&mut clauses, &[output, left.negate(), right.negate()]);
-    }
-    for state in 0..(1usize << model.latches.len()) {
-        if claimed_safe_states & (1u16 << state) == 0 {
-            continue;
-        }
-        let differs = model
-            .latches
-            .iter()
-            .enumerate()
-            .map(|(bit, latch)| {
-                let current = aag_cnf_literal(model, 0, latch.current);
-                if state >> bit & 1 == 1 {
-                    current.negate()
-                } else {
-                    current
-                }
-            })
-            .collect::<Vec<_>>();
-        push_simplified_clause(&mut clauses, &differs);
-    }
-    push_simplified_clause(
-        &mut clauses,
-        &[aag_cnf_literal(model, 0, model.outputs[bad_output]).negate()],
-    );
-    Ok(clauses)
+    let transition = aiger_obligation_transition(model);
+    let predicate = AigerInputPredicate {
+        clauses: predicate.clauses.clone(),
+    };
+    let safe_states = (0..(1usize << model.latches.len()))
+        .filter(|state| claimed_safe_states & (1u16 << state) != 0)
+        .collect::<Vec<_>>();
+    aiger_obligation::terminal_completeness_cnf(
+        &transition,
+        relevant_inputs,
+        &predicate,
+        bad_output,
+        &safe_states,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn generate_varisat_unsat_proof(clauses: &[Clause]) -> Result<Vec<u8>, String> {
-    let mut proof = Vec::new();
-    {
-        let mut solver = Solver::new();
-        solver.write_proof(&mut proof, ProofFormat::Varisat);
-        add_to_varisat(&mut solver, clauses);
-        if solver
-            .solve()
-            .map_err(|error| format!("solve predicate proof obligation: {error}"))?
-        {
-            return Err("predicate completeness obligation is satisfiable".to_string());
-        }
-        solver
-            .close_proof()
-            .map_err(|error| format!("close predicate proof obligation: {error}"))?;
-    }
-    Ok(proof)
+    unsat_proof::generate_unsat_proof(clauses).map_err(|error| error.to_string())
 }
 
+#[allow(dead_code)]
 fn read_predicate_proof_vli(proof: &[u8], offset: &mut usize) -> Result<u64, String> {
     let start = *offset;
     let mut marker = None;
@@ -9943,6 +9893,7 @@ fn read_predicate_proof_vli(proof: &[u8], offset: &mut usize) -> Result<u64, Str
     Ok(value as u64)
 }
 
+#[allow(dead_code)]
 fn preflight_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
     const CODE_END: u64 = 0x9ac3_391f_4294_c211;
     const MAX_PROOF_STEPS: usize = 100_000;
@@ -10027,27 +9978,7 @@ fn preflight_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(),
 }
 
 fn verify_varisat_unsat_proof(clauses: &[Clause], proof: &[u8]) -> Result<(), String> {
-    preflight_varisat_unsat_proof(clauses, proof)?;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut checker = VarisatProofChecker::new();
-        for clause in clauses {
-            let literals = clause
-                .0
-                .iter()
-                .map(|&(variable, positive)| Lit::from_var(Var::from_index(variable), positive))
-                .collect::<Vec<_>>();
-            checker
-                .add_clause(&literals)
-                .map_err(|error| format!("load predicate proof obligation: {error}"))?;
-        }
-        checker
-            .check_proof(proof)
-            .map_err(|error| format!("check predicate proof obligation: {error}"))
-    }));
-    match result {
-        Ok(result) => result,
-        Err(_) => Err("check predicate proof obligation: malformed proof was rejected".to_string()),
-    }
+    unsat_proof::verify_unsat_proof(clauses, proof).map_err(|error| error.to_string())
 }
 
 #[derive(Debug)]
@@ -10068,7 +9999,7 @@ fn predicate_proof_relation_experiment(
     let mut quotient = PredicateQuotient::new(model)?;
     let relation = quotient.relation(constraints)?;
     let rows = relation
-        .rows
+        .rows()
         .iter()
         .map(|row| row[0] as u16)
         .collect::<Vec<_>>();
@@ -11932,7 +11863,7 @@ fn event_contract_proof_experiment(
     for (phase_index, phase) in contract.phases.iter().enumerate() {
         let relation = quotient.interface.relation_predicate(&phase.predicate)?;
         let rows = relation
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
@@ -12142,13 +12073,13 @@ fn certify_aiger_event_contract_v3_with_node_limit(
     for phase in &contract.phases {
         let base = quotient.interface.relation_predicate(&phase.predicate)?;
         let base_rows = base
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
         let powered = InterfaceRelation::power(&base, phase.length)?;
         let powered_rows = powered
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
@@ -13026,7 +12957,7 @@ fn certify_aiger_predicate(
             start,
             length: end - start,
             constraints: constraints[start].clone(),
-            rows: relation.rows.iter().map(|row| row[0] as u16).collect(),
+            rows: relation.rows().iter().map(|row| row[0] as u16).collect(),
         });
         start = end;
     }
@@ -13241,13 +13172,13 @@ fn certify_aiger_predicate_v2(
         }
         let base = quotient.relation(&constraints[start])?;
         let base_rows = base
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
         let powered = quotient.relation_power(&constraints[start], end - start)?;
         let powered_rows = powered
-            .rows
+            .rows()
             .iter()
             .map(|row| row[0] as u16)
             .collect::<Vec<_>>();
@@ -14634,94 +14565,60 @@ fn benchmark_aiger_predicate_proof_terminal(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct InterfaceRelation {
-    states: usize,
-    words: usize,
-    rows: Vec<Vec<u64>>,
-}
+struct InterfaceRelation(DenseRelation);
 
 impl InterfaceRelation {
+    fn states(&self) -> usize {
+        self.0.states()
+    }
+
     fn empty(states: usize) -> Self {
-        let words = states.div_ceil(u64::BITS as usize);
-        Self {
-            states,
-            words,
-            rows: vec![vec![0; words]; states],
-        }
+        Self(DenseRelation::empty(states).expect("validated interface state count"))
     }
 
     fn identity(states: usize) -> Self {
-        let mut relation = Self::empty(states);
-        for state in 0..states {
-            relation.insert(state, state);
-        }
-        relation
+        Self(DenseRelation::identity(states).expect("validated interface state count"))
     }
 
     fn insert(&mut self, source: usize, target: usize) {
-        self.rows[source][target / u64::BITS as usize] |= 1u64 << (target % u64::BITS as usize);
+        self.0
+            .insert(source, target)
+            .expect("validated interface edge");
     }
 
     fn contains(&self, source: usize, target: usize) -> bool {
-        self.rows[source][target / u64::BITS as usize] & (1u64 << (target % u64::BITS as usize))
-            != 0
+        self.0
+            .contains(source, target)
+            .expect("validated interface query")
     }
 
     fn targets(&self, source: usize) -> impl Iterator<Item = usize> + '_ {
-        let states = self.states;
-        self.rows[source]
-            .iter()
-            .enumerate()
-            .flat_map(move |(word_index, word)| {
-                let mut remaining = *word;
-                std::iter::from_fn(move || {
-                    if remaining == 0 {
-                        return None;
-                    }
-                    let bit = remaining.trailing_zeros() as usize;
-                    remaining &= remaining - 1;
-                    let target = word_index * u64::BITS as usize + bit;
-                    (target < states).then_some(target)
-                })
-            })
+        self.0
+            .targets(source)
+            .expect("validated interface source")
+            .into_iter()
     }
 
     fn compose(left: &Self, right: &Self) -> Result<Self, String> {
-        if left.states != right.states {
-            return Err("interface relation state-space mismatch".to_string());
-        }
-        let mut result = Self::empty(left.states);
-        for source in 0..left.states {
-            for middle in left.targets(source) {
-                for word in 0..result.words {
-                    result.rows[source][word] |= right.rows[middle][word];
-                }
-            }
-        }
-        Ok(result)
+        DenseRelation::compose(&left.0, &right.0)
+            .map(Self)
+            .map_err(|error| error.to_string())
     }
 
-    fn power(base: &Self, mut exponent: usize) -> Result<Self, String> {
-        let mut result = Self::identity(base.states);
-        let mut factor = base.clone();
-        while exponent != 0 {
-            if exponent & 1 == 1 {
-                result = Self::compose(&result, &factor)?;
-            }
-            exponent >>= 1;
-            if exponent != 0 {
-                factor = Self::compose(&factor, &factor)?;
-            }
-        }
-        Ok(result)
+    fn power(base: &Self, exponent: usize) -> Result<Self, String> {
+        let exponent = u64::try_from(exponent)
+            .map_err(|_| "interface relation exponent exceeds u64".to_string())?;
+        DenseRelation::power(&base.0, exponent)
+            .map(Self)
+            .map_err(|error| error.to_string())
     }
 
     fn pairs(&self) -> usize {
-        self.rows
-            .iter()
-            .flat_map(|row| row.iter())
-            .map(|word| word.count_ones() as usize)
-            .sum()
+        self.0.pair_count()
+    }
+
+    fn rows(&self) -> &[Vec<u64>] {
+        self.0.row_words()
     }
 }
 
@@ -24779,6 +24676,341 @@ fn read_bounded_regular_file(path: &Path, limit: usize, label: &str) -> Result<V
     Ok(bytes)
 }
 
+fn parse_component_batch_manifest(
+    manifest_path: &Path,
+) -> Result<Vec<ComponentBatchManifestMember>, String> {
+    use std::path::Component;
+
+    let bytes = read_bounded_regular_file(
+        manifest_path,
+        BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES,
+        "component batch manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "component batch manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err("component batch manifest must be canonical LF text without NUL".to_string());
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("component batch manifest expected {key}"))
+    };
+    let version = take("component_batch_manifest_version")?
+        .parse::<u32>()
+        .map_err(|_| "component batch manifest version is invalid".to_string())?;
+    if version != BTOR2_COMPONENT_BATCH_MANIFEST_VERSION {
+        return Err("unsupported component batch manifest version".to_string());
+    }
+    let count_text = take("member_count")?;
+    let count = count_text
+        .parse::<usize>()
+        .map_err(|_| "component batch member count is invalid".to_string())?;
+    if count.to_string() != count_text
+        || count == 0
+        || count > btor2_component::MAX_COMPONENT_BATCH_MEMBERS
+    {
+        return Err("component batch member count is outside limit or noncanonical".to_string());
+    }
+    let base = manifest_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut members = Vec::with_capacity(count);
+    let mut canonical = format!(
+        "component_batch_manifest_version={BTOR2_COMPONENT_BATCH_MANIFEST_VERSION}\nmember_count={count}\n"
+    );
+    for _ in 0..count {
+        let plant = take("plant_path")?;
+        let contract = take("contract_path")?;
+        let horizon_text = take("horizon")?;
+        let horizon = horizon_text
+            .parse::<u32>()
+            .map_err(|_| "component batch horizon is invalid".to_string())?;
+        if horizon.to_string() != horizon_text {
+            return Err("component batch horizon is noncanonical".to_string());
+        }
+        let validate_path = |value: &str, label: &str| -> Result<PathBuf, String> {
+            if value.is_empty() || value.len() > 4096 {
+                return Err(format!("component batch {label} path length is invalid"));
+            }
+            let path = Path::new(value);
+            if path.is_absolute()
+                || path
+                    .components()
+                    .any(|component| !matches!(component, Component::Normal(_)))
+            {
+                return Err(format!(
+                    "component batch {label} path must be a normalized relative path"
+                ));
+            }
+            Ok(base.join(path))
+        };
+        members.push(ComponentBatchManifestMember {
+            plant_path: validate_path(plant, "plant")?,
+            contract_path: validate_path(contract, "contract")?,
+            horizon,
+        });
+        canonical.push_str(&format!(
+            "plant_path={plant}\ncontract_path={contract}\nhorizon={horizon}\n"
+        ));
+    }
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err("component batch manifest is incomplete or has trailing fields".to_string());
+    }
+    canonical.push_str("status=complete\n");
+    if canonical != text {
+        return Err("component batch manifest is not canonical".to_string());
+    }
+    Ok(members)
+}
+
+fn parse_controller_mtbdd_plant_manifest(
+    manifest_path: &Path,
+    max_controller_inputs: usize,
+    max_controller_outputs: usize,
+) -> Result<ControllerMtbddPlantManifest, String> {
+    use std::path::Component;
+
+    let bytes = read_bounded_regular_file(
+        manifest_path,
+        CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES,
+        "controller MTBDD plant manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller MTBDD plant manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller MTBDD plant manifest must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller MTBDD plant manifest expected {key}"))
+    };
+    let version_text = take("controller_mtbdd_plant_manifest_version")?;
+    if version_text != CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION.to_string() {
+        return Err("unsupported controller MTBDD plant manifest version".to_string());
+    }
+    let base = fs::canonicalize(manifest_path.parent().unwrap_or_else(|| Path::new(".")))
+        .map_err(|error| format!("resolve controller MTBDD manifest directory: {error}"))?;
+    let normalized_path = |value: &str, label: &str| -> Result<PathBuf, String> {
+        if value.is_empty() || value.len() > 4096 {
+            return Err(format!("controller MTBDD {label} path length is invalid"));
+        }
+        let path = Path::new(value);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(format!(
+                "controller MTBDD {label} path must be a normalized relative path"
+            ));
+        }
+        let mut resolved = base.clone();
+        for component in path.components() {
+            let Component::Normal(component) = component else {
+                unreachable!("path components were validated above");
+            };
+            resolved.push(component);
+            let metadata = fs::symlink_metadata(&resolved).map_err(|error| {
+                format!(
+                    "inspect controller MTBDD {label} path {}: {error}",
+                    resolved.display()
+                )
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "controller MTBDD {label} path must not contain symlinks"
+                ));
+            }
+        }
+        Ok(resolved)
+    };
+    let parse_vector = |value: &str, label: &str, maximum: usize| -> Result<Vec<usize>, String> {
+        if value.is_empty() {
+            return Err(format!("controller MTBDD {label} vector is empty"));
+        }
+        let values = value
+            .split(',')
+            .map(|item| {
+                let parsed = item
+                    .parse::<usize>()
+                    .map_err(|_| format!("controller MTBDD {label} index is invalid"))?;
+                if parsed.to_string() != item {
+                    return Err(format!("controller MTBDD {label} index is noncanonical"));
+                }
+                Ok(parsed)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if values.len() > maximum || values.windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err(format!(
+                "controller MTBDD {label} vector is outside limits or not strictly sorted"
+            ));
+        }
+        Ok(values)
+    };
+    let parse_usize = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller MTBDD {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!("controller MTBDD {label} is noncanonical"));
+        }
+        Ok(parsed)
+    };
+
+    let controller_source_text = take("controller_source_path")?;
+    let controller_source_path = normalized_path(controller_source_text, "controller source")?;
+    let controller_aiger_text = take("controller_aiger_path")?;
+    let controller_aiger_path = normalized_path(controller_aiger_text, "controller AIGER")?;
+    let relevant_text = take("relevant_inputs")?;
+    let relevant_inputs = parse_vector(relevant_text, "relevant inputs", max_controller_inputs)?;
+    let observed_text = take("observed_outputs")?;
+    let observed_outputs = parse_vector(observed_text, "observed outputs", max_controller_outputs)?;
+    let count_text = take("member_count")?;
+    let count = parse_usize(count_text, "member count")?;
+    if count == 0 || count > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
+        return Err("controller MTBDD plant member count is outside limit".to_string());
+    }
+
+    let mut canonical = format!(
+        "controller_mtbdd_plant_manifest_version={version_text}\ncontroller_source_path={controller_source_text}\ncontroller_aiger_path={controller_aiger_text}\nrelevant_inputs={relevant_text}\nobserved_outputs={observed_text}\nmember_count={count}\n"
+    );
+    let mut members = Vec::with_capacity(count);
+    for _ in 0..count {
+        let plant_source_text = take("plant_source_path")?;
+        let plant_source_path = normalized_path(plant_source_text, "plant source")?;
+        let plant_aiger_text = take("plant_aiger_path")?;
+        let plant_aiger_path = normalized_path(plant_aiger_text, "plant AIGER")?;
+        let controller_sensor_text = take("controller_sensor_inputs")?;
+        let controller_sensor_inputs = parse_vector(
+            controller_sensor_text,
+            "controller sensor inputs",
+            max_controller_inputs,
+        )?;
+        let controller_action_text = take("controller_action_outputs")?;
+        let controller_action_outputs = parse_vector(
+            controller_action_text,
+            "controller action outputs",
+            max_controller_outputs,
+        )?;
+        let plant_sensor_text = take("plant_sensor_outputs")?;
+        let plant_sensor_outputs = parse_vector(
+            plant_sensor_text,
+            "plant sensor outputs",
+            max_controller_inputs,
+        )?;
+        let plant_action_text = take("plant_action_inputs")?;
+        let plant_action_inputs = parse_vector(
+            plant_action_text,
+            "plant action inputs",
+            max_controller_outputs,
+        )?;
+        let initial_controller_text = take("initial_controller_state")?;
+        let initial_controller_state =
+            parse_usize(initial_controller_text, "initial controller state")?;
+        let initial_plant_text = take("initial_plant_state")?;
+        let initial_plant_state = parse_usize(initial_plant_text, "initial plant state")?;
+        let bad_output_text = take("bad_plant_output")?;
+        let bad_plant_output = parse_usize(bad_output_text, "bad plant output")?;
+        let horizon_text = take("horizon")?;
+        let horizon = parse_usize(horizon_text, "horizon")?;
+        canonical.push_str(&format!(
+            "plant_source_path={plant_source_text}\nplant_aiger_path={plant_aiger_text}\ncontroller_sensor_inputs={controller_sensor_text}\ncontroller_action_outputs={controller_action_text}\nplant_sensor_outputs={plant_sensor_text}\nplant_action_inputs={plant_action_text}\ninitial_controller_state={initial_controller_text}\ninitial_plant_state={initial_plant_text}\nbad_plant_output={bad_output_text}\nhorizon={horizon_text}\n"
+        ));
+        members.push(ControllerMtbddPlantManifestMember {
+            plant_source_path,
+            plant_aiger_path,
+            wiring: ControllerPlantWiring {
+                controller_sensor_inputs,
+                controller_action_outputs,
+                plant_sensor_outputs,
+                plant_action_inputs,
+            },
+            initial_controller_state,
+            initial_plant_state,
+            bad_plant_output,
+            horizon,
+        });
+    }
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller MTBDD plant manifest is incomplete or has trailing fields".to_string(),
+        );
+    }
+    canonical.push_str("status=complete\n");
+    if canonical != text {
+        return Err("controller MTBDD plant manifest is not canonical".to_string());
+    }
+    Ok(ControllerMtbddPlantManifest {
+        controller_source_path,
+        controller_aiger_path,
+        relevant_inputs,
+        observed_outputs,
+        members,
+    })
+}
+
+type LoadedControllerPlantManifest = (
+    ControllerMtbddPlantManifest,
+    AigerTransition,
+    [u8; 32],
+    Vec<AigerTransition>,
+    Vec<[u8; 32]>,
+);
+
+fn load_controller_plant_manifest(
+    path: &Path,
+    max_controller_inputs: usize,
+    max_controller_outputs: usize,
+) -> Result<LoadedControllerPlantManifest, String> {
+    let manifest =
+        parse_controller_mtbdd_plant_manifest(path, max_controller_inputs, max_controller_outputs)?;
+    let controller_source = read_bounded_regular_file(
+        &manifest.controller_source_path,
+        AAG_INPUT_LIMIT_BYTES as usize,
+        "controller source",
+    )?;
+    let controller_aiger = read_bounded_regular_file(
+        &manifest.controller_aiger_path,
+        AAG_INPUT_LIMIT_BYTES as usize,
+        "controller AIGER model",
+    )?;
+    let controller = aiger_obligation::parse_ascii_aiger_transition(&controller_aiger)
+        .map_err(|error| error.to_string())?;
+    let controller_digest: [u8; 32] = Sha256::digest(&controller_source).into();
+    let mut plant_digests = Vec::with_capacity(manifest.members.len());
+    let mut plants = Vec::with_capacity(manifest.members.len());
+    for member in &manifest.members {
+        let plant_source = read_bounded_regular_file(
+            &member.plant_source_path,
+            AAG_INPUT_LIMIT_BYTES as usize,
+            "plant source",
+        )?;
+        let plant_aiger = read_bounded_regular_file(
+            &member.plant_aiger_path,
+            AAG_INPUT_LIMIT_BYTES as usize,
+            "plant AIGER model",
+        )?;
+        plant_digests.push(<[u8; 32]>::from(Sha256::digest(&plant_source)));
+        plants.push(
+            aiger_obligation::parse_ascii_aiger_transition(&plant_aiger)
+                .map_err(|error| error.to_string())?,
+        );
+    }
+    Ok((
+        manifest,
+        controller,
+        controller_digest,
+        plants,
+        plant_digests,
+    ))
+}
+
 fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, String> {
     let raw_phases = raw.split(',').collect::<Vec<_>>();
     if raw_phases.is_empty() || raw_phases.len() > btor2_phase::MAX_PHASES {
@@ -24822,12 +25054,318 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         return Ok(false);
     };
     match command {
+        "controller-mtbdd-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-mtbdd-cli-version".to_string(),
+                );
+            }
+            println!(
+                "controller_mtbdd_cli_version={CONTROLLER_MTBDD_CLI_VERSION} mtbdd_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_members={} max_state_bits={} max_inputs={} max_outputs={} max_nodes={} max_terminals={} max_assignments={} max_horizon={} unsupported=fail-closed",
+                controller_mtbdd::CONTROLLER_MTBDD_VERSION,
+                controller_plant_artifact::MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                controller_mtbdd::MAX_MTBDD_STATE_BITS,
+                controller_mtbdd::MAX_MTBDD_INPUTS,
+                controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                controller_mtbdd::MAX_MTBDD_NODES,
+                controller_mtbdd::MAX_MTBDD_TERMINALS,
+                controller_mtbdd::MAX_MTBDD_ASSIGNMENTS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+            );
+            Ok(true)
+        }
+        "controller-plant-portfolio-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-plant-portfolio-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_plant_portfolio_cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_members={} backends=mtbdd,direct-exact routing=static fallback=exact unsupported=fail-closed",
+                controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+            );
+            Ok(true)
+        }
+        "certify-controller-plant-portfolio" | "verify-controller-plant-portfolio" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-plant-portfolio" {
+                        "OUTPUT.controller-plant"
+                    } else {
+                        "INPUT.controller-plant"
+                    }
+                ));
+            }
+            let invocation_started = Instant::now();
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
+                    guarded_continuation_checker::controller_plant::MAX_PLANT_INPUTS,
+                )?;
+            let load_micros = invocation_started.elapsed().as_micros();
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact_started = Instant::now();
+            let (encoded, action, write_micros) = if command == "certify-controller-plant-portfolio"
+            {
+                let encoded = controller_plant_artifact::produce_controller_mtbdd_plant_portfolio(
+                    &controller,
+                    controller_digest,
+                    &manifest.relevant_inputs,
+                    &manifest.observed_outputs,
+                    &inputs,
+                )
+                .map_err(|error| error.to_string())?;
+                let write_started = Instant::now();
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED", write_started.elapsed().as_micros())
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "controller plant portfolio",
+                    )?,
+                    "VERIFIED",
+                    0,
+                )
+            };
+            let artifact_micros = artifact_started
+                .elapsed()
+                .as_micros()
+                .saturating_sub(write_micros);
+            let verification_started = Instant::now();
+            let summary = controller_plant_artifact::verify_controller_mtbdd_plant_portfolio(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+                &inputs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            let verification_micros = verification_started.elapsed().as_micros();
+            println!(
+                "controller-plant-portfolio status={action} cli_version={CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} write_micros={write_micros} elapsed_micros={}{}",
+                controller_plant_artifact::MTBDD_PLANT_PORTFOLIO_VERSION,
+                match summary.backend {
+                    controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::Mtbdd =>
+                        "MTBDD",
+                    controller_plant_artifact::ControllerMtbddPlantPortfolioBackend::DirectExact =>
+                        "DIRECT_EXACT",
+                },
+                match summary.reason {
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::MtbddAdmitted =>
+                        "mtbdd-admitted",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::BoundaryLimit =>
+                        "boundary-limit",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::TerminalLimit =>
+                        "terminal-limit",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::NodeLimit =>
+                        "node-limit",
+                },
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                encoded.len(),
+                invocation_started.elapsed().as_micros(),
+                if action == "CREATED" {
+                    format!(" output={}", args[2])
+                } else {
+                    String::new()
+                }
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-plant-portfolio-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe =>
+                            "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe =>
+                            "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
+        "certify-controller-mtbdd-plant-batch" | "verify-controller-mtbdd-plant-batch" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-mtbdd-plant-batch" {
+                        "OUTPUT.mtbdd-plant"
+                    } else {
+                        "INPUT.mtbdd-plant"
+                    }
+                ));
+            }
+            let (manifest, controller, controller_digest, plants, plant_digests) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let source_pairs = plants
+                .iter()
+                .zip(&plant_digests)
+                .map(|(plant, &digest)| (plant, digest))
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            let (encoded, action) = if command == "certify-controller-mtbdd-plant-batch" {
+                let mtbdd = controller_mtbdd::produce_controller_mtbdd(
+                    &controller,
+                    controller_digest,
+                    &manifest.relevant_inputs,
+                    &manifest.observed_outputs,
+                )
+                .map_err(|error| error.to_string())?;
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let artifact = controller_plant_artifact::produce_controller_mtbdd_plant_artifact(
+                    &controller,
+                    controller_digest,
+                    &mtbdd,
+                    &inputs,
+                )
+                .map_err(|error| error.to_string())?;
+                let encoded =
+                    controller_plant_artifact::encode_controller_mtbdd_plant_artifact(&artifact)
+                        .map_err(|error| error.to_string())?;
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED")
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "controller MTBDD plant artifact",
+                    )?,
+                    "VERIFIED",
+                )
+            };
+            let decoded =
+                controller_plant_artifact::decode_controller_mtbdd_plant_artifact(&encoded)
+                    .map_err(|error| error.to_string())?;
+            let decoded_mtbdd =
+                controller_mtbdd::decode_controller_mtbdd(&decoded.controller_mtbdd)
+                    .map_err(|error| error.to_string())?;
+            if decoded_mtbdd.relevant_inputs != manifest.relevant_inputs
+                || decoded_mtbdd.observed_outputs != manifest.observed_outputs
+                || decoded.members.len() != manifest.members.len()
+            {
+                return Err(
+                    "controller MTBDD plant artifact does not match manifest boundary".to_string(),
+                );
+            }
+            for ((claimed, expected), expected_digest) in decoded
+                .members
+                .iter()
+                .zip(&manifest.members)
+                .zip(&plant_digests)
+            {
+                if claimed.plant_source_sha256 != *expected_digest
+                    || claimed.wiring != expected.wiring
+                    || claimed.initial_controller_state != expected.initial_controller_state
+                    || claimed.initial_plant_state != expected.initial_plant_state
+                    || claimed.bad_plant_output != expected.bad_plant_output
+                    || claimed.horizon != expected.horizon
+                {
+                    return Err(
+                        "controller MTBDD plant artifact does not match manifest member"
+                            .to_string(),
+                    );
+                }
+            }
+            let summary = controller_plant_artifact::verify_controller_mtbdd_plant_artifact(
+                &controller,
+                controller_digest,
+                &source_pairs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            println!(
+                "controller-mtbdd-plant-batch status={action} cli_version={CONTROLLER_MTBDD_CLI_VERSION} artifact_version={} members={} safe={} unsafe={} mtbdd_nodes={} mtbdd_terminals={} assignments_checked={} reachable_product_states={} explored_transitions={} artifact_bytes={} elapsed_micros={}{}",
+                controller_plant_artifact::MTBDD_PLANT_ARTIFACT_VERSION,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.mtbdd_nodes,
+                summary.mtbdd_terminals,
+                summary.assignments_checked,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if action == "CREATED" {
+                    format!(" output={}", args[2])
+                } else {
+                    String::new()
+                }
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-mtbdd-plant-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe =>
+                            "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe =>
+                            "UNSAFE",
+                    },
+                    member.horizon,
+                    member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
         "btor2-cli-version" => {
             if args.len() != 1 {
                 return Err("usage: guarded-continuation-checker btor2-cli-version".to_string());
             }
             println!(
-                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
+                "btor2_cli_version={} phase_certificate_version={} replay_certificate_version={} search_certificate_version={} region_certificate_version={} motion_certificate_version={} braking_certificate_version={} component_contract_version={} component_certificate_version={} controller_obligation_version={} reusable_component_batch_version={} component_batch_portfolio_version={} component_batch_manifest_version={} bounded_portfolio_version={} max_bytes={} max_lines={} max_nodes={} max_bit_width={} max_phase_certificate_bytes={} max_phases={} max_phase_horizon={} max_replay_horizon={} max_replay_node_steps={} max_search_horizon={} max_search_states_per_layer={} max_search_total_states={} max_search_node_steps={} max_search_certificate_bytes={} max_region_horizon={} max_region_certificate_bytes={} max_motion_horizon={} max_motion_certificate_bytes={} max_braking_horizon={} max_braking_certificate_bytes={} max_component_contract_bytes={} max_controller_obligation_bytes={} max_component_phase_horizon={} max_component_search_horizon={} max_component_certificate_bytes={} max_component_batch_members={} max_reusable_component_batch_bytes={} max_component_batch_portfolio_bytes={} max_component_batch_manifest_bytes={} arrays=unsupported liveness=unsupported unsupported=fail-closed",
                 btor2::BTOR2_CORE_VERSION,
                 btor2_phase::PHASE_CERTIFICATE_VERSION,
                 btor2_phase::REPLAY_CERTIFICATE_VERSION,
@@ -24837,6 +25375,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_braking::BRAKING_CERTIFICATE_VERSION,
                 btor2_component::COMPONENT_CONTRACT_VERSION,
                 btor2_component::COMPONENT_CERTIFICATE_VERSION,
+                btor2_component::CONTROLLER_OBLIGATION_VERSION,
+                btor2_component::REUSABLE_COMPONENT_BATCH_VERSION,
+                btor2_component::COMPONENT_BATCH_PORTFOLIO_VERSION,
+                BTOR2_COMPONENT_BATCH_MANIFEST_VERSION,
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2::MAX_BTOR2_LINES,
@@ -24859,9 +25401,76 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 btor2_braking::MAX_BRAKING_HORIZON,
                 btor2_braking::MAX_BRAKING_CERTIFICATE_BYTES,
                 btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                btor2_component::MAX_CONTROLLER_OBLIGATION_BYTES,
                 btor2_component::MAX_COMPONENT_PHASE_HORIZON,
                 btor2_component::MAX_COMPONENT_SEARCH_HORIZON,
                 btor2_component::MAX_COMPONENT_CERTIFICATE_BYTES,
+                btor2_component::MAX_COMPONENT_BATCH_MEMBERS,
+                btor2_component::MAX_REUSABLE_COMPONENT_BATCH_BYTES,
+                btor2_component::MAX_COMPONENT_BATCH_PORTFOLIO_BYTES,
+                BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES,
+            );
+            Ok(true)
+        }
+        "certify-btor2-controller-obligation" => {
+            if args.len() != 4 {
+                return Err("usage: guarded-continuation-checker certify-btor2-controller-obligation CONTROLLER.btor2 CONTRACT.txt OUTPUT.controller-obligation".to_string());
+            }
+            let controller = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "controller BTOR2 input",
+            )?;
+            let contract = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                "component contract",
+            )?;
+            let started = Instant::now();
+            let obligation = btor2_component::produce_controller_obligation(&controller, &contract)
+                .map_err(|error| error.to_string())?;
+            let encoded = btor2_component::encode_controller_obligation(&obligation)
+                .map_err(|error| error.to_string())?;
+            btor2_component::verify_controller_obligation(&controller, &obligation)
+                .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[3]), encoded.as_bytes())?;
+            println!(
+                "btor2-controller-obligation status=CREATED obligation_version={} velocity_width={} brake_velocity={} obligation_bytes={} elapsed_micros={} output={}",
+                btor2_component::CONTROLLER_OBLIGATION_VERSION,
+                obligation.velocity_width,
+                obligation.brake_velocity,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                args[3]
+            );
+            Ok(true)
+        }
+        "verify-btor2-controller-obligation" => {
+            if args.len() != 3 {
+                return Err("usage: guarded-continuation-checker verify-btor2-controller-obligation CONTROLLER.btor2 INPUT.controller-obligation".to_string());
+            }
+            let controller = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "controller BTOR2 input",
+            )?;
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2_component::MAX_CONTROLLER_OBLIGATION_BYTES,
+                "controller obligation",
+            )?;
+            let obligation = btor2_component::decode_controller_obligation(&encoded)
+                .map_err(|error| error.to_string())?;
+            let started = Instant::now();
+            btor2_component::verify_controller_obligation(&controller, &obligation)
+                .map_err(|error| error.to_string())?;
+            println!(
+                "btor2-controller-obligation status=VERIFIED obligation_version={} velocity_width={} brake_velocity={} obligation_bytes={} elapsed_micros={}",
+                btor2_component::CONTROLLER_OBLIGATION_VERSION,
+                obligation.velocity_width,
+                obligation.brake_velocity,
+                encoded.len(),
+                started.elapsed().as_micros()
             );
             Ok(true)
         }
@@ -24967,6 +25576,127 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 summary.logical_reachable_states,
                 encoded.len(),
                 started.elapsed().as_micros()
+            );
+            Ok(true)
+        }
+        "check-btor2-component-batch" | "verify-btor2-component-batch" => {
+            if args.len() != 4 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} CONTROLLER.btor2 MANIFEST.txt {}",
+                    if command == "check-btor2-component-batch" {
+                        "OUTPUT.component-batch"
+                    } else {
+                        "INPUT.component-batch"
+                    }
+                ));
+            }
+            let controller = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "controller BTOR2 input",
+            )?;
+            let manifest_path = Path::new(&args[2]);
+            let manifest = parse_component_batch_manifest(manifest_path)?;
+            let mut plants = Vec::with_capacity(manifest.len());
+            let mut contracts = Vec::with_capacity(manifest.len());
+            for member in &manifest {
+                plants.push(read_bounded_regular_file(
+                    &member.plant_path,
+                    btor2::MAX_BTOR2_BYTES,
+                    "plant BTOR2 input",
+                )?);
+                contracts.push(read_bounded_regular_file(
+                    &member.contract_path,
+                    btor2_component::MAX_COMPONENT_CONTRACT_BYTES,
+                    "component contract",
+                )?);
+            }
+            let inputs = manifest
+                .iter()
+                .enumerate()
+                .map(|(index, member)| btor2_component::ComponentBatchInput {
+                    plant_source: plants[index].as_slice(),
+                    contract_source: contracts[index].as_slice(),
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let started = Instant::now();
+            let (certificate, encoded, action, reason) = if command == "check-btor2-component-batch"
+            {
+                let production =
+                    btor2_component::produce_component_batch_portfolio(&controller, &inputs)
+                        .map_err(|error| error.to_string())?;
+                let reason = production.selection_reason.as_str();
+                let encoded =
+                    btor2_component::encode_component_batch_portfolio(&production.certificate)
+                        .map_err(|error| error.to_string())?;
+                (production.certificate, encoded, "CREATED", reason)
+            } else {
+                let encoded = read_bounded_regular_file(
+                    Path::new(&args[3]),
+                    btor2_component::MAX_COMPONENT_BATCH_PORTFOLIO_BYTES,
+                    "component batch portfolio",
+                )?;
+                let certificate = btor2_component::decode_component_batch_portfolio(&encoded)
+                    .map_err(|error| error.to_string())?;
+                let reason = match &certificate {
+                    btor2_component::ComponentBatchPortfolioCertificate::Reusable(_) => {
+                        "fully-admitted-reuse"
+                    }
+                    btor2_component::ComponentBatchPortfolioCertificate::Ordinary(_) => {
+                        "singleton-or-exact-fallback"
+                    }
+                };
+                (
+                    certificate,
+                    String::from_utf8(encoded)
+                        .map_err(|_| "component batch portfolio is not UTF-8".to_string())?,
+                    "VERIFIED",
+                    reason,
+                )
+            };
+            let summary = btor2_component::verify_component_batch_portfolio(
+                &controller,
+                &inputs,
+                &certificate,
+            )
+            .map_err(|error| error.to_string())?;
+            let (route, members, reused, fallback) = match &certificate {
+                btor2_component::ComponentBatchPortfolioCertificate::Reusable(certificate) => (
+                    "reusable",
+                    certificate.members.len(),
+                    certificate.members.len(),
+                    0,
+                ),
+                btor2_component::ComponentBatchPortfolioCertificate::Ordinary(certificate) => {
+                    let fallback = certificate
+                        .members
+                        .iter()
+                        .filter(|member| {
+                            matches!(member, btor2_component::ComponentCertificate::Search(_))
+                        })
+                        .count();
+                    ("ordinary", certificate.members.len(), 0, fallback)
+                }
+            };
+            if command == "check-btor2-component-batch" {
+                write_new_certificate(Path::new(&args[3]), encoded.as_bytes())?;
+            }
+            println!(
+                "btor2-component-batch status={action} portfolio_version={} route={route} reason={reason} members={} reused_phase={} exact_fallback={} safe={} unsafe={} certificate_bytes={} elapsed_micros={}{}",
+                btor2_component::COMPONENT_BATCH_PORTFOLIO_VERSION,
+                members,
+                reused,
+                fallback,
+                summary.safe,
+                summary.unsafe_count,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if command == "check-btor2-component-batch" {
+                    format!(" output={}", args[3])
+                } else {
+                    String::new()
+                }
             );
             Ok(true)
         }
@@ -34745,7 +35475,7 @@ mod tests {
                 assert_eq!(
                     actual,
                     expected
-                        .rows
+                        .rows()
                         .iter()
                         .map(|row| row[0] as u16)
                         .collect::<Vec<_>>()
@@ -34756,7 +35486,7 @@ mod tests {
                     assert_eq!(
                         actual,
                         expected
-                            .rows
+                            .rows()
                             .iter()
                             .map(|row| row[0] as u16)
                             .collect::<Vec<_>>()
@@ -34808,7 +35538,7 @@ mod tests {
         let relevant = IndependentPredicateChecker::support(&model).unwrap();
         let constraints = vec![None; relevant.len()];
         let mut quotient = PredicateQuotient::new(&model).unwrap();
-        let row = quotient.relation(&constraints).unwrap().rows[0][0] as u16;
+        let row = quotient.relation(&constraints).unwrap().rows()[0][0] as u16;
         let clauses =
             predicate_relation_completeness_clauses(&model, &relevant, 0, &constraints, row)
                 .unwrap();
@@ -35048,6 +35778,12 @@ mod tests {
         assert_eq!(
             fs::read(&certificate_path).unwrap(),
             fs::read(&duplicate_path).unwrap()
+        );
+        let compatibility_bytes = fs::read(&certificate_path).unwrap();
+        assert_eq!(compatibility_bytes.len(), 9_706);
+        assert_eq!(
+            predicate_bytes_hex(&Sha256::digest(&compatibility_bytes)),
+            "6a1ffce05d42bfaa65a227da57647ba6abeac26c82b620219b84011d05ab1f6d"
         );
         assert!(
             certify_aiger_predicate_v2(&input, 0, &transcript, &certificate_path)
@@ -35388,6 +36124,33 @@ mod tests {
         let contract = root.join("examples/btor2/components/braking-motion-contract-v1.txt");
         let certificate =
             std::env::temp_dir().join(format!("gcc-btor2-components-{}.cert", std::process::id()));
+        let obligation = std::env::temp_dir().join(format!(
+            "gcc-btor2-controller-{}.obligation",
+            std::process::id()
+        ));
+        assert!(
+            run_artifact_cli(&[
+                "certify-btor2-controller-obligation".to_string(),
+                controller.display().to_string(),
+                contract.display().to_string(),
+                obligation.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            fs::read_to_string(&obligation)
+                .unwrap()
+                .starts_with("controller_obligation_version=1\n")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-controller-obligation".to_string(),
+                controller.display().to_string(),
+                obligation.display().to_string(),
+            ])
+            .unwrap()
+        );
+        fs::remove_file(&obligation).unwrap();
         for (horizon, backend) in [
             (255, "backend=phase-contract"),
             (256, "backend=composed-search"),
@@ -35418,6 +36181,70 @@ mod tests {
             );
             fs::remove_file(&certificate).unwrap();
         }
+    }
+
+    #[test]
+    fn btor2_component_batch_cli_is_manifest_bound_and_self_verifying() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/btor2/components");
+        let scratch =
+            std::env::temp_dir().join(format!("gcc-btor2-component-batch-{}", std::process::id()));
+        if scratch.exists() {
+            fs::remove_dir_all(&scratch).unwrap();
+        }
+        fs::create_dir(&scratch).unwrap();
+        for name in [
+            "braking-controller-v1.btor2",
+            "motion-plant-v1.btor2",
+            "semi-implicit-motion-plant-v1.btor2",
+            "braking-motion-contract-v1.txt",
+        ] {
+            fs::copy(source.join(name), scratch.join(name)).unwrap();
+        }
+        let manifest = scratch.join("batch.txt");
+        fs::write(
+            &manifest,
+            "component_batch_manifest_version=1\nmember_count=3\nplant_path=motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=255\nplant_path=motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=256\nplant_path=semi-implicit-motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=127\nstatus=complete\n",
+        )
+        .unwrap();
+        let certificate = scratch.join("batch.component-batch");
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-component-batch".to_string(),
+                scratch
+                    .join("braking-controller-v1.btor2")
+                    .display()
+                    .to_string(),
+                manifest.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        let encoded = fs::read_to_string(&certificate).unwrap();
+        assert!(encoded.starts_with("component_batch_portfolio_version=1\n"));
+        assert!(matches!(
+            btor2_component::decode_component_batch_portfolio(encoded.as_bytes()).unwrap(),
+            btor2_component::ComponentBatchPortfolioCertificate::Ordinary(_)
+        ));
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-component-batch".to_string(),
+                scratch
+                    .join("braking-controller-v1.btor2")
+                    .display()
+                    .to_string(),
+                manifest.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+
+        fs::write(
+            &manifest,
+            "component_batch_manifest_version=1\nmember_count=1\nplant_path=../motion-plant-v1.btor2\ncontract_path=braking-motion-contract-v1.txt\nhorizon=255\nstatus=complete\n",
+        )
+        .unwrap();
+        assert!(parse_component_batch_manifest(&manifest).is_err());
+        fs::remove_dir_all(&scratch).unwrap();
     }
 
     #[test]
@@ -37317,7 +38144,7 @@ mod tests {
             .interface
             .relation_predicate(&contract.phases[0].predicate)
             .unwrap();
-        let targets = relation.rows[0][0] as u16;
+        let targets = relation.rows()[0][0] as u16;
         let omitted = targets & !(1u16 << targets.trailing_zeros());
         let clauses = predicate_relation_completeness_clauses_for_predicate(
             &model,

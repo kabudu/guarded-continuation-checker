@@ -25,6 +25,8 @@ component_motor_controller=examples/btor2/components/motor-stop-controller-v1.bt
 component_motor_plant=examples/btor2/components/motor-plant-v1.btor2
 component_semi_implicit=examples/btor2/components/semi-implicit-motion-plant-v1.btor2
 component_contract=examples/btor2/components/braking-motion-contract-v1.txt
+component_admitted_batch=examples/btor2/components/braking-batch-admitted-v1.txt
+component_mixed_batch=examples/btor2/components/braking-batch-mixed-v1.txt
 certificate=${TMPDIR:-/tmp}/gcc-btor2-phase-$$.cert
 actuator_witness=${TMPDIR:-/tmp}/gcc-btor2-actuator-$$.witness
 saturating_witness=${TMPDIR:-/tmp}/gcc-btor2-saturating-$$.witness
@@ -176,5 +178,19 @@ check_components "$component_motor_controller" "$component_motor_plant" 159 SAFE
 check_components "$component_motor_controller" "$component_motor_plant" 160 UNSAFE composed-search
 check_components "$component_controller" "$component_semi_implicit" 127 SAFE composed-search
 check_components "$component_controller" "$component_semi_implicit" 128 UNSAFE composed-search
+
+"$gcc_binary" check-btor2-component-batch \
+  "$component_controller" "$component_admitted_batch" "$certificate"
+grep -q '^reusable_component_batch_version=1$' "$certificate"
+"$gcc_binary" verify-btor2-component-batch \
+  "$component_controller" "$component_admitted_batch" "$certificate"
+rm -f "$certificate"
+"$gcc_binary" check-btor2-component-batch \
+  "$component_controller" "$component_mixed_batch" "$certificate"
+grep -q '^component_batch_portfolio_version=1$' "$certificate"
+grep -q '^route=ordinary$' "$certificate"
+"$gcc_binary" verify-btor2-component-batch \
+  "$component_controller" "$component_mixed_batch" "$certificate"
+rm -f "$certificate"
 
 echo 'btor2tools_baseline=PASS'

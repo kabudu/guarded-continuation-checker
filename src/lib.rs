@@ -4,6 +4,7 @@
 //! This library invokes it directly without a shell and validates its advertised
 //! versioned CLI contract before exposing typed certificate operations.
 
+pub mod aiger_obligation;
 pub mod btor2;
 pub mod btor2_bounded;
 pub mod btor2_braking;
@@ -12,6 +13,13 @@ pub mod btor2_motion;
 pub mod btor2_phase;
 pub mod btor2_region;
 pub mod btor2_search;
+pub mod controller_mtbdd;
+pub mod controller_mtbdd_proof;
+pub mod controller_plant;
+pub mod controller_plant_artifact;
+pub mod controller_transducer;
+pub mod dense_relation;
+pub mod unsat_proof;
 
 use std::fmt;
 use std::io::Read;
@@ -141,6 +149,12 @@ pub enum OperationKind {
     VerifyEventContractV3,
     EventContractPortfolio,
     VerifyEventContractPortfolioReport,
+    DiscoverControllerMtbdd,
+    CertifyControllerMtbddPlantBatch,
+    VerifyControllerMtbddPlantBatch,
+    DiscoverControllerPlantPortfolio,
+    CertifyControllerPlantPortfolio,
+    VerifyControllerPlantPortfolio,
 }
 
 impl OperationKind {
@@ -156,6 +170,12 @@ impl OperationKind {
             Self::VerifyEventContractV3 => "verify_event_contract_v3",
             Self::EventContractPortfolio => "event_contract_portfolio",
             Self::VerifyEventContractPortfolioReport => "verify_event_contract_portfolio_report",
+            Self::DiscoverControllerMtbdd => "discover_controller_mtbdd",
+            Self::CertifyControllerMtbddPlantBatch => "certify_controller_mtbdd_plant_batch",
+            Self::VerifyControllerMtbddPlantBatch => "verify_controller_mtbdd_plant_batch",
+            Self::DiscoverControllerPlantPortfolio => "discover_controller_plant_portfolio",
+            Self::CertifyControllerPlantPortfolio => "certify_controller_plant_portfolio",
+            Self::VerifyControllerPlantPortfolio => "verify_controller_plant_portfolio",
         }
     }
 }
@@ -318,6 +338,105 @@ pub struct EventContractCapabilities {
     pub max_proof_bytes: usize,
     pub max_total_proof_bytes: usize,
 }
+
+/// Machine-discovered limits for controller MTBDD plant CLI v1.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerMtbddCapabilities {
+    pub cli_version: u32,
+    pub mtbdd_version: u32,
+    pub plant_artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_manifest_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_members: usize,
+    pub max_state_bits: usize,
+    pub max_inputs: usize,
+    pub max_outputs: usize,
+    pub max_nodes: usize,
+    pub max_terminals: usize,
+    pub max_assignments: usize,
+    pub max_horizon: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerMtbddAnswer {
+    Safe,
+    Unsafe,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerMtbddMemberResult {
+    pub index: usize,
+    pub answer: ControllerMtbddAnswer,
+    pub horizon: usize,
+    pub bad_frame: Option<usize>,
+    pub trace_steps: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerMtbddBatchSummary {
+    pub artifact_version: u32,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub mtbdd_nodes: usize,
+    pub mtbdd_terminals: usize,
+    pub assignments_checked: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub elapsed_micros: usize,
+    pub members: Vec<ControllerMtbddMemberResult>,
+}
+
+pub type ControllerMtbddApiError = PredicateApiError;
+pub type ControllerMtbddOperationError = PredicateOperationError;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantPortfolioCapabilities {
+    pub cli_version: u32,
+    pub artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_manifest_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_members: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerPlantPortfolioBackend {
+    Mtbdd,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerPlantPortfolioReason {
+    MtbddAdmitted,
+    BoundaryLimit,
+    TerminalLimit,
+    NodeLimit,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerPlantPortfolioBatchSummary {
+    pub artifact_version: u32,
+    pub backend: ControllerPlantPortfolioBackend,
+    pub reason: ControllerPlantPortfolioReason,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub write_micros: usize,
+    pub elapsed_micros: usize,
+    pub members: Vec<ControllerMtbddMemberResult>,
+}
+
+pub type ControllerPlantPortfolioApiError = PredicateApiError;
+pub type ControllerPlantPortfolioOperationError = PredicateOperationError;
 
 /// Event-contract v1 uses the same two logical outcomes as predicate checks.
 pub type EventContractResult = PredicateResult;
@@ -568,6 +687,268 @@ impl PredicateTool {
             });
         }
         Ok(())
+    }
+}
+
+/// Typed, shell-free client for controller MTBDD plant CLI v1.
+#[derive(Clone, Debug)]
+pub struct ControllerMtbddTool {
+    executable: PathBuf,
+    capabilities: ControllerMtbddCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerMtbddTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, ControllerMtbddApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, ControllerMtbddApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, ControllerMtbddOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-mtbdd-cli-version");
+        let output = run_bounded(OperationKind::DiscoverControllerMtbdd, command, policy)?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_controller_mtbdd_capabilities(&stdout).map_err(|error| {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            PredicateOperationError {
+                error: Box::new(error),
+                metrics: metrics.clone(),
+            }
+        })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn executable(&self) -> &Path {
+        &self.executable
+    }
+
+    pub fn capabilities(&self) -> &ControllerMtbddCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerMtbddBatchSummary, ControllerMtbddApiError> {
+        self.certify_observed(manifest, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerMtbddBatchSummary>, ControllerMtbddOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("certify-controller-mtbdd-plant-batch")
+            .arg(manifest)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::CertifyControllerMtbddPlantBatch,
+            command,
+            self.policy,
+        )?;
+        parse_controller_mtbdd_summary(output, "CREATED", Some(artifact), &self.capabilities)
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerMtbddBatchSummary, ControllerMtbddApiError> {
+        self.verify_observed(manifest, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerMtbddBatchSummary>, ControllerMtbddOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-mtbdd-plant-batch")
+            .arg(manifest)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerMtbddPlantBatch,
+            command,
+            self.policy,
+        )?;
+        parse_controller_mtbdd_summary(output, "VERIFIED", None, &self.capabilities)
+    }
+}
+
+/// Typed, shell-free client for statically routed controller/plant portfolio v1.
+#[derive(Clone, Debug)]
+pub struct ControllerPlantPortfolioTool {
+    executable: PathBuf,
+    capabilities: ControllerPlantPortfolioCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerPlantPortfolioTool {
+    pub fn discover(
+        executable: impl Into<PathBuf>,
+    ) -> Result<Self, ControllerPlantPortfolioApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, ControllerPlantPortfolioApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, ControllerPlantPortfolioOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-plant-portfolio-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerPlantPortfolio,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_plant_portfolio_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn executable(&self) -> &Path {
+        &self.executable
+    }
+
+    pub fn capabilities(&self) -> &ControllerPlantPortfolioCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerPlantPortfolioBatchSummary, ControllerPlantPortfolioApiError> {
+        self.certify_observed(manifest, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<
+        Observed<ControllerPlantPortfolioBatchSummary>,
+        ControllerPlantPortfolioOperationError,
+    > {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("certify-controller-plant-portfolio")
+            .arg(manifest)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::CertifyControllerPlantPortfolio,
+            command,
+            self.policy,
+        )?;
+        parse_controller_plant_portfolio_summary(
+            output,
+            "CREATED",
+            Some(artifact),
+            &self.capabilities,
+        )
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerPlantPortfolioBatchSummary, ControllerPlantPortfolioApiError> {
+        self.verify_observed(manifest, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        artifact: &Path,
+    ) -> Result<
+        Observed<ControllerPlantPortfolioBatchSummary>,
+        ControllerPlantPortfolioOperationError,
+    > {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-plant-portfolio")
+            .arg(manifest)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerPlantPortfolio,
+            command,
+            self.policy,
+        )?;
+        parse_controller_plant_portfolio_summary(output, "VERIFIED", None, &self.capabilities)
     }
 }
 
@@ -1121,6 +1502,671 @@ fn parse_result(stdout: &str) -> Result<PredicateResult, PredicateApiError> {
     }
 }
 
+fn canonical_usize(value: &str, field: &str) -> Result<usize, PredicateApiError> {
+    let parsed = value.parse::<usize>().map_err(|_| {
+        PredicateApiError::InvalidResponse(format!("{field} is not an unsigned integer"))
+    })?;
+    if parsed.to_string() != value {
+        return Err(PredicateApiError::InvalidResponse(format!(
+            "{field} is noncanonical"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn canonical_u32(value: &str, field: &str) -> Result<u32, PredicateApiError> {
+    let parsed = canonical_usize(value, field)?;
+    u32::try_from(parsed).map_err(|_| {
+        PredicateApiError::InvalidResponse(format!("{field} exceeds canonical u32 range"))
+    })
+}
+
+fn token_value<'a>(token: &'a str, key: &str) -> Result<&'a str, PredicateApiError> {
+    token
+        .strip_prefix(&format!("{key}="))
+        .ok_or_else(|| PredicateApiError::InvalidResponse(format!("expected response field {key}")))
+}
+
+fn parse_controller_plant_portfolio_capabilities(
+    line: &str,
+) -> Result<ControllerPlantPortfolioCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller plant portfolio capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_plant_portfolio_cli_version",
+        "artifact_version",
+        "manifest_version",
+        "max_manifest_bytes",
+        "max_artifact_bytes",
+        "max_members",
+        "backends",
+        "routing",
+        "fallback",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller plant portfolio capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[6..] != ["mtbdd,direct-exact", "static", "exact", "fail-closed"] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller plant portfolio routing contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..3]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[3..6]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 3]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if versions != [1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller plant portfolio version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller plant portfolio discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerPlantPortfolioCapabilities {
+        cli_version: versions[0],
+        artifact_version: versions[1],
+        manifest_version: versions[2],
+        max_manifest_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_members: limits[2],
+    })
+}
+
+fn parse_controller_plant_portfolio_summary(
+    output: ManagedOutput,
+    expected_action: &str,
+    expected_output: Option<&Path>,
+    capabilities: &ControllerPlantPortfolioCapabilities,
+) -> Result<Observed<ControllerPlantPortfolioBatchSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerPlantPortfolioBatchSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant portfolio response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller plant portfolio summary line is missing".to_string(),
+            )
+        })?;
+        let summary_text = if let Some(expected_output) = expected_output {
+            first
+                .split_once(" output=")
+                .and_then(|(summary, output)| {
+                    (output == expected_output.to_string_lossy()).then_some(summary)
+                })
+                .ok_or_else(|| {
+                    PredicateApiError::InvalidResponse(
+                        "controller plant portfolio output path disagrees".to_string(),
+                    )
+                })?
+        } else if first.contains(" output=") {
+            return Err(PredicateApiError::InvalidResponse(
+                "verified controller plant portfolio unexpectedly names output".to_string(),
+            ));
+        } else {
+            first
+        };
+        let fields = summary_text.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-plant-portfolio",
+            "status",
+            "cli_version",
+            "artifact_version",
+            "backend",
+            "reason",
+            "members",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "write_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant portfolio summary shape is invalid".to_string(),
+            ));
+        }
+        if token_value(fields[1], "status")? != expected_action {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant portfolio action disagrees".to_string(),
+            ));
+        }
+        let cli_version = canonical_u32(token_value(fields[2], "cli_version")?, "cli_version")?;
+        let artifact_version = canonical_u32(
+            token_value(fields[3], "artifact_version")?,
+            "artifact_version",
+        )?;
+        if cli_version != capabilities.cli_version
+            || artifact_version != capabilities.artifact_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller plant portfolio response version changed".to_string(),
+            ));
+        }
+        let backend = match token_value(fields[4], "backend")? {
+            "MTBDD" => ControllerPlantPortfolioBackend::Mtbdd,
+            "DIRECT_EXACT" => ControllerPlantPortfolioBackend::DirectExact,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant portfolio backend is invalid".to_string(),
+                ));
+            }
+        };
+        let reason = match token_value(fields[5], "reason")? {
+            "mtbdd-admitted" => ControllerPlantPortfolioReason::MtbddAdmitted,
+            "boundary-limit" => ControllerPlantPortfolioReason::BoundaryLimit,
+            "terminal-limit" => ControllerPlantPortfolioReason::TerminalLimit,
+            "node-limit" => ControllerPlantPortfolioReason::NodeLimit,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant portfolio reason is invalid".to_string(),
+                ));
+            }
+        };
+        if !matches!(
+            (backend, reason),
+            (
+                ControllerPlantPortfolioBackend::Mtbdd,
+                ControllerPlantPortfolioReason::MtbddAdmitted
+            ) | (
+                ControllerPlantPortfolioBackend::DirectExact,
+                ControllerPlantPortfolioReason::BoundaryLimit
+                    | ControllerPlantPortfolioReason::TerminalLimit
+                    | ControllerPlantPortfolioReason::NodeLimit
+            )
+        ) {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant portfolio route and reason disagree".to_string(),
+            ));
+        }
+        let numeric = fields[6..]
+            .iter()
+            .zip(&keys[6..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        let member_count = numeric[0];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[5] > capabilities.max_artifact_bytes
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant portfolio response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut members = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller plant portfolio member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-plant-portfolio-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant portfolio member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], "index")?, "index")?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant portfolio member order is invalid".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], "answer")? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller plant portfolio member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_usize(token_value(fields[3], "horizon")?, "horizon")?;
+            let bad = token_value(fields[4], "bad_frame")?;
+            let bad_frame = if bad == "none" {
+                None
+            } else {
+                Some(canonical_usize(bad, "bad_frame")?)
+            };
+            let trace_steps =
+                canonical_usize(token_value(fields[5], "trace_steps")?, "trace_steps")?;
+            if horizon > crate::controller_plant::MAX_COMPOSITION_HORIZON
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => trace_steps != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || trace_steps != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller plant portfolio member trace boundary is invalid".to_string(),
+                ));
+            }
+            members.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps,
+                reachable_product_states: canonical_usize(
+                    token_value(fields[6], "reachable_product_states")?,
+                    "reachable_product_states",
+                )?,
+                explored_transitions: canonical_usize(
+                    token_value(fields[7], "explored_transitions")?,
+                    "explored_transitions",
+                )?,
+            });
+        }
+        let reachable_total = members.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.reachable_product_states)
+        });
+        let transition_total = members.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.explored_transitions)
+        });
+        if lines.next().is_some()
+            || members
+                .iter()
+                .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+                .count()
+                != numeric[1]
+            || members
+                .iter()
+                .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Unsafe))
+                .count()
+                != numeric[2]
+            || reachable_total != Some(numeric[3])
+            || transition_total != Some(numeric[4])
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller plant portfolio member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerPlantPortfolioBatchSummary {
+            artifact_version,
+            backend,
+            reason,
+            safe: numeric[1],
+            unsafe_count: numeric[2],
+            reachable_product_states: numeric[3],
+            explored_transitions: numeric[4],
+            artifact_bytes: numeric[5],
+            load_micros: numeric[6],
+            artifact_micros: numeric[7],
+            verification_micros: numeric[8],
+            write_micros: numeric[9],
+            elapsed_micros: numeric[10],
+            members,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_mtbdd_capabilities(
+    line: &str,
+) -> Result<ControllerMtbddCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller MTBDD capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_mtbdd_cli_version",
+        "mtbdd_version",
+        "plant_artifact_version",
+        "manifest_version",
+        "max_manifest_bytes",
+        "max_artifact_bytes",
+        "max_members",
+        "max_state_bits",
+        "max_inputs",
+        "max_outputs",
+        "max_nodes",
+        "max_terminals",
+        "max_assignments",
+        "max_horizon",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller MTBDD capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[14] != "fail-closed" {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller MTBDD unsupported-input policy is not fail-closed".to_string(),
+        ));
+    }
+    let versions = values[..4]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[4..14]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 4]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if versions != [1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller MTBDD version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller MTBDD discovered limit must be positive".to_string(),
+        ));
+    }
+    let capabilities = ControllerMtbddCapabilities {
+        cli_version: versions[0],
+        mtbdd_version: versions[1],
+        plant_artifact_version: versions[2],
+        manifest_version: versions[3],
+        max_manifest_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_members: limits[2],
+        max_state_bits: limits[3],
+        max_inputs: limits[4],
+        max_outputs: limits[5],
+        max_nodes: limits[6],
+        max_terminals: limits[7],
+        max_assignments: limits[8],
+        max_horizon: limits[9],
+    };
+    Ok(capabilities)
+}
+
+fn parse_controller_mtbdd_summary(
+    output: ManagedOutput,
+    expected_action: &str,
+    expected_output: Option<&Path>,
+    capabilities: &ControllerMtbddCapabilities,
+) -> Result<Observed<ControllerMtbddBatchSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerMtbddBatchSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller MTBDD response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller MTBDD summary line is missing".to_string(),
+            )
+        })?;
+        let summary_text = if let Some(expected_output) = expected_output {
+            first
+                .split_once(" output=")
+                .and_then(|(summary, output)| {
+                    (output == expected_output.to_string_lossy()).then_some(summary)
+                })
+                .ok_or_else(|| {
+                    PredicateApiError::InvalidResponse(
+                        "controller MTBDD created response output disagrees".to_string(),
+                    )
+                })?
+        } else if first.contains(" output=") {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller MTBDD verified response unexpectedly names output".to_string(),
+            ));
+        } else {
+            first
+        };
+        let fields = summary_text.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-mtbdd-plant-batch",
+            "status",
+            "cli_version",
+            "artifact_version",
+            "members",
+            "safe",
+            "unsafe",
+            "mtbdd_nodes",
+            "mtbdd_terminals",
+            "assignments_checked",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller MTBDD summary shape is invalid".to_string(),
+            ));
+        }
+        if token_value(fields[1], keys[1])? != expected_action {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller MTBDD response action disagrees".to_string(),
+            ));
+        }
+        let numeric = fields[2..]
+            .iter()
+            .zip(&keys[2..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if numeric[0] != capabilities.cli_version as usize {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller MTBDD response CLI version changed".to_string(),
+            ));
+        }
+        if numeric[1] != capabilities.plant_artifact_version as usize {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller MTBDD response artifact version changed".to_string(),
+            ));
+        }
+        let member_count = numeric[2];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[5] > capabilities.max_nodes
+            || numeric[6] > capabilities.max_terminals
+            || numeric[7] > capabilities.max_assignments
+            || numeric[10] > capabilities.max_artifact_bytes
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller MTBDD response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut members = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller MTBDD member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-mtbdd-plant-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller MTBDD member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], "index")?, "index")?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller MTBDD member order is invalid".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], "answer")? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller MTBDD member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let bad = token_value(fields[4], "bad_frame")?;
+            let bad_frame = if bad == "none" {
+                None
+            } else {
+                Some(canonical_usize(bad, "bad_frame")?)
+            };
+            if matches!(answer, ControllerMtbddAnswer::Safe) != bad_frame.is_none() {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller MTBDD answer and bad frame disagree".to_string(),
+                ));
+            }
+            let horizon = canonical_usize(token_value(fields[3], "horizon")?, "horizon")?;
+            let trace_steps =
+                canonical_usize(token_value(fields[5], "trace_steps")?, "trace_steps")?;
+            if horizon > capabilities.max_horizon
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => trace_steps != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || trace_steps != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller MTBDD member trace boundary is invalid".to_string(),
+                ));
+            }
+            members.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps,
+                reachable_product_states: canonical_usize(
+                    token_value(fields[6], "reachable_product_states")?,
+                    "reachable_product_states",
+                )?,
+                explored_transitions: canonical_usize(
+                    token_value(fields[7], "explored_transitions")?,
+                    "explored_transitions",
+                )?,
+            });
+        }
+        let reachable_total = members
+            .iter()
+            .try_fold(0usize, |total, member| {
+                total.checked_add(member.reachable_product_states)
+            })
+            .ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller MTBDD reachable-state total overflows".to_string(),
+                )
+            })?;
+        let transition_total = members
+            .iter()
+            .try_fold(0usize, |total, member| {
+                total.checked_add(member.explored_transitions)
+            })
+            .ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller MTBDD transition total overflows".to_string(),
+                )
+            })?;
+        if lines.next().is_some()
+            || members
+                .iter()
+                .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+                .count()
+                != numeric[3]
+            || members
+                .iter()
+                .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Unsafe))
+                .count()
+                != numeric[4]
+            || reachable_total != numeric[8]
+            || transition_total != numeric[9]
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller MTBDD member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerMtbddBatchSummary {
+            artifact_version: numeric[1] as u32,
+            safe: numeric[3],
+            unsafe_count: numeric[4],
+            mtbdd_nodes: numeric[5],
+            mtbdd_terminals: numeric[6],
+            assignments_checked: numeric[7],
+            reachable_product_states: numeric[8],
+            explored_transitions: numeric[9],
+            artifact_bytes: numeric[10],
+            elapsed_micros: numeric[11],
+            members,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
 fn parse_capabilities(line: &str) -> Result<PredicateCapabilities, PredicateApiError> {
     let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
     if fields.len() != 11 || line.contains('\r') || !line.ends_with('\n') {
@@ -1320,6 +2366,65 @@ mod tests {
         ));
         assert!(
             parse_event_contract_capabilities(&canonical.replace(" max_latches=4", "")).is_err()
+        );
+    }
+
+    #[test]
+    fn controller_mtbdd_capability_parser_is_strict_and_fail_closed() {
+        let canonical = "controller_mtbdd_cli_version=1 mtbdd_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=33554432 max_members=64 max_state_bits=20 max_inputs=32 max_outputs=8 max_nodes=1048576 max_terminals=1048576 max_assignments=1048576 max_horizon=4096 unsupported=fail-closed\n";
+        let parsed = parse_controller_mtbdd_capabilities(canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.max_outputs, 8);
+        assert!(
+            parse_controller_mtbdd_capabilities(&canonical.replacen(
+                "controller_mtbdd_cli_version=1",
+                "controller_mtbdd_cli_version=4294967297",
+                1
+            ))
+            .is_err()
+        );
+        assert!(
+            parse_controller_mtbdd_capabilities(
+                &canonical.replace("max_outputs=8", "max_outputs=08")
+            )
+            .is_err()
+        );
+        assert!(
+            parse_controller_mtbdd_capabilities(
+                &canonical.replace("max_members=64", "max_members=0")
+            )
+            .is_err()
+        );
+        assert!(
+            parse_controller_mtbdd_capabilities(
+                &canonical.replace("unsupported=fail-closed", "unsupported=best-effort")
+            )
+            .is_err()
+        );
+        assert!(parse_controller_mtbdd_capabilities(&canonical.replace('\n', "\r\n")).is_err());
+    }
+
+    #[test]
+    fn controller_plant_portfolio_capability_parser_is_strict() {
+        let canonical = "controller_plant_portfolio_cli_version=1 artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_members=64 backends=mtbdd,direct-exact routing=static fallback=exact unsupported=fail-closed\n";
+        let parsed = parse_controller_plant_portfolio_capabilities(canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.max_members, 64);
+        assert!(
+            parse_controller_plant_portfolio_capabilities(
+                &canonical.replace("routing=static", "routing=timed")
+            )
+            .is_err()
+        );
+        assert!(
+            parse_controller_plant_portfolio_capabilities(
+                &canonical.replace("max_members=64", "max_members=064")
+            )
+            .is_err()
+        );
+        assert!(
+            parse_controller_plant_portfolio_capabilities(&canonical.replace('\n', "\r\n"))
+                .is_err()
         );
     }
 
