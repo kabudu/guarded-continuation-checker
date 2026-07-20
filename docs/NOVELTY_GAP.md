@@ -39,6 +39,17 @@ Primary starting points:
 - [iSMC: A BDD-based Symbolic Model Checker with Interactive Certification](https://arxiv.org/abs/2605.03705)
 - [QBFcert](https://fmv.jku.at/qbfcert)
 
+The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) found materially closer
+disconfirming work than the original list captured. In particular, FMCAD 2023
+already composes certificates produced by BDD and other model-checking engines
+across temporal decomposition, while FM 2026 composes arbitrary witness
+circuits and shares certificate checks across multiple properties. Patent
+records also describe SAT-derived predicate transition enumeration, proof-based
+abstraction, and abstract hardware/software composition. The broad combination
+of BDDs, predicate projection, composition, and independently checked evidence
+is therefore not a credible novelty claim. Gate 5 remains open because this was
+not a systematic or professional patent search.
+
 ## Claim gates
 
 1. **Closed for candidate v1:** freeze a precise certificate language and
@@ -54,14 +65,24 @@ Primary starting points:
    replication gates pass on the frozen corpus. The result is negative on
    speed, size, and packaging. A low-memory GCC verifier profile reproduces on
    arm64 and amd64, and both evidence paths reproduce byte-identical artifacts
-   across architectures. Comparison with a formally verified checker remains
-   open.
+   across architectures. Certifaiger's SAFE obligations are checked through
+   CaDiCaL and the formally verified `lrat_isa` checker. The remaining gate is
+   a direct comparison with the FM 2026 composed multi-property witness, not a
+   missing formally verified SAT-proof consumer.
 5. Search papers, tools, patents and current implementations for the complete
    proposed combination, recording both confirming and disconfirming evidence.
 6. Obtain external expert review of the scoped claim.
 
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
+
+The revised candidate question is whether exact controller evidence can remain
+reusable across separately supplied and changing plant contracts while a
+bounded low-memory checker proves quotient completeness, wiring, and both
+answer classes without rebuilding a whole-circuit inductive witness. This must
+be compared directly with the FM 2026 composed-witness construction. Until that
+comparison demonstrates a distinct semantic capability or measured property,
+it is a research direction rather than a candidate contribution.
 
 Gate 1 is represented by the frozen
 [`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md), with working

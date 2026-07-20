@@ -43,6 +43,11 @@
   require an OpenSSH signature from the attested independent reviewer under a
   fixed namespace and caller-controlled allowed-signers policy. Add hostile
   register substitution, attestation tampering, and untrusted-key controls.
+  Add bounded prior-art audit v1. Record the disconfirming FMCAD 2023 and FM
+  2026 compositional certificate results and relevant predicate-abstraction
+  patent records. Narrow the research target to reusable controller evidence
+  across independently changing plant contracts, with a required direct
+  composed-witness baseline before any novelty claim.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

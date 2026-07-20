@@ -170,5 +170,16 @@ public benchmark's local provenance mechanism gap. General signed partner build
 provenance, independent synthesis equivalence, and compatibility history remain
 open.
 
+The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
+9. Compositional certification from BDD engines, arbitrary witness-circuit
+composition, and shared multi-property checking already exist in the closest
+published systems. The next experiment must therefore compare reusable
+controller-local quotient evidence directly with a composed whole-circuit
+witness. It must test whether a changed plant can be admitted and checked
+without rebuilding controller evidence, while preserving both answers,
+deterministic artifacts, low checker memory, and exact fail-closed behavior.
+If that distinction does not survive the baseline, the algorithmic novelty
+hypothesis is rejected and work continues as production engineering.
+
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
