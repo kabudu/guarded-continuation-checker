@@ -7,6 +7,9 @@
   canonical plant manifest, enforce create-new output, source and query binding,
   bounded UNSAT-miter verification, deterministic bytes, typed observations,
   and fail-closed mutation and drift handling.
+  Retain a nine-case public self-service acceptance fixture covering exact
+  SAFE/UNSAFE answers, shortest bad frames, proof verification, manifest drift,
+  artifact mutation, and output collision.
 
 - Add a source-bound controller MTBDD equivalence miter and bounded UNSAT proof,
   plus canonical `GCCMEP01` proof and `GCCMPF01` proof-carrying plant-batch

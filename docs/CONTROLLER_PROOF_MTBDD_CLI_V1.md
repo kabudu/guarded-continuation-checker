@@ -53,3 +53,13 @@ at version 1. SAT miters and UNSAT proof checking are established techniques;
 this interface is product integration, not a novelty claim. Hosted
 whole-process evidence and independent acceptance remain required before the
 proof profile can enter the default portfolio.
+
+## Simulated external acceptance
+
+`scripts/run-controller-proof-mtbdd-self-service-acceptance.sh` exercises the
+public six-property physical-plant manifest through fresh producer and verifier
+processes. The retained
+`results/controller-proof-mtbdd-self-service-acceptance-v1.csv` records all four
+expected shortest UNSAFE frames, both SAFE results, proof verification,
+manifest-drift rejection, mutation rejection, and no-clobber rejection. This is
+repository-run simulated acceptance, not independent partner evidence.
