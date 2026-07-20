@@ -47,7 +47,12 @@
   2026 compositional certificate results and relevant predicate-abstraction
   patent records. Narrow the research target to reusable controller evidence
   across independently changing plant contracts, with a required direct
-  composed-witness baseline before any novelty claim.
+  composed-witness baseline before any novelty claim. Predeclare that baseline
+  against the FM 2026 construction, including four changing-plant fixtures,
+  exact incremental-rebuild accounting, independent Certifaiger validation,
+  hostile controls, and explicit falsification criteria. Record that no public
+  `aigmerge` implementation was present in the inspected upstream branches, so
+  ordinary per-property Certifaiger checking cannot stand in for composition.
 
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product

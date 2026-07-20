@@ -79,6 +79,8 @@ The audit inspected the public [Certifaiger repository](https://github.com/Frole
 maintained witness checker and its CaDiCaL plus formally verified `lrat_isa`
 path already pinned by GCC's equivalent-evidence harness. The inspected tree
 does not contain the FM 2026 `aigmerge` implementation named by the paper.
+The paper itself states that `aigmerge` may eventually be added to the AIGER
+utilities, rather than identifying a released revision.
 Therefore a direct composed-witness baseline cannot honestly be represented by
 ordinary Certifaiger checking alone. The next cycle must either obtain the
 authors' released implementation at an immutable revision or implement and

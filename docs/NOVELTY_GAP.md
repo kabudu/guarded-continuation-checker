@@ -80,9 +80,10 @@ The revised candidate question is whether exact controller evidence can remain
 reusable across separately supplied and changing plant contracts while a
 bounded low-memory checker proves quotient completeness, wiring, and both
 answer classes without rebuilding a whole-circuit inductive witness. This must
-be compared directly with the FM 2026 composed-witness construction. Until that
-comparison demonstrates a distinct semantic capability or measured property,
-it is a research direction rather than a candidate contribution.
+be compared directly with the FM 2026 composed-witness construction under the
+[predeclared baseline](COMPOSED_WITNESS_BASELINE_V1.md). Until that comparison
+demonstrates a distinct semantic capability or measured property, it is a
+research direction rather than a candidate contribution.
 
 Gate 1 is represented by the frozen
 [`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md), with working
@@ -360,10 +361,12 @@ checkable evidence, but those properties do not overcome established
 proof-carrying-hardware prior art. Hosted Linux reproduces the negative runtime
 result.
 
-The next predeclared experiment compares GCC evidence with the
+The completed equivalent-evidence experiment compares GCC evidence with the
 competition-standard Certifaiger and `aigsim` path at equivalent bounded scope.
-The [comparison plan](CERTIFAIGER_EQUIVALENT_EVIDENCE_PLAN.md) explicitly allows
-the portable-batch distinction to be falsified.
+Its negative runtime, size, and packaging result falsifies the broad
+portable-batch advantage for this corpus. The next gate is the closer FM 2026
+multi-property composed-witness baseline, which explicitly allows the narrower
+controller-reuse hypothesis to be falsified.
 
 Controller/plant resource envelope v1 converts the narrow low-memory result
 into an explicit conservative consumer policy boundary. Static work estimates,
