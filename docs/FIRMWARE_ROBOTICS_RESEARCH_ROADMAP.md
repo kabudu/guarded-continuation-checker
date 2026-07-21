@@ -103,7 +103,8 @@ close either register by itself.
    environment constraints, admissible terminal valuations, and assumption
    dead ends without changing retained v1 through v3 evidence. A constrained
    public PLIC workflow agrees with maintained Yosys plus Z3 through horizon
-   16. Hosted reproduction and release compatibility remain open.
+   16. Hosted amd64 run 29872388711 reproduces the pinned model, retained
+   evidence, maintained-tool baseline, Linux suite, and downstream API matrix.
    The next predeclared fallback boundary is
    [bounded search v5](BTOR2_BOUNDED_SEARCH_V5_PLAN.md), which must preserve
    small word-valued register and sensor inputs without flattening away source

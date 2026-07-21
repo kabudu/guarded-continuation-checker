@@ -1,7 +1,7 @@
 # BTOR2 bounded search certificate v4
 
-Status: experimental implementation with local public-design validation. Hosted
-reproduction remains open.
+Status: experimental implementation with local and hosted public-design
+validation.
 
 ## Capability gap
 
@@ -93,3 +93,11 @@ plus Z3 independently checks the same assumptions and assertions through step
 16. The retained v1, Caliptra v2, and PLIC v3 result files remain byte-identical.
 The public result is recorded in
 [`roalogic-plic-gateway-constrained-acceptance-v1.csv`](../results/roalogic-plic-gateway-constrained-acceptance-v1.csv).
+
+[Hosted amd64 run
+29872388711](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29872388711)
+reproduces the constrained PLIC model and evidence using the pinned Yosys
+source build, checks both properties with maintained Yosys plus Z3, preserves
+the retained v1 through v3 evidence, and passes the complete Linux and
+downstream API suites. This closes the predeclared v4 gates. It does not change
+the explicit non-novelty claim or make the wider platform production-ready.

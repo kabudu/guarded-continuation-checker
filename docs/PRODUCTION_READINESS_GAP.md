@@ -73,8 +73,10 @@ reachability and its SAFE
   Constraint-aware bounded search v4 now preserves the environment assumptions
   needed for legal reset, bus, interrupt, and actuator traces. Its local public
   PLIC workflow, independent oracle, hostile controls, maintained Yosys plus Z3
-  agreement, and retained v1 through v3 compatibility pass. Hosted and release
-  compatibility gates remain open, so no readiness status changes yet.
+  agreement, and retained v1 through v3 compatibility pass. Hosted amd64 run
+  29872388711 reproduces the pinned model, evidence, maintained-tool baseline,
+  Linux suite, and downstream API matrix. This closes the v4 experiment gates,
+  but does not close wider release compatibility or product-validity rows.
   Word-input bounded search v5 is predeclared because v4 still refuses small
   register fields, bus values, and sensor samples. No readiness row changes
   until its width binding, exact fallback, public Caliptra workflow, retained
