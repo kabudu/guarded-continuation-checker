@@ -66,6 +66,8 @@ jobs:
         run: cargo clippy --all-targets
       - name: Test
         run: cargo test --locked
+      - name: Package and install exact crate payload
+        run: scripts/test-crate-package-v1.sh
       - name: Reproduce composed-witness model exports
         run: scripts/test-composed-witness-model-exports-v1.sh
       - name: Check BTOR2 baseline scripts
