@@ -37,6 +37,9 @@ const BOUNDED_ANSWER_MAGIC: &[u8; 8] = b"GCCBA001";
 const DIRECT_ANSWER_MAGIC: &[u8; 8] = b"GCCDA001";
 pub const BOUNDED_ANSWER_CERTIFICATE_VERSION: u32 = 1;
 pub const DIRECT_ANSWER_CERTIFICATE_VERSION: u32 = 1;
+pub const REVISION_PORTFOLIO_CERTIFICATE_VERSION: u32 = 1;
+pub const MAX_REVISION_PORTFOLIO_BYTES: usize = MAX_REVISION_LOCAL_CERTIFICATE_BYTES + 1024;
+const REVISION_PORTFOLIO_MAGIC: &[u8; 8] = b"GCCRPF01";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EvidenceSection {
@@ -2725,6 +2728,154 @@ pub fn verify_revision_portfolio(
     }
 }
 
+fn selection_reason_code(reason: RevisionSelectionReason) -> u8 {
+    match reason {
+        RevisionSelectionReason::ExactLocalRelationAdmitted => 0,
+        RevisionSelectionReason::LeftStateWidth => 1,
+        RevisionSelectionReason::LeftInputWidth => 2,
+        RevisionSelectionReason::LeftOutputWidth => 3,
+        RevisionSelectionReason::LeftNodeSteps => 4,
+        RevisionSelectionReason::RightStateWidth => 5,
+        RevisionSelectionReason::RightInputWidth => 6,
+        RevisionSelectionReason::RightOutputWidth => 7,
+        RevisionSelectionReason::RightNodeSteps => 8,
+        RevisionSelectionReason::PairCheckBound => 9,
+    }
+}
+
+fn decode_selection_reason(code: u8) -> Result<RevisionSelectionReason, RevisionLocalError> {
+    match code {
+        0 => Ok(RevisionSelectionReason::ExactLocalRelationAdmitted),
+        1 => Ok(RevisionSelectionReason::LeftStateWidth),
+        2 => Ok(RevisionSelectionReason::LeftInputWidth),
+        3 => Ok(RevisionSelectionReason::LeftOutputWidth),
+        4 => Ok(RevisionSelectionReason::LeftNodeSteps),
+        5 => Ok(RevisionSelectionReason::RightStateWidth),
+        6 => Ok(RevisionSelectionReason::RightInputWidth),
+        7 => Ok(RevisionSelectionReason::RightOutputWidth),
+        8 => Ok(RevisionSelectionReason::RightNodeSteps),
+        9 => Ok(RevisionSelectionReason::PairCheckBound),
+        _ => Err(reject(
+            EvidenceSection::Envelope,
+            "invalid portfolio selection reason",
+        )),
+    }
+}
+
+pub fn encode_revision_portfolio(
+    production: &RevisionPortfolioProduction,
+) -> Result<Vec<u8>, RevisionLocalError> {
+    let (backend, payload) = match &production.certificate {
+        RevisionPortfolioCertificate::RevisionLocal(certificate) => (
+            RevisionPortfolioBackend::RevisionLocal,
+            encode_revision_local_certificate(certificate)?,
+        ),
+        RevisionPortfolioCertificate::DirectExact(certificate) => (
+            RevisionPortfolioBackend::DirectExact,
+            encode_direct_answer_certificate(certificate)?,
+        ),
+    };
+    if production.backend != backend {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio backend does not match certificate variant",
+        ));
+    }
+    let mut output = Vec::new();
+    output.extend_from_slice(REVISION_PORTFOLIO_MAGIC);
+    output.extend_from_slice(&REVISION_PORTFOLIO_CERTIFICATE_VERSION.to_be_bytes());
+    output.push(match backend {
+        RevisionPortfolioBackend::RevisionLocal => 0,
+        RevisionPortfolioBackend::DirectExact => 1,
+    });
+    output.push(selection_reason_code(production.reason));
+    append_u32(&mut output, payload.len(), EvidenceSection::Envelope)?;
+    output.extend_from_slice(&payload);
+    if output.len() > MAX_REVISION_PORTFOLIO_BYTES {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio certificate exceeds byte limit",
+        ));
+    }
+    Ok(output)
+}
+
+pub fn decode_revision_portfolio(
+    bytes: &[u8],
+) -> Result<RevisionPortfolioProduction, RevisionLocalError> {
+    if bytes.len() > MAX_REVISION_PORTFOLIO_BYTES {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio certificate exceeds byte limit",
+        ));
+    }
+    let mut decoder = Decoder { bytes, offset: 0 };
+    if decoder.take(REVISION_PORTFOLIO_MAGIC.len(), EvidenceSection::Envelope)?
+        != REVISION_PORTFOLIO_MAGIC
+    {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "invalid portfolio certificate magic",
+        ));
+    }
+    if decoder.u32(EvidenceSection::Envelope)? != REVISION_PORTFOLIO_CERTIFICATE_VERSION {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "unsupported portfolio certificate version",
+        ));
+    }
+    let backend = match decoder.byte(EvidenceSection::Envelope)? {
+        0 => RevisionPortfolioBackend::RevisionLocal,
+        1 => RevisionPortfolioBackend::DirectExact,
+        _ => {
+            return Err(reject(
+                EvidenceSection::Envelope,
+                "invalid portfolio backend",
+            ));
+        }
+    };
+    let reason = decode_selection_reason(decoder.byte(EvidenceSection::Envelope)?)?;
+    let payload_length =
+        usize::try_from(decoder.u32(EvidenceSection::Envelope)?).expect("u32 fits usize");
+    let maximum_payload = match backend {
+        RevisionPortfolioBackend::RevisionLocal => MAX_REVISION_LOCAL_CERTIFICATE_BYTES,
+        RevisionPortfolioBackend::DirectExact => MAX_FINAL_SECTION_BYTES,
+    };
+    if payload_length > maximum_payload {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio payload exceeds backend limit",
+        ));
+    }
+    let payload = decoder.take(payload_length, EvidenceSection::Envelope)?;
+    if decoder.offset != bytes.len() {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio certificate has trailing bytes",
+        ));
+    }
+    let certificate = match backend {
+        RevisionPortfolioBackend::RevisionLocal => {
+            RevisionPortfolioCertificate::RevisionLocal(decode_revision_local_certificate(payload)?)
+        }
+        RevisionPortfolioBackend::DirectExact => {
+            RevisionPortfolioCertificate::DirectExact(decode_direct_answer_certificate(payload)?)
+        }
+    };
+    let production = RevisionPortfolioProduction {
+        certificate,
+        backend,
+        reason,
+    };
+    if encode_revision_portfolio(&production)? != bytes {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio certificate is not canonical",
+        ));
+    }
+    Ok(production)
+}
+
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
     !ids.is_empty()
         && ids.len() <= maximum
@@ -3871,6 +4022,9 @@ mod tests {
             .result,
             BoundedResult::Unsafe
         );
+        let local_bytes = encode_revision_portfolio(&local).unwrap();
+        let local_decoded = decode_revision_portfolio(&local_bytes).unwrap();
+        assert_eq!(local_decoded, local);
 
         let wide_interface = encode_word_interface_contract(&WordInterfaceContract {
             wires: vec![InterfaceWire {
@@ -3902,6 +4056,12 @@ mod tests {
         .unwrap();
         assert_eq!(summary.result, BoundedResult::Unsafe);
         assert_eq!(summary.bad_frame, Some(1));
+        let fallback_bytes = encode_revision_portfolio(&fallback).unwrap();
+        let fallback_decoded = decode_revision_portfolio(&fallback_bytes).unwrap();
+        assert_eq!(fallback_decoded, fallback);
+        for length in 0..fallback_bytes.len() {
+            assert!(decode_revision_portfolio(&fallback_bytes[..length]).is_err());
+        }
     }
 
     #[test]

@@ -73,8 +73,12 @@ revision-local envelope; every static rejection routes the unchanged sources,
 interface, and query to direct exact evidence. Verification recomputes the
 reason and rejects forced fallback, forced specialisation, or a mismatched
 certificate backend. Invalid wiring remains a semantic error and is never
-masked by fallback. A canonical top-level portfolio codec and CLI integration
-remain incomplete.
+masked by fallback. The top-level portfolio now has a canonical versioned
+binary codec that binds backend, stable selection reason, payload
+length, and the nested revision-local or direct certificate. Decoding applies
+the selected backend's byte cap before copying or parsing the payload, rejects
+every truncation, and round-trips through the public API. CLI integration
+remains incomplete.
 
 ## Hypothesis
 

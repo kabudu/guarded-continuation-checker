@@ -3,15 +3,15 @@ use guarded_continuation_checker::revision_local::{
     LocalEvidence, RevisionLocalCertificate, RevisionPortfolioBackend, RevisionSelectionReason,
     WordInterfaceContract, compose_verified_local_relations, decode_bounded_answer_certificate,
     decode_direct_answer_certificate, decode_local_relation_certificate,
-    decode_revision_local_certificate, decode_word_interface_contract,
+    decode_revision_local_certificate, decode_revision_portfolio, decode_word_interface_contract,
     encode_bounded_answer_certificate, encode_direct_answer_certificate,
     encode_local_relation_certificate, encode_revision_local_certificate,
-    encode_word_interface_contract, produce_bounded_answer, produce_direct_answer,
-    produce_local_relation, produce_revision_local_certificate, produce_revision_portfolio,
-    source_digest, unchanged_local_evidence, validate_local_artifact, verify_bounded_answer,
-    verify_direct_answer, verify_local_relation, verify_local_relation_for_composition,
-    verify_revision_local_certificate, verify_revision_portfolio,
-    verify_revision_with_retained_left, verify_source_bindings,
+    encode_revision_portfolio, encode_word_interface_contract, produce_bounded_answer,
+    produce_direct_answer, produce_local_relation, produce_revision_local_certificate,
+    produce_revision_portfolio, source_digest, unchanged_local_evidence, validate_local_artifact,
+    verify_bounded_answer, verify_direct_answer, verify_local_relation,
+    verify_local_relation_for_composition, verify_revision_local_certificate,
+    verify_revision_portfolio, verify_revision_with_retained_left, verify_source_bindings,
 };
 
 #[test]
@@ -243,6 +243,8 @@ fn downstream_client_gets_exact_fallback_beyond_local_state_bounds() {
     .unwrap();
     assert_eq!(portfolio.backend, RevisionPortfolioBackend::DirectExact);
     assert_eq!(portfolio.reason, RevisionSelectionReason::LeftStateWidth);
+    let portfolio_bytes = encode_revision_portfolio(&portfolio).unwrap();
+    let portfolio = decode_revision_portfolio(&portfolio_bytes).unwrap();
     let summary = verify_revision_portfolio(
         wide_left,
         &[4],
