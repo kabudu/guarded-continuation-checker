@@ -24,10 +24,17 @@ fi
 
 produce_one() {
   local directory=$1 property=$2 expected=$3
-  /tools/ric3 check "/models/h${horizon}-${property}.aag" \
-    --cert "$directory/h${horizon}-${property}.evidence.aag" --ui false ic3 \
-    >"$directory/h${horizon}-${property}.producer.log" 2>&1
+  /repo/scripts/ric3-static-evidence-producer-v1.sh \
+    "/models/h${horizon}-${property}.aag" \
+    "$directory/h${horizon}-${property}.evidence.aag" \
+    "$directory/h${horizon}-${property}.producer.log" \
+    "$directory/h${horizon}-${property}.engine"
   grep -qx "$expected" "$directory/h${horizon}-${property}.producer.log"
+  if [[ "$expected" == SAT ]]; then
+    grep -qx bmc "$directory/h${horizon}-${property}.engine"
+  else
+    grep -qx ic3 "$directory/h${horizon}-${property}.engine"
+  fi
 }
 
 case "$mode" in

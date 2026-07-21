@@ -13,7 +13,10 @@ This experiment translates the same pinned dual-timer wrapper into bounded
 AIGER models for horizons 4, 5, 7, and 9. It keeps wake, bark, and bite as
 separately checkable properties, preserves the timer counts and bound counter
 as common observable state, and compares all twelve answers with pinned rIC3,
-Certifaiger 10.2.0 plus `lrat_isa`, and `aigsim`. SAFE witness circuits are
+Certifaiger 10.2.0 plus `lrat_isa`, and `aigsim`. The static producer contract
+starts IC3 and depth-ordered BMC together for every property. It accepts IC3
+only for a SAFE certificate and accepts an UNSAFE trace only from BMC. SAFE
+witness circuits are
 composed for the three-property horizon-4 set and the two-property horizon-5
 set using the repository's reviewed FM 2026 Theorem 1 baseline.
 
@@ -37,7 +40,7 @@ All twelve external answers agree with GCC:
 
 Certifaiger accepts all six SAFE certificates with every generated SAT proof
 checked by `lrat_isa`. `aigsim` replays all six UNSAFE traces, and each trace
-has exactly the expected number of frame valuations. Two clean rIC3 runs
+has exactly the expected number of frame valuations. Two clean producer runs
 produce byte-identical evidence for every row. Two clean Yosys builds produce
 byte-identical AIGER models and witness maps.
 
@@ -78,6 +81,15 @@ truncated SAFE evidence, a SAFE witness bound to the wrong horizon, a composed
 witness bound to the wrong shared model, a truncated UNSAFE trace, and a trace
 replayed against a SAFE horizon.
 
+The engine race is static and answer-independent, not per-formula calibration.
+Both engines start before the answer is known. An IC3 UNSAT result is accepted
+immediately; an IC3 SAT result remains provisional while BMC explores depths in
+order. Only BMC SAT may produce the final UNSAFE trace. The harness rejects any
+trace whose terminated valuation count differs from the independently frozen
+earliest frame. The hosted Linux run caught this distinction when IC3 produced
+a valid horizon-9 bark trace ending at frame 9 although the first bad frame is
+5.
+
 ## Conclusion and remaining gates
 
 The identical-scope result removes external-answer disagreement as an
@@ -101,8 +113,9 @@ The repeated workload prevents a short GCC invocation from finishing between
 memory samples.
 
 For GCC, production creates one complete predicate-set artifact and consumption
-verifies it from the BTOR2 source. For the external route, production runs rIC3
-for all three properties and composes the SAFE members; consumption checks the
+verifies it from the BTOR2 source. For the external route, production runs the
+same static IC3/BMC race for every property, accepts IC3 SAFE certificates and
+BMC UNSAFE traces, then composes the SAFE members; consumption checks the
 composition with Certifaiger plus `lrat_isa` and replays any UNSAFE trace with
 `aigsim`. Evidence bytes therefore include the composed SAFE witness and every
 required UNSAFE trace. Model bytes, producer and consumer executable footprints,

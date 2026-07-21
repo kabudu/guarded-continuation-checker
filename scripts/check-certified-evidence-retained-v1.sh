@@ -53,9 +53,11 @@ cmp -s "$arm_hostile" "$amd_hostile"
 
 awk -F, '
   NR == 1 { next }
-  NF != 11 || $9 != "true" || $10 != "true" || $11 != "validated" { exit 1 }
+  NF != 12 || $10 != "true" || $11 != "true" || $12 != "validated" { exit 1 }
   $4 == "SAFE" && ($5 != "UNSAT" || $6 != "none") { exit 1 }
   $4 == "UNSAFE" && ($5 != "SAT" || $6 !~ /^(5|7|9)$/) { exit 1 }
+  $4 == "SAFE" && $7 != "ic3" { exit 1 }
+  $4 == "UNSAFE" && $7 != "bmc" { exit 1 }
   { key = $2 ":" $3; if (!(key in seen)) count++; seen[key]++; answers[key] = $4 ":" $6 }
   END {
     if (NR != 13 || count != 12) exit 1
@@ -68,6 +70,9 @@ awk -F, '
 [[ $(sed -n 's/^answer_count=//p' "$opentitan_manifest") == 12 ]]
 [[ $(sed -n 's/^safe_certificate_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^unsafe_trace_count=//p' "$opentitan_manifest") == 6 ]]
+[[ $(sed -n 's/^safe_producer_engine=//p' "$opentitan_manifest") == ric3-ic3 ]]
+[[ $(sed -n 's/^unsafe_producer_engine=//p' "$opentitan_manifest") == ric3-bmc ]]
+[[ $(sed -n 's/^unsafe_trace_contract=//p' "$opentitan_manifest") == earliest-bad-frame ]]
 [[ $(sed -n 's/^composed_safe_set_count=//p' "$opentitan_manifest") == 2 ]]
 [[ $(sed -n 's/^hostile_control_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_manifest") == validated ]]

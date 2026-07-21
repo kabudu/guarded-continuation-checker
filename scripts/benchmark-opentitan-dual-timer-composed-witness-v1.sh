@@ -94,13 +94,23 @@ expected_frame() {
   esac
 }
 
+trace_value_count() {
+  awk '
+    NR < 4 { next }
+    $0 == "." { terminated = 1; print count + 0; exit }
+    $0 !~ /^[01x]+$/ { exit 2 }
+    { count++ }
+    END { if (!terminated) exit 2 }
+  ' "$1"
+}
+
 produce() {
-  local model=$1 destination=$2 log=$3
+  local model=$1 destination=$2 log=$3 engine_file=$4
   docker run --rm --network none \
     -v "$ric3_output:/tools:ro" -v "$models:/models:ro" \
-    -v "$evidence:/out" "$ric3_image" \
-    /tools/ric3 check "/models/$model" --cert "/out/$destination" \
-    --ui false ic3 >"$evidence/$log" 2>&1
+    -v "$evidence:/out" -v "$repository:/repo:ro" "$ric3_image" \
+    /repo/scripts/ric3-static-evidence-producer-v1.sh \
+    "/models/$model" "/out/$destination" "/out/$log" "/out/$engine_file"
 }
 
 verify_safe() {
@@ -148,7 +158,7 @@ reject_unsafe() {
 }
 
 printf '%s\n' \
-  'schema_version,horizon,property,expected_answer,external_answer,earliest_bad_frame,model_bytes,evidence_bytes,deterministic,independently_verified,status' \
+  'schema_version,horizon,property,expected_answer,external_answer,earliest_bad_frame,producer_engine,model_bytes,evidence_bytes,deterministic,independently_verified,status' \
   >"$scratch/result.csv"
 
 for horizon in 4 5 7 9; do
@@ -156,27 +166,37 @@ for horizon in 4 5 7 9; do
     model=h${horizon}-${property}.aag
     first=h${horizon}-${property}.evidence.aag
     second=h${horizon}-${property}.second.aag
-    produce "$model" "$first" "h${horizon}-${property}.producer.log"
-    produce "$model" "$second" "h${horizon}-${property}.second.log"
+    expected=$(expected_answer "$horizon" "$property")
+    produce "$model" "$first" "h${horizon}-${property}.producer.log" \
+      "h${horizon}-${property}.engine"
+    produce "$model" "$second" "h${horizon}-${property}.second.log" \
+      "h${horizon}-${property}.second.engine"
     cmp "$evidence/$first" "$evidence/$second"
+    cmp "$evidence/h${horizon}-${property}.engine" \
+      "$evidence/h${horizon}-${property}.second.engine"
+    engine=$(<"$evidence/h${horizon}-${property}.engine")
     actual=$(grep -E '^(SAT|UNSAT)$' \
       "$evidence/h${horizon}-${property}.producer.log" | tail -1)
-    expected=$(expected_answer "$horizon" "$property")
     frame=none
     if [[ "$expected" == SAFE ]]; then
+      [[ "$engine" == ic3 ]]
       [[ "$actual" == UNSAT ]]
       verify_safe "$model" "$first" "h${horizon}-${property}.consumer.log"
     else
+      [[ "$engine" == bmc ]]
       [[ "$actual" == SAT ]]
       frame=$(expected_frame "$property")
-      trace_values=$(awk 'NR >= 4 && $0 != "." { count++ } END { print count + 0 }' \
-        "$evidence/$first")
-      [[ "$trace_values" -eq $((frame + 1)) ]]
+      trace_values=$(trace_value_count "$evidence/$first")
+      if [[ "$trace_values" -ne $((frame + 1)) ]]; then
+        echo "UNSAFE trace frame mismatch: h${horizon}-${property} expected=$((frame + 1)) actual=$trace_values" >&2
+        sed -n '1,80p' "$evidence/$first" >&2
+        exit 1
+      fi
       verify_unsafe "$model" "$first" "h${horizon}-${property}.consumer.log"
     fi
-    printf '1,%s,%s,%s,%s,%s,%s,%s,true,true,validated\n' \
+    printf '1,%s,%s,%s,%s,%s,%s,%s,%s,true,true,validated\n' \
       "$horizon" "$property" "$expected" "$actual" "$frame" \
-      "$(wc -c <"$models/$model" | tr -d ' ')" \
+      "$engine" "$(wc -c <"$models/$model" | tr -d ' ')" \
       "$(wc -c <"$evidence/$first" | tr -d ' ')" \
       >>"$scratch/result.csv"
   done
@@ -228,6 +248,9 @@ echo "opentitan composed-witness phase=hostile-controls-rejected"
   printf 'answer_count=12\n'
   printf 'safe_certificate_count=6\n'
   printf 'unsafe_trace_count=6\n'
+  printf 'safe_producer_engine=ric3-ic3\n'
+  printf 'unsafe_producer_engine=ric3-bmc\n'
+  printf 'unsafe_trace_contract=earliest-bad-frame\n'
   printf 'composed_safe_set_count=2\n'
   printf 'hostile_control_count=6\n'
   printf 'aiger_models_sha256=%s\n' "$(sha256sum_portable "$models/SHA256SUMS")"

@@ -402,6 +402,16 @@ invocations to avoid missing short-lived memory peaks. Hosted reproduction and
 measurements, Linux policy enforcement, and independent review remain open, so
 this does not yet close a production-readiness row.
 
+The first hosted attempt exposed a producer-contract defect rather than an
+answer error: IC3 returned a replayable horizon-9 bark counterexample ending at
+frame 9, while the independently established first bad frame is 5. The
+identical-scope baseline and resource harness now start IC3 and depth-ordered
+BMC for every property, accept IC3 only for SAFE certificates, and accept BMC
+only for UNSAFE traces. The expected answer never selects the engine. The
+retained schema binds that static race, and the consumer rejects a trace whose
+terminated valuation count does not equal the expected earliest frame plus one. Hosted
+reproduction of the corrected contract remains open.
+
 ## Post-production-release deliverables
 
 - Create a visually polished, accessible SVG architecture diagram after the
