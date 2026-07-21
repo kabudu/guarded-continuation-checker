@@ -124,6 +124,16 @@ Primary starting points are the
 [Certifaiger](https://fmv.jku.at/certifaiger/), and
 [finite-state proof-certificate framework](https://arxiv.org/abs/1507.08716).
 
+The pinned OpenTitan dual-timer probe narrows the next candidate mechanism. Its
+wake-up counter is not an independent direct recurrence: a separately stored
+prescaler state is provably zero and that fact guards both wake-up increment and
+interrupt semantics. The proposed follow-up must therefore certificate one
+invariant, use it to simplify a dependent recurrence, and compose that result
+with an independent watchdog recurrence across three ordered properties. This
+is invariant chaining over a public embedded core, not evidence of novelty.
+Invariant propagation, cone decomposition, recurrence acceleration, and
+compositional model checking remain prior art and must be included in gate 5.
+
 The revised candidate question is whether exact controller evidence can remain
 reusable across separately supplied and changing plant contracts while a
 bounded low-memory checker proves quotient completeness, wiring, and both

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add the pinned OpenTitan AON dual-timer structural probe for invariant-chained
+  predicate composition. Enable wake-up and watchdog paths together, retain a
+  deterministic three-state BTOR2 model, implement standard reduction-or word
+  semantics in the strict parser, and validate wake-up, bark, and bite boundary
+  frames through the public semantic API. Make the post-reset zero-initial state
+  assumption explicit in the Yosys builder and provenance. Predeclare exact
+  multi-recurrence acceptance criteria and retain predicate-set v2's complete-
+  query refusal as the negative control. This identifies the next mechanism; it
+  does not yet implement invariant chaining or establish novelty.
 - Add an exact BTOR2 predicate-set portfolio with canonical v1 and v2
   source-bound certificates. Version 2 shares one recurrence claim across 2 to
   64 ordered SAFE and UNSAFE predicates, carries exact earliest bad frames, and

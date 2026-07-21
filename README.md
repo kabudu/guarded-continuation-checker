@@ -195,6 +195,16 @@ rules. Multi-property checking, recurrence reasoning, and certificate
 composition are established prior art; this narrow combined contract remains a
 candidate contribution.
 
+The next pinned
+[OpenTitan dual-timer experiment](docs/OPENTITAN_AON_DUAL_TIMER_EXPERIMENT_V1.md)
+extends the public target to wake-up interrupt, watchdog bark, and watchdog bite
+in one three-state model. The structural probe finds a zero-prescaler invariant
+that guards the wake-up recurrence, so the required mechanism is exact
+invariant chaining rather than simple independent-counter grouping. GCC now
+parses Yosys's standard reduction-or node and retains exact frame 5, 7, and 9
+semantic checks. Predicate-set v2 still refuses this complete query; that
+refusal is the frozen pre-implementation control.
+
 The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
 keeps controller, plant, and synchronous wiring contract as separately hashed
 sources. Its specialised checker verifies the feedback relation without

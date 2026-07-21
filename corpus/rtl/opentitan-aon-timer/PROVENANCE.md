@@ -10,9 +10,9 @@ The upstream file `upstream/aon_timer_core.sv` is an unmodified copy of:
 - licence: Apache License 2.0
 
 The repository root [LICENSE](../../../LICENSE) covers redistribution under the
-same licence. The `compat`, `wrapper.sv`, `wrapper-predicate-set.sv`, and
-`normalize-yosys.sed` files are GCC test infrastructure, not upstream OpenTitan
-files.
+same licence. The `compat`, `wrapper.sv`, `wrapper-predicate-set.sv`,
+`wrapper-dual-timer-predicate-set.sv`, and `normalize-yosys.sed` files are GCC
+test infrastructure, not upstream OpenTitan files.
 
 The source is never edited in place. The build script checks its digest, copies
 it into a private temporary directory, and applies the checked-in compatibility
@@ -36,3 +36,11 @@ sets explicit bark and bite thresholds. It does not modify the pinned core.
 Predicate-set certificate v2 changes only the proof representation: the same
 generated BTOR2 source and ordered bad-property nodes bind joint SAFE, mixed,
 and joint UNSAFE results to one independently reconstructed recurrence.
+
+The dual-timer builder uses Yosys `setundef -zero -init` after asynchronous
+reset lowering. This explicitly models verification after reset by assigning
+zero to the core prescaler state that otherwise has no BTOR2 initialiser. The
+assumption is part of the source-to-model boundary and is not applied by the
+general parser or verifier. Both wrapper-held timer counts have explicit zero
+initialisers in their source. The resulting target does not claim arbitrary
+power-on-state behaviour.

@@ -1,9 +1,41 @@
 use guarded_continuation_checker::{btor2, btor2_bounded, btor2_search};
+use std::collections::BTreeMap;
 
 const SMALL: &[u8] =
     include_bytes!("../corpus/rtl/opentitan-aon-timer/generated/watchdog-small.btor2");
 const SCALE: &[u8] =
     include_bytes!("../corpus/rtl/opentitan-aon-timer/generated/watchdog-scale.btor2");
+const DUAL_TIMER: &[u8] =
+    include_bytes!("../corpus/rtl/opentitan-aon-timer/generated/dual-timer-predicate-set.btor2");
+
+#[test]
+fn public_opentitan_dual_timer_model_preserves_three_exact_boundaries() {
+    let model = btor2::parse_bytes(DUAL_TIMER).unwrap();
+    assert_eq!(model.inputs(), &[2]);
+    assert_eq!(model.states(), &[6, 16, 23]);
+    assert_eq!(
+        model
+            .bad_properties()
+            .iter()
+            .map(|(property, _, _)| *property)
+            .collect::<Vec<_>>(),
+        vec![33, 37, 41]
+    );
+
+    let input = BTreeMap::from([(2, 0)]);
+    let mut state = model.initial_state().unwrap();
+    assert!(model.active_bad(&state, &input).unwrap().is_empty());
+    for frame in 1..=9 {
+        state = model.step(&state, &input).unwrap();
+        let active = model.active_bad(&state, &input).unwrap();
+        match frame {
+            5 | 6 => assert_eq!(active, vec![37]),
+            7 | 8 => assert_eq!(active, vec![37, 41]),
+            9 => assert_eq!(active, vec![33, 37, 41]),
+            _ => assert!(active.is_empty()),
+        }
+    }
+}
 
 #[test]
 fn public_opentitan_watchdog_path_preserves_exact_boundary_answers() {

@@ -381,6 +381,16 @@ three-platform downstream APIs, RustSec audit, the full retained workflow, and
 reproducible packaging. A frozen first-release compatibility fingerprint,
 external operator acceptance, and expert novelty review remain open.
 
+The next OpenTitan dual-timer probe expands the same pinned core from one live
+timer path to wake-up and watchdog operation together. It adds exact parser
+support for Yosys reduction-or and freezes a post-reset three-state model with
+bad frames 5, 7, and 9. The current portfolio refuses the complete query because
+the wake-up recurrence depends on a separately proved prescaler invariant. This
+is a pre-implementation control and does not close a production-readiness row.
+The follow-up must add independently checked invariant chaining, exact fallback
+or refusal, resource bounds, hostile controls, maintained baselines, and hosted
+reproduction before the broader public-core mechanism can be reassessed.
+
 ## Post-production-release deliverables
 
 - Create a visually polished, accessible SVG architecture diagram after the

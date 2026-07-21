@@ -72,6 +72,7 @@ pub enum UnaryOp {
     Inc,
     Dec,
     Neg,
+    Redor,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -240,6 +241,7 @@ impl Btor2Model {
                         UnaryOp::Inc => value.wrapping_add(1),
                         UnaryOp::Dec => value.wrapping_sub(1),
                         UnaryOp::Neg => 0u64.wrapping_sub(value),
+                        UnaryOp::Redor => u64::from(value != 0),
                     }
                 }
                 NodeKind::Binary(operator, left, right) => {
@@ -656,6 +658,22 @@ fn parse_node_kind(
             };
             NodeKind::Unary(operator, operand)
         }
+        "redor" => {
+            if width != 1 {
+                return Err(ParseError::new(
+                    line,
+                    "reduction-or result sort must be bit-vector 1",
+                ));
+            }
+            let operand = parse_u64(tokens.next().as_deref(), line, "reduction-or operand")?;
+            if !nodes.contains_key(&operand) {
+                return Err(ParseError::new(
+                    line,
+                    "unknown or non-prior reduction-or operand",
+                ));
+            }
+            NodeKind::Unary(UnaryOp::Redor, operand)
+        }
         "and" | "or" | "xor" | "add" | "sub" | "mul" => {
             let left = parse_u64(tokens.next().as_deref(), line, "left operand")?;
             let right = parse_u64(tokens.next().as_deref(), line, "right operand")?;
@@ -867,8 +885,29 @@ mod tests {
     fn rejects_unsupported_arrays_and_operations() {
         let error = parse("1 sort array 2 2\n").unwrap_err();
         assert!(error.message.contains("only bit-vector"));
-        let error = parse("1 sort bitvec 1\n2 state 1 s\n3 zero 1\n4 init 1 2 3\n5 next 1 2 3\n6 redor 1 2\n7 bad 6\n").unwrap_err();
+        let error = parse("1 sort bitvec 1\n2 state 1 s\n3 zero 1\n4 init 1 2 3\n5 next 1 2 3\n6 sll 1 2 2\n7 bad 6\n").unwrap_err();
         assert!(error.message.contains("unsupported operation"));
+    }
+
+    #[test]
+    fn reduction_or_matches_standard_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 12\n3 state 2 word\n4 zero 2\n5 init 2 3 4\n6 next 2 3 3\n7 redor 1 3 any_bit\n8 bad 7 reduced\n";
+        let model = parse(source).unwrap();
+        assert!(
+            model
+                .active_bad(&BTreeMap::from([(3, 0)]), &BTreeMap::new())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            model
+                .active_bad(&BTreeMap::from([(3, 8)]), &BTreeMap::new())
+                .unwrap(),
+            vec![8]
+        );
+        assert_eq!(model.nodes()[&7].symbol.as_deref(), Some("any_bit"));
+        assert!(parse(&source.replace("7 redor 1", "7 redor 2")).is_err());
+        assert!(parse(&source.replace("7 redor 1 3", "7 redor 1 99")).is_err());
     }
 
     #[test]
