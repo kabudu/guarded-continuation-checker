@@ -540,3 +540,9 @@ multi-input reachability is established prior art, so this is an
 interoperability and product-validity result, not novelty evidence. Its value is
 to provide an exact, fail-closed baseline against which later dense
 proof-carrying composition can be measured on a third public embedded project.
+
+The predeclared constraint-aware bounded-search v4 experiment addresses the
+next practical exact-fallback gap. Assumption-constrained reachability and
+explicit-state search are established prior art. Even a successful public
+design result is production engineering evidence only and cannot change a
+novelty gate.

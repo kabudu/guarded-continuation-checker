@@ -70,6 +70,10 @@ reachability and its SAFE
   deterministic PLIC evidence, maintained Yosys plus Z3 agreement, hostile
   controls, a node-step refusal, and retained v1/v2 compatibility pass locally.
   Hosted reproduction and release compatibility remain open.
+  Constraint-aware bounded search v4 is now predeclared because v3 still
+  refuses the environment assumptions needed for legal reset, bus, interrupt,
+  and actuator traces. No readiness status changes until its exact semantics,
+  public workflow, retained compatibility, and hosted gates pass.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,

@@ -98,6 +98,10 @@ close either register by itself.
    and terminal valuations, preserve v1/v2 bytes, and pass an independent
    generated-model oracle before it can support the
    [public PLIC experiment](ROALOGIC_PLIC_GATEWAY_EXPERIMENT_V1.md).
+   The next interoperability boundary is
+   [bounded search v4](BTOR2_BOUNDED_SEARCH_V4_PLAN.md): preserve exact BTOR2
+   environment constraints, admissible terminal valuations, and assumption
+   dead ends without changing retained v1 through v3 evidence.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
