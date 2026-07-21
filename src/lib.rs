@@ -11,6 +11,7 @@ pub mod btor2_braking;
 pub mod btor2_component;
 pub mod btor2_motion;
 pub mod btor2_phase;
+pub mod btor2_predicate_set;
 pub mod btor2_region;
 pub mod btor2_search;
 pub mod composed_witness;

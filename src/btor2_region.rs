@@ -8,6 +8,7 @@ use std::fmt;
 pub const REGION_CERTIFICATE_VERSION: u32 = 1;
 pub const MAX_REGION_HORIZON: u32 = 1_000_000_000;
 pub const MAX_REGION_CERTIFICATE_BYTES: usize = 64 * 1024;
+pub const MAX_REGION_SET_MEMBERS: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RegionFamily {
@@ -399,69 +400,111 @@ pub fn try_produce_safe(
     bad_property: NodeId,
     horizon: u32,
 ) -> Result<Option<RegionCertificate>, RegionError> {
+    try_produce_safe_set(source, &[bad_property], horizon)
+        .map(|certificates| certificates.map(|mut values| values.pop().unwrap()))
+}
+
+/// Produces source-compatible region certificates with one parse and one shape
+/// recognition pass. `Ok(None)` preserves the complete caller query for exact
+/// fallback when any member is unsupported or intersects the reachable set.
+pub fn try_produce_safe_set(
+    source: &[u8],
+    bad_properties: &[NodeId],
+    horizon: u32,
+) -> Result<Option<Vec<RegionCertificate>>, RegionError> {
     if horizon > MAX_REGION_HORIZON {
         return Err(reject("region query horizon exceeds limit"));
+    }
+    if bad_properties.is_empty() || bad_properties.len() > MAX_REGION_SET_MEMBERS {
+        return Err(reject("region property-set member count is outside limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
     let Some(shape) = recognise_shape(&model) else {
         return Ok(None);
     };
-    let Some((predicate, predicate_literal)) =
-        recognise_predicate(&model, bad_property, shape.state)
-    else {
-        return Ok(None);
-    };
     let Some(max_index) = max_index(shape, horizon) else {
         return Ok(None);
     };
-    if !predicate_is_disjoint(shape, predicate, predicate_literal, max_index) {
-        return Ok(None);
+    let source_sha256 = digest(source);
+    let mut certificates = Vec::with_capacity(bad_properties.len());
+    for bad_property in bad_properties {
+        let Some((predicate, predicate_literal)) =
+            recognise_predicate(&model, *bad_property, shape.state)
+        else {
+            return Ok(None);
+        };
+        if !predicate_is_disjoint(shape, predicate, predicate_literal, max_index) {
+            return Ok(None);
+        }
+        certificates.push(RegionCertificate {
+            source_sha256: source_sha256.clone(),
+            query_horizon: horizon,
+            bad_property: *bad_property,
+            input: shape.input,
+            state: shape.state,
+            width: shape.width,
+            family: shape.family,
+            initial: shape.initial,
+            reset: shape.reset,
+            delta: shape.delta,
+            saturation: shape.saturation,
+            predicate,
+            predicate_literal,
+            max_index,
+        });
     }
-    Ok(Some(RegionCertificate {
-        source_sha256: digest(source),
-        query_horizon: horizon,
-        bad_property,
-        input: shape.input,
-        state: shape.state,
-        width: shape.width,
-        family: shape.family,
-        initial: shape.initial,
-        reset: shape.reset,
-        delta: shape.delta,
-        saturation: shape.saturation,
-        predicate,
-        predicate_literal,
-        max_index,
-    }))
+    Ok(Some(certificates))
 }
 
 pub fn verify(
     source: &[u8],
     certificate: &RegionCertificate,
 ) -> Result<RegionSummary, RegionError> {
-    if certificate.source_sha256 != digest(source) {
+    verify_set(source, std::slice::from_ref(certificate))
+}
+
+/// Independently verifies a bounded set with one source parse. Every member is
+/// checked against the source graph; shared claims are not trusted by position.
+pub fn verify_set(
+    source: &[u8],
+    certificates: &[RegionCertificate],
+) -> Result<RegionSummary, RegionError> {
+    if certificates.is_empty() || certificates.len() > MAX_REGION_SET_MEMBERS {
+        return Err(reject("region property-set member count is outside limit"));
+    }
+    let source_sha256 = digest(source);
+    let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
+    let first = &certificates[0];
+    if first.source_sha256 != source_sha256 {
         return Err(reject("region certificate source digest mismatch"));
     }
-    if certificate.query_horizon > MAX_REGION_HORIZON {
+    if first.query_horizon > MAX_REGION_HORIZON {
         return Err(reject("region certificate horizon exceeds limit"));
     }
-    let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let shape = verify_claimed_shape(&model, certificate)?;
-    verify_claimed_predicate(&model, certificate)?;
-    let expected_max = max_index(shape, certificate.query_horizon)
+    let first_shape = verify_claimed_shape(&model, first)?;
+    let expected_max = max_index(first_shape, first.query_horizon)
         .ok_or_else(|| reject("word region would wrap and is not exact"))?;
-    if certificate.max_index != expected_max {
-        return Err(reject("region certificate claims do not match the source"));
+    for certificate in certificates {
+        if certificate.source_sha256 != source_sha256
+            || certificate.query_horizon != first.query_horizon
+        {
+            return Err(reject("region certificate set binding mismatch"));
+        }
+        let shape = verify_claimed_shape(&model, certificate)?;
+        if shape != first_shape || certificate.max_index != expected_max {
+            return Err(reject("region certificate claims do not match the source"));
+        }
+        verify_claimed_predicate(&model, certificate)?;
+        if !predicate_is_disjoint(
+            shape,
+            certificate.predicate,
+            certificate.predicate_literal,
+            expected_max,
+        ) {
+            return Err(reject("word region intersects the selected bad property"));
+        }
     }
-    if !predicate_is_disjoint(
-        shape,
-        certificate.predicate,
-        certificate.predicate_literal,
-        expected_max,
-    ) {
-        return Err(reject("word region intersects the selected bad property"));
-    }
-    let layers = u64::from(certificate.query_horizon) + 1;
+    let layers = u64::from(first.query_horizon) + 1;
     let saturation_layer = expected_max + 1;
     let logical_reachable_states = if layers <= saturation_layer {
         layers
@@ -479,7 +522,7 @@ pub fn verify(
     }
     .ok_or_else(|| reject("logical reachable-state count overflowed"))?;
     Ok(RegionSummary {
-        query_horizon: certificate.query_horizon,
+        query_horizon: first.query_horizon,
         max_index: expected_max,
         logical_reachable_states,
     })

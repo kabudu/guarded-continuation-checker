@@ -66,6 +66,7 @@ jobs:
             scripts/test-btor2tools-baseline.sh \
             scripts/test-bitwuzla-phase-baseline.sh \
             scripts/run-opentitan-aon-watchdog-acceptance.sh \
+            scripts/run-opentitan-aon-predicate-set-acceptance.sh \
             scripts/run-btor2-search-cohort.sh \
             scripts/run-btor2-region-cohort.sh \
             scripts/run-btor2-motion-cohort.sh \
@@ -282,6 +283,8 @@ jobs:
           cargo test --locked --lib btor2_component
           cargo test --locked --test btor2_component_api
           cargo test --locked --test opentitan_aon_watchdog_api
+          cargo test --locked --lib btor2_predicate_set
+          cargo test --locked --test btor2_predicate_set_api
 
   public-rtl-corpus:
     runs-on: ubuntu-latest
@@ -343,6 +346,14 @@ jobs:
             /tmp/opentitan-aon-watchdog-acceptance.csv
           diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
             /tmp/opentitan-aon-watchdog-acceptance.csv
+      - name: Reproduce OpenTitan AON predicate-set acceptance
+        run: |
+          scripts/run-opentitan-aon-predicate-set-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-predicate-set-acceptance.csv
+          diff -u results/opentitan-aon-predicate-set-acceptance-v1.csv \
+            /tmp/opentitan-aon-predicate-set-acceptance.csv
       - name: Compare proof profile with maintained formal workflow
         env:
           TRIALS: 1

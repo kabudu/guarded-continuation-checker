@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Add an exact BTOR2 predicate-set portfolio with a canonical source-bound
+  certificate that shares one recurrence claim across 2 to 64 ordered SAFE
+  predicates only when encoded evidence is smaller than separate proofs.
+  Reproduce routing during independent verification, reject omitted,
+  reordered, substituted, or downgraded queries, and preserve mixed answers
+  through the existing exact per-property portfolio. Add stable Rust and
+  no-clobber CLI surfaces, bounded canonical decoding, mutation tests, and a
+  pinned OpenTitan bark-plus-bite workflow. The retained public RTL cases save
+  45.8% and 44.8% certificate bytes at small and billion-frame SAFE bounds; the
+  frame-5 mixed case deliberately records a larger integrity envelope while
+  preserving bark UNSAFE and bite SAFE. Add official BTOR2Tools parsing,
+  maintained Bitwuzla endpoints, deterministic Yosys regeneration, seven
+  hostile controls, and explicit prior-art boundaries. This is a narrow
+  candidate contribution, not an established novelty or production claim.
 - Accept standard Yosys BTOR2 observation statements and optional node symbols,
   while exposing only inputs that reach transition, constraint, or bad-property
   semantics. Admit exact Boolean identity wrappers in the independently checked

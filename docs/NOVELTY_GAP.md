@@ -84,6 +84,39 @@ not a systematic or professional patent search.
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
 
+## Shared recurrence predicate-set candidate
+
+The predicate-set certificate v1 adds a narrower candidate mechanism on the
+word-level path. It shares one exact source-bound reset-add recurrence claim
+across an ordered set of comparison predicates, admits sharing only when the
+canonical artifact is smaller than separate certificates, reconstructs every
+member through the independent verifier, and rejects a forced ordinary route.
+Mixed SAFE and UNSAFE answers remain exact per-member artifacts.
+
+This is not a claim to multi-property model checking. HWMCC introduced a
+multi-property track in 2011, the BTOR2 ecosystem supports multiple bad
+properties, and model checkers routinely share transition exploration.
+Proof-certificate frameworks, Certifaiger, and the FM 2026 composed-witness
+baseline also predate this experiment. The measured 45.8% and 44.8% reductions
+on two OpenTitan watchdog properties are consistent with removing duplicated
+headers and recurrence fields; they do not prove an asymptotic or broad
+algorithmic distinction.
+
+The exact candidate question is whether existing systems already combine all
+of these constraints in one portable contract: caller-bound ordered property
+sets, a single independently reconstructed word-level recurrence claim,
+deterministic encoded-size admission, mixed-answer exact fallback, and forced-
+downgrade rejection. Gate 5 requires a focused implementation and patent
+search for that exact combination. Gate 6 still requires external expert
+review. Until both close, the result is useful product engineering and a
+candidate contribution only.
+
+Primary starting points are the
+[HWMCC 2011 multi-property track](https://fmv.jku.at/hwmcc11/results.html),
+[BTOR2 CAV 2018 artifact](https://fmv.jku.at/cav18-btor2),
+[Certifaiger](https://fmv.jku.at/certifaiger/), and
+[finite-state proof-certificate framework](https://arxiv.org/abs/1507.08716).
+
 The revised candidate question is whether exact controller evidence can remain
 reusable across separately supplied and changing plant contracts while a
 bounded low-memory checker proves quotient completeness, wiring, and both

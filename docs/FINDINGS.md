@@ -635,6 +635,32 @@ deleting one source clause may incorrectly remove a constraint still contributed
 by another clause. The implementation now rebuilds from the root on deletion.
 Only insertion repair is claimed as local and exact.
 
+## Shared multi-predicate recurrence evidence
+
+The OpenTitan AON watchdog follow-up tests whether expansion into more observed
+properties can reduce proof duplication without hiding the answer to any
+property. Two bark and bite predicates share the same exact reset-add reachable
+region. At horizon 4, one 324-byte certificate proves both SAFE, compared with
+598 bytes for two separate region certificates. At horizon 1,000,000,000, one
+360-byte certificate replaces 652 separate bytes while representing
+500,000,001,500,000,001 logical reachable states.
+
+The important control is horizon 5. Bark becomes UNSAFE while bite remains
+SAFE. The shared route is then inapplicable and the static portfolio emits one
+explicit counterexample plus one region proof. That envelope is 1,172 bytes,
+larger than the 517-byte sum of loose member evidence because canonical hex
+embedding and query binding have a cost. This refutes any universal compression
+claim while validating exact mixed-answer preservation.
+
+The practical result is a production-shaped batching primitive for related
+firmware or RTL alarms: share structural evidence when every predicate admits
+the same exact proof, otherwise retain each answer through exact fallback.
+Multi-property model checking, shared exploration, and compositional
+certification already exist, so the result is not evidence of a broad new
+algorithm. The specific size-gated, source-bound, downgrade-detecting contract
+remains only a candidate contribution pending fuller prior-art and expert
+review.
+
 ## Appropriate interpretation
 
 This work identifies a useful specialized knowledge-compilation regime:

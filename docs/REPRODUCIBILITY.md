@@ -897,9 +897,18 @@ scripts/run-opentitan-aon-watchdog-acceptance.sh \
   /tmp/opentitan-aon-watchdog-acceptance.csv
 diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
   /tmp/opentitan-aon-watchdog-acceptance.csv
+scripts/run-opentitan-aon-predicate-set-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  /path/to/pinned/yosys \
+  /tmp/opentitan-aon-predicate-set-acceptance.csv
+diff -u results/opentitan-aon-predicate-set-acceptance-v1.csv \
+  /tmp/opentitan-aon-predicate-set-acceptance.csv
 ```
 
 The script accepts only the pinned OpenTitan source digest and Yosys revision,
-regenerates two BTOR2 files and three certificates byte for byte, independently
-verifies every answer, and runs five fail-closed controls. Exact upstream and
-wrapper boundaries are documented under `corpus/rtl/opentitan-aon-timer`.
+regenerates four BTOR2 files and six certificates byte for byte, independently
+verifies every answer, and runs the single-property plus predicate-set hostile
+controls. The predicate-set report compares shared and separate evidence for
+both SAFE scales and retains the mixed bark-UNSAFE, bite-SAFE exact fallback.
+Exact upstream and wrapper boundaries are documented under
+`corpus/rtl/opentitan-aon-timer`.

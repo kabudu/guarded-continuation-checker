@@ -1,7 +1,7 @@
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
-    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search, composed_witness, controller_mtbdd,
+    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase,
+    btor2_predicate_set, btor2_region, btor2_search, composed_witness, controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
@@ -25771,6 +25771,25 @@ fn write_new_certificate(output: &Path, encoded: &[u8]) -> Result<(), String> {
         .map_err(|error| format!("write certificate {}: {error}", output.display()))
 }
 
+fn parse_btor2_property_set(value: &str) -> Result<Vec<btor2::NodeId>, String> {
+    let properties = value
+        .split(',')
+        .map(|item| {
+            item.parse::<u64>()
+                .map_err(|_| "BAD_PROPERTIES must be comma-separated unsigned node identifiers")
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if properties.is_empty()
+        || properties.len() > btor2_predicate_set::MAX_PREDICATE_SET_MEMBERS
+        || !properties.windows(2).all(|pair| pair[0] < pair[1])
+    {
+        return Err(
+            "BAD_PROPERTIES must contain 1..=64 strictly increasing node identifiers".to_string(),
+        );
+    }
+    Ok(properties)
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
@@ -28115,6 +28134,132 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "btor2-bounded status=VERIFIED portfolio_version={} backend={backend} result={result} horizon={} bad_frame={bad_frame} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 summary.query_horizon,
+                summary.logical_reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros()
+            );
+            Ok(true)
+        }
+        "btor2-predicate-set-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-predicate-set-version".to_string(),
+                );
+            }
+            println!(
+                "btor2_predicate_set_cli_version={} certificate_version={} portfolio_version={} max_members={} max_horizon={} max_certificate_bytes={} property_order=strictly-increasing",
+                btor2_predicate_set::PREDICATE_SET_CLI_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                btor2_predicate_set::MAX_PREDICATE_SET_MEMBERS,
+                btor2_region::MAX_REGION_HORIZON,
+                btor2_predicate_set::MAX_PREDICATE_SET_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
+        "check-btor2-predicate-set" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker check-btor2-predicate-set INPUT.btor2 BAD_PROPERTIES HORIZON OUTPUT.btor2-set-cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let properties = parse_btor2_property_set(&args[2])?;
+            let horizon = args[3]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let started = Instant::now();
+            let production = btor2_predicate_set::produce(&source, &properties, horizon)
+                .map_err(|error| error.to_string())?;
+            let reason = production.selection_reason;
+            let certificate = production.certificate;
+            let encoded =
+                btor2_predicate_set::encode(&certificate).map_err(|error| error.to_string())?;
+            let summary = btor2_predicate_set::verify(&source, &properties, horizon, &certificate)
+                .map_err(|error| error.to_string())?;
+            let output = Path::new(&args[4]);
+            write_new_certificate(output, encoded.as_bytes())?;
+            let answers = summary
+                .members
+                .iter()
+                .map(|member| {
+                    let result = match member.result {
+                        btor2_search::SearchResult::Safe => "SAFE",
+                        btor2_search::SearchResult::Unsafe => "UNSAFE",
+                    };
+                    let frame = member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |value| value.to_string());
+                    format!("{}:{result}:{frame}", member.bad_property)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "btor2-predicate-set status=CREATED portfolio_version={} route={} reason={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                summary.route.as_str(),
+                reason.as_str(),
+                summary.query_horizon,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                answers,
+                summary.logical_reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                output.display()
+            );
+            Ok(true)
+        }
+        "verify-btor2-predicate-set" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker verify-btor2-predicate-set INPUT.btor2 BAD_PROPERTIES HORIZON CERTIFICATE.btor2-set-cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let properties = parse_btor2_property_set(&args[2])?;
+            let horizon = args[3]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[4]),
+                btor2_predicate_set::MAX_PREDICATE_SET_CERTIFICATE_BYTES,
+                "BTOR2 predicate-set certificate",
+            )?;
+            let certificate =
+                btor2_predicate_set::decode(&encoded).map_err(|error| error.to_string())?;
+            let started = Instant::now();
+            let summary = btor2_predicate_set::verify(&source, &properties, horizon, &certificate)
+                .map_err(|error| error.to_string())?;
+            let answers = summary
+                .members
+                .iter()
+                .map(|member| {
+                    let result = match member.result {
+                        btor2_search::SearchResult::Safe => "SAFE",
+                        btor2_search::SearchResult::Unsafe => "UNSAFE",
+                    };
+                    let frame = member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |value| value.to_string());
+                    format!("{}:{result}:{frame}", member.bad_property)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "btor2-predicate-set status=VERIFIED portfolio_version={} route={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                summary.route.as_str(),
+                summary.query_horizon,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                answers,
                 summary.logical_reachable_states,
                 encoded.len(),
                 started.elapsed().as_micros()
@@ -41123,5 +41268,58 @@ mod tests {
             verify_loaded_source_model_snapshot(&[], &snapshot).unwrap_err(),
             "source-model subject count changed after the query snapshot"
         );
+    }
+
+    #[test]
+    fn btor2_predicate_set_cli_preserves_query_binding_and_output_immutability() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("corpus/rtl/opentitan-aon-timer/generated/watchdog-predicate-set-small.btor2");
+        let certificate = std::env::temp_dir().join(format!(
+            "gcc-btor2-predicate-set-{}.cert",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&certificate);
+        assert!(run_artifact_cli(&["btor2-predicate-set-version".to_string()]).unwrap());
+        let check = vec![
+            "check-btor2-predicate-set".to_string(),
+            source.display().to_string(),
+            "18,22".to_string(),
+            "4".to_string(),
+            certificate.display().to_string(),
+        ];
+        assert!(run_artifact_cli(&check).unwrap());
+        assert!(
+            fs::read_to_string(&certificate)
+                .unwrap()
+                .starts_with("predicate_set_certificate_version=1\nroute=shared_region\n")
+        );
+        assert!(
+            run_artifact_cli(&check)
+                .unwrap_err()
+                .contains("create certificate")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-predicate-set".to_string(),
+                source.display().to_string(),
+                "18,22".to_string(),
+                "4".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-predicate-set".to_string(),
+                source.display().to_string(),
+                "18,22".to_string(),
+                "5".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap_err()
+            .contains("query binding mismatch")
+        );
+        assert!(parse_btor2_property_set("22,18").is_err());
+        fs::remove_file(certificate).unwrap();
     }
 }

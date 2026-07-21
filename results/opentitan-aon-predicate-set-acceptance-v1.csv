@@ -1,0 +1,4 @@
+schema_version,case,source_sha256,bad_properties,horizon,expected_answers,actual_answers,expected_route,actual_route,logical_reachable_states,certificate_bytes,separate_certificate_bytes,bytes_saved,certificate_verified,status
+1,shared-safe,8d88421e946bf08022c48b3c1aa85e089e295c0b1a2a4900731cecb9d3156e8a,18+22,4,"18:SAFE:none,22:SAFE:none","18:SAFE:none,22:SAFE:none",shared-region,shared-region,15,324,598,274,true,accepted
+1,mixed-exact,8d88421e946bf08022c48b3c1aa85e089e295c0b1a2a4900731cecb9d3156e8a,18+22,5,"18:UNSAFE:5,22:SAFE:none","18:UNSAFE:5,22:SAFE:none",ordinary-exact,ordinary-exact,27,1172,517,-655,true,accepted
+1,scale-shared,826979091e8f702e6bacb3f541454006f20d1f1cb1d53f8fbf1dd41a5d420bfe,18+22,1000000000,"18:SAFE:none,22:SAFE:none","18:SAFE:none,22:SAFE:none",shared-region,shared-region,500000001500000001,360,652,292,true,accepted

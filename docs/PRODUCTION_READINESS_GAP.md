@@ -365,6 +365,16 @@ Hosted run 29787171907 reproduces this complete path on exact commit `6f0c4d4`,
 including pinned Linux Yosys, maintained Bitwuzla, official BTOR2Tools, the
 three-platform Rust API matrix, dependency audit, and reproducible packaging.
 
+The predicate-set follow-up adds an additive Rust API and two self-service CLI
+commands for ordered multi-property queries. It shares one recurrence claim
+only under a deterministic encoded-size gate and otherwise preserves every
+property through exact fallback. The pinned OpenTitan bark and bite cases cover
+joint SAFE, mixed UNSAFE and SAFE, and billion-frame joint SAFE results;
+retained artifacts reproduce byte for byte and seven hostile controls fail
+closed. This closes a narrow multi-property mechanism locally. Hosted Linux
+reproduction, a frozen first-release compatibility fingerprint, external
+operator acceptance, and expert novelty review remain open.
+
 ## Post-production-release deliverables
 
 - Create a visually polished, accessible SVG architecture diagram after the

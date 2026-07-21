@@ -10,8 +10,9 @@ The upstream file `upstream/aon_timer_core.sv` is an unmodified copy of:
 - licence: Apache License 2.0
 
 The repository root [LICENSE](../../../LICENSE) covers redistribution under the
-same licence. The `compat`, `wrapper.sv`, and `normalize-yosys.sed` files are GCC
-test infrastructure, not upstream OpenTitan files.
+same licence. The `compat`, `wrapper.sv`, `wrapper-predicate-set.sv`, and
+`normalize-yosys.sed` files are GCC test infrastructure, not upstream OpenTitan
+files.
 
 The source is never edited in place. The build script checks its digest, copies
 it into a private temporary directory, and applies the checked-in compatibility
@@ -28,3 +29,7 @@ Yosys records its host compiler in the first comment line. After checking the
 executable revision and the expected header prefix, the build replaces only
 that comment with a canonical revision-bound header. No semantic BTOR2 line is
 changed.
+
+`wrapper-predicate-set.sv` changes only the test boundary. It connects the
+existing `wdog_intr_o` and `wdog_reset_req_o` signals to two assertions and
+sets explicit bark and bite thresholds. It does not modify the pinned core.

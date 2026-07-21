@@ -22,6 +22,15 @@ at frame 9 through exact explicit fallback. `watchdog-scale.btor2` uses threshol
 certificate while representing 500,000,001,500,000,001 logical reachable
 states.
 
+The separate `wrapper-predicate-set.sv` exposes both the watchdog bark and bite
+outputs as ordered bad properties over the same counter. Its small model uses
+thresholds 5 and 9. Through frame 4, a 324-byte shared recurrence certificate
+proves both SAFE versus 598 bytes separately. At frame 5, bark is UNSAFE and
+bite remains SAFE, so the static portfolio preserves both answers through exact
+fallback. Its scale model uses thresholds 2,000,000,000 and 4,000,000,000 and
+proves both SAFE through frame 1,000,000,000 with a 360-byte shared certificate
+versus 652 bytes separately.
+
 Run the self-service acceptance from the repository root:
 
 ```sh
@@ -32,13 +41,18 @@ scripts/run-opentitan-aon-watchdog-acceptance.sh \
   target/debug/guarded-continuation-checker \
   "$(command -v yosys)" \
   /tmp/opentitan-aon-watchdog.csv
+scripts/run-opentitan-aon-predicate-set-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  "$(command -v yosys)" \
+  /tmp/opentitan-aon-predicate-set.csv
 ```
 
 The build intentionally refuses a different source digest, a different Yosys
 revision, symlink output directories, and overwrites. The acceptance script
-reproduces both models and all three certificates byte for byte, independently
+reproduces all four models and all six certificates byte for byte, independently
 verifies each certificate, and runs source, recogniser, overwrite, invalid
-observation, and output-path hostile controls.
+observation, output-path, query-binding, member-integrity, and publication
+hostile controls.
 
 This is evidence for a bounded mechanism exercised on real public RTL. It is not
 a verification of the complete OpenTitan AON timer, the Earlgrey product, its
