@@ -177,3 +177,55 @@ substantial evidence sharing is already available through the established
 route. Differences in bounded instrumentation, source binding, checker
 footprint, setup cost, and answer class remain visible. Predicate-set v3 is an
 engineering capability, not a supported novelty result.
+
+## Word-level component-reuse reassessment
+
+Date: 2026-07-21
+
+The word-input search v5 result prompted a stricter question: can GCC claim a
+new method by combining word-level component relations, constraints, source
+separation, and independently checked certificates? The current evidence says
+no. Each broad ingredient, and several important combinations, already has a
+close predecessor:
+
+- [Btor2, BtorMC and Boolector 3.0](https://fmv.jku.at/papers/NiemetzPreinerWolfBiere-CAV18.pdf)
+  establishes word-level transition systems, constraints, witnesses, and
+  hardware model-checking workflows.
+- [Btor2-Cert](https://link.springer.com/chapter/10.1007/978-3-031-57256-2_7)
+  transports word-level invariants and validates both correctness and violation
+  evidence against BTOR2 models.
+- [Towards Compositional Hardware Model Checking Certification](https://froleyks.de/assets/pdf/Yu%20et%20al.%20-%202023%20-%20Towards%20compositional%20hardware%20model%20checking%20certification.pdf)
+  composes independently checkable witness circuits produced by temporally
+  decomposed verification tasks.
+- [Certifying Constraints in Hardware Model Checking](https://cca.informatik.uni-freiburg.de/papers/FroleyksYuBiereHeljanko-FM26.pdf)
+  certifies extracted constraints and composes multiple property witnesses
+  while sharing common checking obligations.
+- [Proof-Carrying Hardware via IC3](https://arxiv.org/abs/1410.4507) establishes
+  independently validated hardware safety proofs generated from IC3 results.
+- [C2Btor](https://arxiv.org/abs/2607.17622) further reduces any claim boundary
+  based merely on supplying firmware-like C through a word-level BTOR2 model.
+
+The repository already implements source-separated BTOR2 controller, plant,
+and wiring inputs, exact both-answer fallback, reusable controller obligations,
+and independent certificate checking. Repackaging those capabilities as
+"word-level component composition" would duplicate existing GCC work and
+would not establish novelty.
+
+The remaining candidate is narrower and remains unproven:
+
+> Can a canonical component-local certificate remain byte-identical and
+> independently valid when a different component is revised, while a separate
+> interface certificate proves word-level assumption and guarantee
+> compatibility, retains exact constrained SAFE and UNSAFE answers, and reports
+> the smallest source or boundary set that invalidates reuse?
+
+This is a revision-local proof-reuse and invalidation hypothesis, not a broad
+composition claim. Proof caching, incremental verification,
+assume-guarantee reasoning, unsatisfiable cores, and blame attribution are each
+established. A candidate contribution can survive only if the combined
+certificate invariant provides a measured capability absent from the closest
+maintained systems. The next experiment must therefore include revision pairs,
+stale-proof and hidden-coupling controls, an ordinary full-rebuild baseline,
+and a faithful composed-witness baseline. If unchanged evidence cannot be
+reused without weakening completeness or if the baseline supplies the same
+property, the hypothesis is falsified.
