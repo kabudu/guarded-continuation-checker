@@ -5,9 +5,10 @@ use guarded_continuation_checker::revision_local::{
     decode_local_relation_certificate, decode_revision_local_certificate,
     decode_word_interface_contract, encode_bounded_answer_certificate,
     encode_local_relation_certificate, encode_revision_local_certificate,
-    encode_word_interface_contract, produce_bounded_answer, produce_local_relation, source_digest,
-    unchanged_local_evidence, verify_bounded_answer, verify_local_relation,
-    verify_local_relation_for_composition, verify_source_bindings,
+    encode_word_interface_contract, produce_bounded_answer, produce_local_relation,
+    produce_revision_local_certificate, source_digest, unchanged_local_evidence,
+    verify_bounded_answer, verify_local_relation, verify_local_relation_for_composition,
+    verify_revision_local_certificate, verify_source_bindings,
 };
 
 #[test]
@@ -113,4 +114,44 @@ fn downstream_client_can_verify_both_composed_bounded_answers() {
         assert_eq!(summary.result, expected);
         assert_eq!(summary.bad_frame, bad_frame);
     }
+}
+
+#[test]
+fn downstream_client_can_exchange_a_complete_revision_local_envelope() {
+    let left_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    let right_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    let interface = encode_word_interface_contract(&WordInterfaceContract {
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        }],
+    })
+    .unwrap();
+    let query = BoundedQuery {
+        horizon: 1,
+        bad_side: ComponentSide::Right,
+        bad_output: 10,
+    };
+    let (produced, _) = produce_revision_local_certificate(
+        left_source,
+        &[7],
+        right_source,
+        &[7, 10],
+        interface.as_bytes(),
+        &query,
+    )
+    .unwrap();
+    let bytes = encode_revision_local_certificate(&produced).unwrap();
+    let decoded = decode_revision_local_certificate(&bytes).unwrap();
+    let summary = verify_revision_local_certificate(
+        left_source,
+        right_source,
+        interface.as_bytes(),
+        &decoded,
+    )
+    .unwrap();
+    assert_eq!(summary.answer.result, BoundedResult::Unsafe);
+    assert_eq!(summary.answer.bad_frame, Some(1));
+    assert_eq!(summary.certificate_bytes, bytes.len());
 }

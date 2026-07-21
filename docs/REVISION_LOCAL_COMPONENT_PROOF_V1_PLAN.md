@@ -36,6 +36,14 @@ truncation, source and interface drift, and witness mutation have local tests.
 Exact portfolio fallback, revision-work observations, public revision evidence,
 maintained controls, and cross-platform replication remain incomplete.
 
+The four-section envelope is now end-to-end executable through the public Rust
+API. Production embeds canonical left and right local relations, the exact
+interface source, and final answer evidence. Verification checks all three
+source digests, requires the embedded interface to equal the supplied contract,
+decodes and semantically verifies both local relations, rebuilds composition,
+and independently checks the final answer. SAFE and UNSAFE queries retain
+byte-identical component and interface sections when only the query changes.
+
 ## Hypothesis
 
 For two source-separated constrained BTOR2 components connected through a

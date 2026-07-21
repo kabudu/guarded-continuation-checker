@@ -164,6 +164,14 @@ pub struct BoundedAnswerSummary {
     pub transition_checks: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionLocalSummary {
+    pub left: LocalRelationSummary,
+    pub right: LocalRelationSummary,
+    pub answer: BoundedAnswerSummary,
+    pub certificate_bytes: usize,
+}
+
 pub struct VerifiedLocalRelation<'a> {
     certificate: &'a LocalRelationCertificate,
     summary: LocalRelationSummary,
@@ -1404,6 +1412,99 @@ pub fn decode_bounded_answer_certificate(
     Ok(certificate)
 }
 
+fn attribute(mut error: RevisionLocalError, section: EvidenceSection) -> RevisionLocalError {
+    if error.section == EvidenceSection::Envelope {
+        error.section = section;
+    }
+    error
+}
+
+pub fn produce_revision_local_certificate(
+    left_source: &[u8],
+    left_outputs: &[NodeId],
+    right_source: &[u8],
+    right_outputs: &[NodeId],
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<(RevisionLocalCertificate, RevisionLocalSummary), RevisionLocalError> {
+    let left_relation = produce_local_relation(left_source, left_outputs)
+        .map_err(|error| attribute(error, EvidenceSection::Left))?;
+    let right_relation = produce_local_relation(right_source, right_outputs)
+        .map_err(|error| attribute(error, EvidenceSection::Right))?;
+    let left =
+        verify_local_relation_for_composition(left_source, &left_relation, EvidenceSection::Left)?;
+    let right = verify_local_relation_for_composition(
+        right_source,
+        &right_relation,
+        EvidenceSection::Right,
+    )?;
+    let contract = decode_word_interface_contract(interface_source)?;
+    let (answer, answer_summary) = bounded_certificate(&left, &right, &contract, query)?;
+    let certificate = RevisionLocalCertificate {
+        left: LocalEvidence {
+            source_sha256: source_digest(left_source),
+            evidence: encode_local_relation_certificate(&left_relation)
+                .map_err(|error| attribute(error, EvidenceSection::Left))?,
+        },
+        right: LocalEvidence {
+            source_sha256: source_digest(right_source),
+            evidence: encode_local_relation_certificate(&right_relation)
+                .map_err(|error| attribute(error, EvidenceSection::Right))?,
+        },
+        interface: BoundEvidence {
+            source_sha256: source_digest(interface_source),
+            evidence: interface_source.to_vec(),
+        },
+        final_evidence: encode_bounded_answer_certificate(&answer)?,
+    };
+    let certificate_bytes = encode_revision_local_certificate(&certificate)?.len();
+    Ok((
+        certificate,
+        RevisionLocalSummary {
+            left: left.summary.clone(),
+            right: right.summary.clone(),
+            answer: answer_summary,
+            certificate_bytes,
+        },
+    ))
+}
+
+pub fn verify_revision_local_certificate(
+    left_source: &[u8],
+    right_source: &[u8],
+    interface_source: &[u8],
+    certificate: &RevisionLocalCertificate,
+) -> Result<RevisionLocalSummary, RevisionLocalError> {
+    verify_source_bindings(left_source, right_source, interface_source, certificate)?;
+    if certificate.interface.evidence != interface_source {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "embedded interface contract differs from supplied source",
+        ));
+    }
+    let left_relation = decode_local_relation_certificate(&certificate.left.evidence)
+        .map_err(|error| attribute(error, EvidenceSection::Left))?;
+    let right_relation = decode_local_relation_certificate(&certificate.right.evidence)
+        .map_err(|error| attribute(error, EvidenceSection::Right))?;
+    let left =
+        verify_local_relation_for_composition(left_source, &left_relation, EvidenceSection::Left)?;
+    let right = verify_local_relation_for_composition(
+        right_source,
+        &right_relation,
+        EvidenceSection::Right,
+    )?;
+    let contract = decode_word_interface_contract(interface_source)?;
+    let answer = decode_bounded_answer_certificate(&certificate.final_evidence)?;
+    let answer_summary = verify_bounded_answer(&left, &right, &contract, &answer)?;
+    let certificate_bytes = encode_revision_local_certificate(certificate)?.len();
+    Ok(RevisionLocalSummary {
+        left: left.summary.clone(),
+        right: right.summary.clone(),
+        answer: answer_summary,
+        certificate_bytes,
+    })
+}
+
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
     !ids.is_empty()
         && ids.len() <= maximum
@@ -2265,5 +2366,64 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.section, EvidenceSection::Final);
         assert_eq!(error.message, "UNSAFE witness pair is not enabled");
+    }
+
+    #[test]
+    fn complete_revision_local_envelope_preserves_both_answers() {
+        let interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        let mut produced = Vec::new();
+        for (horizon, expected) in [(0, BoundedResult::Safe), (1, BoundedResult::Unsafe)] {
+            let query = BoundedQuery {
+                horizon,
+                bad_side: ComponentSide::Right,
+                bad_output: 10,
+            };
+            let (certificate, summary) = produce_revision_local_certificate(
+                WORD_COMPONENT,
+                &[7],
+                FINAL_RIGHT_COMPONENT,
+                &[7, 10],
+                interface.as_bytes(),
+                &query,
+            )
+            .unwrap();
+            assert_eq!(summary.answer.result, expected);
+            let bytes = encode_revision_local_certificate(&certificate).unwrap();
+            let decoded = decode_revision_local_certificate(&bytes).unwrap();
+            assert_eq!(
+                verify_revision_local_certificate(
+                    WORD_COMPONENT,
+                    FINAL_RIGHT_COMPONENT,
+                    interface.as_bytes(),
+                    &decoded,
+                )
+                .unwrap()
+                .answer
+                .result,
+                expected
+            );
+            produced.push(certificate);
+        }
+        assert_eq!(produced[0].left, produced[1].left);
+        assert_eq!(produced[0].right, produced[1].right);
+        assert_eq!(produced[0].interface, produced[1].interface);
+
+        let mut hostile = produced.pop().unwrap();
+        hostile.left.evidence[0] ^= 1;
+        let error = verify_revision_local_certificate(
+            WORD_COMPONENT,
+            FINAL_RIGHT_COMPONENT,
+            interface.as_bytes(),
+            &hostile,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Left);
     }
 }
