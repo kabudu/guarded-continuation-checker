@@ -122,12 +122,6 @@ jobs:
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
-          scripts/run-caliptra-wdt-word-probe-v2.sh \
-            target/debug/guarded-continuation-checker \
-            "$(command -v yosys)" \
-            /tmp/caliptra-wdt-word-probe-v2.csv
-          diff -u results/caliptra-wdt-word-probe-v2.csv \
-            /tmp/caliptra-wdt-word-probe-v2.csv
       - name: Check retained certified evidence
         run: |
           shellcheck -s bash scripts/check-certified-evidence-retained-v1.sh
@@ -381,6 +375,12 @@ jobs:
             /tmp/opentitan-aon-watchdog-acceptance.csv
       - name: Reproduce Roa Logic PLIC search acceptance
         run: |
+          scripts/run-caliptra-wdt-word-probe-v2.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/caliptra-wdt-word-probe-v2.csv
+          diff -u results/caliptra-wdt-word-probe-v2.csv \
+            /tmp/caliptra-wdt-word-probe-v2.csv
           scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             /tmp/yosys-attestation/build/yosys \
