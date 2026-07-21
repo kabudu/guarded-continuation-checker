@@ -2,7 +2,7 @@
 
 use crate::btor2::{self, Btor2Model, NodeId, WordValues};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
@@ -23,9 +23,15 @@ pub const MAX_COMPOSED_PAIR_CHECKS: usize = 4_000_000;
 pub const MAX_COMPOSED_PAIRS: usize = 65_536;
 pub const WORD_INTERFACE_CONTRACT_VERSION: u32 = 1;
 pub const MAX_WORD_INTERFACE_CONTRACT_BYTES: usize = 4096;
+pub const MAX_FINAL_HORIZON: u32 = 32;
+pub const MAX_FINAL_STATES_PER_LAYER: usize = 65_536;
+pub const MAX_FINAL_TOTAL_STATES: usize = 262_144;
+pub const MAX_FINAL_TRANSITION_CHECKS: usize = 4_000_000;
 
 const MAGIC: &[u8; 8] = b"GCCRLCP1";
 const LOCAL_RELATION_MAGIC: &[u8; 8] = b"GCCLRL01";
+const BOUNDED_ANSWER_MAGIC: &[u8; 8] = b"GCCBA001";
+pub const BOUNDED_ANSWER_CERTIFICATE_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EvidenceSection {
@@ -84,6 +90,7 @@ pub struct LocalRelationSummary {
     pub output_bits: usize,
     pub candidate_valuations: usize,
     pub admissible_rows: usize,
+    pub initial_state: Vec<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -115,6 +122,46 @@ pub struct ComposedRelation {
     pub interface_sha256: [u8; 32],
     pub pairs: Vec<ComposedPair>,
     pub pair_checks: usize,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CombinedState {
+    pub left: Vec<u64>,
+    pub right: Vec<u64>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BoundedResult {
+    Safe,
+    Unsafe,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundedQuery {
+    pub horizon: u32,
+    pub bad_side: ComponentSide,
+    pub bad_output: NodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundedAnswerCertificate {
+    pub left_sha256: [u8; 32],
+    pub right_sha256: [u8; 32],
+    pub interface_sha256: [u8; 32],
+    pub query: BoundedQuery,
+    pub result: BoundedResult,
+    pub bad_frame: Option<u32>,
+    pub witness_pairs: Vec<u32>,
+    pub layers: Vec<Vec<CombinedState>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundedAnswerSummary {
+    pub result: BoundedResult,
+    pub horizon: u32,
+    pub bad_frame: Option<u32>,
+    pub reachable_states: usize,
+    pub transition_checks: usize,
 }
 
 pub struct VerifiedLocalRelation<'a> {
@@ -407,12 +454,17 @@ pub fn verify_local_relation(
     if claimed.next().is_some() {
         return Err(reject(section, "local relation has extra rows"));
     }
+    let source_initial = model
+        .initial_state()
+        .map_err(|error| reject(section, error.to_string()))?;
+    let initial_state = shape.states.iter().map(|id| source_initial[id]).collect();
     Ok(LocalRelationSummary {
         state_bits: shape.state_bits,
         input_bits: shape.input_bits,
         output_bits: shape.output_bits,
         candidate_valuations: shape.candidate_valuations,
         admissible_rows,
+        initial_state,
     })
 }
 
@@ -701,6 +753,655 @@ pub fn compose_local_relations(
     let left = verify_local_relation_for_composition(left_source, left, EvidenceSection::Left)?;
     let right = verify_local_relation_for_composition(right_source, right, EvidenceSection::Right)?;
     compose_verified_local_relations(&left, &right, contract)
+}
+
+#[derive(Clone)]
+struct IndexedTransition {
+    pair: u32,
+    next: CombinedState,
+    bad: bool,
+}
+
+fn bad_output_index(
+    relation: &LocalRelationCertificate,
+    output: NodeId,
+) -> Result<usize, RevisionLocalError> {
+    let index = relation
+        .outputs
+        .binary_search(&output)
+        .map_err(|_| reject(EvidenceSection::Final, "bad output is not projected"))?;
+    if relation.output_widths[index] != 1 {
+        return Err(reject(EvidenceSection::Final, "bad output must be one bit"));
+    }
+    Ok(index)
+}
+
+fn transition_index(
+    left: &LocalRelationCertificate,
+    right: &LocalRelationCertificate,
+    composed: &ComposedRelation,
+    query: &BoundedQuery,
+) -> Result<BTreeMap<CombinedState, Vec<IndexedTransition>>, RevisionLocalError> {
+    if query.horizon > MAX_FINAL_HORIZON {
+        return Err(reject(
+            EvidenceSection::Final,
+            "bounded answer horizon exceeds limit",
+        ));
+    }
+    let bad_index = match query.bad_side {
+        ComponentSide::Left => bad_output_index(left, query.bad_output)?,
+        ComponentSide::Right => bad_output_index(right, query.bad_output)?,
+    };
+    let mut index = BTreeMap::<CombinedState, Vec<IndexedTransition>>::new();
+    for (pair_index, pair) in composed.pairs.iter().enumerate() {
+        let left_row = left
+            .rows
+            .get(pair.left_row as usize)
+            .ok_or_else(|| reject(EvidenceSection::Final, "left row index is invalid"))?;
+        let right_row = right
+            .rows
+            .get(pair.right_row as usize)
+            .ok_or_else(|| reject(EvidenceSection::Final, "right row index is invalid"))?;
+        let current = CombinedState {
+            left: left_row.state.clone(),
+            right: right_row.state.clone(),
+        };
+        let next = CombinedState {
+            left: left_row.next_state.clone(),
+            right: right_row.next_state.clone(),
+        };
+        let bad = match query.bad_side {
+            ComponentSide::Left => left_row.output[bad_index] != 0,
+            ComponentSide::Right => right_row.output[bad_index] != 0,
+        };
+        index.entry(current).or_default().push(IndexedTransition {
+            pair: u32::try_from(pair_index).expect("bounded composed pairs fit u32"),
+            next,
+            bad,
+        });
+    }
+    Ok(index)
+}
+
+fn initial_combined_state(
+    left: &VerifiedLocalRelation<'_>,
+    right: &VerifiedLocalRelation<'_>,
+) -> CombinedState {
+    CombinedState {
+        left: left.summary.initial_state.clone(),
+        right: right.summary.initial_state.clone(),
+    }
+}
+
+fn reconstruct_witness(
+    predecessors: &[BTreeMap<CombinedState, (CombinedState, u32)>],
+    mut state: CombinedState,
+    terminal_pair: u32,
+) -> Vec<u32> {
+    let mut reversed = Vec::with_capacity(predecessors.len() + 1);
+    for layer in predecessors.iter().rev() {
+        let (previous, pair) = &layer[&state];
+        reversed.push(*pair);
+        state = previous.clone();
+    }
+    reversed.reverse();
+    reversed.push(terminal_pair);
+    reversed
+}
+
+fn bounded_certificate(
+    left: &VerifiedLocalRelation<'_>,
+    right: &VerifiedLocalRelation<'_>,
+    contract: &WordInterfaceContract,
+    query: &BoundedQuery,
+) -> Result<(BoundedAnswerCertificate, BoundedAnswerSummary), RevisionLocalError> {
+    let composed = compose_verified_local_relations(left, right, contract)?;
+    let index = transition_index(left.certificate, right.certificate, &composed, query)?;
+    let mut current = BTreeSet::from([initial_combined_state(left, right)]);
+    let mut layers = vec![current.iter().cloned().collect::<Vec<_>>()];
+    let mut predecessors = Vec::<BTreeMap<CombinedState, (CombinedState, u32)>>::new();
+    let mut reachable_states = 1usize;
+    let mut transition_checks = 0usize;
+    for frame in 0..=query.horizon {
+        let mut next = BTreeSet::new();
+        let mut next_predecessors = BTreeMap::new();
+        for state in &current {
+            for transition in index.get(state).into_iter().flatten() {
+                transition_checks = transition_checks
+                    .checked_add(1)
+                    .filter(|count| *count <= MAX_FINAL_TRANSITION_CHECKS)
+                    .ok_or_else(|| {
+                        reject(
+                            EvidenceSection::Final,
+                            "bounded answer transition checks exceed limit",
+                        )
+                    })?;
+                if transition.bad {
+                    let bad_frame = Some(frame);
+                    let certificate = BoundedAnswerCertificate {
+                        left_sha256: *left.source_sha256(),
+                        right_sha256: *right.source_sha256(),
+                        interface_sha256: composed.interface_sha256,
+                        query: query.clone(),
+                        result: BoundedResult::Unsafe,
+                        bad_frame,
+                        witness_pairs: reconstruct_witness(
+                            &predecessors,
+                            state.clone(),
+                            transition.pair,
+                        ),
+                        layers: Vec::new(),
+                    };
+                    return Ok((
+                        certificate,
+                        BoundedAnswerSummary {
+                            result: BoundedResult::Unsafe,
+                            horizon: query.horizon,
+                            bad_frame,
+                            reachable_states,
+                            transition_checks,
+                        },
+                    ));
+                }
+                if frame < query.horizon && next.insert(transition.next.clone()) {
+                    next_predecessors
+                        .insert(transition.next.clone(), (state.clone(), transition.pair));
+                }
+            }
+        }
+        if frame < query.horizon {
+            if next.len() > MAX_FINAL_STATES_PER_LAYER {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "bounded answer layer exceeds state limit",
+                ));
+            }
+            reachable_states = reachable_states
+                .checked_add(next.len())
+                .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+                .ok_or_else(|| {
+                    reject(
+                        EvidenceSection::Final,
+                        "bounded answer total states exceed limit",
+                    )
+                })?;
+            layers.push(next.iter().cloned().collect());
+            predecessors.push(next_predecessors);
+            current = next;
+        }
+    }
+    let certificate = BoundedAnswerCertificate {
+        left_sha256: *left.source_sha256(),
+        right_sha256: *right.source_sha256(),
+        interface_sha256: composed.interface_sha256,
+        query: query.clone(),
+        result: BoundedResult::Safe,
+        bad_frame: None,
+        witness_pairs: Vec::new(),
+        layers,
+    };
+    Ok((
+        certificate,
+        BoundedAnswerSummary {
+            result: BoundedResult::Safe,
+            horizon: query.horizon,
+            bad_frame: None,
+            reachable_states,
+            transition_checks,
+        },
+    ))
+}
+
+pub fn produce_bounded_answer(
+    left: &VerifiedLocalRelation<'_>,
+    right: &VerifiedLocalRelation<'_>,
+    contract: &WordInterfaceContract,
+    query: &BoundedQuery,
+) -> Result<BoundedAnswerCertificate, RevisionLocalError> {
+    bounded_certificate(left, right, contract, query).map(|(certificate, _)| certificate)
+}
+
+pub fn verify_bounded_answer(
+    left: &VerifiedLocalRelation<'_>,
+    right: &VerifiedLocalRelation<'_>,
+    contract: &WordInterfaceContract,
+    certificate: &BoundedAnswerCertificate,
+) -> Result<BoundedAnswerSummary, RevisionLocalError> {
+    if certificate.left_sha256 != *left.source_sha256() {
+        return Err(reject(
+            EvidenceSection::Left,
+            "final source binding is invalid",
+        ));
+    }
+    if certificate.right_sha256 != *right.source_sha256() {
+        return Err(reject(
+            EvidenceSection::Right,
+            "final source binding is invalid",
+        ));
+    }
+    let composed = compose_verified_local_relations(left, right, contract)?;
+    if certificate.interface_sha256 != composed.interface_sha256 {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "final interface binding is invalid",
+        ));
+    }
+    let index = transition_index(
+        left.certificate,
+        right.certificate,
+        &composed,
+        &certificate.query,
+    )?;
+    let initial = initial_combined_state(left, right);
+    let mut current = BTreeSet::from([initial.clone()]);
+    let mut reachable_states = 1usize;
+    let mut transition_checks = 0usize;
+    let advance_count = |count: &mut usize| -> Result<(), RevisionLocalError> {
+        *count = count
+            .checked_add(1)
+            .filter(|value| *value <= MAX_FINAL_TRANSITION_CHECKS)
+            .ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "bounded answer transition checks exceed limit",
+                )
+            })?;
+        Ok(())
+    };
+    match certificate.result {
+        BoundedResult::Safe => {
+            if certificate.bad_frame.is_some()
+                || !certificate.witness_pairs.is_empty()
+                || certificate.layers.len() != certificate.query.horizon as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "SAFE bounded answer shape is invalid",
+                ));
+            }
+            for frame in 0..=certificate.query.horizon {
+                let claimed = &certificate.layers[frame as usize];
+                if claimed.len() > MAX_FINAL_STATES_PER_LAYER
+                    || claimed.windows(2).any(|pair| pair[0] >= pair[1])
+                    || claimed.iter().cloned().collect::<BTreeSet<_>>() != current
+                {
+                    return Err(reject(
+                        EvidenceSection::Final,
+                        "SAFE bounded answer layer is incomplete or noncanonical",
+                    ));
+                }
+                let mut next = BTreeSet::new();
+                for state in &current {
+                    for transition in index.get(state).into_iter().flatten() {
+                        advance_count(&mut transition_checks)?;
+                        if transition.bad {
+                            return Err(reject(
+                                EvidenceSection::Final,
+                                "SAFE bounded answer contains a bad transition",
+                            ));
+                        }
+                        if frame < certificate.query.horizon {
+                            next.insert(transition.next.clone());
+                        }
+                    }
+                }
+                if frame < certificate.query.horizon {
+                    if next.len() > MAX_FINAL_STATES_PER_LAYER {
+                        return Err(reject(
+                            EvidenceSection::Final,
+                            "bounded answer layer exceeds state limit",
+                        ));
+                    }
+                    reachable_states = reachable_states
+                        .checked_add(next.len())
+                        .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+                        .ok_or_else(|| {
+                            reject(
+                                EvidenceSection::Final,
+                                "bounded answer total states exceed limit",
+                            )
+                        })?;
+                    current = next;
+                }
+            }
+            Ok(BoundedAnswerSummary {
+                result: BoundedResult::Safe,
+                horizon: certificate.query.horizon,
+                bad_frame: None,
+                reachable_states,
+                transition_checks,
+            })
+        }
+        BoundedResult::Unsafe => {
+            let bad_frame = certificate.bad_frame.ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "UNSAFE bounded answer has no bad frame",
+                )
+            })?;
+            if bad_frame > certificate.query.horizon
+                || !certificate.layers.is_empty()
+                || certificate.witness_pairs.len() != bad_frame as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "UNSAFE bounded answer shape is invalid",
+                ));
+            }
+            for frame in 0..=bad_frame {
+                let mut next = BTreeSet::new();
+                let mut found_bad = false;
+                for state in &current {
+                    for transition in index.get(state).into_iter().flatten() {
+                        advance_count(&mut transition_checks)?;
+                        found_bad |= transition.bad;
+                        if frame < bad_frame {
+                            next.insert(transition.next.clone());
+                        }
+                    }
+                }
+                if frame < bad_frame && found_bad {
+                    return Err(reject(
+                        EvidenceSection::Final,
+                        "UNSAFE bounded answer does not claim the earliest bad frame",
+                    ));
+                }
+                if frame == bad_frame && !found_bad {
+                    return Err(reject(
+                        EvidenceSection::Final,
+                        "UNSAFE bounded answer frame has no bad transition",
+                    ));
+                }
+                if frame < bad_frame {
+                    if next.len() > MAX_FINAL_STATES_PER_LAYER {
+                        return Err(reject(
+                            EvidenceSection::Final,
+                            "bounded answer layer exceeds state limit",
+                        ));
+                    }
+                    reachable_states = reachable_states
+                        .checked_add(next.len())
+                        .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+                        .ok_or_else(|| {
+                            reject(
+                                EvidenceSection::Final,
+                                "bounded answer total states exceed limit",
+                            )
+                        })?;
+                    current = next;
+                }
+            }
+            let mut witness_state = initial;
+            for (frame, pair) in certificate.witness_pairs.iter().enumerate() {
+                let transition = index
+                    .get(&witness_state)
+                    .and_then(|transitions| transitions.iter().find(|item| item.pair == *pair))
+                    .ok_or_else(|| {
+                        reject(EvidenceSection::Final, "UNSAFE witness pair is not enabled")
+                    })?;
+                if frame == bad_frame as usize {
+                    if !transition.bad {
+                        return Err(reject(
+                            EvidenceSection::Final,
+                            "UNSAFE terminal witness is not bad",
+                        ));
+                    }
+                } else {
+                    witness_state = transition.next.clone();
+                }
+            }
+            Ok(BoundedAnswerSummary {
+                result: BoundedResult::Unsafe,
+                horizon: certificate.query.horizon,
+                bad_frame: Some(bad_frame),
+                reachable_states,
+                transition_checks,
+            })
+        }
+    }
+}
+
+fn validate_combined_state_shape(state: &CombinedState) -> bool {
+    !state.left.is_empty()
+        && state.left.len() <= MAX_LOCAL_STATE_BITS
+        && !state.right.is_empty()
+        && state.right.len() <= MAX_LOCAL_STATE_BITS
+}
+
+fn validate_bounded_answer_structure(
+    certificate: &BoundedAnswerCertificate,
+) -> Result<(), RevisionLocalError> {
+    if certificate.query.horizon > MAX_FINAL_HORIZON || certificate.query.bad_output == 0 {
+        return Err(reject(
+            EvidenceSection::Final,
+            "bounded answer query is invalid",
+        ));
+    }
+    match certificate.result {
+        BoundedResult::Safe => {
+            if certificate.bad_frame.is_some()
+                || !certificate.witness_pairs.is_empty()
+                || certificate.layers.len() != certificate.query.horizon as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "SAFE bounded answer shape is invalid",
+                ));
+            }
+        }
+        BoundedResult::Unsafe => {
+            let bad_frame = certificate.bad_frame.ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "UNSAFE bounded answer has no bad frame",
+                )
+            })?;
+            if bad_frame > certificate.query.horizon
+                || !certificate.layers.is_empty()
+                || certificate.witness_pairs.len() != bad_frame as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "UNSAFE bounded answer shape is invalid",
+                ));
+            }
+        }
+    }
+    let mut total_states = 0usize;
+    for layer in &certificate.layers {
+        if layer.len() > MAX_FINAL_STATES_PER_LAYER
+            || layer.windows(2).any(|pair| pair[0] >= pair[1])
+            || !layer.iter().all(validate_combined_state_shape)
+        {
+            return Err(reject(
+                EvidenceSection::Final,
+                "bounded answer layer shape is invalid",
+            ));
+        }
+        total_states = total_states
+            .checked_add(layer.len())
+            .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+            .ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "bounded answer total states exceed limit",
+                )
+            })?;
+    }
+    Ok(())
+}
+
+fn append_values(output: &mut Vec<u8>, values: &[u64]) -> Result<(), RevisionLocalError> {
+    append_u32(output, values.len(), EvidenceSection::Final)?;
+    for value in values {
+        output.extend_from_slice(&value.to_be_bytes());
+    }
+    Ok(())
+}
+
+pub fn encode_bounded_answer_certificate(
+    certificate: &BoundedAnswerCertificate,
+) -> Result<Vec<u8>, RevisionLocalError> {
+    validate_bounded_answer_structure(certificate)?;
+    let mut output = Vec::new();
+    output.extend_from_slice(BOUNDED_ANSWER_MAGIC);
+    output.extend_from_slice(&BOUNDED_ANSWER_CERTIFICATE_VERSION.to_be_bytes());
+    output.extend_from_slice(&certificate.left_sha256);
+    output.extend_from_slice(&certificate.right_sha256);
+    output.extend_from_slice(&certificate.interface_sha256);
+    output.extend_from_slice(&certificate.query.horizon.to_be_bytes());
+    output.push(match certificate.query.bad_side {
+        ComponentSide::Left => 0,
+        ComponentSide::Right => 1,
+    });
+    output.extend_from_slice(&certificate.query.bad_output.to_be_bytes());
+    output.push(match certificate.result {
+        BoundedResult::Safe => 0,
+        BoundedResult::Unsafe => 1,
+    });
+    output.extend_from_slice(&certificate.bad_frame.unwrap_or(u32::MAX).to_be_bytes());
+    append_u32(
+        &mut output,
+        certificate.witness_pairs.len(),
+        EvidenceSection::Final,
+    )?;
+    for pair in &certificate.witness_pairs {
+        output.extend_from_slice(&pair.to_be_bytes());
+    }
+    append_u32(
+        &mut output,
+        certificate.layers.len(),
+        EvidenceSection::Final,
+    )?;
+    for layer in &certificate.layers {
+        append_u32(&mut output, layer.len(), EvidenceSection::Final)?;
+        for state in layer {
+            append_values(&mut output, &state.left)?;
+            append_values(&mut output, &state.right)?;
+        }
+    }
+    if output.len() > MAX_FINAL_SECTION_BYTES {
+        return Err(reject(
+            EvidenceSection::Final,
+            "bounded answer encoding exceeds byte limit",
+        ));
+    }
+    Ok(output)
+}
+
+pub fn decode_bounded_answer_certificate(
+    bytes: &[u8],
+) -> Result<BoundedAnswerCertificate, RevisionLocalError> {
+    if bytes.len() > MAX_FINAL_SECTION_BYTES {
+        return Err(reject(
+            EvidenceSection::Final,
+            "bounded answer encoding exceeds byte limit",
+        ));
+    }
+    let mut decoder = Decoder { bytes, offset: 0 };
+    if decoder.take(BOUNDED_ANSWER_MAGIC.len(), EvidenceSection::Final)? != BOUNDED_ANSWER_MAGIC {
+        return Err(reject(
+            EvidenceSection::Final,
+            "invalid bounded answer magic",
+        ));
+    }
+    if decoder.u32(EvidenceSection::Final)? != BOUNDED_ANSWER_CERTIFICATE_VERSION {
+        return Err(reject(
+            EvidenceSection::Final,
+            "unsupported bounded answer version",
+        ));
+    }
+    let left_sha256 = decoder.digest(EvidenceSection::Final)?;
+    let right_sha256 = decoder.digest(EvidenceSection::Final)?;
+    let interface_sha256 = decoder.digest(EvidenceSection::Final)?;
+    let horizon = decoder.u32(EvidenceSection::Final)?;
+    let bad_side = match decoder.byte(EvidenceSection::Final)? {
+        0 => ComponentSide::Left,
+        1 => ComponentSide::Right,
+        _ => return Err(reject(EvidenceSection::Final, "invalid bad side")),
+    };
+    let bad_output = decoder.u64(EvidenceSection::Final)?;
+    let result = match decoder.byte(EvidenceSection::Final)? {
+        0 => BoundedResult::Safe,
+        1 => BoundedResult::Unsafe,
+        _ => return Err(reject(EvidenceSection::Final, "invalid bounded result")),
+    };
+    let encoded_bad_frame = decoder.u32(EvidenceSection::Final)?;
+    let bad_frame = (encoded_bad_frame != u32::MAX).then_some(encoded_bad_frame);
+    let witness_count = decoder.bounded_count(
+        MAX_FINAL_HORIZON as usize + 1,
+        EvidenceSection::Final,
+        "witness",
+    )?;
+    let mut witness_pairs = Vec::with_capacity(witness_count);
+    for _ in 0..witness_count {
+        witness_pairs.push(decoder.u32(EvidenceSection::Final)?);
+    }
+    let layer_count = decoder.bounded_count(
+        MAX_FINAL_HORIZON as usize + 1,
+        EvidenceSection::Final,
+        "layer",
+    )?;
+    let mut layers = Vec::with_capacity(layer_count);
+    let mut total_states = 0usize;
+    for _ in 0..layer_count {
+        let state_count =
+            decoder.bounded_count(MAX_FINAL_STATES_PER_LAYER, EvidenceSection::Final, "state")?;
+        total_states = total_states
+            .checked_add(state_count)
+            .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+            .ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "bounded answer total states exceed limit",
+                )
+            })?;
+        let mut layer = Vec::with_capacity(state_count);
+        for _ in 0..state_count {
+            let left_count = decoder.bounded_count(
+                MAX_LOCAL_STATE_BITS,
+                EvidenceSection::Final,
+                "left-state-value",
+            )?;
+            let left = decoder.values(left_count, EvidenceSection::Final)?;
+            let right_count = decoder.bounded_count(
+                MAX_LOCAL_STATE_BITS,
+                EvidenceSection::Final,
+                "right-state-value",
+            )?;
+            let right = decoder.values(right_count, EvidenceSection::Final)?;
+            layer.push(CombinedState { left, right });
+        }
+        layers.push(layer);
+    }
+    if decoder.offset != bytes.len() {
+        return Err(reject(
+            EvidenceSection::Final,
+            "bounded answer has trailing bytes",
+        ));
+    }
+    let certificate = BoundedAnswerCertificate {
+        left_sha256,
+        right_sha256,
+        interface_sha256,
+        query: BoundedQuery {
+            horizon,
+            bad_side,
+            bad_output,
+        },
+        result,
+        bad_frame,
+        witness_pairs,
+        layers,
+    };
+    validate_bounded_answer_structure(&certificate)?;
+    if encode_bounded_answer_certificate(&certificate)? != bytes {
+        return Err(reject(
+            EvidenceSection::Final,
+            "bounded answer encoding is not canonical",
+        ));
+    }
+    Ok(certificate)
 }
 
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
@@ -1112,6 +1813,10 @@ impl<'a> Decoder<'a> {
         Ok(u32::from_be_bytes(bytes))
     }
 
+    fn byte(&mut self, section: EvidenceSection) -> Result<u8, RevisionLocalError> {
+        Ok(self.take(1, section)?[0])
+    }
+
     fn u64(&mut self, section: EvidenceSection) -> Result<u64, RevisionLocalError> {
         let bytes: [u8; 8] = self.take(8, section)?.try_into().expect("fixed size");
         Ok(u64::from_be_bytes(bytes))
@@ -1217,6 +1922,7 @@ mod tests {
 
     const WORD_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 ulte 1 3 9\n11 constraint 10\n12 zero 1\n13 bad 12 never\n";
     const RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    const FINAL_RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
 
     fn fixture() -> RevisionLocalCertificate {
         RevisionLocalCertificate {
@@ -1457,5 +2163,107 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.section, EvidenceSection::Left);
         assert_eq!(error.message, "local relation row does not match source");
+    }
+
+    #[test]
+    fn bounded_answer_preserves_safe_and_earliest_unsafe_results() {
+        let left = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let right = produce_local_relation(FINAL_RIGHT_COMPONENT, &[7, 10]).unwrap();
+        let verified_left =
+            verify_local_relation_for_composition(WORD_COMPONENT, &left, EvidenceSection::Left)
+                .unwrap();
+        let verified_right = verify_local_relation_for_composition(
+            FINAL_RIGHT_COMPONENT,
+            &right,
+            EvidenceSection::Right,
+        )
+        .unwrap();
+        let contract = WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        };
+        let safe_query = BoundedQuery {
+            horizon: 0,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let safe = produce_bounded_answer(&verified_left, &verified_right, &contract, &safe_query)
+            .unwrap();
+        assert_eq!(safe.result, BoundedResult::Safe);
+        assert_eq!(safe.layers.len(), 1);
+        assert_eq!(
+            verify_bounded_answer(&verified_left, &verified_right, &contract, &safe)
+                .unwrap()
+                .bad_frame,
+            None
+        );
+
+        let unsafe_query = BoundedQuery {
+            horizon: 1,
+            ..safe_query
+        };
+        let unsafe_certificate =
+            produce_bounded_answer(&verified_left, &verified_right, &contract, &unsafe_query)
+                .unwrap();
+        assert_eq!(unsafe_certificate.result, BoundedResult::Unsafe);
+        assert_eq!(unsafe_certificate.bad_frame, Some(1));
+        assert_eq!(unsafe_certificate.witness_pairs.len(), 2);
+        let summary = verify_bounded_answer(
+            &verified_left,
+            &verified_right,
+            &contract,
+            &unsafe_certificate,
+        )
+        .unwrap();
+        assert_eq!(summary.bad_frame, Some(1));
+        let encoded = encode_bounded_answer_certificate(&unsafe_certificate).unwrap();
+        let decoded = decode_bounded_answer_certificate(&encoded).unwrap();
+        assert_eq!(decoded, unsafe_certificate);
+        assert_eq!(
+            verify_bounded_answer(&verified_left, &verified_right, &contract, &decoded)
+                .unwrap()
+                .bad_frame,
+            Some(1)
+        );
+        for length in 0..encoded.len() {
+            assert!(decode_bounded_answer_certificate(&encoded[..length]).is_err());
+        }
+    }
+
+    #[test]
+    fn bounded_answer_tampering_is_attributed_and_rejected() {
+        let left = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let right = produce_local_relation(FINAL_RIGHT_COMPONENT, &[7, 10]).unwrap();
+        let verified_left =
+            verify_local_relation_for_composition(WORD_COMPONENT, &left, EvidenceSection::Left)
+                .unwrap();
+        let verified_right = verify_local_relation_for_composition(
+            FINAL_RIGHT_COMPONENT,
+            &right,
+            EvidenceSection::Right,
+        )
+        .unwrap();
+        let contract = WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        };
+        let query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let mut certificate =
+            produce_bounded_answer(&verified_left, &verified_right, &contract, &query).unwrap();
+        certificate.witness_pairs[0] ^= 1;
+        let error = verify_bounded_answer(&verified_left, &verified_right, &contract, &certificate)
+            .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Final);
+        assert_eq!(error.message, "UNSAFE witness pair is not enabled");
     }
 }

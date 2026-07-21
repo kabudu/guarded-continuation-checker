@@ -22,8 +22,19 @@ composition now has a canonical bounded contract, exact constraint-preserving
 row join, width and multiple-driver rejection, a four-million pair-check cap,
 and a 65,536-pair output cap. Ordinary composition verifies both sources first;
 an unforgeable validated handle permits intentional reuse without silently
-accepting raw evidence. Final answer evidence, exact v5 fallback, revision-work
-observations, and public revision evidence remain incomplete.
+accepting raw evidence.
+
+The final answer layer now derives component initial states from the original
+sources, performs bounded reachability over the exact composed relation, emits
+complete canonical SAFE layers or a replayable earliest-frame UNSAFE pair
+witness, and uses a separate verifier path. SAFE checking rebuilds every layer
+and rejects any bad admissible transition. UNSAFE checking proves that no
+earlier reachable transition is bad before replaying the terminal witness. The
+versioned final codec is bounded to horizon 32, 65,536 states per layer, 262,144
+total states, four million transition checks, and 16 MiB. Both answers, every
+truncation, source and interface drift, and witness mutation have local tests.
+Exact portfolio fallback, revision-work observations, public revision evidence,
+maintained controls, and cross-platform replication remain incomplete.
 
 ## Hypothesis
 

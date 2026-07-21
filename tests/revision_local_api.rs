@@ -1,10 +1,12 @@
 use guarded_continuation_checker::revision_local::{
-    BoundEvidence, ComponentSide, EvidenceSection, InterfaceWire, LocalEvidence,
-    RevisionLocalCertificate, WordInterfaceContract, compose_verified_local_relations,
+    BoundEvidence, BoundedQuery, BoundedResult, ComponentSide, EvidenceSection, InterfaceWire,
+    LocalEvidence, RevisionLocalCertificate, WordInterfaceContract,
+    compose_verified_local_relations, decode_bounded_answer_certificate,
     decode_local_relation_certificate, decode_revision_local_certificate,
-    decode_word_interface_contract, encode_local_relation_certificate,
-    encode_revision_local_certificate, encode_word_interface_contract, produce_local_relation,
-    source_digest, unchanged_local_evidence, verify_local_relation,
+    decode_word_interface_contract, encode_bounded_answer_certificate,
+    encode_local_relation_certificate, encode_revision_local_certificate,
+    encode_word_interface_contract, produce_bounded_answer, produce_local_relation, source_digest,
+    unchanged_local_evidence, verify_bounded_answer, verify_local_relation,
     verify_local_relation_for_composition, verify_source_bindings,
 };
 
@@ -76,4 +78,39 @@ fn downstream_client_can_reuse_validated_evidence_for_word_interface_composition
         compose_verified_local_relations(&verified_left, &verified_right, &contract).unwrap();
     assert_eq!(composed.pair_checks, 256);
     assert_eq!(composed.pairs.len(), 64);
+}
+
+#[test]
+fn downstream_client_can_verify_both_composed_bounded_answers() {
+    let left_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    let right_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    let left = produce_local_relation(left_source, &[7]).unwrap();
+    let right = produce_local_relation(right_source, &[7, 10]).unwrap();
+    let left =
+        verify_local_relation_for_composition(left_source, &left, EvidenceSection::Left).unwrap();
+    let right = verify_local_relation_for_composition(right_source, &right, EvidenceSection::Right)
+        .unwrap();
+    let contract = WordInterfaceContract {
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        }],
+    };
+    for (horizon, expected, bad_frame) in [
+        (0, BoundedResult::Safe, None),
+        (1, BoundedResult::Unsafe, Some(1)),
+    ] {
+        let query = BoundedQuery {
+            horizon,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let produced = produce_bounded_answer(&left, &right, &contract, &query).unwrap();
+        let bytes = encode_bounded_answer_certificate(&produced).unwrap();
+        let decoded = decode_bounded_answer_certificate(&bytes).unwrap();
+        let summary = verify_bounded_answer(&left, &right, &contract, &decoded).unwrap();
+        assert_eq!(summary.result, expected);
+        assert_eq!(summary.bad_frame, bad_frame);
+    }
 }
