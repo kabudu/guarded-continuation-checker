@@ -109,10 +109,14 @@ fn validate_state_shape(model: &Btor2Model, state: &SearchState) -> Result<(), S
     Ok(())
 }
 
-fn validate_model(
-    model: &Btor2Model,
-    bad_property: NodeId,
-) -> Result<(Vec<NodeId>, Vec<u32>, Vec<NodeId>, NodeId, bool), SearchError> {
+struct ModelShape {
+    inputs: Vec<NodeId>,
+    input_widths: Vec<u32>,
+    constraints: Vec<NodeId>,
+    input_dependent: bool,
+}
+
+fn validate_model(model: &Btor2Model, bad_property: NodeId) -> Result<ModelShape, SearchError> {
     if model.inputs().is_empty() || model.inputs().len() > MAX_SEARCH_INPUTS {
         return Err(reject(
             "bounded search requires between one and eight semantic inputs",
@@ -167,13 +171,12 @@ fn validate_model(
         result
     }
     let input_dependent = depends_on_input(model, expression, &mut BTreeMap::new());
-    Ok((
-        model.inputs().to_vec(),
+    Ok(ModelShape {
+        inputs: model.inputs().to_vec(),
         input_widths,
-        model.constraints().iter().map(|(id, _)| *id).collect(),
-        expression,
+        constraints: model.constraints().iter().map(|(id, _)| *id).collect(),
         input_dependent,
-    ))
+    })
 }
 
 fn uses_packed_valuations(version: u32) -> bool {
@@ -299,8 +302,12 @@ pub fn produce(
         return Err(reject("search horizon exceeds limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let (inputs, input_widths, constraints, _, input_dependent) =
-        validate_model(&model, bad_property)?;
+    let ModelShape {
+        inputs,
+        input_widths,
+        constraints,
+        input_dependent,
+    } = validate_model(&model, bad_property)?;
     let certificate_version = if input_widths.iter().any(|width| *width > 1) {
         SEARCH_CERTIFICATE_VERSION
     } else if !constraints.is_empty() {
@@ -525,8 +532,12 @@ pub fn verify(
         return Err(reject("search certificate horizon exceeds limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let (inputs, input_widths, constraints, _, input_dependent) =
-        validate_model(&model, certificate.bad_property)?;
+    let ModelShape {
+        inputs,
+        input_widths,
+        constraints,
+        input_dependent,
+    } = validate_model(&model, certificate.bad_property)?;
     let input = inputs[0];
     if input != certificate.input {
         return Err(reject("search certificate input does not match source"));
