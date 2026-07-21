@@ -1,6 +1,7 @@
 # Caliptra watchdog experiment v1
 
-Status: local arm64 baseline validated. Hosted amd64 reproduction remains open.
+Status: local arm64 and hosted amd64 baselines validated. Independent operator
+acceptance remains open.
 
 ## Purpose
 
@@ -63,6 +64,15 @@ Retained data:
 
 - [`caliptra-wdt-composed-witness-v1.csv`](../results/caliptra-wdt-composed-witness-v1.csv)
 - [`caliptra-wdt-composed-witness-v1.manifest.txt`](../results/caliptra-wdt-composed-witness-v1.manifest.txt)
+- [`caliptra-wdt-composed-witness-amd64-v1.csv`](../results/caliptra-wdt-composed-witness-amd64-v1.csv)
+- [`caliptra-wdt-composed-witness-amd64-v1.manifest.txt`](../results/caliptra-wdt-composed-witness-amd64-v1.manifest.txt)
+- [`caliptra-wdt-hosted-amd64-v1.provenance.txt`](../results/caliptra-wdt-hosted-amd64-v1.provenance.txt)
+
+[Hosted run 29863532960](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29863532960)
+passes the complete baseline on amd64. Its nine-row CSV is byte-identical to
+arm64, and its manifest differs only in the expected architecture-specific
+rIC3 binary and Certifaiger tree hashes. The retained provenance binds both
+files to the workflow commit and artifact digest.
 
 Reproduce locally with the qualified rIC3 and Certifaiger tool trees:
 

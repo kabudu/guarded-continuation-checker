@@ -1,0 +1,12 @@
+schema_version=1
+workflow_run_id=29863532960
+workflow_url=https://github.com/kabudu/guarded-continuation-checker/actions/runs/29863532960
+workflow_event=workflow_dispatch
+workflow_head_sha=51e665062bf8a629e1cfa5f807b1351169fe5ba1
+artifact_id=8508885999
+artifact_name=certified-equivalent-evidence-amd64
+artifact_digest=sha256:a6e7074bdf71992783a22df56e5c7737dba2593915ce79909d990dbbedca4aba
+artifact_expires_at=2026-08-04T20:18:26Z
+composed_csv_sha256=8b95d1bcaa8b2ec72264e13a4a0f2dd9609562fbe4fd180c9d8a1ac763ed5a60
+composed_manifest_sha256=7e676ce64f75bb0a7596381c6e7aa082dd1e630c9251132f16abda7605d2ab84
+status=retained

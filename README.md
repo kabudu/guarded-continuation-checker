@@ -221,8 +221,9 @@ design. Its frozen nine-row local matrix has five independently checked SAFE
 witnesses and four shortest replayed UNSAFE traces. Verified standard witness
 composition reduces the horizon-2 and horizon-3 SAFE sets by 68.90% and 53.89%.
 This broadens real-design evidence while further disconfirming a broad novelty
-claim for multi-property evidence sharing. Hosted amd64 reproduction and
-independent operator acceptance remain open.
+claim for multi-property evidence sharing. Hosted amd64 reproduces the complete
+baseline with a byte-identical comparison CSV. Independent operator acceptance
+remains open.
 
 The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
 keeps controller, plant, and synchronous wiring contract as separately hashed

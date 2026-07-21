@@ -22,13 +22,18 @@ opentitan_amd_resource_manifest="$results/opentitan-dual-timer-resources-amd64-v
 opentitan_amd_provenance="$results/opentitan-dual-timer-hosted-amd64-v1.provenance.txt"
 caliptra_composed="$results/caliptra-wdt-composed-witness-v1.csv"
 caliptra_manifest="$results/caliptra-wdt-composed-witness-v1.manifest.txt"
+caliptra_amd_composed="$results/caliptra-wdt-composed-witness-amd64-v1.csv"
+caliptra_amd_manifest="$results/caliptra-wdt-composed-witness-amd64-v1.manifest.txt"
+caliptra_amd_provenance="$results/caliptra-wdt-hosted-amd64-v1.provenance.txt"
 
 for file in "$arm_external" "$amd_external" "$arm_manifest" "$amd_manifest" \
   "$arm_hostile" "$amd_hostile" "$amd_gcc" "$amd_gcc_manifest" "$cross_gcc" \
   "$opentitan_composed" "$opentitan_manifest" \
   "$opentitan_amd_composed" "$opentitan_amd_manifest" \
   "$opentitan_amd_resources" "$opentitan_amd_resource_manifest" \
-  "$opentitan_amd_provenance" "$caliptra_composed" "$caliptra_manifest"; do
+  "$opentitan_amd_provenance" "$caliptra_composed" "$caliptra_manifest" \
+  "$caliptra_amd_composed" "$caliptra_amd_manifest" \
+  "$caliptra_amd_provenance"; do
   [[ -f "$file" && ! -L "$file" ]] || { echo "missing retained evidence: $file" >&2; exit 1; }
 done
 
@@ -160,6 +165,12 @@ awk -F, '
     if (answers["5:t1"] != "UNSAFE:3" || answers["5:t2"] != "UNSAFE:5" || answers["5:fatal"] != "UNSAFE:5") exit 1
   }
 ' "$caliptra_composed"
+cmp "$caliptra_composed" "$caliptra_amd_composed"
+diff -u \
+  <(grep -Ev '^(ric3_binary_sha256|certifaiger_tree_sha256)=' \
+    "$caliptra_manifest") \
+  <(grep -Ev '^(ric3_binary_sha256|certifaiger_tree_sha256)=' \
+    "$caliptra_amd_manifest")
 [[ $(sed -n 's/^model_count=//p' "$caliptra_manifest") == 11 ]]
 [[ $(sed -n 's/^answer_count=//p' "$caliptra_manifest") == 9 ]]
 [[ $(sed -n 's/^safe_certificate_count=//p' "$caliptra_manifest") == 5 ]]
@@ -169,6 +180,18 @@ awk -F, '
 [[ $(sed -n 's/^composed_safe_set_count=//p' "$caliptra_manifest") == 2 ]]
 [[ $(sed -n 's/^hostile_control_count=//p' "$caliptra_manifest") == 6 ]]
 [[ $(sed -n 's/^status=//p' "$caliptra_manifest") == validated ]]
+[[ $(sed -n 's/^status=//p' "$caliptra_amd_manifest") == validated ]]
+for binding in \
+  "composed_csv_sha256:$caliptra_amd_composed" \
+  "composed_manifest_sha256:$caliptra_amd_manifest"; do
+  field=${binding%%:*}
+  file=${binding#*:}
+  [[ $(sed -n "s/^$field=//p" "$caliptra_amd_provenance") == \
+    $(sha256_portable "$file") ]]
+done
+[[ $(sed -n 's/^workflow_head_sha=//p' "$caliptra_amd_provenance") == \
+  51e665062bf8a629e1cfa5f807b1351169fe5ba1 ]]
+[[ $(sed -n 's/^status=//p' "$caliptra_amd_provenance") == retained ]]
 
 shared_pattern='^(qualification_lock_sha256|model_manifest_sha256|evidence_bytes|property_.*)='
 diff -u \
