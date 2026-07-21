@@ -27,6 +27,8 @@ pub const MAX_FINAL_HORIZON: u32 = 32;
 pub const MAX_FINAL_STATES_PER_LAYER: usize = 65_536;
 pub const MAX_FINAL_TOTAL_STATES: usize = 262_144;
 pub const MAX_FINAL_TRANSITION_CHECKS: usize = 4_000_000;
+pub const MAX_DIRECT_INPUT_BITS: usize = 12;
+pub const MAX_DIRECT_INPUT_VALUATIONS: usize = 4096;
 
 const MAGIC: &[u8; 8] = b"GCCRLCP1";
 const LOCAL_RELATION_MAGIC: &[u8; 8] = b"GCCLRL01";
@@ -206,6 +208,27 @@ pub struct RevisionWorkObservation {
     pub reused_local_sections: usize,
     pub composed_pair_checks: usize,
     pub final_transition_checks: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectAnswerCertificate {
+    pub left_sha256: [u8; 32],
+    pub right_sha256: [u8; 32],
+    pub interface_sha256: [u8; 32],
+    pub query: BoundedQuery,
+    pub result: BoundedResult,
+    pub bad_frame: Option<u32>,
+    pub witness_valuations: Vec<u16>,
+    pub layers: Vec<Vec<CombinedState>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectAnswerSummary {
+    pub result: BoundedResult,
+    pub horizon: u32,
+    pub bad_frame: Option<u32>,
+    pub reachable_states: usize,
+    pub valuation_checks: usize,
 }
 
 pub struct VerifiedLocalRelation<'a> {
@@ -1619,6 +1642,563 @@ pub fn verify_revision_with_retained_left(
     ))
 }
 
+struct DirectContext {
+    left: Btor2Model,
+    right: Btor2Model,
+    left_inputs: Vec<NodeId>,
+    right_inputs: Vec<NodeId>,
+    left_input_widths: Vec<u32>,
+    right_input_widths: Vec<u32>,
+    left_input_bits: usize,
+    input_valuations: usize,
+    wires: Vec<InterfaceWire>,
+    bad_side: ComponentSide,
+    bad_output: NodeId,
+}
+
+fn direct_context(
+    left_source: &[u8],
+    right_source: &[u8],
+    contract: &WordInterfaceContract,
+    query: &BoundedQuery,
+) -> Result<DirectContext, RevisionLocalError> {
+    if query.horizon > MAX_FINAL_HORIZON {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct fallback horizon exceeds limit",
+        ));
+    }
+    encode_word_interface_contract(contract)?;
+    let left = btor2::parse_bytes(left_source)
+        .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
+    let right = btor2::parse_bytes(right_source)
+        .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
+    let left_inputs = left.inputs().to_vec();
+    let right_inputs = right.inputs().to_vec();
+    let left_input_widths = widths(&left, &left_inputs, EvidenceSection::Left, "input")?;
+    let right_input_widths = widths(&right, &right_inputs, EvidenceSection::Right, "input")?;
+    let left_input_bits = checked_bits(
+        &left_input_widths,
+        MAX_DIRECT_INPUT_BITS,
+        EvidenceSection::Left,
+        "direct input",
+    )?;
+    let right_input_bits = checked_bits(
+        &right_input_widths,
+        MAX_DIRECT_INPUT_BITS,
+        EvidenceSection::Right,
+        "direct input",
+    )?;
+    let input_bits = left_input_bits
+        .checked_add(right_input_bits)
+        .filter(|bits| *bits <= MAX_DIRECT_INPUT_BITS)
+        .ok_or_else(|| {
+            reject(
+                EvidenceSection::Final,
+                "direct fallback joint input width exceeds limit",
+            )
+        })?;
+    let input_valuations = 1usize
+        .checked_shl(input_bits as u32)
+        .filter(|count| *count <= MAX_DIRECT_INPUT_VALUATIONS)
+        .ok_or_else(|| {
+            reject(
+                EvidenceSection::Final,
+                "direct fallback valuation count exceeds limit",
+            )
+        })?;
+    let bad_model = match query.bad_side {
+        ComponentSide::Left => &left,
+        ComponentSide::Right => &right,
+    };
+    let bad_node = bad_model
+        .nodes()
+        .get(&query.bad_output)
+        .ok_or_else(|| reject(EvidenceSection::Final, "direct bad output is unknown"))?;
+    if bad_node.width != 1 {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct bad output must be one bit",
+        ));
+    }
+    let mut destinations = Vec::new();
+    for wire in &contract.wires {
+        let (source, destination, destination_side) = match wire.from {
+            ComponentSide::Left => (&left, &right, ComponentSide::Right),
+            ComponentSide::Right => (&right, &left, ComponentSide::Left),
+        };
+        let source_width = source
+            .nodes()
+            .get(&wire.output)
+            .map(|node| node.width)
+            .ok_or_else(|| reject(EvidenceSection::Interface, "wire output is unknown"))?;
+        let input_position = destination
+            .inputs()
+            .binary_search(&wire.to_input)
+            .map_err(|_| reject(EvidenceSection::Interface, "wire input is not semantic"))?;
+        if source_width != destination.nodes()[&wire.to_input].width {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "wire output and input widths differ",
+            ));
+        }
+        let destination_key = (destination_side, destination.inputs()[input_position]);
+        if destinations.contains(&destination_key) {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "more than one wire drives an input",
+            ));
+        }
+        destinations.push(destination_key);
+    }
+    Ok(DirectContext {
+        left,
+        right,
+        left_inputs,
+        right_inputs,
+        left_input_widths,
+        right_input_widths,
+        left_input_bits,
+        input_valuations,
+        wires: contract.wires.clone(),
+        bad_side: query.bad_side,
+        bad_output: query.bad_output,
+    })
+}
+
+fn state_map(
+    model: &Btor2Model,
+    values: &[u64],
+    section: EvidenceSection,
+) -> Result<WordValues, RevisionLocalError> {
+    if values.len() != model.states().len() {
+        return Err(reject(section, "direct state vector length is invalid"));
+    }
+    let mut state = BTreeMap::new();
+    for (id, value) in model.states().iter().zip(values) {
+        let width = model.nodes()[id].width;
+        if width < 64 && (*value >> width) != 0 {
+            return Err(reject(section, "direct state value exceeds width"));
+        }
+        state.insert(*id, *value);
+    }
+    Ok(state)
+}
+
+fn direct_transition(
+    context: &DirectContext,
+    current: &CombinedState,
+    packed: u16,
+) -> Result<Option<(CombinedState, bool)>, RevisionLocalError> {
+    let left_state = state_map(&context.left, &current.left, EvidenceSection::Left)?;
+    let right_state = state_map(&context.right, &current.right, EvidenceSection::Right)?;
+    let left_mask = (1usize << context.left_input_bits) - 1;
+    let (left_input, _) = unpack(
+        &context.left_inputs,
+        &context.left_input_widths,
+        usize::from(packed) & left_mask,
+    );
+    let (right_input, _) = unpack(
+        &context.right_inputs,
+        &context.right_input_widths,
+        usize::from(packed) >> context.left_input_bits,
+    );
+    if !admissible(
+        &context.left,
+        &left_state,
+        &left_input,
+        EvidenceSection::Left,
+    )? || !admissible(
+        &context.right,
+        &right_state,
+        &right_input,
+        EvidenceSection::Right,
+    )? {
+        return Ok(None);
+    }
+    for wire in &context.wires {
+        let (source, source_state, source_input, destination_input) = match wire.from {
+            ComponentSide::Left => (&context.left, &left_state, &left_input, &right_input),
+            ComponentSide::Right => (&context.right, &right_state, &right_input, &left_input),
+        };
+        let output = source
+            .evaluate(wire.output, source_state, source_input)
+            .map_err(|error| reject(EvidenceSection::Interface, error.to_string()))?;
+        if destination_input[&wire.to_input] != output {
+            return Ok(None);
+        }
+    }
+    let (bad_model, bad_state, bad_input) = match context.bad_side {
+        ComponentSide::Left => (&context.left, &left_state, &left_input),
+        ComponentSide::Right => (&context.right, &right_state, &right_input),
+    };
+    let bad = bad_model
+        .evaluate(context.bad_output, bad_state, bad_input)
+        .map_err(|error| reject(EvidenceSection::Final, error.to_string()))?
+        != 0;
+    let left_next = context
+        .left
+        .step(&left_state, &left_input)
+        .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
+    let right_next = context
+        .right
+        .step(&right_state, &right_input)
+        .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
+    Ok(Some((
+        CombinedState {
+            left: context
+                .left
+                .states()
+                .iter()
+                .map(|id| left_next[id])
+                .collect(),
+            right: context
+                .right
+                .states()
+                .iter()
+                .map(|id| right_next[id])
+                .collect(),
+        },
+        bad,
+    )))
+}
+
+fn direct_initial(context: &DirectContext) -> Result<CombinedState, RevisionLocalError> {
+    let left = context
+        .left
+        .initial_state()
+        .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
+    let right = context
+        .right
+        .initial_state()
+        .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
+    Ok(CombinedState {
+        left: context.left.states().iter().map(|id| left[id]).collect(),
+        right: context.right.states().iter().map(|id| right[id]).collect(),
+    })
+}
+
+fn reconstruct_direct_witness(
+    predecessors: &[BTreeMap<CombinedState, (CombinedState, u16)>],
+    mut state: CombinedState,
+    terminal_valuation: u16,
+) -> Vec<u16> {
+    let mut reversed = Vec::with_capacity(predecessors.len() + 1);
+    for layer in predecessors.iter().rev() {
+        let (previous, valuation) = &layer[&state];
+        reversed.push(*valuation);
+        state = previous.clone();
+    }
+    reversed.reverse();
+    reversed.push(terminal_valuation);
+    reversed
+}
+
+pub fn produce_direct_answer(
+    left_source: &[u8],
+    right_source: &[u8],
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<(DirectAnswerCertificate, DirectAnswerSummary), RevisionLocalError> {
+    let contract = decode_word_interface_contract(interface_source)?;
+    let context = direct_context(left_source, right_source, &contract, query)?;
+    let mut current = BTreeSet::from([direct_initial(&context)?]);
+    let mut layers = vec![current.iter().cloned().collect::<Vec<_>>()];
+    let mut predecessors = Vec::<BTreeMap<CombinedState, (CombinedState, u16)>>::new();
+    let mut reachable_states = 1usize;
+    let mut valuation_checks = 0usize;
+    for frame in 0..=query.horizon {
+        let mut next = BTreeSet::new();
+        let mut next_predecessors = BTreeMap::new();
+        for state in &current {
+            for packed in 0..context.input_valuations {
+                valuation_checks = valuation_checks
+                    .checked_add(1)
+                    .filter(|count| *count <= MAX_FINAL_TRANSITION_CHECKS)
+                    .ok_or_else(|| {
+                        reject(
+                            EvidenceSection::Final,
+                            "direct fallback valuation checks exceed limit",
+                        )
+                    })?;
+                let packed = u16::try_from(packed).expect("bounded valuations fit u16");
+                if let Some((successor, bad)) = direct_transition(&context, state, packed)? {
+                    if bad {
+                        let bad_frame = Some(frame);
+                        return Ok((
+                            DirectAnswerCertificate {
+                                left_sha256: source_digest(left_source),
+                                right_sha256: source_digest(right_source),
+                                interface_sha256: source_digest(interface_source),
+                                query: query.clone(),
+                                result: BoundedResult::Unsafe,
+                                bad_frame,
+                                witness_valuations: reconstruct_direct_witness(
+                                    &predecessors,
+                                    state.clone(),
+                                    packed,
+                                ),
+                                layers: Vec::new(),
+                            },
+                            DirectAnswerSummary {
+                                result: BoundedResult::Unsafe,
+                                horizon: query.horizon,
+                                bad_frame,
+                                reachable_states,
+                                valuation_checks,
+                            },
+                        ));
+                    }
+                    if frame < query.horizon && next.insert(successor.clone()) {
+                        next_predecessors.insert(successor, (state.clone(), packed));
+                    }
+                }
+            }
+        }
+        if frame < query.horizon {
+            if next.len() > MAX_FINAL_STATES_PER_LAYER {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "direct fallback layer exceeds state limit",
+                ));
+            }
+            reachable_states = reachable_states
+                .checked_add(next.len())
+                .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+                .ok_or_else(|| {
+                    reject(
+                        EvidenceSection::Final,
+                        "direct fallback total states exceed limit",
+                    )
+                })?;
+            layers.push(next.iter().cloned().collect());
+            predecessors.push(next_predecessors);
+            current = next;
+        }
+    }
+    Ok((
+        DirectAnswerCertificate {
+            left_sha256: source_digest(left_source),
+            right_sha256: source_digest(right_source),
+            interface_sha256: source_digest(interface_source),
+            query: query.clone(),
+            result: BoundedResult::Safe,
+            bad_frame: None,
+            witness_valuations: Vec::new(),
+            layers,
+        },
+        DirectAnswerSummary {
+            result: BoundedResult::Safe,
+            horizon: query.horizon,
+            bad_frame: None,
+            reachable_states,
+            valuation_checks,
+        },
+    ))
+}
+
+pub fn verify_direct_answer(
+    left_source: &[u8],
+    right_source: &[u8],
+    interface_source: &[u8],
+    certificate: &DirectAnswerCertificate,
+) -> Result<DirectAnswerSummary, RevisionLocalError> {
+    if certificate.left_sha256 != source_digest(left_source) {
+        return Err(reject(
+            EvidenceSection::Left,
+            "direct source binding is invalid",
+        ));
+    }
+    if certificate.right_sha256 != source_digest(right_source) {
+        return Err(reject(
+            EvidenceSection::Right,
+            "direct source binding is invalid",
+        ));
+    }
+    if certificate.interface_sha256 != source_digest(interface_source) {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "direct interface binding is invalid",
+        ));
+    }
+    let contract = decode_word_interface_contract(interface_source)?;
+    let context = direct_context(left_source, right_source, &contract, &certificate.query)?;
+    let initial = direct_initial(&context)?;
+    let mut current = BTreeSet::from([initial.clone()]);
+    let mut reachable_states = 1usize;
+    let mut valuation_checks = 0usize;
+    let advance = |checks: &mut usize| -> Result<(), RevisionLocalError> {
+        *checks = checks
+            .checked_add(1)
+            .filter(|count| *count <= MAX_FINAL_TRANSITION_CHECKS)
+            .ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "direct fallback valuation checks exceed limit",
+                )
+            })?;
+        Ok(())
+    };
+    match certificate.result {
+        BoundedResult::Safe => {
+            if certificate.bad_frame.is_some()
+                || !certificate.witness_valuations.is_empty()
+                || certificate.layers.len() != certificate.query.horizon as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "direct SAFE evidence shape is invalid",
+                ));
+            }
+            for frame in 0..=certificate.query.horizon {
+                let claimed = &certificate.layers[frame as usize];
+                if claimed.len() > MAX_FINAL_STATES_PER_LAYER
+                    || claimed.windows(2).any(|pair| pair[0] >= pair[1])
+                    || claimed.iter().cloned().collect::<BTreeSet<_>>() != current
+                {
+                    return Err(reject(
+                        EvidenceSection::Final,
+                        "direct SAFE layer is incomplete or noncanonical",
+                    ));
+                }
+                let mut next = BTreeSet::new();
+                for state in &current {
+                    for packed in 0..context.input_valuations {
+                        advance(&mut valuation_checks)?;
+                        let packed = u16::try_from(packed).expect("bounded valuations fit u16");
+                        if let Some((successor, bad)) = direct_transition(&context, state, packed)?
+                        {
+                            if bad {
+                                return Err(reject(
+                                    EvidenceSection::Final,
+                                    "direct SAFE evidence contains a bad valuation",
+                                ));
+                            }
+                            if frame < certificate.query.horizon {
+                                next.insert(successor);
+                            }
+                        }
+                    }
+                }
+                if frame < certificate.query.horizon {
+                    if next.len() > MAX_FINAL_STATES_PER_LAYER {
+                        return Err(reject(
+                            EvidenceSection::Final,
+                            "direct fallback layer exceeds state limit",
+                        ));
+                    }
+                    reachable_states = reachable_states
+                        .checked_add(next.len())
+                        .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+                        .ok_or_else(|| {
+                            reject(
+                                EvidenceSection::Final,
+                                "direct fallback total states exceed limit",
+                            )
+                        })?;
+                    current = next;
+                }
+            }
+            Ok(DirectAnswerSummary {
+                result: BoundedResult::Safe,
+                horizon: certificate.query.horizon,
+                bad_frame: None,
+                reachable_states,
+                valuation_checks,
+            })
+        }
+        BoundedResult::Unsafe => {
+            let bad_frame = certificate.bad_frame.ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "direct UNSAFE evidence has no bad frame",
+                )
+            })?;
+            if bad_frame > certificate.query.horizon
+                || !certificate.layers.is_empty()
+                || certificate.witness_valuations.len() != bad_frame as usize + 1
+                || certificate
+                    .witness_valuations
+                    .iter()
+                    .any(|value| usize::from(*value) >= context.input_valuations)
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "direct UNSAFE evidence shape is invalid",
+                ));
+            }
+            for frame in 0..=bad_frame {
+                let mut next = BTreeSet::new();
+                let mut found_bad = false;
+                for state in &current {
+                    for packed in 0..context.input_valuations {
+                        advance(&mut valuation_checks)?;
+                        let packed = u16::try_from(packed).expect("bounded valuations fit u16");
+                        if let Some((successor, bad)) = direct_transition(&context, state, packed)?
+                        {
+                            found_bad |= bad;
+                            if frame < bad_frame {
+                                next.insert(successor);
+                            }
+                        }
+                    }
+                }
+                if frame < bad_frame && found_bad {
+                    return Err(reject(
+                        EvidenceSection::Final,
+                        "direct UNSAFE evidence does not claim the earliest bad frame",
+                    ));
+                }
+                if frame == bad_frame && !found_bad {
+                    return Err(reject(
+                        EvidenceSection::Final,
+                        "direct UNSAFE frame has no bad valuation",
+                    ));
+                }
+                if frame < bad_frame {
+                    reachable_states = reachable_states
+                        .checked_add(next.len())
+                        .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+                        .ok_or_else(|| {
+                            reject(
+                                EvidenceSection::Final,
+                                "direct fallback total states exceed limit",
+                            )
+                        })?;
+                    current = next;
+                }
+            }
+            let mut witness_state = initial;
+            for (frame, packed) in certificate.witness_valuations.iter().enumerate() {
+                let (successor, bad) = direct_transition(&context, &witness_state, *packed)?
+                    .ok_or_else(|| {
+                        reject(
+                            EvidenceSection::Final,
+                            "direct UNSAFE witness valuation is inadmissible",
+                        )
+                    })?;
+                if frame == bad_frame as usize {
+                    if !bad {
+                        return Err(reject(
+                            EvidenceSection::Final,
+                            "direct UNSAFE terminal valuation is not bad",
+                        ));
+                    }
+                } else {
+                    witness_state = successor;
+                }
+            }
+            Ok(DirectAnswerSummary {
+                result: BoundedResult::Unsafe,
+                horizon: certificate.query.horizon,
+                bad_frame: Some(bad_frame),
+                reachable_states,
+                valuation_checks,
+            })
+        }
+    }
+}
+
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
     !ids.is_empty()
         && ids.len() <= maximum
@@ -2139,6 +2719,7 @@ mod tests {
     const RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
     const FINAL_RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     const FINAL_RIGHT_COMPONENT_V2: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    const WIDE_LEFT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 sort bitvec 9\n4 input 2 command\n5 state 3 wide_state\n6 zero 3\n7 init 3 5 6\n8 uext 3 4 7\n9 next 3 5 8\n10 zero 1\n11 bad 10 never\n";
 
     fn fixture() -> RevisionLocalCertificate {
         RevisionLocalCertificate {
@@ -2611,5 +3192,90 @@ mod tests {
             error.message,
             "retained left evidence is not byte-identical"
         );
+    }
+
+    #[test]
+    fn direct_fallback_preserves_both_answers_beyond_local_state_limit() {
+        assert!(produce_local_relation(WIDE_LEFT_COMPONENT, &[4]).is_err());
+        let interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 4,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        for (horizon, expected, bad_frame) in [
+            (0, BoundedResult::Safe, None),
+            (1, BoundedResult::Unsafe, Some(1)),
+        ] {
+            let query = BoundedQuery {
+                horizon,
+                bad_side: ComponentSide::Right,
+                bad_output: 10,
+            };
+            let (certificate, produced) = produce_direct_answer(
+                WIDE_LEFT_COMPONENT,
+                FINAL_RIGHT_COMPONENT,
+                interface.as_bytes(),
+                &query,
+            )
+            .unwrap();
+            assert_eq!(produced.result, expected);
+            assert_eq!(produced.bad_frame, bad_frame);
+            let verified = verify_direct_answer(
+                WIDE_LEFT_COMPONENT,
+                FINAL_RIGHT_COMPONENT,
+                interface.as_bytes(),
+                &certificate,
+            )
+            .unwrap();
+            assert_eq!(verified.result, expected);
+            assert_eq!(verified.bad_frame, bad_frame);
+        }
+    }
+
+    #[test]
+    fn direct_fallback_rejects_witness_and_source_drift() {
+        let interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 4,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        let query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let (mut certificate, _) = produce_direct_answer(
+            WIDE_LEFT_COMPONENT,
+            FINAL_RIGHT_COMPONENT,
+            interface.as_bytes(),
+            &query,
+        )
+        .unwrap();
+        certificate.witness_valuations[0] = u16::MAX;
+        let error = verify_direct_answer(
+            WIDE_LEFT_COMPONENT,
+            FINAL_RIGHT_COMPONENT,
+            interface.as_bytes(),
+            &certificate,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Final);
+        assert_eq!(error.message, "direct UNSAFE evidence shape is invalid");
+
+        certificate.left_sha256[0] ^= 1;
+        let error = verify_direct_answer(
+            WIDE_LEFT_COMPONENT,
+            FINAL_RIGHT_COMPONENT,
+            interface.as_bytes(),
+            &certificate,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Left);
     }
 }

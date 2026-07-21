@@ -55,6 +55,17 @@ internal transition revision retains the left bytes and both answers in local
 tests. Whole-process timing, memory, artifact baselines, and public revision
 evidence are still required before the revision-reuse gate passes.
 
+The first exact source-separated fallback engine is now implemented. It parses
+both original BTOR2 sources, enumerates at most 12 joint semantic input bits,
+checks both constraint sets, enforces every declared word wire, and steps both
+models synchronously without generating or trusting a merged source. It emits
+complete SAFE layers or joint-input UNSAFE witnesses and has a separate
+verifier that proves the earliest bad frame before replay. A retained nine-bit
+state case is outside the local-relation admission bound but preserves SAFE at
+horizon zero and UNSAFE at frame one through direct fallback. The direct
+certificate codec, static portfolio selector, and refusal taxonomy remain
+incomplete, so fallback is not yet wired into the end-to-end envelope.
+
 ## Hypothesis
 
 For two source-separated constrained BTOR2 components connected through a

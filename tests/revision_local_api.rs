@@ -5,11 +5,11 @@ use guarded_continuation_checker::revision_local::{
     decode_local_relation_certificate, decode_revision_local_certificate,
     decode_word_interface_contract, encode_bounded_answer_certificate,
     encode_local_relation_certificate, encode_revision_local_certificate,
-    encode_word_interface_contract, produce_bounded_answer, produce_local_relation,
-    produce_revision_local_certificate, source_digest, unchanged_local_evidence,
-    validate_local_artifact, verify_bounded_answer, verify_local_relation,
-    verify_local_relation_for_composition, verify_revision_local_certificate,
-    verify_revision_with_retained_left, verify_source_bindings,
+    encode_word_interface_contract, produce_bounded_answer, produce_direct_answer,
+    produce_local_relation, produce_revision_local_certificate, source_digest,
+    unchanged_local_evidence, validate_local_artifact, verify_bounded_answer, verify_direct_answer,
+    verify_local_relation, verify_local_relation_for_composition,
+    verify_revision_local_certificate, verify_revision_with_retained_left, verify_source_bindings,
 };
 
 #[test]
@@ -202,4 +202,30 @@ fn downstream_client_can_measure_retained_left_revision_work() {
     assert_eq!(work.decoded_local_sections, 1);
     assert_eq!(work.semantically_verified_local_sections, 1);
     assert_eq!(work.reused_local_sections, 1);
+}
+
+#[test]
+fn downstream_client_gets_exact_fallback_beyond_local_state_bounds() {
+    let wide_left = b"1 sort bitvec 1\n2 sort bitvec 2\n3 sort bitvec 9\n4 input 2 command\n5 state 3 wide_state\n6 zero 3\n7 init 3 5 6\n8 uext 3 4 7\n9 next 3 5 8\n10 zero 1\n11 bad 10 never\n";
+    let right = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    assert!(produce_local_relation(wide_left, &[4]).is_err());
+    let interface = encode_word_interface_contract(&WordInterfaceContract {
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 4,
+            to_input: 3,
+        }],
+    })
+    .unwrap();
+    let query = BoundedQuery {
+        horizon: 1,
+        bad_side: ComponentSide::Right,
+        bad_output: 10,
+    };
+    let (certificate, produced) =
+        produce_direct_answer(wide_left, right, interface.as_bytes(), &query).unwrap();
+    assert_eq!(produced.result, BoundedResult::Unsafe);
+    let verified =
+        verify_direct_answer(wide_left, right, interface.as_bytes(), &certificate).unwrap();
+    assert_eq!(verified.bad_frame, Some(1));
 }
