@@ -48,7 +48,11 @@ mkdir "$evidence"
   "$yosys_binary" "$models" >/dev/null
 "$repository/scripts/build-opentitan-aon-dual-timer-aiger.sh" \
   "$yosys_binary" "$models_second" >/dev/null
-diff -ru "$models" "$models_second" >/dev/null
+if ! diff -ru "$models" "$models_second" >"$scratch/models.diff"; then
+  echo "OpenTitan AIGER clean-directory reproduction differs" >&2
+  sed -n '1,200p' "$scratch/models.diff" >&2
+  exit 1
+fi
 echo "opentitan composed-witness phase=models-deterministic"
 models=$(cd "$models" && pwd -P)
 evidence=$(cd "$evidence" && pwd -P)

@@ -74,11 +74,17 @@ build_model() {
       out/h${horizon}-${label}.aag
   "
   )
-  test -s "$model"
+  if [ ! -s "$model" ]; then
+    echo "AIGER model is empty: h${horizon}-${label}" >&2
+    exit 1
+  fi
   header=$(sed -n '1p' "$model")
   bads=$(printf '%s\n' "$header" | awk '{print ($1 == "aag" && NF >= 7) ? $7 : 0}')
   expected=$(printf '%s' "$mask" | awk '{n=$1; c=0; while(n){c+=n%2; n=int(n/2)}; print c}')
-  test "$bads" -eq "$expected"
+  if [ "$bads" -ne "$expected" ]; then
+    echo "AIGER bad-property count mismatch: h${horizon}-${label} expected=$expected actual=$bads header=$header" >&2
+    exit 1
+  fi
 }
 
 for horizon in 4 5 7 9; do
