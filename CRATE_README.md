@@ -18,7 +18,8 @@ The package provides:
   named assumptions, replayable counterexamples and versioned evidence bundles;
 - a static specialised-backend gate with exact persistent-CDCL fallback;
 - deterministic certificate formats with independent source-bound verification;
-  and
+- qualified Certifaiger plus `lrat_isa` SAFE checking and `aigsim` UNSAFE trace
+  replay in the repository evidence harness; and
 - experimental BTOR2 word semantics, counter-phase certificates, exact trace
   replay, proof-carrying exact word regions, coupled-motion curves, resettable
   braking phases, source-separated controller/plant contracts, and both-answer
@@ -37,6 +38,13 @@ The project publishes negative measurements and tracks the remaining
 and
 [novelty](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/NOVELTY_GAP.md)
 gaps explicitly.
+
+The retained public-design evidence covers pinned OpenTitan timer RTL and an
+independently maintained CHIPS Alliance Caliptra watchdog module. The Caliptra
+baseline preserves five SAFE and four UNSAFE bounded outcomes, deterministic
+evidence, independently checked certificates and traces, verified
+multi-property witness composition, and hostile-evidence rejection. These are
+narrow configured-core results, not assurance for either complete product.
 
 Bounded portfolio v3 source-binds and independently checks the exact
 accelerate, brake, and stopped relation, with unchanged exact-search fallback

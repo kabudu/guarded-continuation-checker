@@ -202,7 +202,8 @@ preserves watchdog bark, wake-up, and bite violations at exact frames 5, 7, and
 9. A 515-byte artifact preserves the same earliest frames at a billion-frame
 horizon without explicit layer construction. The source-reconstructing checker
 rejects claim mutations and every truncated h9 artifact. Maintained-tool,
-cross-platform, resource, and focused prior-art gates remain open.
+cross-platform, and resource comparisons now pass for this narrow
+configuration. Focused prior-art and independent-review gates remain open.
 
 The next pinned
 [OpenTitan dual-timer experiment](docs/OPENTITAN_AON_DUAL_TIMER_EXPERIMENT_V1.md)
@@ -213,6 +214,15 @@ invariant chaining rather than simple independent-counter grouping. GCC now
 parses Yosys's standard reduction-or node and retains exact frame 5, 7, and 9
 semantic checks. Predicate-set v3 now completes the query through invariant
 chaining; the earlier v2 refusal remains the frozen pre-implementation control.
+
+The independent [Caliptra watchdog experiment](docs/CALIPTRA_WDT_EXPERIMENT_V1.md)
+adds an unmodified Apache-2.0 CHIPS Alliance module as a second public embedded
+design. Its frozen nine-row local matrix has five independently checked SAFE
+witnesses and four shortest replayed UNSAFE traces. Verified standard witness
+composition reduces the horizon-2 and horizon-3 SAFE sets by 68.90% and 53.89%.
+This broadens real-design evidence while further disconfirming a broad novelty
+claim for multi-property evidence sharing. Hosted amd64 reproduction and
+independent operator acceptance remain open.
 
 The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
 keeps controller, plant, and synchronous wiring contract as separately hashed
