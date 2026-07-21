@@ -29,6 +29,8 @@ jobs:
             scripts/benchmark-gcc-proof-runlim-v1.sh \
             scripts/test-composed-witness-baseline-v1.sh \
             scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+            scripts/opentitan-dual-timer-resource-container-v1.sh \
             scripts/benchmark-changing-plant-composed-witness-v1.sh \
             scripts/test-certified-evidence-hostile-v1.sh
           shellcheck -s sh scripts/build-opentitan-aon-dual-timer-aiger.sh
@@ -67,7 +69,9 @@ jobs:
         run: |
           shellcheck -s bash scripts/build-opentitan-aon-watchdog-btor2.sh
           shellcheck -s bash \
-            scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh
+            scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+            scripts/opentitan-dual-timer-resource-container-v1.sh
           shellcheck -s sh \
             scripts/build-opentitan-aon-dual-timer-aiger.sh \
             scripts/test-btor2tools-baseline.sh \

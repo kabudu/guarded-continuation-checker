@@ -396,9 +396,11 @@ property answers. Certifaiger plus `lrat_isa` independently accepts six SAFE
 certificates, `aigsim` replays six UNSAFE traces, and the two applicable SAFE
 sets compose and verify. Model and evidence regeneration is byte-deterministic.
 Six targeted evidence substitution, mutation, and truncation controls fail
-closed. Hosted reproduction of this new baseline, Linux resource enforcement,
-and independent review remain open, so this does not yet close a
-production-readiness row.
+closed. A predeclared hosted resource harness now measures complete h4 and h5
+production and consumption under the same process-group monitor, using repeated
+invocations to avoid missing short-lived memory peaks. Hosted reproduction and
+measurements, Linux policy enforcement, and independent review remain open, so
+this does not yet close a production-readiness row.
 
 ## Post-production-release deliverables
 

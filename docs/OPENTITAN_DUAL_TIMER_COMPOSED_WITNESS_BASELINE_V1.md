@@ -91,3 +91,28 @@ Hosted amd64 reproduction, resource measurements, and independent expert review
 remain required before the baseline can close its production gate. The builder
 now attests the pinned OpenTitan source and Yosys revision, while the corpus
 manifest binds the wrapper and compatibility files.
+
+## Predeclared resource comparison
+
+The hosted amd64 follow-up measures horizons 4 and 5 with three trials. Each
+sample runs ten sequential complete invocations under pinned `runlim`, reports
+wall time normalised per invocation, and retains the process-group peak RSS.
+The repeated workload prevents a short GCC invocation from finishing between
+memory samples.
+
+For GCC, production creates one complete predicate-set artifact and consumption
+verifies it from the BTOR2 source. For the external route, production runs rIC3
+for all three properties and composes the SAFE members; consumption checks the
+composition with Certifaiger plus `lrat_isa` and replays any UNSAFE trace with
+`aigsim`. Evidence bytes therefore include the composed SAFE witness and every
+required UNSAFE trace. Model bytes, producer and consumer executable footprints,
+wall time, and peak RSS remain separate columns.
+The external producer footprint includes both rIC3 and the GCC binary that
+hosts the paper-derived composer; omitting that composer would understate the
+actual experimental toolchain. The consumer footprint is the complete
+qualified Certifaiger tool tree used by the checker and trace replay.
+
+Pinned Yosys source-to-model generation is common setup and is explicitly
+excluded from both timed regions. Its models and provenance remain included in
+the byte accounting. No performance conclusion is permitted until the hosted
+run completes with nonzero resource measurements and exact answer agreement.
