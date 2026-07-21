@@ -545,3 +545,9 @@ Constraint-aware bounded search v4 closes the next practical exact-fallback
 gap on a constrained public PLIC wrapper. Assumption-constrained reachability
 and explicit-state search are established prior art. The successful result is
 production engineering evidence only and does not change a novelty gate.
+
+The predeclared word-input bounded-search v5 experiment is also product
+engineering rather than a novelty candidate. Explicit finite-domain
+bit-vector enumeration, typed input reconstruction, and constrained bounded
+reachability are established. Its role is to make later word-level proof
+compression comparisons exact and source-faithful.

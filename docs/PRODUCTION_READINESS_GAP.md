@@ -75,6 +75,10 @@ reachability and its SAFE
   PLIC workflow, independent oracle, hostile controls, maintained Yosys plus Z3
   agreement, and retained v1 through v3 compatibility pass. Hosted and release
   compatibility gates remain open, so no readiness status changes yet.
+  Word-input bounded search v5 is predeclared because v4 still refuses small
+  register fields, bus values, and sensor samples. No readiness row changes
+  until its width binding, exact fallback, public Caliptra workflow, retained
+  compatibility, and hosted gates pass.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,

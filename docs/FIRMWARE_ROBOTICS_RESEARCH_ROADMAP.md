@@ -104,6 +104,10 @@ close either register by itself.
    dead ends without changing retained v1 through v3 evidence. A constrained
    public PLIC workflow agrees with maintained Yosys plus Z3 through horizon
    16. Hosted reproduction and release compatibility remain open.
+   The next predeclared fallback boundary is
+   [bounded search v5](BTOR2_BOUNDED_SEARCH_V5_PLAN.md), which must preserve
+   small word-valued register and sensor inputs without flattening away source
+   widths, while retaining every v1 through v4 artifact.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
