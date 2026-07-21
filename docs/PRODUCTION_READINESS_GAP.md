@@ -395,9 +395,10 @@ queries. The local identical-scope AIGER control now agrees on all twelve
 property answers. Certifaiger plus `lrat_isa` independently accepts six SAFE
 certificates, `aigsim` replays six UNSAFE traces, and the two applicable SAFE
 sets compose and verify. Model and evidence regeneration is byte-deterministic.
-Hosted reproduction of this new baseline, Linux resource enforcement, targeted
-mutation controls, and independent review remain open, so this does not yet
-close a production-readiness row.
+Six targeted evidence substitution, mutation, and truncation controls fail
+closed. Hosted reproduction of this new baseline, Linux resource enforcement,
+and independent review remain open, so this does not yet close a
+production-readiness row.
 
 ## Post-production-release deliverables
 

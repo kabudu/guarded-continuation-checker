@@ -111,6 +111,30 @@ verify_unsafe() {
     >"$evidence/$log" 2>&1
 }
 
+reject_safe() {
+  local model=$1 certificate=$2 log=$3
+  if docker run --rm --network none \
+    -v "$certifaiger_output/bin:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out:ro" "$certifaiger_image" \
+    /tools/check "/models/$model" "/out/$certificate" \
+    >"$evidence/$log" 2>&1; then
+    echo "hostile SAFE evidence unexpectedly verified: $log" >&2
+    exit 1
+  fi
+}
+
+reject_unsafe() {
+  local model=$1 trace=$2 log=$3
+  if docker run --rm --network none \
+    -v "$certifaiger_output/bin:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out:ro" "$certifaiger_image" \
+    /tools/aigsim -c -m "/models/$model" "/out/$trace" \
+    >"$evidence/$log" 2>&1; then
+    echo "hostile UNSAFE evidence unexpectedly replayed: $log" >&2
+    exit 1
+  fi
+}
+
 printf '%s\n' \
   'schema_version,horizon,property,expected_answer,external_answer,earliest_bad_frame,model_bytes,evidence_bytes,deterministic,independently_verified,status' \
   >"$scratch/result.csv"
@@ -164,6 +188,24 @@ verify_safe h4-safe-set.aag h4-composed.aag h4-composed.consumer.log
 cmp "$evidence/h5-composed.aag" "$evidence/h5-composed-second.aag"
 verify_safe h5-safe-set.aag h5-composed.aag h5-composed.consumer.log
 
+# Evidence substitution, corruption, and truncation must fail independently.
+sed '1s/^aag/bag/' "$evidence/h4-wake.evidence.aag" \
+  >"$evidence/h4-wake.malformed.aag"
+safe_bytes=$(wc -c <"$evidence/h4-wake.evidence.aag" | tr -d ' ')
+dd if="$evidence/h4-wake.evidence.aag" \
+  of="$evidence/h4-wake.truncated.aag" bs=1 count=$((safe_bytes - 1)) \
+  2>/dev/null
+trace_bytes=$(wc -c <"$evidence/h5-bark.evidence.aag" | tr -d ' ')
+dd if="$evidence/h5-bark.evidence.aag" \
+  of="$evidence/h5-bark.truncated.aag" bs=1 count=$((trace_bytes - 1)) \
+  2>/dev/null
+reject_safe h4-wake.aag h4-wake.malformed.aag hostile-safe-malformed.log
+reject_safe h4-wake.aag h4-wake.truncated.aag hostile-safe-truncated.log
+reject_safe h5-wake.aag h4-wake.evidence.aag hostile-safe-wrong-model.log
+reject_safe h5-safe-set.aag h4-composed.aag hostile-composed-wrong-model.log
+reject_unsafe h5-bark.aag h5-bark.truncated.aag hostile-trace-truncated.log
+reject_unsafe h4-bark.aag h5-bark.evidence.aag hostile-trace-wrong-model.log
+
 {
   printf 'schema_version=1\n'
   printf 'scope=opentitan-aon-dual-timer-bounded-identical-scope\n'
@@ -172,6 +214,7 @@ verify_safe h5-safe-set.aag h5-composed.aag h5-composed.consumer.log
   printf 'safe_certificate_count=6\n'
   printf 'unsafe_trace_count=6\n'
   printf 'composed_safe_set_count=2\n'
+  printf 'hostile_control_count=6\n'
   printf 'aiger_models_sha256=%s\n' "$(sha256sum_portable "$models/SHA256SUMS")"
   printf 'h4_safe_set_model_bytes=%s\n' "$(wc -c \
     <"$models/h4-safe-set.aag" | tr -d ' ')"

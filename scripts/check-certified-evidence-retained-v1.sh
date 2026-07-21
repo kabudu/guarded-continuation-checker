@@ -69,6 +69,7 @@ awk -F, '
 [[ $(sed -n 's/^safe_certificate_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^unsafe_trace_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^composed_safe_set_count=//p' "$opentitan_manifest") == 2 ]]
+[[ $(sed -n 's/^hostile_control_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_manifest") == validated ]]
 
 shared_pattern='^(qualification_lock_sha256|model_manifest_sha256|evidence_bytes|property_.*)='

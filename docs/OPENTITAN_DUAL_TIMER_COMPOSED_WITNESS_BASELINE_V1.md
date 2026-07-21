@@ -73,7 +73,10 @@ scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
 The harness refuses overwrites, uses no-network checker containers, validates
 the exact pinned toolchain lock, checks deterministic regeneration, verifies
 each evidence object independently, and checks both composed witnesses against
-their complete shared models.
+their complete shared models. Six hostile controls reject malformed and
+truncated SAFE evidence, a SAFE witness bound to the wrong horizon, a composed
+witness bound to the wrong shared model, a truncated UNSAFE trace, and a trace
+replayed against a SAFE horizon.
 
 ## Conclusion and remaining gates
 
@@ -84,7 +87,7 @@ property sets. Predicate-set v3 remains valuable as a compact bounded
 word-level product contract, but this experiment supplies no support for an
 algorithmic novelty claim.
 
-Hosted amd64 reproduction, resource measurements, mutation controls specific
-to this new wrapper, source-to-AIGER attestation in the public corpus, and
-independent expert review remain required before the baseline can close its
-production gate.
+Hosted amd64 reproduction, resource measurements, and independent expert review
+remain required before the baseline can close its production gate. The builder
+now attests the pinned OpenTitan source and Yosys revision, while the corpus
+manifest binds the wrapper and compatibility files.

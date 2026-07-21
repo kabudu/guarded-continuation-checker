@@ -5,6 +5,7 @@ answer_count=12
 safe_certificate_count=6
 unsafe_trace_count=6
 composed_safe_set_count=2
+hostile_control_count=6
 aiger_models_sha256=9846999ea1dc5caf25ce0de599cceee62ca96e9a92d6df0a2cc0525029cac603
 h4_safe_set_model_bytes=30695
 h5_safe_set_model_bytes=30470
