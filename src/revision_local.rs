@@ -16,8 +16,11 @@ pub const MAX_LOCAL_INPUT_BITS: usize = 8;
 pub const MAX_LOCAL_OUTPUT_BITS: usize = 8;
 pub const MAX_LOCAL_VALUATIONS: usize = 65_536;
 pub const MAX_LOCAL_NODE_STEPS: usize = 30_000_000;
+pub const LOCAL_RELATION_CERTIFICATE_VERSION: u32 = 1;
+pub const MAX_LOCAL_CONSTRAINTS: usize = 4096;
 
 const MAGIC: &[u8; 8] = b"GCCRLCP1";
+const LOCAL_RELATION_MAGIC: &[u8; 8] = b"GCCLRL01";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EvidenceSection {
@@ -362,6 +365,287 @@ pub fn verify_local_relation(
     })
 }
 
+fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
+    !ids.is_empty()
+        && ids.len() <= maximum
+        && ids.iter().all(|id| *id != 0)
+        && ids.windows(2).all(|pair| pair[0] < pair[1])
+}
+
+fn validate_local_relation_structure(
+    certificate: &LocalRelationCertificate,
+    section: EvidenceSection,
+) -> Result<(), RevisionLocalError> {
+    if !valid_ids(&certificate.states, MAX_LOCAL_STATE_BITS)
+        || !valid_ids(&certificate.inputs, MAX_LOCAL_INPUT_BITS)
+        || !valid_ids(&certificate.outputs, MAX_LOCAL_OUTPUT_BITS)
+    {
+        return Err(reject(section, "local relation node vectors are invalid"));
+    }
+    if certificate.states.len() != certificate.state_widths.len()
+        || certificate.inputs.len() != certificate.input_widths.len()
+        || certificate.outputs.len() != certificate.output_widths.len()
+    {
+        return Err(reject(section, "local relation width vectors are invalid"));
+    }
+    if certificate
+        .state_widths
+        .iter()
+        .chain(&certificate.input_widths)
+        .chain(&certificate.output_widths)
+        .any(|width| !(1..=64).contains(width))
+    {
+        return Err(reject(section, "local relation contains an invalid width"));
+    }
+    checked_bits(
+        &certificate.state_widths,
+        MAX_LOCAL_STATE_BITS,
+        section,
+        "state",
+    )?;
+    checked_bits(
+        &certificate.input_widths,
+        MAX_LOCAL_INPUT_BITS,
+        section,
+        "input",
+    )?;
+    checked_bits(
+        &certificate.output_widths,
+        MAX_LOCAL_OUTPUT_BITS,
+        section,
+        "output",
+    )?;
+    if certificate.constraints.len() > MAX_LOCAL_CONSTRAINTS
+        || certificate.constraints.contains(&0)
+        || !certificate
+            .constraints
+            .windows(2)
+            .all(|pair| pair[0] < pair[1])
+    {
+        return Err(reject(
+            section,
+            "local relation constraint vector is invalid",
+        ));
+    }
+    if certificate.rows.len() > MAX_LOCAL_VALUATIONS {
+        return Err(reject(section, "local relation row count exceeds limit"));
+    }
+    for row in &certificate.rows {
+        if row.state.len() != certificate.states.len()
+            || row.input.len() != certificate.inputs.len()
+            || row.next_state.len() != certificate.states.len()
+            || row.output.len() != certificate.outputs.len()
+        {
+            return Err(reject(section, "local relation row shape is invalid"));
+        }
+        for (value, width) in row
+            .state
+            .iter()
+            .zip(&certificate.state_widths)
+            .chain(row.input.iter().zip(&certificate.input_widths))
+            .chain(row.next_state.iter().zip(&certificate.state_widths))
+            .chain(row.output.iter().zip(&certificate.output_widths))
+        {
+            if *width < 64 && (*value >> *width) != 0 {
+                return Err(reject(section, "local relation row value exceeds width"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn append_u32(
+    output: &mut Vec<u8>,
+    value: usize,
+    section: EvidenceSection,
+) -> Result<(), RevisionLocalError> {
+    let value = u32::try_from(value)
+        .map_err(|_| reject(section, "local relation count cannot be encoded"))?;
+    output.extend_from_slice(&value.to_be_bytes());
+    Ok(())
+}
+
+fn append_id_widths(
+    output: &mut Vec<u8>,
+    ids: &[NodeId],
+    widths: &[u32],
+    section: EvidenceSection,
+) -> Result<(), RevisionLocalError> {
+    append_u32(output, ids.len(), section)?;
+    for (id, width) in ids.iter().zip(widths) {
+        output.extend_from_slice(&id.to_be_bytes());
+        output.extend_from_slice(&width.to_be_bytes());
+    }
+    Ok(())
+}
+
+pub fn encode_local_relation_certificate(
+    certificate: &LocalRelationCertificate,
+) -> Result<Vec<u8>, RevisionLocalError> {
+    validate_local_relation_structure(certificate, EvidenceSection::Envelope)?;
+    let mut output = Vec::new();
+    output.extend_from_slice(LOCAL_RELATION_MAGIC);
+    output.extend_from_slice(&LOCAL_RELATION_CERTIFICATE_VERSION.to_be_bytes());
+    output.extend_from_slice(&certificate.source_sha256);
+    append_id_widths(
+        &mut output,
+        &certificate.states,
+        &certificate.state_widths,
+        EvidenceSection::Envelope,
+    )?;
+    append_id_widths(
+        &mut output,
+        &certificate.inputs,
+        &certificate.input_widths,
+        EvidenceSection::Envelope,
+    )?;
+    append_id_widths(
+        &mut output,
+        &certificate.outputs,
+        &certificate.output_widths,
+        EvidenceSection::Envelope,
+    )?;
+    append_u32(
+        &mut output,
+        certificate.constraints.len(),
+        EvidenceSection::Envelope,
+    )?;
+    for constraint in &certificate.constraints {
+        output.extend_from_slice(&constraint.to_be_bytes());
+    }
+    append_u32(
+        &mut output,
+        certificate.rows.len(),
+        EvidenceSection::Envelope,
+    )?;
+    for row in &certificate.rows {
+        for value in row
+            .state
+            .iter()
+            .chain(&row.input)
+            .chain(&row.next_state)
+            .chain(&row.output)
+        {
+            output.extend_from_slice(&value.to_be_bytes());
+        }
+    }
+    if output.len() > MAX_LOCAL_SECTION_BYTES {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "encoded local relation exceeds byte limit",
+        ));
+    }
+    Ok(output)
+}
+
+fn decode_id_widths(
+    decoder: &mut Decoder<'_>,
+    maximum: usize,
+    section: EvidenceSection,
+) -> Result<(Vec<NodeId>, Vec<u32>), RevisionLocalError> {
+    let count = decoder.bounded_count(maximum, section, "node")?;
+    if count == 0 {
+        return Err(reject(section, "local relation node vector is empty"));
+    }
+    let mut ids = Vec::with_capacity(count);
+    let mut widths = Vec::with_capacity(count);
+    for _ in 0..count {
+        ids.push(decoder.u64(section)?);
+        widths.push(decoder.u32(section)?);
+    }
+    Ok((ids, widths))
+}
+
+pub fn decode_local_relation_certificate(
+    bytes: &[u8],
+) -> Result<LocalRelationCertificate, RevisionLocalError> {
+    if bytes.len() > MAX_LOCAL_SECTION_BYTES {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "encoded local relation exceeds byte limit",
+        ));
+    }
+    let mut decoder = Decoder { bytes, offset: 0 };
+    if decoder.take(LOCAL_RELATION_MAGIC.len(), EvidenceSection::Envelope)? != LOCAL_RELATION_MAGIC
+    {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "invalid local relation magic",
+        ));
+    }
+    if decoder.u32(EvidenceSection::Envelope)? != LOCAL_RELATION_CERTIFICATE_VERSION {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "unsupported local relation version",
+        ));
+    }
+    let source_sha256 = decoder.digest(EvidenceSection::Envelope)?;
+    let (states, state_widths) = decode_id_widths(
+        &mut decoder,
+        MAX_LOCAL_STATE_BITS,
+        EvidenceSection::Envelope,
+    )?;
+    let (inputs, input_widths) = decode_id_widths(
+        &mut decoder,
+        MAX_LOCAL_INPUT_BITS,
+        EvidenceSection::Envelope,
+    )?;
+    let (outputs, output_widths) = decode_id_widths(
+        &mut decoder,
+        MAX_LOCAL_OUTPUT_BITS,
+        EvidenceSection::Envelope,
+    )?;
+    let constraint_count = decoder.bounded_count(
+        MAX_LOCAL_CONSTRAINTS,
+        EvidenceSection::Envelope,
+        "constraint",
+    )?;
+    let mut constraints = Vec::with_capacity(constraint_count);
+    for _ in 0..constraint_count {
+        constraints.push(decoder.u64(EvidenceSection::Envelope)?);
+    }
+    let row_count =
+        decoder.bounded_count(MAX_LOCAL_VALUATIONS, EvidenceSection::Envelope, "row")?;
+    let mut rows = Vec::with_capacity(row_count);
+    for _ in 0..row_count {
+        let state = decoder.values(states.len(), EvidenceSection::Envelope)?;
+        let input = decoder.values(inputs.len(), EvidenceSection::Envelope)?;
+        let next_state = decoder.values(states.len(), EvidenceSection::Envelope)?;
+        let output = decoder.values(outputs.len(), EvidenceSection::Envelope)?;
+        rows.push(LocalRelationRow {
+            state,
+            input,
+            next_state,
+            output,
+        });
+    }
+    if decoder.offset != bytes.len() {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "local relation has trailing bytes",
+        ));
+    }
+    let certificate = LocalRelationCertificate {
+        source_sha256,
+        states,
+        state_widths,
+        inputs,
+        input_widths,
+        outputs,
+        output_widths,
+        constraints,
+        rows,
+    };
+    validate_local_relation_structure(&certificate, EvidenceSection::Envelope)?;
+    if encode_local_relation_certificate(&certificate)? != bytes {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "local relation encoding is not canonical",
+        ));
+    }
+    Ok(certificate)
+}
+
 pub fn verify_source_bindings(
     left_source: &[u8],
     right_source: &[u8],
@@ -488,6 +772,35 @@ impl<'a> Decoder<'a> {
     fn u32(&mut self, section: EvidenceSection) -> Result<u32, RevisionLocalError> {
         let bytes: [u8; 4] = self.take(4, section)?.try_into().expect("fixed size");
         Ok(u32::from_be_bytes(bytes))
+    }
+
+    fn u64(&mut self, section: EvidenceSection) -> Result<u64, RevisionLocalError> {
+        let bytes: [u8; 8] = self.take(8, section)?.try_into().expect("fixed size");
+        Ok(u64::from_be_bytes(bytes))
+    }
+
+    fn bounded_count(
+        &mut self,
+        maximum: usize,
+        section: EvidenceSection,
+        label: &str,
+    ) -> Result<usize, RevisionLocalError> {
+        let count = usize::try_from(self.u32(section)?).expect("u32 fits usize");
+        if count > maximum {
+            return Err(reject(
+                section,
+                format!("local relation {label} count exceeds limit"),
+            ));
+        }
+        Ok(count)
+    }
+
+    fn values(
+        &mut self,
+        count: usize,
+        section: EvidenceSection,
+    ) -> Result<Vec<u64>, RevisionLocalError> {
+        (0..count).map(|_| self.u64(section)).collect()
     }
 
     fn digest(&mut self, section: EvidenceSection) -> Result<[u8; 32], RevisionLocalError> {
@@ -652,6 +965,11 @@ mod tests {
         assert_eq!(summary.output_bits, 2);
         assert_eq!(summary.candidate_valuations, 16);
         assert_eq!(summary.admissible_rows, 12);
+        let encoded = encode_local_relation_certificate(&relation).unwrap();
+        assert_eq!(
+            decode_local_relation_certificate(&encoded).unwrap(),
+            relation
+        );
     }
 
     #[test]
@@ -678,5 +996,25 @@ mod tests {
         let error = produce_local_relation(source, &[4]).unwrap_err();
         assert_eq!(error.section, EvidenceSection::Envelope);
         assert_eq!(error.message, "state width exceeds 8-bit limit");
+    }
+
+    #[test]
+    fn local_relation_codec_rejects_truncation_trailing_and_count_attacks() {
+        let relation = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let encoded = encode_local_relation_certificate(&relation).unwrap();
+        for length in 0..encoded.len() {
+            assert!(decode_local_relation_certificate(&encoded[..length]).is_err());
+        }
+        let mut trailing = encoded.clone();
+        trailing.push(0);
+        assert!(decode_local_relation_certificate(&trailing).is_err());
+
+        let mut hostile_count = encoded;
+        let state_count_offset = LOCAL_RELATION_MAGIC.len() + 4 + 32;
+        hostile_count[state_count_offset..state_count_offset + 4]
+            .copy_from_slice(&u32::MAX.to_be_bytes());
+        let error = decode_local_relation_certificate(&hostile_count).unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Envelope);
+        assert_eq!(error.message, "local relation node count exceeds limit");
     }
 }

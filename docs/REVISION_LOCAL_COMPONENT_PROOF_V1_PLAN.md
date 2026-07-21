@@ -13,9 +13,14 @@ semantic input bits, eight selected output bits, 65,536 candidate valuations,
 and 30 million estimated node steps. Constraints filter admissible rows. The
 verifier independently iterates every state and input valuation and rejects
 omitted, extra, reordered, or false rows with left-side or right-side
-attribution. This is not yet an independently encoded local proof: canonical
-local-relation encoding, interface composition, final answer evidence, exact v5
-fallback, and revision-work observations remain incomplete.
+attribution. Canonical local-relation encoding now round-trips through a
+versioned bounded binary codec, rejects every truncation, preflights hostile
+counts before allocation, and has a downstream public API test. This is not yet
+a compact independently encoded local proof because checking uses exhaustive
+semantic re-evaluation rather than compact proof checking. Interface
+composition, final
+answer evidence, exact v5 fallback, and revision-work observations remain
+incomplete.
 
 ## Hypothesis
 
