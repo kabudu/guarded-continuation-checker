@@ -145,19 +145,19 @@ completes with nonzero resource measurements and exact answer agreement.
 
 ## Hosted amd64 resource result
 
-[Hosted run 29800096071](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29800096071)
+[Hosted run 29860773683](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29860773683)
 completed three trials with ten sequential full
 invocations per sample. Every row has exact answer agreement, deterministic
 evidence, and nonzero wall-time and peak-memory measurements.
 
 At horizon 4, median GCC production is 0.005 seconds at 8 MB peak RSS, versus
-0.860 seconds and 359 MB for the external route. Median GCC consumption is
-0.003 seconds at 7 MB, versus 0.242 seconds and 143 MB. GCC retains 445 bytes
+0.861 seconds and 457 MB for the external route. Median GCC consumption is
+0.003 seconds at 4 MB, versus 0.236 seconds and 138 MB. GCC retains 445 bytes
 of evidence versus 26,984 bytes for the composed AIGER witness.
 
 At horizon 5, median GCC production is 0.005 seconds at 8 MB peak RSS, versus
-0.550 seconds and 271 MB. Median GCC consumption is 0.003 seconds at 7 MB,
-versus 0.253 seconds and 140 MB. GCC retains 454 bytes of evidence versus
+0.547 seconds and 324 MB. Median GCC consumption is 0.003 seconds at 7 MB,
+versus 0.250 seconds and 136 MB. GCC retains 454 bytes of evidence versus
 24,430 bytes for the composed SAFE witness plus the shortest UNSAFE trace.
 
 These measurements describe this narrow recognised recurrence only. They do
@@ -166,13 +166,14 @@ not establish general SAT or model-checking superiority. The GCC executable is
 the external consumer tool tree is only 11,444,673 bytes, so GCC does not win
 the consumer executable-footprint comparison.
 
-The arm64 and amd64 runs preserve identical answers, earliest frames, evidence
-sizes, and composed-witness hashes. The generated AAG model text differs by 15
-bytes per property across the two hosts, so the repository does not claim
-cross-platform model-byte identity. The hosted provenance record binds the
-retained files to the successful workflow commit and artifact digest.
+The arm64 and amd64 runs now produce byte-identical comparison CSVs, including
+answers, earliest frames, model byte counts, evidence sizes, and composed
+witness results. Their manifests are identical except for the expected
+architecture-specific rIC3 binary and Certifaiger tree hashes. The hosted
+provenance record binds the retained files to the successful workflow commit
+and artifact digest.
 
-## Canonical-export follow-up checkpoint
+## Canonical-export follow-up result
 
 The remaining AAG byte difference is isolated to Yosys build-identification
 text in the AAG comment and witness-map `gennerator` field. The builder now
@@ -180,7 +181,6 @@ replaces only those two non-semantic strings with the already-attested Yosys
 commit under serialization profile `canonical-yosys-revision-v1`. Two clean
 arm64 exports are byte-identical, and the complete twelve-row proof,
 composition, independent-verification, determinism, and hostile-control
-baseline passes unchanged. The retained amd64 artifact above predates this
-canonicalisation and remains bound to its original workflow. A fresh hosted
-amd64 run is still required to confirm cross-platform byte identity; no such
-claim is made at this checkpoint.
+baseline passes unchanged. Hosted run 29860773683 confirms the complete amd64
+comparison CSV is byte-identical to arm64 under the canonical profile. This
+closes the cross-platform model-serialization subgate for this experiment.

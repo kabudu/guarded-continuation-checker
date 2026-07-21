@@ -91,16 +91,15 @@ check_opentitan_composed "$opentitan_amd_composed"
 [[ $(sed -n 's/^hostile_control_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_manifest") == validated ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_amd_manifest") == validated ]]
+[[ $(sed -n 's/^model_serialization_profile=//p' \
+  "$opentitan_amd_manifest") == canonical-yosys-revision-v1 ]]
 
+cmp "$opentitan_composed" "$opentitan_amd_composed"
 diff -u \
-  <(cut -d, -f2-7,9-12 "$opentitan_composed") \
-  <(cut -d, -f2-7,9-12 "$opentitan_amd_composed")
-for field in h4_composed_sha256 h5_composed_sha256 \
-  h4_individual_evidence_bytes h4_composed_evidence_bytes \
-  h5_individual_safe_evidence_bytes h5_composed_evidence_bytes; do
-  [[ $(sed -n "s/^$field=//p" "$opentitan_manifest") == \
-    $(sed -n "s/^$field=//p" "$opentitan_amd_manifest") ]]
-done
+  <(grep -Ev '^(ric3_binary_sha256|certifaiger_tree_sha256)=' \
+    "$opentitan_manifest") \
+  <(grep -Ev '^(ric3_binary_sha256|certifaiger_tree_sha256)=' \
+    "$opentitan_amd_manifest")
 
 awk -F, '
   NR == 1 { next }
@@ -121,6 +120,8 @@ awk -F, '
 [[ $(sed -n 's/^trials=//p' "$opentitan_amd_resource_manifest") == 3 ]]
 [[ $(sed -n 's/^external_producer_policy=//p' \
   "$opentitan_amd_resource_manifest") == static-ic3-safe-bmc-earliest-unsafe-race ]]
+[[ $(sed -n 's/^model_serialization_profile=//p' \
+  "$opentitan_amd_resource_manifest") == canonical-yosys-revision-v1 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_amd_resource_manifest") == measured ]]
 
 sha256_portable() {
@@ -141,7 +142,7 @@ for binding in \
     $(sha256_portable "$file") ]]
 done
 [[ $(sed -n 's/^workflow_head_sha=//p' "$opentitan_amd_provenance") == \
-  8621d80abde8e37cf545af863cdcfd756990302e ]]
+  9656749ce892bcbaf66d7a38ed570f59cab1e2a6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_amd_provenance") == retained ]]
 
 shared_pattern='^(qualification_lock_sha256|model_manifest_sha256|evidence_bytes|property_.*)='

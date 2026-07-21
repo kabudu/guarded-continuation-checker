@@ -509,3 +509,8 @@ reproduces the same answers, exact frames, evidence sizes, and composed-witness
 hashes and adds nonzero resource measurements. This strengthens the engineering
 evidence but does not revive an algorithmic novelty claim. Independent expert
 review remains mandatory.
+
+Canonical hosted run 29860773683 additionally makes the complete twelve-row
+arm64 and amd64 comparison CSV byte-identical by normalising only non-semantic
+Yosys build-identification text. This closes a reproducibility gap, not a
+novelty row.

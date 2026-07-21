@@ -438,9 +438,13 @@ other production gates remain open.
 A subsequent reproducibility checkpoint canonicalises only the pinned Yosys
 build-identification strings embedded in AAG comments and witness maps. Two
 clean arm64 exports and the full local evidence baseline pass under profile
-`canonical-yosys-revision-v1`. Hosted amd64 confirmation is intentionally left
-open; the successful retained artifact above remains the pre-canonicalisation
-baseline until that follow-up runs.
+`canonical-yosys-revision-v1`. Hosted run 29860773683 reproduces the complete
+twelve-row CSV byte-for-byte on amd64, including model sizes, answers, earliest
+frames, and evidence sizes. The manifests differ only in the expected
+architecture-specific producer and consumer binary hashes. This closes the
+canonical cross-platform model-serialization subgate for the OpenTitan
+experiment; it does not close independent review or the broader production
+release gates.
 
 ## Post-production-release deliverables
 
