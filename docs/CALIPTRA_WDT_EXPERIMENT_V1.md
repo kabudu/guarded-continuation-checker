@@ -1,6 +1,6 @@
 # Caliptra watchdog experiment v1
 
-Status: predeclared, implementation in progress. No results have been retained.
+Status: local arm64 baseline validated. Hosted amd64 reproduction remains open.
 
 ## Purpose
 
@@ -20,10 +20,12 @@ instrumentation selects three properties independently:
 2. timer two has not timed out;
 3. no fatal cascade timeout has occurred.
 
-The tested horizons will be chosen only by a deterministic boundary probe and
-then frozen before comparative timing or evidence-size measurements. The final
-set must contain both SAFE and UNSAFE outcomes and at least one shared SAFE set
-eligible for witness composition.
+The deterministic answer-only boundary probe found the first timer-one bad
+frame at 3 and the first timer-two and fatal bad frames at 5. Horizons 2, 3,
+and 5 are therefore frozen before comparative timing or evidence-size
+measurement. This gives five SAFE and four UNSAFE individual rows. Horizon 2
+has a three-property shared SAFE set, while horizon 3 has a two-property shared
+SAFE set containing timer two and fatal timeout.
 
 ## Acceptance criteria
 
@@ -40,3 +42,36 @@ The cycle passes only if:
 Failure or loss is retained and reported. This experiment is an evidence-breadth
 gate. It cannot by itself supply independent operator acceptance or establish a
 novel verification algorithm.
+
+## Local retained result
+
+All nine individual answers match the frozen boundary matrix. The five SAFE
+results are accepted by Certifaiger with every generated SAT proof checked by
+`lrat_isa`. The four UNSAFE traces replay with `aigsim` and terminate at the
+first bad frame. Two clean source-to-AIGER exports and two clean evidence runs
+are byte-identical. Six hostile controls reject malformed and truncated SAFE
+evidence, wrong-model SAFE evidence, a wrong shared model, a truncated UNSAFE
+trace, and an UNSAFE trace substituted into a SAFE horizon.
+
+At horizon 2, three individual SAFE witnesses total 43,630 bytes. Their verified
+composition is 13,570 bytes, a 68.90% reduction. At horizon 3, the timer-two and
+fatal witnesses total 29,126 bytes. Their verified composition is 13,432 bytes,
+a 53.89% reduction. This is evidence that established FM 2026 composition works
+on a second public embedded design. It is not an algorithmic novelty result.
+
+Retained data:
+
+- [`caliptra-wdt-composed-witness-v1.csv`](../results/caliptra-wdt-composed-witness-v1.csv)
+- [`caliptra-wdt-composed-witness-v1.manifest.txt`](../results/caliptra-wdt-composed-witness-v1.manifest.txt)
+
+Reproduce locally with the qualified rIC3 and Certifaiger tool trees:
+
+```sh
+scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
+  target/release/guarded-continuation-checker \
+  "$(command -v yosys)" \
+  /tmp/ric3-output \
+  /tmp/certifaiger-output \
+  /tmp/caliptra-wdt.csv \
+  /tmp/caliptra-wdt.manifest.txt
+```

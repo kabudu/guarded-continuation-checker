@@ -20,13 +20,15 @@ opentitan_amd_manifest="$results/opentitan-dual-timer-composed-witness-amd64-v1.
 opentitan_amd_resources="$results/opentitan-dual-timer-resources-amd64-v1.csv"
 opentitan_amd_resource_manifest="$results/opentitan-dual-timer-resources-amd64-v1.manifest.txt"
 opentitan_amd_provenance="$results/opentitan-dual-timer-hosted-amd64-v1.provenance.txt"
+caliptra_composed="$results/caliptra-wdt-composed-witness-v1.csv"
+caliptra_manifest="$results/caliptra-wdt-composed-witness-v1.manifest.txt"
 
 for file in "$arm_external" "$amd_external" "$arm_manifest" "$amd_manifest" \
   "$arm_hostile" "$amd_hostile" "$amd_gcc" "$amd_gcc_manifest" "$cross_gcc" \
   "$opentitan_composed" "$opentitan_manifest" \
   "$opentitan_amd_composed" "$opentitan_amd_manifest" \
   "$opentitan_amd_resources" "$opentitan_amd_resource_manifest" \
-  "$opentitan_amd_provenance"; do
+  "$opentitan_amd_provenance" "$caliptra_composed" "$caliptra_manifest"; do
   [[ -f "$file" && ! -L "$file" ]] || { echo "missing retained evidence: $file" >&2; exit 1; }
 done
 
@@ -144,6 +146,29 @@ done
 [[ $(sed -n 's/^workflow_head_sha=//p' "$opentitan_amd_provenance") == \
   9656749ce892bcbaf66d7a38ed570f59cab1e2a6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_amd_provenance") == retained ]]
+
+awk -F, '
+  NR == 1 { next }
+  NF != 12 || $10 != "true" || $11 != "true" || $12 != "validated" { exit 1 }
+  $4 == "SAFE" && ($5 != "UNSAT" || $6 != "none" || $7 != "ic3") { exit 1 }
+  $4 == "UNSAFE" && ($5 != "SAT" || $6 !~ /^(3|5)$/ || $7 != "bmc") { exit 1 }
+  { key = $2 ":" $3; if (!(key in seen)) count++; seen[key]++; answers[key] = $4 ":" $6 }
+  END {
+    if (NR != 10 || count != 9) exit 1
+    if (answers["2:t1"] != "SAFE:none" || answers["2:t2"] != "SAFE:none" || answers["2:fatal"] != "SAFE:none") exit 1
+    if (answers["3:t1"] != "UNSAFE:3" || answers["3:t2"] != "SAFE:none" || answers["3:fatal"] != "SAFE:none") exit 1
+    if (answers["5:t1"] != "UNSAFE:3" || answers["5:t2"] != "UNSAFE:5" || answers["5:fatal"] != "UNSAFE:5") exit 1
+  }
+' "$caliptra_composed"
+[[ $(sed -n 's/^model_count=//p' "$caliptra_manifest") == 11 ]]
+[[ $(sed -n 's/^answer_count=//p' "$caliptra_manifest") == 9 ]]
+[[ $(sed -n 's/^safe_certificate_count=//p' "$caliptra_manifest") == 5 ]]
+[[ $(sed -n 's/^unsafe_trace_count=//p' "$caliptra_manifest") == 4 ]]
+[[ $(sed -n 's/^model_serialization_profile=//p' "$caliptra_manifest") == \
+  canonical-yosys-revision-v1 ]]
+[[ $(sed -n 's/^composed_safe_set_count=//p' "$caliptra_manifest") == 2 ]]
+[[ $(sed -n 's/^hostile_control_count=//p' "$caliptra_manifest") == 6 ]]
+[[ $(sed -n 's/^status=//p' "$caliptra_manifest") == validated ]]
 
 shared_pattern='^(qualification_lock_sha256|model_manifest_sha256|evidence_bytes|property_.*)='
 diff -u \

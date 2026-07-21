@@ -84,6 +84,13 @@ not a systematic or professional patent search.
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
 
+The frozen Caliptra watchdog comparison adds a second independently maintained
+public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
+five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the
+FM 2026 composer reduces the two shared SAFE sets by 68.90% and 53.89%. This is
+further disconfirming evidence against a broad multi-property evidence-sharing
+claim. It strengthens product validity and baseline breadth, not novelty.
+
 ## Shared exact recurrence predicate-set candidate
 
 Predicate-set certificate v2 extends the narrower candidate mechanism on the

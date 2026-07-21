@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+report_failure() {
+  local status=$?
+  echo "caliptra watchdog composed-witness failure status=$status line=${BASH_LINENO[0]} command=$BASH_COMMAND" >&2
+  exit "$status"
+}
+trap report_failure ERR
+
+if [[ $# -ne 6 ]]; then
+  echo "usage: $0 GCC_BINARY YOSYS_BINARY RIC3_OUTPUT CERTIFAIGER_OUTPUT OUTPUT.csv MANIFEST.txt" >&2
+  exit 2
+fi
+
+gcc_binary=$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")
+yosys_binary=$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2")
+ric3_output=$(cd "$3" && pwd -P)
+certifaiger_output=$(cd "$4" && pwd -P)
+output=$5
+manifest=$6
+repository=$(cd "$(dirname "$0")/.." && pwd -P)
+ric3_image=${RIC3_IMAGE:-gcc-ric3-qualification:v1-arm64}
+certifaiger_image=${CERTIFAIGER_IMAGE:-gcc-certifaiger-qualification:v1-arm64}
+
+[[ -x "$gcc_binary" && -x "$yosys_binary" && -x "$ric3_output/ric3" ]] || {
+  echo "required producer binary is unavailable" >&2
+  exit 2
+}
+[[ -x "$certifaiger_output/bin/check" && -x "$certifaiger_output/bin/aigsim" ]] || {
+  echo "required independent checker binary is unavailable" >&2
+  exit 2
+}
+for target in "$output" "$manifest"; do
+  [[ ! -e "$target" && ! -L "$target" ]] || {
+    echo "refusing to overwrite $target" >&2
+    exit 2
+  }
+done
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-caliptra-composed.XXXXXXXX")
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+models=$scratch/models
+models_second=$scratch/models-second
+evidence=$scratch/evidence
+mkdir "$evidence"
+"$repository/scripts/build-caliptra-wdt-aiger-v1.sh" \
+  "$yosys_binary" "$models" >/dev/null
+"$repository/scripts/build-caliptra-wdt-aiger-v1.sh" \
+  "$yosys_binary" "$models_second" >/dev/null
+if ! diff -ru "$models" "$models_second" >"$scratch/models.diff"; then
+  echo "Caliptra AIGER clean-directory reproduction differs" >&2
+  sed -n '1,200p' "$scratch/models.diff" >&2
+  exit 1
+fi
+echo "caliptra watchdog composed-witness phase=models-deterministic"
+models=$(cd "$models" && pwd -P)
+evidence=$(cd "$evidence" && pwd -P)
+
+sha256sum_portable() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+tree_sha256_portable() {
+  directory=$1
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$directory" && find . -type f -print0 | sort -z | \
+      xargs -0 sha256sum | sha256sum | awk '{print $1}')
+  else
+    (cd "$directory" && find . -type f -print0 | sort -z | \
+      xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')
+  fi
+}
+
+expected_answer() {
+  case "$1:$2" in
+    2:*|3:t2|3:fatal) echo SAFE ;;
+    3:t1|5:*) echo UNSAFE ;;
+    *) echo "invalid case $1:$2" >&2; exit 2 ;;
+  esac
+}
+
+expected_frame() {
+  case "$1" in
+    t1) echo 3 ;;
+    t2|fatal) echo 5 ;;
+    *) exit 2 ;;
+  esac
+}
+
+trace_value_count() {
+  awk '
+    NR < 4 { next }
+    $0 == "." { terminated = 1; print count + 0; exit }
+    $0 !~ /^[01x]+$/ { exit 2 }
+    { count++ }
+    END { if (!terminated) exit 2 }
+  ' "$1"
+}
+
+produce() {
+  local model=$1 destination=$2 log=$3 engine_file=$4
+  docker run --rm --network none \
+    -v "$ric3_output:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out" -v "$repository:/repo:ro" "$ric3_image" \
+    /repo/scripts/ric3-static-evidence-producer-v1.sh \
+    "/models/$model" "/out/$destination" "/out/$log" "/out/$engine_file"
+}
+
+verify_safe() {
+  local model=$1 certificate=$2 log=$3
+  docker run --rm --network none \
+    -v "$certifaiger_output/bin:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out:ro" "$certifaiger_image" \
+    /tools/check "/models/$model" "/out/$certificate" \
+    >"$evidence/$log" 2>&1
+  grep -q '^check_unsat: Certificate check passed$' "$evidence/$log"
+  grep -q '^check: valid witness$' "$evidence/$log"
+}
+
+verify_unsafe() {
+  local model=$1 trace=$2 log=$3
+  docker run --rm --network none \
+    -v "$certifaiger_output/bin:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out:ro" "$certifaiger_image" \
+    /tools/aigsim -c -m "/models/$model" "/out/$trace" \
+    >"$evidence/$log" 2>&1
+}
+
+reject_safe() {
+  local model=$1 certificate=$2 log=$3
+  if docker run --rm --network none \
+    -v "$certifaiger_output/bin:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out:ro" "$certifaiger_image" \
+    /tools/check "/models/$model" "/out/$certificate" \
+    >"$evidence/$log" 2>&1; then
+    echo "hostile SAFE evidence unexpectedly verified: $log" >&2
+    exit 1
+  fi
+}
+
+reject_unsafe() {
+  local model=$1 trace=$2 log=$3
+  if docker run --rm --network none \
+    -v "$certifaiger_output/bin:/tools:ro" -v "$models:/models:ro" \
+    -v "$evidence:/out:ro" "$certifaiger_image" \
+    /tools/aigsim -c -m "/models/$model" "/out/$trace" \
+    >"$evidence/$log" 2>&1; then
+    echo "hostile UNSAFE evidence unexpectedly replayed: $log" >&2
+    exit 1
+  fi
+}
+
+printf '%s\n' \
+  'schema_version,horizon,property,expected_answer,external_answer,earliest_bad_frame,producer_engine,model_bytes,evidence_bytes,deterministic,independently_verified,status' \
+  >"$scratch/result.csv"
+
+for horizon in 2 3 5; do
+  for property in t1 t2 fatal; do
+    model=h${horizon}-${property}.aag
+    first=h${horizon}-${property}.evidence.aag
+    second=h${horizon}-${property}.second.aag
+    expected=$(expected_answer "$horizon" "$property")
+    produce "$model" "$first" "h${horizon}-${property}.producer.log" \
+      "h${horizon}-${property}.engine"
+    produce "$model" "$second" "h${horizon}-${property}.second.log" \
+      "h${horizon}-${property}.second.engine"
+    cmp "$evidence/$first" "$evidence/$second"
+    cmp "$evidence/h${horizon}-${property}.engine" \
+      "$evidence/h${horizon}-${property}.second.engine"
+    engine=$(<"$evidence/h${horizon}-${property}.engine")
+    actual=$(grep -E '^(SAT|UNSAT)$' \
+      "$evidence/h${horizon}-${property}.producer.log" | tail -1)
+    frame=none
+    if [[ "$expected" == SAFE ]]; then
+      [[ "$engine" == ic3 ]]
+      [[ "$actual" == UNSAT ]]
+      verify_safe "$model" "$first" "h${horizon}-${property}.consumer.log"
+    else
+      [[ "$engine" == bmc ]]
+      [[ "$actual" == SAT ]]
+      frame=$(expected_frame "$property")
+      trace_values=$(trace_value_count "$evidence/$first")
+      if [[ "$trace_values" -ne $((frame + 1)) ]]; then
+        echo "UNSAFE trace frame mismatch: h${horizon}-${property} expected=$((frame + 1)) actual=$trace_values" >&2
+        sed -n '1,80p' "$evidence/$first" >&2
+        exit 1
+      fi
+      verify_unsafe "$model" "$first" "h${horizon}-${property}.consumer.log"
+    fi
+    printf '1,%s,%s,%s,%s,%s,%s,%s,%s,true,true,validated\n' \
+      "$horizon" "$property" "$expected" "$actual" "$frame" \
+      "$engine" "$(wc -c <"$models/$model" | tr -d ' ')" \
+      "$(wc -c <"$evidence/$first" | tr -d ' ')" \
+      >>"$scratch/result.csv"
+  done
+done
+echo "caliptra watchdog composed-witness phase=individual-evidence-verified"
+
+"$gcc_binary" compose-safety-witnesses-v1 "$models/h2-safe-set.aag" \
+  "$evidence/h2-composed.aag" "$evidence/h2-t1.evidence.aag" \
+  "$evidence/h2-t2.evidence.aag" "$evidence/h2-fatal.evidence.aag" >/dev/null
+"$gcc_binary" compose-safety-witnesses-v1 "$models/h2-safe-set.aag" \
+  "$evidence/h2-composed-second.aag" "$evidence/h2-t1.evidence.aag" \
+  "$evidence/h2-t2.evidence.aag" "$evidence/h2-fatal.evidence.aag" >/dev/null
+cmp "$evidence/h2-composed.aag" "$evidence/h2-composed-second.aag"
+verify_safe h2-safe-set.aag h2-composed.aag h2-composed.consumer.log
+
+"$gcc_binary" compose-safety-witnesses-v1 "$models/h3-safe-set.aag" \
+  "$evidence/h3-composed.aag" "$evidence/h3-t2.evidence.aag" \
+  "$evidence/h3-fatal.evidence.aag" >/dev/null
+"$gcc_binary" compose-safety-witnesses-v1 "$models/h3-safe-set.aag" \
+  "$evidence/h3-composed-second.aag" "$evidence/h3-t2.evidence.aag" \
+  "$evidence/h3-fatal.evidence.aag" >/dev/null
+cmp "$evidence/h3-composed.aag" "$evidence/h3-composed-second.aag"
+verify_safe h3-safe-set.aag h3-composed.aag h3-composed.consumer.log
+echo "caliptra watchdog composed-witness phase=compositions-verified"
+
+# Evidence substitution, corruption, and truncation must fail independently.
+sed '1s/^aag/bag/' "$evidence/h2-t1.evidence.aag" \
+  >"$evidence/h2-t1.malformed.aag"
+safe_bytes=$(wc -c <"$evidence/h2-t1.evidence.aag" | tr -d ' ')
+dd if="$evidence/h2-t1.evidence.aag" \
+  of="$evidence/h2-t1.truncated.aag" bs=1 count=$((safe_bytes - 1)) \
+  2>/dev/null
+trace_bytes=$(wc -c <"$evidence/h3-t1.evidence.aag" | tr -d ' ')
+dd if="$evidence/h3-t1.evidence.aag" \
+  of="$evidence/h3-t1.truncated.aag" bs=1 count=$((trace_bytes - 1)) \
+  2>/dev/null
+reject_safe h2-t1.aag h2-t1.malformed.aag hostile-safe-malformed.log
+reject_safe h2-t1.aag h2-t1.truncated.aag hostile-safe-truncated.log
+reject_safe h3-t1.aag h2-t1.evidence.aag hostile-safe-wrong-model.log
+reject_safe h3-safe-set.aag h2-composed.aag hostile-composed-wrong-model.log
+reject_unsafe h3-t1.aag h3-t1.truncated.aag hostile-trace-truncated.log
+reject_unsafe h2-t1.aag h3-t1.evidence.aag hostile-trace-wrong-model.log
+echo "caliptra watchdog composed-witness phase=hostile-controls-rejected"
+
+{
+  printf 'schema_version=1\n'
+  printf 'scope=caliptra-wdt-bounded-identical-scope\n'
+  printf 'model_count=11\n'
+  printf 'answer_count=9\n'
+  printf 'safe_certificate_count=5\n'
+  printf 'unsafe_trace_count=4\n'
+  printf 'safe_producer_engine=ric3-ic3\n'
+  printf 'unsafe_producer_engine=ric3-bmc\n'
+  printf 'unsafe_trace_contract=earliest-bad-frame\n'
+  printf 'model_serialization_profile=canonical-yosys-revision-v1\n'
+  printf 'composed_safe_set_count=2\n'
+  printf 'hostile_control_count=6\n'
+  printf 'aiger_models_sha256=%s\n' "$(sha256sum_portable "$models/SHA256SUMS")"
+  printf 'h2_safe_set_model_bytes=%s\n' "$(wc -c \
+    <"$models/h2-safe-set.aag" | tr -d ' ')"
+  printf 'h3_safe_set_model_bytes=%s\n' "$(wc -c \
+    <"$models/h3-safe-set.aag" | tr -d ' ')"
+  printf 'h2_individual_evidence_bytes=%s\n' "$(wc -c \
+    "$evidence/h2-t1.evidence.aag" "$evidence/h2-t2.evidence.aag" \
+    "$evidence/h2-fatal.evidence.aag" | awk 'END {print $1}')"
+  printf 'h2_composed_evidence_bytes=%s\n' "$(wc -c \
+    <"$evidence/h2-composed.aag" | tr -d ' ')"
+  printf 'h3_individual_safe_evidence_bytes=%s\n' "$(wc -c \
+    "$evidence/h3-t2.evidence.aag" "$evidence/h3-fatal.evidence.aag" \
+    | awk 'END {print $1}')"
+  printf 'h3_composed_evidence_bytes=%s\n' "$(wc -c \
+    <"$evidence/h3-composed.aag" | tr -d ' ')"
+  printf 'h2_composed_sha256=%s\n' \
+    "$(sha256sum_portable "$evidence/h2-composed.aag")"
+  printf 'h3_composed_sha256=%s\n' \
+    "$(sha256sum_portable "$evidence/h3-composed.aag")"
+  printf 'qualification_lock_sha256=%s\n' \
+    "$(sha256sum_portable "$repository/tools/certifaiger-qualification-v1.lock")"
+  printf 'ric3_binary_sha256=%s\n' \
+    "$(sha256sum_portable "$ric3_output/ric3")"
+  printf 'certifaiger_tree_sha256=%s\n' \
+    "$(tree_sha256_portable "$certifaiger_output/bin")"
+  printf 'status=validated\n'
+} >"$scratch/manifest.txt"
+
+if ! (set -C; cat "$scratch/result.csv" >"$output") 2>/dev/null; then
+  echo "refusing to overwrite $output" >&2
+  exit 2
+fi
+if ! (set -C; cat "$scratch/manifest.txt" >"$manifest") 2>/dev/null; then
+  echo "refusing to overwrite $manifest" >&2
+  exit 2
+fi
+echo "caliptra_wdt_composed_witness=VALIDATED answers=9 safe=5 unsafe=4 composed=2 output=$output"

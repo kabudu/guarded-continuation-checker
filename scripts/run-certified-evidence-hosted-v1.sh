@@ -88,6 +88,14 @@ RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   /tmp/ric3-output /tmp/certifaiger-output \
   "$output/opentitan-dual-timer-composed-witness-amd64-v1.csv" \
   "$output/opentitan-dual-timer-composed-witness-amd64-v1.manifest.txt"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/caliptra-wdt-composed-witness-amd64-v1.csv" \
+  "$output/caliptra-wdt-composed-witness-amd64-v1.manifest.txt"
 TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
   GCC_RUNTIME_IMAGE=gcc-ubuntu-24.04-base:v1-amd64 \
