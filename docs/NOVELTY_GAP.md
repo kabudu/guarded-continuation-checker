@@ -488,6 +488,20 @@ and multi-property model checking are established fields.
 No novelty row closes. The candidate distinction is the exact combination of
 source-reconstructed invariant chaining, ordered earliest-frame claims,
 static downgrade detection, and complete-query fail-closed behaviour in a
-compact portable artifact. A focused closest-prior-art search, maintained-tool
-comparison at identical scope, and independent expert review are still required
-before even that narrow combination can be described as novel.
+compact portable artifact. A focused closest-prior-art search and local
+maintained-tool comparison at identical scope are now complete. Hosted
+reproduction and independent expert review remain required before even that
+narrow combination could be reconsidered as novel.
+
+The focused 21 July reassessment substantially weakens even that narrow
+algorithmic hypothesis. FM 2026 already composes witnesses across 39
+multi-property benchmarks and shares transition checking, while Btor2-Cert
+validates transported BTOR2 invariants through explicit initiation and
+consecution obligations. GCC v3's bounded word-level encoding, mixed-answer
+artifact, static routing, and source binding remain practical differences, but
+are not currently supportable as a novel algorithm. The completed local
+identical-scope baseline agrees on all twelve answers and produces independently
+checked composed SAFE witnesses that are 56.29% and 40.89% smaller than their
+separate inputs. That closes the missing local comparison and further
+disconfirms a broad composition claim. Hosted reproduction and independent
+expert review remain mandatory.

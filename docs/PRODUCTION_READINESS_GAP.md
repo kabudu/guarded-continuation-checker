@@ -390,10 +390,14 @@ horizons 4, 5, 7, 9, and one billion. Local regeneration, exact frames, retained
 v1/v2 compatibility, ten hostile controls, and every h9 truncation pass. The
 separate baseline is explicitly unavailable, not counted as a win. Pinned
 official BTOR2Tools locally parses the model and replays isolated witnesses at
-all three exact bad boundaries. Maintained SMT agreement, Linux resource enforcement,
-three-platform downstream APIs, and hosted
-reproduction remain open, so this does not yet close a production-readiness
-row.
+all three exact bad boundaries, and maintained SMT agrees at all six boundary
+queries. The local identical-scope AIGER control now agrees on all twelve
+property answers. Certifaiger plus `lrat_isa` independently accepts six SAFE
+certificates, `aigsim` replays six UNSAFE traces, and the two applicable SAFE
+sets compose and verify. Model and evidence regeneration is byte-deterministic.
+Hosted reproduction of this new baseline, Linux resource enforcement, targeted
+mutation controls, and independent review remain open, so this does not yet
+close a production-readiness row.
 
 ## Post-production-release deliverables
 

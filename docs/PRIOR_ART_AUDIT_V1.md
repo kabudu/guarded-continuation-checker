@@ -125,3 +125,55 @@ requires:
 - claim-level analysis of relevant live patent families;
 - an archived query and inclusion/exclusion log; and
 - independent expert review under novelty gate 6.
+
+## Predicate-set v3 reassessment
+
+Date: 2026-07-21
+
+The OpenTitan invariant-chaining result triggered a narrower follow-up search:
+does proving one state invariant, using it to simplify another transition cone,
+and sharing the resulting evidence across several properties establish a new
+certificate principle?
+
+The answer from the current evidence is no:
+
+- [Btor2-Cert, TACAS 2024](https://link.springer.com/chapter/10.1007/978-3-031-57256-2_7)
+  already transports BTOR2 invariants and validates consistency, initiation,
+  and consecution through separately generated checking circuits.
+- [Certifying Phase Abstraction, CAV 2024](https://link.springer.com/chapter/10.1007/978-3-031-63498-7_17)
+  constructs certificates backwards through model simplification and proves
+  that a witness for a reduced circuit certifies the original circuit.
+- [Introducing Certificates to the Hardware Model Checking Competition, CAV
+  2025](https://link.springer.com/chapter/10.1007/978-3-031-98668-0_14)
+  establishes independently checked SAFE witness circuits and replayed UNSAFE
+  traces on shared hardware models, including multi-property benchmark
+  families.
+- [Certifying Constraints in Hardware Model Checking, FM
+  2026](https://link.springer.com/chapter/10.1007/978-3-032-26204-2_9)
+  is closer still. It certifies constraints extracted from a model and
+  evaluates composed witnesses for 39 multi-property benchmarks, sharing the
+  expensive transition check across properties.
+- [AutoINV](https://arxiv.org/abs/2604.22285) uses helper assertions derived
+  from high-level hardware structure and reuses proving information to select
+  invariants for RTL verification. This further rules out a broad claim around
+  helper-invariant discovery or reuse.
+
+Predicate-set v3 still differs operationally: it is word-level and bounded,
+stores exact affine recurrence parameters rather than a bit-level witness
+circuit, combines SAFE members with earliest-frame UNSAFE witnesses in one
+ordered artifact, and uses a static fail-closed portfolio. Those are useful
+implementation and product-contract differences. The audit found no evidence
+that their combination is a new algorithm, and they must not be presented as
+one.
+
+The closest disconfirming baseline remains the FM 2026 composed-witness path
+already implemented and qualified elsewhere in this repository. The
+[predicate-set v3 identical-scope comparison](OPENTITAN_DUAL_TIMER_COMPOSED_WITNESS_BASELINE_V1.md)
+now translates the dual-timer scope to bit-level AIGER, retains three separately
+checkable properties, composes every multi-property SAFE set, and reports
+UNSAFE traces separately. All twelve answers agree. The composed witnesses are
+56.29% and 40.89% smaller than their independent inputs, confirming that
+substantial evidence sharing is already available through the established
+route. Differences in bounded instrumentation, source binding, checker
+footprint, setup cost, and answer class remain visible. Predicate-set v3 is an
+engineering capability, not a supported novelty result.

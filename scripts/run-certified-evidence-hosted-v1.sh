@@ -32,6 +32,16 @@ clone_at https://github.com/gipsyh/rIC3.git \
 git -C /tmp/ric3 submodule update --init --recursive
 cargo vendor --locked --manifest-path /tmp/ric3/Cargo.toml /tmp/ric3-vendor \
   > /tmp/ric3-vendor-config.toml
+clone_at https://github.com/YosysHQ/yosys.git \
+  b8e7da6f40ae8f552c116bf6c359b07c6533e159 /tmp/yosys-attestation
+git -C /tmp/yosys-attestation submodule update --init --depth 1 -- \
+  libs/cxxopts libs/fmt libs/tomlplusplus libs/boost_regex \
+  libs/slang frontends/slang/lib
+cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DYOSYS_CHECKOUT_INFO=b8e7da6f40ae8f552c116bf6c359b07c6533e159 \
+  -DYOSYS_WITHOUT_ABC=ON -DYOSYS_WITHOUT_SLANG=ON
+cmake --build /tmp/yosys-attestation/build --parallel 2 --target yosys
 
 docker pull ubuntu:24.04
 docker tag ubuntu:24.04 gcc-ubuntu-24.04-base:v1-amd64
@@ -66,10 +76,18 @@ sha256sum /tmp/gcc-output/guarded-continuation-checker \
   /tmp/ric3-output/ric3 /tmp/certifaiger-output/bin/* > "$output/binaries.sha256"
 
 CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
-  scripts/test-composed-witness-baseline-v1.sh \
+scripts/test-composed-witness-baseline-v1.sh \
   /tmp/gcc-output/guarded-continuation-checker \
   /tmp/certifaiger-input/certifaiger /tmp/certifaiger-output \
   "$output/composed-witness-baseline-amd64-v1.csv"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/opentitan-dual-timer-composed-witness-amd64-v1.csv" \
+  "$output/opentitan-dual-timer-composed-witness-amd64-v1.manifest.txt"
 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
   scripts/benchmark-changing-plant-composed-witness-v1.sh \

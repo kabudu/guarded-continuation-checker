@@ -85,9 +85,20 @@ answer the input-dependent wake predicate and is reported as unavailable, not
 as a compression win.
 
 Pinned official BTOR2Tools locally parses the model and replays each isolated
-bad-boundary witness. Maintained SMT agreement, Linux resource enforcement,
-three-platform downstream API checks, and hosted reproduction remain open. A
-same-width cross-coupled near-neighbour is retained as a rejected unit control.
+bad-boundary witness. Maintained SMT agrees at all six exact boundaries. The
+[identical-scope composed-witness baseline](OPENTITAN_DUAL_TIMER_COMPOSED_WITNESS_BASELINE_V1.md)
+also reproduces all twelve answers: Certifaiger plus `lrat_isa` accepts six SAFE
+certificates, and `aigsim` replays six UNSAFE traces. Linux resource
+enforcement, three-platform downstream API checks, and hosted reproduction of
+the new composed baseline remain open. A same-width cross-coupled
+near-neighbour is retained as a rejected unit control.
 Invariant reasoning, recurrence
 acceleration, and multi-property checking have substantial prior art; v3 is not
 yet a novelty claim.
+
+The focused [prior-art reassessment](PRIOR_ART_AUDIT_V1.md#predicate-set-v3-reassessment)
+identifies FM 2026 composed multi-property witnesses and Btor2-Cert invariant
+validation as the closest mechanisms. The completed local identical-scope
+comparison confirms substantial established evidence sharing. The remaining
+candidate value is the compact bounded word-level product contract, not a broad
+new certificate algorithm.

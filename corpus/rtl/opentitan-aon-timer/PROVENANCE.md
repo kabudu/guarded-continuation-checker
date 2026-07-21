@@ -11,7 +11,8 @@ The upstream file `upstream/aon_timer_core.sv` is an unmodified copy of:
 
 The repository root [LICENSE](../../../LICENSE) covers redistribution under the
 same licence. The `compat`, `wrapper.sv`, `wrapper-predicate-set.sv`,
-`wrapper-dual-timer-predicate-set.sv`, and `normalize-yosys.sed` files are GCC
+`wrapper-dual-timer-predicate-set.sv`,
+`wrapper-dual-timer-bounded-aiger.sv`, and `normalize-yosys.sed` files are GCC
 test infrastructure, not upstream OpenTitan files.
 
 The source is never edited in place. The build script checks its digest, copies
@@ -44,3 +45,12 @@ assumption is part of the source-to-model boundary and is not applied by the
 general parser or verifier. Both wrapper-held timer counts have explicit zero
 initialisers in their source. The resulting target does not claim arbitrary
 power-on-state behaviour.
+
+The bounded AIGER wrapper adds a four-bit autonomous frame counter that advances
+independently of the semantic reset and stops after the selected horizon. Each
+property is enabled only through that horizon. Timer counts and the frame are
+exposed as ordinary outputs to retain identical latch transition definitions in
+the separate and shared property models. Those observability outputs do not
+constrain the model or change a bad property. The AIGER builder uses the same
+pinned Yosys executable and emits canonical ASCII AIGER plus witness maps from
+two clean-directory reproductions.

@@ -43,6 +43,15 @@ and both recurrences, then preserves all three ordered answers in one
 source-bound artifact. The h9 artifact is 472 bytes; the billion-frame artifact
 is 515 bytes. The earlier v2 refusal remains documented as the negative control.
 
+`wrapper-dual-timer-bounded-aiger.sv` supplies an identical-scope control for
+the maintained proof-carrying hardware toolchain. It retains the same reset and
+timer semantics, adds a saturating horizon counter, and keeps common timer state
+observable in every property-specific model so separately produced SAFE
+witnesses can be composed faithfully. Pinned rIC3, Certifaiger plus `lrat_isa`,
+and `aigsim` agree with all twelve GCC answers across horizons 4, 5, 7, and 9.
+The two multi-property SAFE witness sets compose and verify independently. See
+[`OPENTITAN_DUAL_TIMER_COMPOSED_WITNESS_BASELINE_V1.md`](../../../docs/OPENTITAN_DUAL_TIMER_COMPOSED_WITNESS_BASELINE_V1.md).
+
 Run the self-service acceptance from the repository root:
 
 ```sh
@@ -63,6 +72,8 @@ scripts/run-opentitan-aon-dual-timer-acceptance.sh \
   target/debug/guarded-continuation-checker \
   "$(command -v yosys)" \
   /tmp/opentitan-aon-dual-timer.csv
+scripts/build-opentitan-aon-dual-timer-aiger.sh \
+  "$(command -v yosys)" /tmp/opentitan-aon-dual-timer-aiger
 ```
 
 The build intentionally refuses a different source digest, a different Yosys
@@ -72,7 +83,9 @@ certificates byte for byte, independently verifies each certificate, and runs
 source, recogniser, overwrite, invalid-observation, output-path, query-binding,
 member-integrity, and publication hostile controls. The dual-timer acceptance
 adds five v3 boundary cases, two retained compatibility artifacts, ten hostile
-controls, and complete truncation rejection.
+controls, and complete truncation rejection. The separate composed-witness
+benchmark requires the repository's qualified rIC3 and Certifaiger outputs and
+retains twelve independently checked answer rows plus two checked compositions.
 
 This is evidence for a bounded mechanism exercised on real public RTL. It is not
 a verification of the complete OpenTitan AON timer, the Earlgrey product, its
