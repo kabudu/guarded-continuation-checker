@@ -1,7 +1,7 @@
 # OpenTitan dual-timer composed-witness baseline v1
 
-Status: validated locally on arm64. Hosted Linux reproduction and independent
-implementation review remain open.
+Status: validated locally on arm64 and in hosted amd64 Linux. Independent
+implementation review remains open.
 
 ## Question
 
@@ -57,6 +57,11 @@ Retained data:
 
 - [`opentitan-dual-timer-composed-witness-v1.csv`](../results/opentitan-dual-timer-composed-witness-v1.csv)
 - [`opentitan-dual-timer-composed-witness-v1.manifest.txt`](../results/opentitan-dual-timer-composed-witness-v1.manifest.txt)
+- [`opentitan-dual-timer-composed-witness-amd64-v1.csv`](../results/opentitan-dual-timer-composed-witness-amd64-v1.csv)
+- [`opentitan-dual-timer-composed-witness-amd64-v1.manifest.txt`](../results/opentitan-dual-timer-composed-witness-amd64-v1.manifest.txt)
+- [`opentitan-dual-timer-resources-amd64-v1.csv`](../results/opentitan-dual-timer-resources-amd64-v1.csv)
+- [`opentitan-dual-timer-resources-amd64-v1.manifest.txt`](../results/opentitan-dual-timer-resources-amd64-v1.manifest.txt)
+- [`opentitan-dual-timer-hosted-amd64-v1.provenance.txt`](../results/opentitan-dual-timer-hosted-amd64-v1.provenance.txt)
 
 ## Reproduction
 
@@ -99,10 +104,10 @@ property sets. Predicate-set v3 remains valuable as a compact bounded
 word-level product contract, but this experiment supplies no support for an
 algorithmic novelty claim.
 
-Hosted amd64 reproduction, resource measurements, and independent expert review
-remain required before the baseline can close its production gate. The builder
-now attests the pinned OpenTitan source and Yosys revision, while the corpus
-manifest binds the wrapper and compatibility files.
+Hosted amd64 reproduction and resource measurements are complete. Independent
+expert review remains required before the broader production gate can close.
+The builder attests the pinned OpenTitan source and Yosys revision, while the
+corpus manifest binds the wrapper and compatibility files.
 
 Hosted run 29798977299 reproduced the complete corrected twelve-row baseline
 on amd64, including independent verification, both compositions, deterministic
@@ -110,7 +115,7 @@ regeneration, and all six hostile controls. The job then failed before artifact
 upload because the resource harness ran the Ubuntu 24.04-built GCC composer in
 the older Debian Bookworm producer container. The harness now runs the combined
 producer in its declared Ubuntu 24.04 runtime container as the host user. A
-clean hosted rerun and retained artifact are still required.
+clean hosted rerun and retained artifact were therefore required.
 
 ## Predeclared resource comparison
 
@@ -135,5 +140,34 @@ qualified Certifaiger tool tree used by the checker and trace replay.
 
 Pinned Yosys source-to-model generation is common setup and is explicitly
 excluded from both timed regions. Its models and provenance remain included in
-the byte accounting. No performance conclusion is permitted until the hosted
-run completes with nonzero resource measurements and exact answer agreement.
+the byte accounting. The comparison is reported only after the hosted run
+completes with nonzero resource measurements and exact answer agreement.
+
+## Hosted amd64 resource result
+
+[Hosted run 29800096071](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29800096071)
+completed three trials with ten sequential full
+invocations per sample. Every row has exact answer agreement, deterministic
+evidence, and nonzero wall-time and peak-memory measurements.
+
+At horizon 4, median GCC production is 0.005 seconds at 8 MB peak RSS, versus
+0.860 seconds and 359 MB for the external route. Median GCC consumption is
+0.003 seconds at 7 MB, versus 0.242 seconds and 143 MB. GCC retains 445 bytes
+of evidence versus 26,984 bytes for the composed AIGER witness.
+
+At horizon 5, median GCC production is 0.005 seconds at 8 MB peak RSS, versus
+0.550 seconds and 271 MB. Median GCC consumption is 0.003 seconds at 7 MB,
+versus 0.253 seconds and 140 MB. GCC retains 454 bytes of evidence versus
+24,430 bytes for the composed SAFE witness plus the shortest UNSAFE trace.
+
+These measurements describe this narrow recognised recurrence only. They do
+not establish general SAT or model-checking superiority. The GCC executable is
+98,076,152 bytes. The external producer tool set is 106,649,824 bytes, while
+the external consumer tool tree is only 11,444,673 bytes, so GCC does not win
+the consumer executable-footprint comparison.
+
+The arm64 and amd64 runs preserve identical answers, earliest frames, evidence
+sizes, and composed-witness hashes. The generated AAG model text differs by 15
+bytes per property across the two hosts, so the repository does not claim
+cross-platform model-byte identity. The hosted provenance record binds the
+retained files to the successful workflow commit and artifact digest.

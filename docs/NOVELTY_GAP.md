@@ -503,5 +503,9 @@ are not currently supportable as a novel algorithm. The completed local
 identical-scope baseline agrees on all twelve answers and produces independently
 checked composed SAFE witnesses that are 56.29% and 40.89% smaller than their
 separate inputs. That closes the missing local comparison and further
-disconfirms a broad composition claim. Hosted reproduction and independent
-expert review remain mandatory.
+disconfirms a broad composition claim. [Hosted amd64 run
+29800096071](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29800096071)
+reproduces the same answers, exact frames, evidence sizes, and composed-witness
+hashes and adds nonzero resource measurements. This strengthens the engineering
+evidence but does not revive an algorithmic novelty claim. Independent expert
+review remains mandatory.

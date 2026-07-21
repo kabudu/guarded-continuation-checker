@@ -399,8 +399,9 @@ Six targeted evidence substitution, mutation, and truncation controls fail
 closed. A predeclared hosted resource harness now measures complete h4 and h5
 production and consumption under the same process-group monitor, using repeated
 invocations to avoid missing short-lived memory peaks. Hosted reproduction and
-measurements, Linux policy enforcement, and independent review remain open, so
-this does not yet close a production-readiness row.
+measurements are completed below. Linux policy enforcement and independent
+review remain open, so this does not close the broader production-readiness
+row.
 
 The first hosted attempt exposed a producer-contract defect rather than an
 answer error: IC3 returned a replayable horizon-9 bark counterexample ending at
@@ -410,8 +411,8 @@ BMC for every property, accept IC3 only for SAFE certificates, and accept BMC
 only for UNSAFE traces. The expected answer never selects the engine. The
 retained schema binds that static race, and the consumer rejects a trace whose
 terminated valuation count does not equal the expected earliest frame plus
-one. Hosted artifact retention and resource reproduction of the corrected
-contract remain open.
+one. At that point, hosted artifact retention and resource reproduction of the
+corrected contract remained open.
 
 Hosted run 29798977299 subsequently passed that corrected twelve-row baseline,
 all independent checks, both compositions, deterministic regeneration, and all
@@ -420,7 +421,19 @@ ownership defect: an Ubuntu 24.04-built GCC composer was mounted into a Debian
 Bookworm producer container, then root-owned partial outputs could not be
 removed by the runner. The resource producer now uses the declared Ubuntu 24.04
 runtime and the runner's UID. Because the failed job did not upload its partial
-artifact, a clean hosted rerun remains required before this gate closes.
+artifact, a clean hosted rerun was required before this subgate could close.
+
+[Hosted run 29800096071](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29800096071)
+then completed the clean rerun and artifact upload on commit `8621d80`. It
+retained the twelve-row independently checked comparison,
+both composed witnesses, six hostile controls, and three nonzero resource
+trials at horizons 4 and 5. The retained checker binds those files to the
+workflow artifact digest and confirms cross-host identity of answers, earliest
+frames, evidence sizes, and composed-witness hashes. AAG model text is not
+byte-identical across arm64 and amd64, so no broader model-reproducibility claim
+is made. This closes the hosted reproduction and measurement subgate for this
+narrow OpenTitan experiment. Independent expert review and the repository's
+other production gates remain open.
 
 ## Post-production-release deliverables
 

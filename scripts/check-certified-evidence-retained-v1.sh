@@ -15,10 +15,18 @@ amd_gcc_manifest="$results/gcc-proof-equivalent-amd64-v1.manifest-v1.txt"
 cross_gcc="$results/gcc-proof-cross-platform-v1.txt"
 opentitan_composed="$results/opentitan-dual-timer-composed-witness-v1.csv"
 opentitan_manifest="$results/opentitan-dual-timer-composed-witness-v1.manifest.txt"
+opentitan_amd_composed="$results/opentitan-dual-timer-composed-witness-amd64-v1.csv"
+opentitan_amd_manifest="$results/opentitan-dual-timer-composed-witness-amd64-v1.manifest.txt"
+opentitan_amd_resources="$results/opentitan-dual-timer-resources-amd64-v1.csv"
+opentitan_amd_resource_manifest="$results/opentitan-dual-timer-resources-amd64-v1.manifest.txt"
+opentitan_amd_provenance="$results/opentitan-dual-timer-hosted-amd64-v1.provenance.txt"
 
 for file in "$arm_external" "$amd_external" "$arm_manifest" "$amd_manifest" \
   "$arm_hostile" "$amd_hostile" "$amd_gcc" "$amd_gcc_manifest" "$cross_gcc" \
-  "$opentitan_composed" "$opentitan_manifest"; do
+  "$opentitan_composed" "$opentitan_manifest" \
+  "$opentitan_amd_composed" "$opentitan_amd_manifest" \
+  "$opentitan_amd_resources" "$opentitan_amd_resource_manifest" \
+  "$opentitan_amd_provenance"; do
   [[ -f "$file" && ! -L "$file" ]] || { echo "missing retained evidence: $file" >&2; exit 1; }
 done
 
@@ -51,7 +59,8 @@ check_hostile_csv "$arm_hostile"
 check_hostile_csv "$amd_hostile"
 cmp -s "$arm_hostile" "$amd_hostile"
 
-awk -F, '
+check_opentitan_composed() {
+  awk -F, '
   NR == 1 { next }
   NF != 12 || $10 != "true" || $11 != "true" || $12 != "validated" { exit 1 }
   $4 == "SAFE" && ($5 != "UNSAT" || $6 != "none") { exit 1 }
@@ -66,7 +75,10 @@ awk -F, '
     if (answers["7:wake"] != "UNSAFE:7" || answers["7:bark"] != "UNSAFE:5" || answers["7:bite"] != "SAFE:none") exit 1
     if (answers["9:wake"] != "UNSAFE:7" || answers["9:bark"] != "UNSAFE:5" || answers["9:bite"] != "UNSAFE:9") exit 1
   }
-' "$opentitan_composed"
+' "$1"
+}
+check_opentitan_composed "$opentitan_composed"
+check_opentitan_composed "$opentitan_amd_composed"
 [[ $(sed -n 's/^answer_count=//p' "$opentitan_manifest") == 12 ]]
 [[ $(sed -n 's/^safe_certificate_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^unsafe_trace_count=//p' "$opentitan_manifest") == 6 ]]
@@ -76,6 +88,59 @@ awk -F, '
 [[ $(sed -n 's/^composed_safe_set_count=//p' "$opentitan_manifest") == 2 ]]
 [[ $(sed -n 's/^hostile_control_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_manifest") == validated ]]
+[[ $(sed -n 's/^status=//p' "$opentitan_amd_manifest") == validated ]]
+
+diff -u \
+  <(cut -d, -f2-7,9-12 "$opentitan_composed") \
+  <(cut -d, -f2-7,9-12 "$opentitan_amd_composed")
+for field in h4_composed_sha256 h5_composed_sha256 \
+  h4_individual_evidence_bytes h4_composed_evidence_bytes \
+  h5_individual_safe_evidence_bytes h5_composed_evidence_bytes; do
+  [[ $(sed -n "s/^$field=//p" "$opentitan_manifest") == \
+    $(sed -n "s/^$field=//p" "$opentitan_amd_manifest") ]]
+done
+
+awk -F, '
+  NR == 1 { next }
+  NF != 13 || $6 <= 0 || $7 <= 0 || $8 <= 0 || $9 <= 0 ||
+    $10 <= 0 || $11 <= 0 || $12 != "true" || $13 != "measured" { exit 1 }
+  $2 !~ /^[1-3]$/ || $3 !~ /^(4|5)$/ || $4 !~ /^(gcc|external)$/ ||
+    $5 !~ /^(producer|consumer)$/ { exit 1 }
+  {
+    key = $2 ":" $3 ":" $4 ":" $5
+    if (!(key in seen)) count++
+    seen[key]++
+  }
+  END {
+    if (NR != 25 || count != 24) exit 1
+    for (key in seen) if (seen[key] != 1) exit 1
+  }
+' "$opentitan_amd_resources"
+[[ $(sed -n 's/^trials=//p' "$opentitan_amd_resource_manifest") == 3 ]]
+[[ $(sed -n 's/^external_producer_policy=//p' \
+  "$opentitan_amd_resource_manifest") == static-ic3-safe-bmc-earliest-unsafe-race ]]
+[[ $(sed -n 's/^status=//p' "$opentitan_amd_resource_manifest") == measured ]]
+
+sha256_portable() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+for binding in \
+  "composed_csv_sha256:$opentitan_amd_composed" \
+  "composed_manifest_sha256:$opentitan_amd_manifest" \
+  "resources_csv_sha256:$opentitan_amd_resources" \
+  "resources_manifest_sha256:$opentitan_amd_resource_manifest"; do
+  field=${binding%%:*}
+  file=${binding#*:}
+  [[ $(sed -n "s/^$field=//p" "$opentitan_amd_provenance") == \
+    $(sha256_portable "$file") ]]
+done
+[[ $(sed -n 's/^workflow_head_sha=//p' "$opentitan_amd_provenance") == \
+  8621d80abde8e37cf545af863cdcfd756990302e ]]
+[[ $(sed -n 's/^status=//p' "$opentitan_amd_provenance") == retained ]]
 
 shared_pattern='^(qualification_lock_sha256|model_manifest_sha256|evidence_bytes|property_.*)='
 diff -u \
