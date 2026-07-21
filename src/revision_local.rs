@@ -234,6 +234,65 @@ pub struct DirectAnswerSummary {
     pub valuation_checks: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevisionPortfolioBackend {
+    RevisionLocal,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevisionSelectionReason {
+    ExactLocalRelationAdmitted,
+    LeftStateWidth,
+    LeftInputWidth,
+    LeftOutputWidth,
+    LeftNodeSteps,
+    RightStateWidth,
+    RightInputWidth,
+    RightOutputWidth,
+    RightNodeSteps,
+    PairCheckBound,
+}
+
+impl RevisionSelectionReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ExactLocalRelationAdmitted => "exact-local-relation-admitted",
+            Self::LeftStateWidth => "left-state-width",
+            Self::LeftInputWidth => "left-input-width",
+            Self::LeftOutputWidth => "left-output-width",
+            Self::LeftNodeSteps => "left-node-steps",
+            Self::RightStateWidth => "right-state-width",
+            Self::RightInputWidth => "right-input-width",
+            Self::RightOutputWidth => "right-output-width",
+            Self::RightNodeSteps => "right-node-steps",
+            Self::PairCheckBound => "pair-check-bound",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RevisionPortfolioCertificate {
+    RevisionLocal(RevisionLocalCertificate),
+    DirectExact(DirectAnswerCertificate),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionPortfolioProduction {
+    pub certificate: RevisionPortfolioCertificate,
+    pub backend: RevisionPortfolioBackend,
+    pub reason: RevisionSelectionReason,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionPortfolioSummary {
+    pub result: BoundedResult,
+    pub bad_frame: Option<u32>,
+    pub backend: RevisionPortfolioBackend,
+    pub reason: RevisionSelectionReason,
+    pub certificate_bytes: usize,
+}
+
 pub struct VerifiedLocalRelation<'a> {
     certificate: &'a LocalRelationCertificate,
     summary: LocalRelationSummary,
@@ -2448,6 +2507,224 @@ pub fn decode_direct_answer_certificate(
     Ok(certificate)
 }
 
+fn local_side_admission(
+    model: &Btor2Model,
+    outputs: &[NodeId],
+    state_reason: RevisionSelectionReason,
+    input_reason: RevisionSelectionReason,
+    output_reason: RevisionSelectionReason,
+    node_reason: RevisionSelectionReason,
+    section: EvidenceSection,
+) -> Result<(Option<RevisionSelectionReason>, usize), RevisionLocalError> {
+    if model.states().is_empty() || model.inputs().is_empty() {
+        return Err(reject(
+            section,
+            "portfolio requires state and semantic input nodes",
+        ));
+    }
+    if outputs.is_empty() || outputs.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(reject(
+            section,
+            "portfolio output projection must be nonempty and strictly ordered",
+        ));
+    }
+    let state_widths = widths(model, model.states(), section, "state")?;
+    let input_widths = widths(model, model.inputs(), section, "input")?;
+    let output_widths = widths(model, outputs, section, "output")?;
+    let sum = |values: &[u32], label: &str| -> Result<usize, RevisionLocalError> {
+        values
+            .iter()
+            .try_fold(0usize, |total, width| total.checked_add(*width as usize))
+            .ok_or_else(|| reject(section, format!("portfolio {label} width overflowed")))
+    };
+    let state_bits = sum(&state_widths, "state")?;
+    let input_bits = sum(&input_widths, "input")?;
+    let output_bits = sum(&output_widths, "output")?;
+    if state_bits > MAX_LOCAL_STATE_BITS {
+        return Ok((Some(state_reason), 0));
+    }
+    if input_bits > MAX_LOCAL_INPUT_BITS {
+        return Ok((Some(input_reason), 0));
+    }
+    if output_bits > MAX_LOCAL_OUTPUT_BITS {
+        return Ok((Some(output_reason), 0));
+    }
+    let candidate_valuations = 1usize << (state_bits + input_bits);
+    let node_steps = candidate_valuations.saturating_mul(model.nodes().len());
+    if node_steps > MAX_LOCAL_NODE_STEPS {
+        return Ok((Some(node_reason), 0));
+    }
+    Ok((None, candidate_valuations))
+}
+
+pub fn assess_revision_portfolio(
+    left_source: &[u8],
+    left_outputs: &[NodeId],
+    right_source: &[u8],
+    right_outputs: &[NodeId],
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<RevisionSelectionReason, RevisionLocalError> {
+    if query.horizon > MAX_FINAL_HORIZON {
+        return Err(reject(
+            EvidenceSection::Final,
+            "portfolio horizon exceeds limit",
+        ));
+    }
+    decode_word_interface_contract(interface_source)?;
+    let left = btor2::parse_bytes(left_source)
+        .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
+    let right = btor2::parse_bytes(right_source)
+        .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
+    let (left_reason, left_candidates) = local_side_admission(
+        &left,
+        left_outputs,
+        RevisionSelectionReason::LeftStateWidth,
+        RevisionSelectionReason::LeftInputWidth,
+        RevisionSelectionReason::LeftOutputWidth,
+        RevisionSelectionReason::LeftNodeSteps,
+        EvidenceSection::Left,
+    )?;
+    if let Some(reason) = left_reason {
+        return Ok(reason);
+    }
+    let (right_reason, right_candidates) = local_side_admission(
+        &right,
+        right_outputs,
+        RevisionSelectionReason::RightStateWidth,
+        RevisionSelectionReason::RightInputWidth,
+        RevisionSelectionReason::RightOutputWidth,
+        RevisionSelectionReason::RightNodeSteps,
+        EvidenceSection::Right,
+    )?;
+    if let Some(reason) = right_reason {
+        return Ok(reason);
+    }
+    if left_candidates
+        .checked_mul(right_candidates)
+        .filter(|count| *count <= MAX_COMPOSED_PAIR_CHECKS)
+        .is_none()
+    {
+        return Ok(RevisionSelectionReason::PairCheckBound);
+    }
+    Ok(RevisionSelectionReason::ExactLocalRelationAdmitted)
+}
+
+pub fn produce_revision_portfolio(
+    left_source: &[u8],
+    left_outputs: &[NodeId],
+    right_source: &[u8],
+    right_outputs: &[NodeId],
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<RevisionPortfolioProduction, RevisionLocalError> {
+    let reason = assess_revision_portfolio(
+        left_source,
+        left_outputs,
+        right_source,
+        right_outputs,
+        interface_source,
+        query,
+    )?;
+    if reason == RevisionSelectionReason::ExactLocalRelationAdmitted {
+        let (certificate, _) = produce_revision_local_certificate(
+            left_source,
+            left_outputs,
+            right_source,
+            right_outputs,
+            interface_source,
+            query,
+        )?;
+        Ok(RevisionPortfolioProduction {
+            certificate: RevisionPortfolioCertificate::RevisionLocal(certificate),
+            backend: RevisionPortfolioBackend::RevisionLocal,
+            reason,
+        })
+    } else {
+        let (certificate, _) =
+            produce_direct_answer(left_source, right_source, interface_source, query)?;
+        Ok(RevisionPortfolioProduction {
+            certificate: RevisionPortfolioCertificate::DirectExact(certificate),
+            backend: RevisionPortfolioBackend::DirectExact,
+            reason,
+        })
+    }
+}
+
+pub fn verify_revision_portfolio(
+    left_source: &[u8],
+    left_outputs: &[NodeId],
+    right_source: &[u8],
+    right_outputs: &[NodeId],
+    interface_source: &[u8],
+    production: &RevisionPortfolioProduction,
+) -> Result<RevisionPortfolioSummary, RevisionLocalError> {
+    let query = match &production.certificate {
+        RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+            decode_bounded_answer_certificate(&certificate.final_evidence)?.query
+        }
+        RevisionPortfolioCertificate::DirectExact(certificate) => certificate.query.clone(),
+    };
+    let expected_reason = assess_revision_portfolio(
+        left_source,
+        left_outputs,
+        right_source,
+        right_outputs,
+        interface_source,
+        &query,
+    )?;
+    let expected_backend = if expected_reason == RevisionSelectionReason::ExactLocalRelationAdmitted
+    {
+        RevisionPortfolioBackend::RevisionLocal
+    } else {
+        RevisionPortfolioBackend::DirectExact
+    };
+    if production.reason != expected_reason || production.backend != expected_backend {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio selection does not match static assessment",
+        ));
+    }
+    match (&production.certificate, expected_backend) {
+        (
+            RevisionPortfolioCertificate::RevisionLocal(certificate),
+            RevisionPortfolioBackend::RevisionLocal,
+        ) => {
+            let summary = verify_revision_local_certificate(
+                left_source,
+                right_source,
+                interface_source,
+                certificate,
+            )?;
+            Ok(RevisionPortfolioSummary {
+                result: summary.answer.result,
+                bad_frame: summary.answer.bad_frame,
+                backend: expected_backend,
+                reason: expected_reason,
+                certificate_bytes: summary.certificate_bytes,
+            })
+        }
+        (
+            RevisionPortfolioCertificate::DirectExact(certificate),
+            RevisionPortfolioBackend::DirectExact,
+        ) => {
+            let summary =
+                verify_direct_answer(left_source, right_source, interface_source, certificate)?;
+            Ok(RevisionPortfolioSummary {
+                result: summary.result,
+                bad_frame: summary.bad_frame,
+                backend: expected_backend,
+                reason: expected_reason,
+                certificate_bytes: encode_direct_answer_certificate(certificate)?.len(),
+            })
+        }
+        _ => Err(reject(
+            EvidenceSection::Envelope,
+            "portfolio certificate backend does not match static assessment",
+        )),
+    }
+}
+
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
     !ids.is_empty()
         && ids.len() <= maximum
@@ -3550,5 +3827,142 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.section, EvidenceSection::Left);
+    }
+
+    #[test]
+    fn portfolio_routes_statically_and_preserves_both_backends() {
+        let local_interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        let local_query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let local = produce_revision_portfolio(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            local_interface.as_bytes(),
+            &local_query,
+        )
+        .unwrap();
+        assert_eq!(local.backend, RevisionPortfolioBackend::RevisionLocal);
+        assert_eq!(
+            local.reason,
+            RevisionSelectionReason::ExactLocalRelationAdmitted
+        );
+        assert_eq!(
+            verify_revision_portfolio(
+                WORD_COMPONENT,
+                &[7],
+                FINAL_RIGHT_COMPONENT,
+                &[7, 10],
+                local_interface.as_bytes(),
+                &local,
+            )
+            .unwrap()
+            .result,
+            BoundedResult::Unsafe
+        );
+
+        let wide_interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 4,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        let fallback = produce_revision_portfolio(
+            WIDE_LEFT_COMPONENT,
+            &[4],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            wide_interface.as_bytes(),
+            &local_query,
+        )
+        .unwrap();
+        assert_eq!(fallback.backend, RevisionPortfolioBackend::DirectExact);
+        assert_eq!(fallback.reason, RevisionSelectionReason::LeftStateWidth);
+        let summary = verify_revision_portfolio(
+            WIDE_LEFT_COMPONENT,
+            &[4],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            wide_interface.as_bytes(),
+            &fallback,
+        )
+        .unwrap();
+        assert_eq!(summary.result, BoundedResult::Unsafe);
+        assert_eq!(summary.bad_frame, Some(1));
+    }
+
+    #[test]
+    fn portfolio_rejects_forced_downgrade_and_invalid_wiring() {
+        let interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        let query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let (direct, _) = produce_direct_answer(
+            WORD_COMPONENT,
+            FINAL_RIGHT_COMPONENT,
+            interface.as_bytes(),
+            &query,
+        )
+        .unwrap();
+        let forced = RevisionPortfolioProduction {
+            certificate: RevisionPortfolioCertificate::DirectExact(direct),
+            backend: RevisionPortfolioBackend::DirectExact,
+            reason: RevisionSelectionReason::LeftStateWidth,
+        };
+        let error = verify_revision_portfolio(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            interface.as_bytes(),
+            &forced,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Envelope);
+        assert_eq!(
+            error.message,
+            "portfolio selection does not match static assessment"
+        );
+
+        let invalid_interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 999,
+            }],
+        })
+        .unwrap();
+        let error = produce_revision_portfolio(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            invalid_interface.as_bytes(),
+            &query,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Interface);
     }
 }

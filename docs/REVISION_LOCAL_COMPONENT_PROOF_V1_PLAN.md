@@ -66,8 +66,15 @@ horizon zero and UNSAFE at frame one through direct fallback. The direct
 certificate now has a versioned canonical binary codec, bounded state-vector
 counts, pre-allocation count checks, every-prefix truncation rejection, and a
 downstream public API round trip. The static portfolio selector and refusal
-taxonomy remain incomplete, so fallback is not yet wired into the end-to-end
-portfolio.
+taxonomy are now implemented. Selection parses structure but never trial-solves
+or times a candidate. Stable reasons cover left and right state, input, output,
+node-step, and joint pair-check bounds. The admitted route emits the complete
+revision-local envelope; every static rejection routes the unchanged sources,
+interface, and query to direct exact evidence. Verification recomputes the
+reason and rejects forced fallback, forced specialisation, or a mismatched
+certificate backend. Invalid wiring remains a semantic error and is never
+masked by fallback. A canonical top-level portfolio codec and CLI integration
+remain incomplete.
 
 ## Hypothesis
 
