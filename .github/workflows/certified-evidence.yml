@@ -28,6 +28,7 @@ jobs:
             scripts/test-composed-witness-baseline-v1.sh \
             scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+            scripts/ric3-static-evidence-producer-v1.sh \
             scripts/opentitan-dual-timer-resource-container-v1.sh \
             scripts/benchmark-changing-plant-composed-witness-v1.sh \
             scripts/test-certified-evidence-hostile-v1.sh
