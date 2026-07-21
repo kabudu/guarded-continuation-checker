@@ -65,6 +65,10 @@ reachability and its SAFE
   one-bit input, including the retained Caliptra asynchronous-reset export,
   while keeping v1 byte-for-byte unchanged. It closes an interoperability gap,
   but retains the same explicit-state limits and experimental support boundary.
+  The predeclared bounded search v3 experiment targets two to eight one-bit
+  inputs after a pinned public PLIC gateway exposed a five-input refusal. Until
+  its independent exactness, compatibility, hostile-input, and hosted gates
+  pass, multi-input word-level fallback remains open.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,

@@ -528,3 +528,14 @@ Canonical hosted run 29860773683 additionally makes the complete twelve-row
 arm64 and amd64 comparison CSV byte-identical by normalising only non-semantic
 Yosys build-identification text. This closes a reproducibility gap, not a
 novelty row.
+
+## Multi-input public PLIC fallback
+
+The pinned Roa Logic PLIC gateway exposes a product-relevant multi-input
+boundary that search v2 cannot represent. The predeclared certificate v3 will
+pack complete transition and terminal valuations and enumerate all valuations
+for SAFE successor closure. Explicit-state multi-input reachability is
+established prior art, so even a fully successful experiment is an
+interoperability and product-validity result, not novelty evidence. Its value is
+to provide an exact, fail-closed baseline against which later dense
+proof-carrying composition can be measured on a third public embedded project.
