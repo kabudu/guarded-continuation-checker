@@ -46,6 +46,12 @@ evidence, independently checked certificates and traces, verified
 multi-property witness composition, and hostile-evidence rejection. These are
 narrow configured-core results, not assurance for either complete product.
 
+The experimental exact bounded-search interface accepts state-only properties
+through retained certificate v1 and current-input-dependent properties through
+additive certificate v2. V2 represents asynchronous-reset semantics with a
+separate terminal-frame input and preserves v1 encoding unchanged. Both
+formats remain bounded research interfaces rather than production assurance.
+
 Bounded portfolio v3 source-binds and independently checks the exact
 accelerate, brake, and stopped relation, with unchanged exact-search fallback
 for every unsupported or intersecting query. This remains a narrow experimental

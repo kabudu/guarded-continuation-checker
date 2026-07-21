@@ -56,11 +56,15 @@ Bitwuzla endpoint formulas. It proves only a claimed bad endpoint for a supplied
 phase trace. It does not prove safety, absence of earlier failures,
 unavoidability, or generic BTOR2 semantics. The counter-trace portfolio now
 preserves rejected supplied one-input traces through exact replay up to 100,000
-transitions. Separately, bounded search v1 provides exact existential bad
+  transitions. Separately, bounded search v1 provides exact existential bad
 reachability and its SAFE
   complement for the one-input, constraint-free subset through fixed state and
   work limits. Its explicit-layer certificate is a research reference, with no
   compatibility history, broad product corpus, or external acceptance evidence.
+  Additive bounded search v2 covers bad properties that depend on the current
+  one-bit input, including the retained Caliptra asynchronous-reset export,
+  while keeping v1 byte-for-byte unchanged. It closes an interoperability gap,
+  but retains the same explicit-state limits and experimental support boundary.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,

@@ -118,3 +118,18 @@ The result is retained in
 The next candidate is an additive search certificate v2 with an explicit
 terminal-frame input and complete two-valued bad checks for every SAFE layer.
 V1 decoding and verification must remain unchanged.
+
+That candidate is now implemented as
+[bounded search certificate v2](BTOR2_BOUNDED_SEARCH_V2.md). The frozen
+horizons 2, 3, and 5 complete through ordinary exact search for all three
+Caliptra properties. At horizon 2 all are SAFE. At horizon 3 the first-stage
+timeout is UNSAFE at frame 3 while the second-stage and fatal properties are
+SAFE. At horizon 5 all three are UNSAFE, at frames 3, 5, and 5 respectively.
+The billion-frame query still refuses at the static search-horizon limit and
+returns no answer.
+
+The retained v2 probe regenerates the canonical model and certificates twice,
+verifies every certificate independently from the source, checks those exact
+answers, and keeps the billion-frame refusal as a negative control. This is an
+interoperability result for explicit bounded search, not recurrence
+acceleration or a Caliptra-specific solver route.

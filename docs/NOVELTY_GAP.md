@@ -91,6 +91,13 @@ FM 2026 composer reduces the two shared SAFE sets by 68.90% and 53.89%. This is
 further disconfirming evidence against a broad multi-property evidence-sharing
 claim. It strengthens product validity and baseline breadth, not novelty.
 
+Bounded search certificate v2 separately closes the ordinary Yosys
+current-input representation gap exposed by the Caliptra word-level export.
+It records a terminal-frame input distinct from transition inputs and checks
+both input values over complete SAFE layers. This is conventional explicit
+bounded reachability with independently replayed evidence. It is an
+interoperability improvement and must not be presented as a novelty result.
+
 ## Shared exact recurrence predicate-set candidate
 
 Predicate-set certificate v2 extends the narrower candidate mechanism on the

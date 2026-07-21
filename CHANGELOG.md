@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add bounded search certificate v2 for bad properties that depend on the
+  current one-bit semantic input. Preserve transition inputs separately from
+  the terminal-frame input, check both terminal values over every complete SAFE
+  layer, reject cross-version reinterpretation and downgrade, and continue to
+  produce retained byte-identical v1 evidence for state-only properties. Turn
+  the pinned Caliptra word-level horizons 2, 3, and 5 from governed refusals
+  into independently verified exact answers while retaining the billion-frame
+  resource refusal. This closes a Yosys asynchronous-reset interoperability
+  gap; it is conventional explicit search, not an algorithmic novelty claim.
 - Add the pinned OpenTitan AON dual-timer structural probe for invariant-chained
   predicate composition. Enable wake-up and watchdog paths together, retain a
   deterministic three-state BTOR2 model, implement standard reduction-or word

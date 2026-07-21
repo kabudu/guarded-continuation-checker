@@ -28006,7 +28006,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
             println!(
                 "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_inputs={} output={}",
-                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                certificate.certificate_version,
                 certificate.query_horizon,
                 certificate.layers.len(),
                 certificate.witness_inputs.len(),
@@ -28041,7 +28041,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
             println!(
                 "btor2-search status=VERIFIED version={} result={result} horizon={} bad_frame={bad_frame} reachable_states={} certificate_bytes={} elapsed_micros={}",
-                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                certificate.certificate_version,
                 summary.query_horizon,
                 summary.reachable_states,
                 encoded.len(),

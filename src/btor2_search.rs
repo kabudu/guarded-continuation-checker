@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-pub const SEARCH_CERTIFICATE_VERSION: u32 = 1;
+pub const SEARCH_CERTIFICATE_V1_VERSION: u32 = 1;
+pub const SEARCH_CERTIFICATE_VERSION: u32 = 2;
 pub const MAX_SEARCH_HORIZON: u32 = 256;
 pub const MAX_STATES_PER_LAYER: usize = 65_536;
 pub const MAX_TOTAL_STATES: usize = 262_144;
@@ -24,6 +25,7 @@ pub enum SearchResult {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SearchCertificate {
+    pub certificate_version: u32,
     pub source_sha256: String,
     pub query_horizon: u32,
     pub bad_property: NodeId,
@@ -31,6 +33,7 @@ pub struct SearchCertificate {
     pub result: SearchResult,
     pub bad_frame: Option<u32>,
     pub witness_inputs: Vec<bool>,
+    pub terminal_input: Option<bool>,
     pub layers: Vec<Vec<SearchState>>,
 }
 
@@ -99,12 +102,12 @@ fn validate_state_shape(model: &Btor2Model, state: &SearchState) -> Result<(), S
 fn validate_model(
     model: &Btor2Model,
     bad_property: NodeId,
-) -> Result<(NodeId, NodeId), SearchError> {
+) -> Result<(NodeId, NodeId, bool), SearchError> {
     if model.inputs().len() != 1 || model.nodes()[&model.inputs()[0]].width != 1 {
         return Err(reject("bounded search requires exactly one one-bit input"));
     }
     if !model.constraints().is_empty() {
-        return Err(reject("bounded search v1 does not admit constraints"));
+        return Err(reject("bounded search does not admit constraints"));
     }
     let expression = model
         .bad_properties()
@@ -136,20 +139,22 @@ fn validate_model(
         memo.insert(id, result);
         result
     }
-    if depends_on_input(model, expression, &mut BTreeMap::new()) {
-        return Err(reject("bounded search requires a state-only bad property"));
-    }
-    Ok((model.inputs()[0], expression))
+    let input_dependent = depends_on_input(model, expression, &mut BTreeMap::new());
+    Ok((model.inputs()[0], expression, input_dependent))
 }
 
 fn bad_active(
     model: &Btor2Model,
     state: &SearchState,
     input: NodeId,
+    input_value: bool,
     bad_property: NodeId,
 ) -> Result<bool, SearchError> {
     Ok(model
-        .active_bad(&state_values(state), &WordValues::from([(input, 0)]))
+        .active_bad(
+            &state_values(state),
+            &WordValues::from([(input, u64::from(input_value))]),
+        )
         .map_err(|error| reject(error.to_string()))?
         .contains(&bad_property))
 }
@@ -194,14 +199,30 @@ pub fn produce(
         return Err(reject("search horizon exceeds limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let (input, _) = validate_model(&model, bad_property)?;
+    let (input, _, input_dependent) = validate_model(&model, bad_property)?;
+    let certificate_version = if input_dependent {
+        SEARCH_CERTIFICATE_VERSION
+    } else {
+        SEARCH_CERTIFICATE_V1_VERSION
+    };
     let initial = state_key(
         &model
             .initial_state()
             .map_err(|error| reject(error.to_string()))?,
     );
-    if bad_active(&model, &initial, input, bad_property)? {
+    let mut initial_bad_input = None;
+    for terminal_input in [false, true]
+        .into_iter()
+        .take(if input_dependent { 2 } else { 1 })
+    {
+        if bad_active(&model, &initial, input, terminal_input, bad_property)? {
+            initial_bad_input = Some(terminal_input);
+            break;
+        }
+    }
+    if let Some(terminal_input) = initial_bad_input {
         return Ok(SearchCertificate {
+            certificate_version,
             source_sha256: digest(source),
             query_horizon: horizon,
             bad_property,
@@ -209,6 +230,7 @@ pub fn produce(
             result: SearchResult::Unsafe,
             bad_frame: Some(0),
             witness_inputs: Vec::new(),
+            terminal_input: input_dependent.then_some(terminal_input),
             layers: Vec::new(),
         });
     }
@@ -237,12 +259,21 @@ pub fn produce(
         let next = next.into_iter().collect::<Vec<_>>();
         let mut bad_state = None;
         for state in &next {
-            if bad_active(&model, state, input, bad_property)? {
-                bad_state = Some(state.clone());
+            for terminal_input in
+                [false, true]
+                    .into_iter()
+                    .take(if input_dependent { 2 } else { 1 })
+            {
+                if bad_active(&model, state, input, terminal_input, bad_property)? {
+                    bad_state = Some((state.clone(), terminal_input));
+                    break;
+                }
+            }
+            if bad_state.is_some() {
                 break;
             }
         }
-        if let Some(bad_state) = bad_state {
+        if let Some((bad_state, terminal_input)) = bad_state {
             predecessors.push(prior);
             let mut cursor = bad_state;
             let mut witness = Vec::with_capacity((frame + 1) as usize);
@@ -255,6 +286,7 @@ pub fn produce(
             }
             witness.reverse();
             return Ok(SearchCertificate {
+                certificate_version,
                 source_sha256: digest(source),
                 query_horizon: horizon,
                 bad_property,
@@ -262,6 +294,7 @@ pub fn produce(
                 result: SearchResult::Unsafe,
                 bad_frame: Some(frame + 1),
                 witness_inputs: witness,
+                terminal_input: input_dependent.then_some(terminal_input),
                 layers: Vec::new(),
             });
         }
@@ -269,6 +302,7 @@ pub fn produce(
         layers.push(next);
     }
     Ok(SearchCertificate {
+        certificate_version,
         source_sha256: digest(source),
         query_horizon: horizon,
         bad_property,
@@ -276,6 +310,7 @@ pub fn produce(
         result: SearchResult::Safe,
         bad_frame: None,
         witness_inputs: Vec::new(),
+        terminal_input: None,
         layers,
     })
 }
@@ -291,9 +326,29 @@ pub fn verify(
         return Err(reject("search certificate horizon exceeds limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let (input, _) = validate_model(&model, certificate.bad_property)?;
+    let (input, _, input_dependent) = validate_model(&model, certificate.bad_property)?;
     if input != certificate.input {
         return Err(reject("search certificate input does not match source"));
+    }
+    match certificate.certificate_version {
+        SEARCH_CERTIFICATE_V1_VERSION if input_dependent => {
+            return Err(reject(
+                "search certificate v1 requires a state-only bad property",
+            ));
+        }
+        SEARCH_CERTIFICATE_V1_VERSION => {
+            if certificate.terminal_input.is_some() {
+                return Err(reject("search certificate v1 has a terminal input"));
+            }
+        }
+        SEARCH_CERTIFICATE_VERSION => {
+            if !input_dependent {
+                return Err(reject(
+                    "search certificate v2 requires an input-dependent bad property",
+                ));
+            }
+        }
+        _ => return Err(reject("unsupported search certificate version")),
     }
     let initial = state_key(
         &model
@@ -305,6 +360,7 @@ pub fn verify(
             if !certificate.layers.is_empty()
                 || certificate.bad_frame != Some(certificate.witness_inputs.len() as u32)
                 || certificate.witness_inputs.len() > certificate.query_horizon as usize
+                || (input_dependent && certificate.terminal_input.is_none())
             {
                 return Err(reject("UNSAFE search certificate shape is invalid"));
             }
@@ -322,7 +378,13 @@ pub fn verify(
                     .map_err(|error| reject(error.to_string()))?;
             }
             let final_state = state_key(&state);
-            if !bad_active(&model, &final_state, input, certificate.bad_property)? {
+            if !bad_active(
+                &model,
+                &final_state,
+                input,
+                certificate.terminal_input.unwrap_or(false),
+                certificate.bad_property,
+            )? {
                 return Err(reject("UNSAFE witness does not reach the bad property"));
             }
             Ok(SearchSummary {
@@ -335,6 +397,7 @@ pub fn verify(
         SearchResult::Safe => {
             if certificate.bad_frame.is_some()
                 || !certificate.witness_inputs.is_empty()
+                || certificate.terminal_input.is_some()
                 || certificate.layers.len() != certificate.query_horizon as usize + 1
                 || certificate.layers.first() != Some(&vec![initial])
             {
@@ -350,10 +413,22 @@ pub fn verify(
                 }
                 budget.add_layer(&model, layer.len())?;
                 for state in layer {
-                    if bad_active(&model, state, input, certificate.bad_property)? {
-                        return Err(reject(format!(
-                            "reachable layer {frame} contains a bad state"
-                        )));
+                    for terminal_input in
+                        [false, true]
+                            .into_iter()
+                            .take(if input_dependent { 2 } else { 1 })
+                    {
+                        if bad_active(
+                            &model,
+                            state,
+                            input,
+                            terminal_input,
+                            certificate.bad_property,
+                        )? {
+                            return Err(reject(format!(
+                                "reachable layer {frame} contains a bad valuation"
+                            )));
+                        }
                     }
                 }
                 if frame + 1 < certificate.layers.len() {
@@ -396,6 +471,17 @@ fn valid_digest(value: &str) -> bool {
 }
 
 pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
+    if !matches!(
+        certificate.certificate_version,
+        SEARCH_CERTIFICATE_V1_VERSION | SEARCH_CERTIFICATE_VERSION
+    ) {
+        return Err(reject("unsupported search certificate version"));
+    }
+    if certificate.certificate_version == SEARCH_CERTIFICATE_V1_VERSION
+        && certificate.terminal_input.is_some()
+    {
+        return Err(reject("search certificate v1 has a terminal input"));
+    }
     if !valid_digest(&certificate.source_sha256) {
         return Err(reject("search source digest is not canonical"));
     }
@@ -412,7 +498,10 @@ pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
         .map(|bit| if *bit { '1' } else { '0' })
         .collect::<String>();
     let mut lines = vec![
-        format!("search_certificate_version={SEARCH_CERTIFICATE_VERSION}"),
+        format!(
+            "search_certificate_version={}",
+            certificate.certificate_version
+        ),
         format!("source_sha256={}", certificate.source_sha256),
         format!("query_horizon={}", certificate.query_horizon),
         format!("bad_property={}", certificate.bad_property),
@@ -420,8 +509,16 @@ pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
         format!("result={result}"),
         format!("bad_frame={bad_frame}"),
         format!("witness={witness}"),
-        format!("layer_count={}", certificate.layers.len()),
     ];
+    if certificate.certificate_version == SEARCH_CERTIFICATE_VERSION {
+        lines.push(format!(
+            "terminal_input={}",
+            certificate
+                .terminal_input
+                .map_or("none", |value| if value { "1" } else { "0" })
+        ));
+    }
+    lines.push(format!("layer_count={}", certificate.layers.len()));
     for (frame, layer) in certificate.layers.iter().enumerate() {
         lines.push(format!("layer_{frame}_count={}", layer.len()));
         for (index, state) in layer.iter().enumerate() {
@@ -465,7 +562,10 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         value.parse().map_err(|_| reject(format!("invalid {key}")))
     }
     let version: u32 = number(take(&mut lines, "search_certificate_version")?, "version")?;
-    if version != SEARCH_CERTIFICATE_VERSION {
+    if !matches!(
+        version,
+        SEARCH_CERTIFICATE_V1_VERSION | SEARCH_CERTIFICATE_VERSION
+    ) {
         return Err(reject("unsupported search certificate version"));
     }
     let source_sha256 = take(&mut lines, "source_sha256")?;
@@ -494,6 +594,16 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         return Err(reject("search witness is not a bit string"));
     }
     let witness_inputs = witness_text.bytes().map(|byte| byte == b'1').collect();
+    let terminal_input = if version == SEARCH_CERTIFICATE_VERSION {
+        match take(&mut lines, "terminal_input")?.as_str() {
+            "none" => None,
+            "0" => Some(false),
+            "1" => Some(true),
+            _ => return Err(reject("search terminal input must be none, 0, or 1")),
+        }
+    } else {
+        None
+    };
     let layer_count: usize = number(take(&mut lines, "layer_count")?, "layer count")?;
     if layer_count > MAX_SEARCH_HORIZON as usize + 1 {
         return Err(reject("search layer count exceeds limit"));
@@ -544,6 +654,7 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         ));
     }
     Ok(SearchCertificate {
+        certificate_version: version,
         source_sha256,
         query_horizon,
         bad_property,
@@ -551,6 +662,7 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         result,
         bad_frame,
         witness_inputs,
+        terminal_input,
         layers,
     })
 }
@@ -562,10 +674,13 @@ mod tests {
     const WATCHDOG: &[u8] = include_bytes!("../examples/btor2/watchdog-counter-v1.btor2");
     const SATURATING: &[u8] =
         include_bytes!("../examples/btor2/saturating-timer-rejected-v1.btor2");
+    const INPUT_DEPENDENT_BAD: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 3\n3 input 1 reset\n4 zero 2\n5 state 2 count\n6 init 2 5 4\n7 one 2\n8 add 2 5 7\n9 ite 2 3 4 8\n10 next 2 5 9\n11 ite 2 3 4 5\n12 constd 2 2\n13 eq 1 11 12\n14 bad 13 reset_guarded\n";
 
     #[test]
     fn proves_both_bounded_answers_and_round_trips() {
         let safe = produce(WATCHDOG, 13, 2).unwrap();
+        assert_eq!(safe.certificate_version, SEARCH_CERTIFICATE_V1_VERSION);
+        assert_eq!(safe.terminal_input, None);
         assert_eq!(safe.result, SearchResult::Safe);
         let safe = decode(encode(&safe).unwrap().as_bytes()).unwrap();
         let summary = verify(WATCHDOG, &safe).unwrap();
@@ -581,6 +696,71 @@ mod tests {
             verify(WATCHDOG, &unsafe_certificate).unwrap().result,
             SearchResult::Unsafe
         );
+    }
+
+    #[test]
+    fn v2_proves_input_dependent_bad_properties_without_reinterpreting_v1() {
+        let safe = produce(INPUT_DEPENDENT_BAD, 14, 1).unwrap();
+        assert_eq!(safe.certificate_version, SEARCH_CERTIFICATE_VERSION);
+        assert_eq!(safe.result, SearchResult::Safe);
+        assert_eq!(safe.terminal_input, None);
+        let safe_text = encode(&safe).unwrap();
+        assert!(safe_text.starts_with("search_certificate_version=2\n"));
+        assert!(safe_text.contains("terminal_input=none\n"));
+        assert!(verify(INPUT_DEPENDENT_BAD, &decode(safe_text.as_bytes()).unwrap()).is_ok());
+
+        let unsafe_certificate = produce(INPUT_DEPENDENT_BAD, 14, 2).unwrap();
+        assert_eq!(
+            unsafe_certificate.certificate_version,
+            SEARCH_CERTIFICATE_VERSION
+        );
+        assert_eq!(unsafe_certificate.result, SearchResult::Unsafe);
+        assert_eq!(unsafe_certificate.bad_frame, Some(2));
+        assert_eq!(unsafe_certificate.witness_inputs, vec![false; 2]);
+        assert_eq!(unsafe_certificate.terminal_input, Some(false));
+        let encoded = encode(&unsafe_certificate).unwrap();
+        let decoded = decode(encoded.as_bytes()).unwrap();
+        assert_eq!(
+            verify(INPUT_DEPENDENT_BAD, &decoded).unwrap().bad_frame,
+            Some(2)
+        );
+
+        let mut wrong_terminal = decoded;
+        wrong_terminal.terminal_input = Some(true);
+        assert!(verify(INPUT_DEPENDENT_BAD, &wrong_terminal).is_err());
+
+        let mut missing_terminal = unsafe_certificate.clone();
+        missing_terminal.terminal_input = None;
+        assert!(verify(INPUT_DEPENDENT_BAD, &missing_terminal).is_err());
+        let mut downgraded = unsafe_certificate.clone();
+        downgraded.certificate_version = SEARCH_CERTIFICATE_V1_VERSION;
+        downgraded.terminal_input = None;
+        assert!(verify(INPUT_DEPENDENT_BAD, &downgraded).is_err());
+        assert!(decode(encoded.replace("terminal_input=0\n", "").as_bytes()).is_err());
+        assert!(
+            decode(
+                encoded
+                    .replace(
+                        "search_certificate_version=2",
+                        "search_certificate_version=1"
+                    )
+                    .as_bytes()
+            )
+            .is_err()
+        );
+
+        let mut invalid_safe = safe;
+        invalid_safe.terminal_input = Some(false);
+        assert!(verify(INPUT_DEPENDENT_BAD, &invalid_safe).is_err());
+
+        let v1 = produce(WATCHDOG, 13, 2).unwrap();
+        let v1_text = encode(&v1).unwrap();
+        assert!(v1_text.starts_with("search_certificate_version=1\n"));
+        assert!(!v1_text.contains("terminal_input="));
+        assert!(verify(WATCHDOG, &decode(v1_text.as_bytes()).unwrap()).is_ok());
+        let mut forced_v2 = v1;
+        forced_v2.certificate_version = SEARCH_CERTIFICATE_VERSION;
+        assert!(verify(WATCHDOG, &forced_v2).is_err());
     }
 
     #[test]

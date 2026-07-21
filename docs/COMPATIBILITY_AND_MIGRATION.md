@@ -38,6 +38,14 @@ Callers that need a raw declaration inventory must not infer it from this API.
 The change is covered by external-consumer tests on every hosted platform and
 will become part of the first tagged compatibility baseline.
 
+Bounded search certificate v2 is additive. State-only bad properties continue
+to produce the original byte-for-byte v1 format. V2 is selected only when the
+bad property depends on the current one-bit semantic input, and records that
+terminal input separately from the inputs that select transitions. The decoder
+accepts both versions, while the verifier rejects cross-version
+reinterpretation, missing terminal inputs, and version downgrades. The first
+production tag must freeze both search formats and their retained fingerprints.
+
 The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded
 portfolio v3 or any existing certificate decoder. Certificate v2 adds joint
