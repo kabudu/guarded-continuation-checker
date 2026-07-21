@@ -348,16 +348,16 @@ the full valuation space. A separate constrained PLIC workflow emits two real
 BTOR2 constraints and agrees with maintained Yosys plus Z3 through horizon 16,
 while retained v1 through v3 results remain byte-identical.
 
-The predeclared [BTOR2 bounded search certificate v5
-experiment](docs/BTOR2_BOUNDED_SEARCH_V5_PLAN.md) extends the exact fallback to
+The [BTOR2 bounded search certificate v5
+experiment](docs/BTOR2_BOUNDED_SEARCH_V5.md) extends the exact fallback to
 small word-valued register fields, bus values, and sensor samples. The local
 core binds each source width and reconstructs packed valuations by input-node
 order, then least-significant bit first within each word. It retains the v1
 through v4 routes and refuses models above eight total semantic input bits. A
 pinned Caliptra watchdog workflow preserves its live two-bit timeout field and
 agrees with maintained Yosys plus Z3 for the retained SAFE and UNSAFE bounds.
-The hosted gate remains open, so this is not yet a completed experiment or
-production claim.
+Hosted amd64 run 29874337371 reproduces the complete result. This closes the v5
+experiment gates, but it is not an algorithmic novelty or production claim.
 
 The experimental [BTOR2 exact word-region certificate v1](docs/BTOR2_WORD_REGION_CERTIFICATE_V1.md)
 now replaces those layers for recognised reset-add and saturating counter

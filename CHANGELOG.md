@@ -12,7 +12,8 @@
   selection and encoding. Add a pinned Caliptra watchdog workflow with a live
   two-bit timeout field, exact nonzero constraint, SAFE and UNSAFE results,
   deterministic evidence, seven hostile controls, and maintained Yosys plus Z3
-  agreement. Hosted evidence remains open.
+  agreement. Hosted amd64 run 29874337371 reproduces all evidence and passes the
+  complete platform and release-build matrix.
 - Add bounded search certificate v4 for exact BTOR2 environment constraints.
   Bind ordered input and constraint nodes, quantify only admissible all-frame
   valuations, preserve assumption dead ends, and charge governance against the

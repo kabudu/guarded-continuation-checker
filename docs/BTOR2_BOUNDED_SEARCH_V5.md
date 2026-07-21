@@ -1,8 +1,7 @@
-# BTOR2 bounded search certificate v5 plan
+# BTOR2 bounded search certificate v5
 
-Status: local implementation and public-design validation complete; hosted
-reproduction remains open. No completed experiment or production result is
-claimed.
+Status: experimental implementation with local and hosted public-design
+validation. No production result is claimed.
 
 ## Capability gap
 
@@ -98,4 +97,12 @@ publication does not clobber existing evidence.
 Maintained Yosys plus Z3 independently proves the horizon-zero assertion and
 finds the same frame-one violation. The retained rows are in
 [`caliptra-wdt-word-input-acceptance-v1.csv`](../results/caliptra-wdt-word-input-acceptance-v1.csv).
-Hosted reproduction remains the only open predeclared gate.
+[Hosted amd64 run
+29874337371](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29874337371)
+reproduces the pinned Caliptra model and all three retained result rows, checks
+the SAFE and UNSAFE bounds with maintained Yosys plus Z3, preserves v1 through
+v4 evidence, and passes the complete Linux suite, reproducible package,
+dependency audit, Bitwuzla baseline, hostile RTL isolation, and macOS, Linux,
+and Windows downstream API matrix. This closes every predeclared v5 gate. It
+does not establish algorithmic novelty, product validity, or production
+readiness.

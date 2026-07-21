@@ -68,8 +68,9 @@ reachability and its SAFE
   Bounded search v3 now covers two to eight one-bit inputs after a pinned public
   PLIC gateway exposed a five-input refusal. Generated both-answer oracles,
   deterministic PLIC evidence, maintained Yosys plus Z3 agreement, hostile
-  controls, a node-step refusal, and retained v1/v2 compatibility pass locally.
-  Hosted reproduction and release compatibility remain open.
+  controls, a node-step refusal, and retained v1/v2 compatibility pass. Hosted
+  amd64 run 29872388711 reproduces the complete result. Tagged-release
+  compatibility and product validity remain open.
   Constraint-aware bounded search v4 now preserves the environment assumptions
   needed for legal reset, bus, interrupt, and actuator traces. Its local public
   PLIC workflow, independent oracle, hostile controls, maintained Yosys plus Z3
@@ -77,11 +78,12 @@ reachability and its SAFE
   29872388711 reproduces the pinned model, evidence, maintained-tool baseline,
   Linux suite, and downstream API matrix. This closes the v4 experiment gates,
   but does not close wider release compatibility or product-validity rows.
-  Word-input bounded search v5 is predeclared because v4 still refuses small
+  Word-input bounded search v5 closes v4's refusal of small
   register fields, bus values, and sensor samples. Its local width binding,
   exact fallback, public Caliptra workflow, retained compatibility, hostile
-  controls, and maintained Yosys plus Z3 gates now pass. Hosted reproduction
-  remains open, and the bounded workflow does not close product validity.
+  controls, and maintained Yosys plus Z3 gates now pass. Hosted amd64 run
+  29874337371 reproduces the full result and closes the v5 experiment gates.
+  The bounded workflow does not close product validity or production release.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,

@@ -1,7 +1,7 @@
 # Roa Logic PLIC gateway experiment v1
 
-Status: pinned source, certificate v3, deterministic local evidence, and
-maintained-oracle agreement complete. Hosted reproduction remains open.
+Status: pinned source, certificate v3, deterministic local and hosted evidence,
+and maintained-oracle agreement complete.
 
 ## Purpose
 
@@ -80,3 +80,8 @@ v3 verification rejects reordered inputs, a false input count, truncation, and
 output overwrite. A separate Yosys SMT2 export checked by maintained Z3 proves
 both assertions through step 16. The retained matrix is
 [`roalogic-plic-gateway-acceptance-v1.csv`](../results/roalogic-plic-gateway-acceptance-v1.csv).
+
+[Hosted amd64 run
+29872388711](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29872388711)
+reproduces the complete retained matrix, pinned source-to-model build,
+maintained Yosys plus Z3 agreement, resource refusal, and hostile controls.

@@ -552,4 +552,6 @@ bit-vector enumeration, typed input reconstruction, and constrained bounded
 reachability are established. Its role is to make later word-level proof
 compression comparisons exact and source-faithful. The pinned Caliptra result
 confirms local product interoperability and maintained-tool agreement. It does
-not change that prior-art assessment or close any novelty row.
+not change that prior-art assessment or close any novelty row. Hosted amd64 run
+29874337371 reproduces the complete result and reinforces only the engineering
+claim.

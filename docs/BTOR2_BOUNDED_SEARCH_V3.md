@@ -1,7 +1,7 @@
 # BTOR2 bounded search certificate v3
 
-Status: experimental implementation with local public-design validation. Hosted
-reproduction remains open.
+Status: experimental implementation with local and hosted public-design
+validation.
 
 ## Problem exposed by public RTL
 
@@ -101,3 +101,8 @@ The public PLIC result is recorded in
 Models containing constraints use additive
 [certificate v4](BTOR2_BOUNDED_SEARCH_V4.md). Constraint-free multi-input
 models continue to produce byte-identical v3 evidence.
+
+[Hosted amd64 run
+29872388711](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29872388711)
+reproduces the pinned PLIC model, v3 evidence, resource refusal, and maintained
+Yosys plus Z3 baseline while retaining v1 and Caliptra v2 evidence.

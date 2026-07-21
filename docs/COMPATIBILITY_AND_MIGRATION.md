@@ -70,7 +70,8 @@ present or absent. Boolean-only models continue to select v1 through v4 under
 their original rules and encodings. The public `SearchCertificate` structure
 adds `input_widths`; callers constructing values directly must initialise it to
 an empty vector for v1 through v4. The first production tag must freeze all five
-formats after the remaining v5 public-design and hosted gates pass.
+formats. Hosted run 29874337371 closes the v5 public-design and compatibility
+gates.
 
 The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded

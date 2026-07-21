@@ -61,8 +61,8 @@ Additive certificates v4 and v5 preserve exact BTOR2 constraints and small
 word-valued semantic inputs respectively. V5 source-binds input widths and
 packs at most eight total input bits by input-node order, then
 least-significant bit first within each word. All five formats remain bounded
-research interfaces. The v5 Caliptra public-design gate passes locally, while
-hosted reproduction remains open.
+research interfaces. Hosted amd64 run 29874337371 reproduces the complete v5
+Caliptra public-design result and compatibility matrix.
 
 Bounded portfolio v3 source-binds and independently checks the exact
 accelerate, brake, and stopped relation, with unchanged exact-search fallback
