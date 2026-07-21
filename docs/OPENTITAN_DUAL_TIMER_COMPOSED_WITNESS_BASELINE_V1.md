@@ -104,6 +104,14 @@ remain required before the baseline can close its production gate. The builder
 now attests the pinned OpenTitan source and Yosys revision, while the corpus
 manifest binds the wrapper and compatibility files.
 
+Hosted run 29798977299 reproduced the complete corrected twelve-row baseline
+on amd64, including independent verification, both compositions, deterministic
+regeneration, and all six hostile controls. The job then failed before artifact
+upload because the resource harness ran the Ubuntu 24.04-built GCC composer in
+the older Debian Bookworm producer container. The harness now runs the combined
+producer in its declared Ubuntu 24.04 runtime container as the host user. A
+clean hosted rerun and retained artifact are still required.
+
 ## Predeclared resource comparison
 
 The hosted amd64 follow-up measures horizons 4 and 5 with three trials. Each

@@ -409,8 +409,18 @@ identical-scope baseline and resource harness now start IC3 and depth-ordered
 BMC for every property, accept IC3 only for SAFE certificates, and accept BMC
 only for UNSAFE traces. The expected answer never selects the engine. The
 retained schema binds that static race, and the consumer rejects a trace whose
-terminated valuation count does not equal the expected earliest frame plus one. Hosted
-reproduction of the corrected contract remains open.
+terminated valuation count does not equal the expected earliest frame plus
+one. Hosted artifact retention and resource reproduction of the corrected
+contract remain open.
+
+Hosted run 29798977299 subsequently passed that corrected twelve-row baseline,
+all independent checks, both compositions, deterministic regeneration, and all
+six hostile controls on amd64. Its resource phase exposed a container ABI and
+ownership defect: an Ubuntu 24.04-built GCC composer was mounted into a Debian
+Bookworm producer container, then root-owned partial outputs could not be
+removed by the runner. The resource producer now uses the declared Ubuntu 24.04
+runtime and the runner's UID. Because the failed job did not upload its partial
+artifact, a clean hosted rerun remains required before this gate closes.
 
 ## Post-production-release deliverables
 

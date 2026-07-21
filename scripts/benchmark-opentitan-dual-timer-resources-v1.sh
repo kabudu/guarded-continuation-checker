@@ -21,7 +21,6 @@ output=$5
 manifest=$6
 repository=$(cd "$(dirname "$0")/.." && pwd -P)
 trials=${TRIALS:-3}
-ric3_image=${RIC3_IMAGE:-gcc-ric3-qualification:v1-amd64}
 certifaiger_image=${CERTIFAIGER_IMAGE:-gcc-certifaiger-qualification:v1-amd64}
 runtime_image=${GCC_RUNTIME_IMAGE:-ubuntu:24.04}
 repetitions=10
@@ -109,10 +108,10 @@ for trial in $(seq 1 "$trials"); do
       /repo/scripts/opentitan-dual-timer-resource-container-v1.sh \
       gcc-consume "$horizon" "$repetitions"
 
-    docker run --rm --network none \
+    docker run --rm --network none --user "$(id -u):$(id -g)" \
       -v "$ric3_output:/tools:ro" -v "$certifaiger_output/bin:/cert:ro" \
       -v "$gcc_directory:/gcc:ro" -v "$repository:/repo:ro" \
-      -v "$models:/models:ro" -v "$trial_dir:/out" "$ric3_image" \
+      -v "$models:/models:ro" -v "$trial_dir:/out" "$runtime_image" \
       /cert/runlim -p -r 300 --sample-rate=1000 \
       -o /out/external-producer.runlim \
       /repo/scripts/opentitan-dual-timer-resource-container-v1.sh \
