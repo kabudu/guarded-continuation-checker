@@ -1,6 +1,8 @@
 //! Canonical envelope primitives for revision-local component evidence.
 
+use crate::btor2::{self, Btor2Model, NodeId, WordValues};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 
@@ -9,6 +11,11 @@ pub const MAX_LOCAL_SECTION_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_INTERFACE_SECTION_BYTES: usize = 1024 * 1024;
 pub const MAX_FINAL_SECTION_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_REVISION_LOCAL_CERTIFICATE_BYTES: usize = 50 * 1024 * 1024;
+pub const MAX_LOCAL_STATE_BITS: usize = 8;
+pub const MAX_LOCAL_INPUT_BITS: usize = 8;
+pub const MAX_LOCAL_OUTPUT_BITS: usize = 8;
+pub const MAX_LOCAL_VALUATIONS: usize = 65_536;
+pub const MAX_LOCAL_NODE_STEPS: usize = 30_000_000;
 
 const MAGIC: &[u8; 8] = b"GCCRLCP1";
 
@@ -42,6 +49,36 @@ pub struct RevisionLocalCertificate {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalRelationRow {
+    pub state: Vec<u64>,
+    pub input: Vec<u64>,
+    pub next_state: Vec<u64>,
+    pub output: Vec<u64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalRelationCertificate {
+    pub source_sha256: [u8; 32],
+    pub states: Vec<NodeId>,
+    pub state_widths: Vec<u32>,
+    pub inputs: Vec<NodeId>,
+    pub input_widths: Vec<u32>,
+    pub outputs: Vec<NodeId>,
+    pub output_widths: Vec<u32>,
+    pub constraints: Vec<NodeId>,
+    pub rows: Vec<LocalRelationRow>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalRelationSummary {
+    pub state_bits: usize,
+    pub input_bits: usize,
+    pub output_bits: usize,
+    pub candidate_valuations: usize,
+    pub admissible_rows: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RevisionLocalError {
     pub section: EvidenceSection,
     pub message: String,
@@ -68,6 +105,261 @@ pub fn source_digest(source: &[u8]) -> [u8; 32] {
 
 pub fn evidence_digest(evidence: &[u8]) -> [u8; 32] {
     Sha256::digest(evidence).into()
+}
+
+struct RelationShape {
+    states: Vec<NodeId>,
+    state_widths: Vec<u32>,
+    inputs: Vec<NodeId>,
+    input_widths: Vec<u32>,
+    outputs: Vec<NodeId>,
+    output_widths: Vec<u32>,
+    constraints: Vec<NodeId>,
+    state_bits: usize,
+    input_bits: usize,
+    output_bits: usize,
+    candidate_valuations: usize,
+}
+
+fn widths(
+    model: &Btor2Model,
+    ids: &[NodeId],
+    section: EvidenceSection,
+    label: &str,
+) -> Result<Vec<u32>, RevisionLocalError> {
+    ids.iter()
+        .map(|id| {
+            model
+                .nodes()
+                .get(id)
+                .map(|node| node.width)
+                .ok_or_else(|| reject(section, format!("unknown {label} node {id}")))
+        })
+        .collect()
+}
+
+fn checked_bits(
+    widths: &[u32],
+    limit: usize,
+    section: EvidenceSection,
+    label: &str,
+) -> Result<usize, RevisionLocalError> {
+    let bits = widths
+        .iter()
+        .try_fold(0usize, |total, width| total.checked_add(*width as usize));
+    let bits = bits.ok_or_else(|| reject(section, format!("{label} width overflowed")))?;
+    if bits > limit {
+        return Err(reject(
+            section,
+            format!("{label} width exceeds {limit}-bit limit"),
+        ));
+    }
+    Ok(bits)
+}
+
+fn relation_shape(
+    model: &Btor2Model,
+    outputs: &[NodeId],
+    section: EvidenceSection,
+) -> Result<RelationShape, RevisionLocalError> {
+    if outputs.is_empty() {
+        return Err(reject(section, "at least one output is required"));
+    }
+    let states = model.states().to_vec();
+    let inputs = model.inputs().to_vec();
+    if states.is_empty() || inputs.is_empty() {
+        return Err(reject(
+            section,
+            "local relation requires state and semantic input nodes",
+        ));
+    }
+    if outputs.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(reject(
+            section,
+            "output nodes must be unique and strictly increasing",
+        ));
+    }
+    let state_widths = widths(model, &states, section, "state")?;
+    let input_widths = widths(model, &inputs, section, "input")?;
+    let output_widths = widths(model, outputs, section, "output")?;
+    let state_bits = checked_bits(&state_widths, MAX_LOCAL_STATE_BITS, section, "state")?;
+    let input_bits = checked_bits(&input_widths, MAX_LOCAL_INPUT_BITS, section, "input")?;
+    let output_bits = checked_bits(&output_widths, MAX_LOCAL_OUTPUT_BITS, section, "output")?;
+    let total_bits = state_bits
+        .checked_add(input_bits)
+        .ok_or_else(|| reject(section, "local valuation width overflowed"))?;
+    let candidate_valuations = 1usize
+        .checked_shl(total_bits as u32)
+        .filter(|count| *count <= MAX_LOCAL_VALUATIONS)
+        .ok_or_else(|| reject(section, "local valuation count exceeds limit"))?;
+    let node_steps = candidate_valuations
+        .checked_mul(model.nodes().len())
+        .ok_or_else(|| reject(section, "local node-step estimate overflowed"))?;
+    if node_steps > MAX_LOCAL_NODE_STEPS {
+        return Err(reject(section, "local node-step estimate exceeds limit"));
+    }
+    Ok(RelationShape {
+        states,
+        state_widths,
+        inputs,
+        input_widths,
+        outputs: outputs.to_vec(),
+        output_widths,
+        constraints: model.constraints().iter().map(|(id, _)| *id).collect(),
+        state_bits,
+        input_bits,
+        output_bits,
+        candidate_valuations,
+    })
+}
+
+fn unpack(ids: &[NodeId], widths: &[u32], mut packed: usize) -> (WordValues, Vec<u64>) {
+    let mut map = BTreeMap::new();
+    let mut values = Vec::with_capacity(ids.len());
+    for (id, width) in ids.iter().zip(widths) {
+        let mask = (1usize << *width) - 1;
+        let value = (packed & mask) as u64;
+        packed >>= *width;
+        map.insert(*id, value);
+        values.push(value);
+    }
+    (map, values)
+}
+
+fn admissible(
+    model: &Btor2Model,
+    state: &WordValues,
+    input: &WordValues,
+    section: EvidenceSection,
+) -> Result<bool, RevisionLocalError> {
+    for (_, expression) in model.constraints() {
+        if model
+            .evaluate(*expression, state, input)
+            .map_err(|error| reject(section, error.to_string()))?
+            == 0
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn relation_row(
+    model: &Btor2Model,
+    shape: &RelationShape,
+    state_packed: usize,
+    input_packed: usize,
+    section: EvidenceSection,
+) -> Result<Option<LocalRelationRow>, RevisionLocalError> {
+    let (state, state_values) = unpack(&shape.states, &shape.state_widths, state_packed);
+    let (input, input_values) = unpack(&shape.inputs, &shape.input_widths, input_packed);
+    if !admissible(model, &state, &input, section)? {
+        return Ok(None);
+    }
+    let next = model
+        .step(&state, &input)
+        .map_err(|error| reject(section, error.to_string()))?;
+    let next_state = shape.states.iter().map(|id| next[id]).collect();
+    let output = shape
+        .outputs
+        .iter()
+        .map(|id| {
+            model
+                .evaluate(*id, &state, &input)
+                .map_err(|error| reject(section, error.to_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(LocalRelationRow {
+        state: state_values,
+        input: input_values,
+        next_state,
+        output,
+    }))
+}
+
+pub fn produce_local_relation(
+    source: &[u8],
+    outputs: &[NodeId],
+) -> Result<LocalRelationCertificate, RevisionLocalError> {
+    let model = btor2::parse_bytes(source)
+        .map_err(|error| reject(EvidenceSection::Envelope, error.to_string()))?;
+    let shape = relation_shape(&model, outputs, EvidenceSection::Envelope)?;
+    let mut rows = Vec::new();
+    for state in 0..(1usize << shape.state_bits) {
+        for input in 0..(1usize << shape.input_bits) {
+            if let Some(row) =
+                relation_row(&model, &shape, state, input, EvidenceSection::Envelope)?
+            {
+                rows.push(row);
+            }
+        }
+    }
+    Ok(LocalRelationCertificate {
+        source_sha256: source_digest(source),
+        states: shape.states,
+        state_widths: shape.state_widths,
+        inputs: shape.inputs,
+        input_widths: shape.input_widths,
+        outputs: shape.outputs,
+        output_widths: shape.output_widths,
+        constraints: shape.constraints,
+        rows,
+    })
+}
+
+pub fn verify_local_relation(
+    source: &[u8],
+    certificate: &LocalRelationCertificate,
+    section: EvidenceSection,
+) -> Result<LocalRelationSummary, RevisionLocalError> {
+    if !matches!(section, EvidenceSection::Left | EvidenceSection::Right) {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "local relation verifier requires left or right attribution",
+        ));
+    }
+    if source_digest(source) != certificate.source_sha256 {
+        return Err(reject(section, "local relation source binding is invalid"));
+    }
+    let model = btor2::parse_bytes(source).map_err(|error| reject(section, error.to_string()))?;
+    let shape = relation_shape(&model, &certificate.outputs, section)?;
+    if certificate.states != shape.states
+        || certificate.state_widths != shape.state_widths
+        || certificate.inputs != shape.inputs
+        || certificate.input_widths != shape.input_widths
+        || certificate.output_widths != shape.output_widths
+        || certificate.constraints != shape.constraints
+    {
+        return Err(reject(
+            section,
+            "local relation shape does not match source",
+        ));
+    }
+    let mut claimed = certificate.rows.iter();
+    let mut admissible_rows = 0usize;
+    for state in 0..(1usize << shape.state_bits) {
+        for input in 0..(1usize << shape.input_bits) {
+            if let Some(expected) = relation_row(&model, &shape, state, input, section)? {
+                let actual = claimed
+                    .next()
+                    .ok_or_else(|| reject(section, "local relation omits an admissible row"))?;
+                if actual != &expected {
+                    return Err(reject(section, "local relation row does not match source"));
+                }
+                admissible_rows += 1;
+            }
+        }
+    }
+    if claimed.next().is_some() {
+        return Err(reject(section, "local relation has extra rows"));
+    }
+    Ok(LocalRelationSummary {
+        state_bits: shape.state_bits,
+        input_bits: shape.input_bits,
+        output_bits: shape.output_bits,
+        candidate_valuations: shape.candidate_valuations,
+        admissible_rows,
+    })
 }
 
 pub fn verify_source_bindings(
@@ -272,6 +564,8 @@ pub fn decode_revision_local_certificate(
 mod tests {
     use super::*;
 
+    const WORD_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 ulte 1 3 9\n11 constraint 10\n12 zero 1\n13 bad 12 never\n";
+
     fn fixture() -> RevisionLocalCertificate {
         RevisionLocalCertificate {
             left: LocalEvidence {
@@ -341,5 +635,48 @@ mod tests {
         let error = decode_revision_local_certificate(&encoded).unwrap_err();
         assert_eq!(error.section, EvidenceSection::Left);
         assert_eq!(error.message, "section exceeds byte limit");
+    }
+
+    #[test]
+    fn word_relation_is_complete_and_constraint_filtered() {
+        let relation = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        assert_eq!(relation.state_widths, [2]);
+        assert_eq!(relation.input_widths, [2]);
+        assert_eq!(relation.output_widths, [2]);
+        assert_eq!(relation.constraints, [11]);
+        assert_eq!(relation.rows.len(), 12);
+        let summary =
+            verify_local_relation(WORD_COMPONENT, &relation, EvidenceSection::Left).unwrap();
+        assert_eq!(summary.state_bits, 2);
+        assert_eq!(summary.input_bits, 2);
+        assert_eq!(summary.output_bits, 2);
+        assert_eq!(summary.candidate_valuations, 16);
+        assert_eq!(summary.admissible_rows, 12);
+    }
+
+    #[test]
+    fn omitted_and_mutated_rows_fail_with_local_attribution() {
+        let relation = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let mut omitted = relation.clone();
+        omitted.rows.pop();
+        let error =
+            verify_local_relation(WORD_COMPONENT, &omitted, EvidenceSection::Right).unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Right);
+        assert_eq!(error.message, "local relation omits an admissible row");
+
+        let mut changed = relation;
+        changed.rows[0].output[0] ^= 1;
+        let error =
+            verify_local_relation(WORD_COMPONENT, &changed, EvidenceSection::Left).unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Left);
+        assert_eq!(error.message, "local relation row does not match source");
+    }
+
+    #[test]
+    fn state_and_input_widths_fail_closed_before_enumeration() {
+        let source = b"1 sort bitvec 1\n2 sort bitvec 9\n3 input 1 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 next 2 4 4\n8 bad 3 input_bad\n";
+        let error = produce_local_relation(source, &[4]).unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Envelope);
+        assert_eq!(error.message, "state width exceeds 8-bit limit");
     }
 }

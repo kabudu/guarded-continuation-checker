@@ -6,6 +6,17 @@ This document predeclares a bounded falsification experiment. No implementation
 result, novelty claim, production claim, or release commitment follows from the
 plan.
 
+The first semantic primitive is now implemented behind the public
+`revision_local` library module. It exhaustively produces and verifies a
+source-bound local relation for components with at most eight state bits, eight
+semantic input bits, eight selected output bits, 65,536 candidate valuations,
+and 30 million estimated node steps. Constraints filter admissible rows. The
+verifier independently iterates every state and input valuation and rejects
+omitted, extra, reordered, or false rows with left-side or right-side
+attribution. This is not yet an independently encoded local proof: canonical
+local-relation encoding, interface composition, final answer evidence, exact v5
+fallback, and revision-work observations remain incomplete.
+
 ## Hypothesis
 
 For two source-separated constrained BTOR2 components connected through a
