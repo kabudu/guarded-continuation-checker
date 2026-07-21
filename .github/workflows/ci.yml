@@ -77,7 +77,8 @@ jobs:
             scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
             scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
-            scripts/opentitan-dual-timer-resource-container-v1.sh
+            scripts/opentitan-dual-timer-resource-container-v1.sh \
+            scripts/test-crate-package-v1.sh
           shellcheck -s sh \
             scripts/build-opentitan-aon-dual-timer-aiger.sh \
             scripts/build-caliptra-wdt-aiger-v1.sh \
