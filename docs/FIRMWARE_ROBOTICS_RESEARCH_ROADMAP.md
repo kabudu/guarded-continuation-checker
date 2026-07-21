@@ -92,7 +92,7 @@ close either register by itself.
    watchdog path, so broader public-product and independent acceptance remain
    open.
    The next fallback boundary is now predeclared as
-   [bounded search certificate v3](BTOR2_BOUNDED_SEARCH_V3_PLAN.md). A pinned
+   [bounded search certificate v3](BTOR2_BOUNDED_SEARCH_V3.md). A pinned
    public PLIC gateway exposes five independent control inputs and is refused
    by the one-input search contract. V3 must retain complete packed transition
    and terminal valuations, preserve v1/v2 bytes, and pass an independent

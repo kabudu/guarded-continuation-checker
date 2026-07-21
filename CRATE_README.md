@@ -52,6 +52,11 @@ additive certificate v2. V2 represents asynchronous-reset semantics with a
 separate terminal-frame input and preserves v1 encoding unchanged. Both
 formats remain bounded research interfaces rather than production assurance.
 
+Additive certificate v3 admits two through eight one-bit semantic inputs and
+binds complete packed transition and terminal valuations. Retained v1 and v2
+encodings remain byte-identical. The v3 path is also experimental and subject
+to the same explicit state, work, horizon, and artifact limits.
+
 Bounded portfolio v3 source-binds and independently checks the exact
 accelerate, brake, and stopped relation, with unchanged exact-search fallback
 for every unsupported or intersecting query. This remains a narrow experimental

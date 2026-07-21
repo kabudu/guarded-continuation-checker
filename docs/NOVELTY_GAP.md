@@ -532,10 +532,11 @@ novelty row.
 ## Multi-input public PLIC fallback
 
 The pinned Roa Logic PLIC gateway exposes a product-relevant multi-input
-boundary that search v2 cannot represent. The predeclared certificate v3 will
-pack complete transition and terminal valuations and enumerate all valuations
-for SAFE successor closure. Explicit-state multi-input reachability is
-established prior art, so even a fully successful experiment is an
+boundary that search v2 cannot represent. Certificate v3 now packs complete
+transition and terminal valuations and enumerates all valuations for SAFE
+successor closure. Its local horizon-16 result agrees with maintained Yosys and
+Z3 and retains the first larger query as a governed refusal. Explicit-state
+multi-input reachability is established prior art, so this is an
 interoperability and product-validity result, not novelty evidence. Its value is
 to provide an exact, fail-closed baseline against which later dense
 proof-carrying composition can be measured on a third public embedded project.

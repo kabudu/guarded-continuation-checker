@@ -27484,6 +27484,24 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "btor2-search-v3-capabilities" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-search-v3-capabilities".to_string(),
+                );
+            }
+            println!(
+                "btor2_search_capability_version=1 search_certificate_version={} min_inputs=1 max_inputs={} input_width=1 max_horizon={} max_states_per_layer={} max_total_states={} max_node_steps={} max_certificate_bytes={} constraints=unsupported valuation_order=input-node-ascending valuation_bit=i-maps-input-i terminal_valuation=distinct unsafe=trace safe=complete-layers resource_refusal=no-answer unsupported=fail-closed",
+                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                btor2_search::MAX_SEARCH_INPUTS,
+                btor2_search::MAX_SEARCH_HORIZON,
+                btor2_search::MAX_STATES_PER_LAYER,
+                btor2_search::MAX_TOTAL_STATES,
+                btor2_search::MAX_SEARCH_NODE_STEPS,
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
         "certify-btor2-controller-obligation" => {
             if args.len() != 4 {
                 return Err("usage: guarded-continuation-checker certify-btor2-controller-obligation CONTROLLER.btor2 CONTRACT.txt OUTPUT.controller-obligation".to_string());
@@ -28004,14 +28022,25 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let bad_frame = certificate
                 .bad_frame
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
-            println!(
-                "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_inputs={} output={}",
-                certificate.certificate_version,
-                certificate.query_horizon,
-                certificate.layers.len(),
-                certificate.witness_inputs.len(),
-                output.display()
-            );
+            if certificate.certificate_version == btor2_search::SEARCH_CERTIFICATE_VERSION {
+                println!(
+                    "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_valuations={} output={}",
+                    certificate.certificate_version,
+                    certificate.query_horizon,
+                    certificate.layers.len(),
+                    certificate.witness_valuations.len(),
+                    output.display()
+                );
+            } else {
+                println!(
+                    "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_inputs={} output={}",
+                    certificate.certificate_version,
+                    certificate.query_horizon,
+                    certificate.layers.len(),
+                    certificate.witness_inputs.len(),
+                    output.display()
+                );
+            }
             Ok(true)
         }
         "verify-btor2-search" => {
@@ -38110,6 +38139,14 @@ mod tests {
     #[test]
     fn btor2_cli_v1_inspects_word_level_fixture_and_rejects_bad_arguments() {
         assert!(run_artifact_cli(&["btor2-cli-version".to_string()]).unwrap());
+        assert!(run_artifact_cli(&["btor2-search-v3-capabilities".to_string()]).unwrap());
+        assert!(
+            run_artifact_cli(&[
+                "btor2-search-v3-capabilities".to_string(),
+                "unexpected".to_string(),
+            ])
+            .is_err()
+        );
         assert!(
             run_artifact_cli(&["btor2-cli-version".to_string(), "unexpected".to_string(),])
                 .is_err()

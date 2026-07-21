@@ -1,7 +1,7 @@
 # Roa Logic PLIC gateway experiment v1
 
-Status: candidate selected and negative boundary retained. Source import,
-certificate v3, independent answers, and hosted reproduction remain open.
+Status: pinned source, certificate v3, deterministic local evidence, and
+maintained-oracle agreement complete. Hosted reproduction remains open.
 
 ## Purpose
 
@@ -26,18 +26,20 @@ claim may be described as an upstream product guarantee.
 
 ## Initial feasibility result
 
-Pinned Yosys accepts and flattens the unmodified module after its standard
-asynchronous-reset lowering. A minimal GCC-owned wrapper exposing reset,
-source, edge/level, claim, and completion produces a valid BTOR2 model with:
+The initial feasibility probe produced 97 nodes before the final canonical
+build recipe and source-relative symbols were frozen. Pinned Yosys accepts and
+flattens the unmodified module after its standard asynchronous-reset lowering.
+The retained GCC-owned wrapper exposing reset, source, edge/level, claim, and
+completion produces a deterministic valid BTOR2 model with:
 
-- 97 nodes;
+- 114 nodes;
 - five semantic one-bit inputs;
 - seven state nodes;
 - two bad properties;
 - no constraints; and
 - maximum word width two.
 
-The current portfolio refuses the first property before producing an artifact:
+Before v3, the portfolio refused the first property before producing an artifact:
 `bounded search requires exactly one one-bit input`. This is the required
 negative baseline. It demonstrates an actual semantic boundary rather than a
 performance comparison selected after observing favourable results.
@@ -57,7 +59,7 @@ level behavior plus claim/completion sequencing.
 ## Required result
 
 The experiment proceeds through the predeclared
-[bounded search v3 plan](BTOR2_BOUNDED_SEARCH_V3_PLAN.md). It must retain every
+[bounded search v3 contract](BTOR2_BOUNDED_SEARCH_V3.md). It must retain every
 input valuation exactly, preserve shortest UNSAFE traces, prove SAFE by complete
 successor construction, and use no PLIC-specific recogniser or route hint.
 
@@ -65,3 +67,16 @@ Success closes a multi-input interoperability and third-public-project
 mechanism gap. It does not close independent partner acceptance, establish that
 the complete PLIC is safe, or support an algorithmic novelty claim.
 
+## Local result
+
+V3 now moves the retained horizons 0, 4, 8, and 16 from refusal to exact SAFE
+answers for both properties through the ordinary exact portfolio route. The
+independent verifier reconstructs all 32 successor valuations for every state.
+The horizon-16 pair covers 1,138 logical state occurrences in 121,491 bytes.
+Horizon 64 refuses at the predeclared node-step limit and publishes no artifact.
+
+Two source-to-model builds and two evidence builds are byte-identical. Direct
+v3 verification rejects reordered inputs, a false input count, truncation, and
+output overwrite. A separate Yosys SMT2 export checked by maintained Z3 proves
+both assertions through step 16. The retained matrix is
+[`roalogic-plic-gateway-acceptance-v1.csv`](../results/roalogic-plic-gateway-acceptance-v1.csv).

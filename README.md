@@ -333,6 +333,13 @@ the terminal-frame input distinct from transition inputs, independently checks
 both input values in SAFE layers, and leaves retained v1 artifacts
 byte-for-byte unchanged.
 
+[BTOR2 bounded search certificate v3](docs/BTOR2_BOUNDED_SEARCH_V3.md) extends
+the same exact fallback to two through eight independent one-bit inputs. Packed
+transition and terminal valuations preserve the complete input vector, and the
+verifier reconstructs every valuation for SAFE successor closure. A pinned
+public Roa Logic PLIC gateway supplies the first five-input retained case, with
+maintained Yosys and Z3 agreement and a governed resource refusal.
+
 The experimental [BTOR2 exact word-region certificate v1](docs/BTOR2_WORD_REGION_CERTIFICATE_V1.md)
 now replaces those layers for recognised reset-add and saturating counter
 families. A timing-free portfolio retains explicit exact search for every other

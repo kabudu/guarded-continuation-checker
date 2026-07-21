@@ -37,9 +37,11 @@ decoder accepts v1 and v2, but verification rejects:
 - terminal-input mutation that no longer activates the bad property; and
 - version downgrades or incomplete v2 text.
 
-The public `search_certificate_version` capability reports the latest producer
-version, 2. Individual create and verify responses report the artifact's actual
-version. Existing v1 artifacts are never reported as v2.
+The public `search_certificate_version` capability now reports the latest
+producer version, 3. Individual create and verify responses report the
+artifact's actual version. Existing v1 and v2 artifacts are never reported as
+v3. Multi-input models use the additive
+[v3 format](BTOR2_BOUNDED_SEARCH_V3.md).
 
 ## Resource and claim boundary
 

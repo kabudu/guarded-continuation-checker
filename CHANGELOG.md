@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add bounded search certificate v3 for two through eight independent one-bit
+  semantic inputs. Bind ordered input nodes, complete packed transition
+  valuations, and a distinct UNSAFE terminal valuation; enumerate every
+  valuation when independently reconstructing SAFE layers; account for the
+  valuation count before search; and reject reorder, high-bit, downgrade,
+  truncation, and resource attacks. Preserve retained v1 and v2 evidence
+  byte-for-byte. Add a revision-pinned unmodified Roa Logic PLIC gateway whose
+  five-input wrapper properties move from governed refusal to exact SAFE
+  answers through horizon 16, agree with maintained Yosys plus Z3, and retain a
+  horizon-64 node-step refusal. This is public-RTL interoperability and exact
+  fallback evidence, not an algorithmic novelty claim.
 - Add bounded search certificate v2 for bad properties that depend on the
   current one-bit semantic input. Preserve transition inputs separately from
   the terminal-frame input, check both terminal values over every complete SAFE

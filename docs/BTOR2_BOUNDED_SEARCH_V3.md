@@ -1,6 +1,7 @@
-# BTOR2 bounded search certificate v3 plan
+# BTOR2 bounded search certificate v3
 
-Status: predeclared experiment. No v3 implementation or result is claimed.
+Status: experimental implementation with local public-design validation. Hosted
+reproduction remains open.
 
 ## Problem exposed by public RTL
 
@@ -31,6 +32,10 @@ Bit `i` of a packed valuation binds input node `inputs[i]`. Values with bits
 outside the declared input count are noncanonical and rejected. SAFE evidence
 has no terminal valuation. The verifier independently enumerates every one of
 the `2^inputs` valuations for bad-property checks and successor reconstruction.
+
+The additive `btor2-search-v3-capabilities` command reports the exact input,
+horizon, state, work, artifact, valuation-order, refusal, and unsupported-shape
+contract without changing the retained `btor2-cli-version` response.
 
 ## Compatibility
 
@@ -69,6 +74,26 @@ The cycle passes only if:
 ## Claim boundary
 
 Multi-input explicit-state search is established model-checking practice. V3
-would close a practical public-RTL interoperability gap and provide a trusted
+closes a practical public-RTL interoperability gap and provides a trusted
 fallback for later proof compression. It is not an algorithmic novelty claim.
 
+## Retained local result
+
+The implementation passes all predeclared local gates. It supports two through
+eight ordered one-bit inputs, independently reconstructs every complete SAFE
+successor layer, and replays packed UNSAFE transition and terminal valuations.
+Generated parity models for every admitted input count agree with their
+closed-form exhaustive result for both answer classes. Nine inputs, high
+valuation bits, reordered inputs, missing terminal values, truncation, forced
+downgrade, and resource exhaustion fail closed.
+
+The pinned Roa Logic PLIC gateway now verifies both wrapper properties as SAFE
+at horizons 0, 4, 8, and 16. At horizon 16 the two certificates cover 1,138
+logical reachable-state occurrences in 121,491 bytes. Horizon 64 refuses at the
+static node-step limit without an answer. Yosys plus Z3 independently checks
+both assertions through step 16. Two model builds and two evidence builds are
+byte-identical, and four hostile workflow controls fail closed.
+
+Retained v1 search artifacts and Caliptra v2 artifacts remain byte-identical.
+The public PLIC result is recorded in
+[`roalogic-plic-gateway-acceptance-v1.csv`](../results/roalogic-plic-gateway-acceptance-v1.csv).

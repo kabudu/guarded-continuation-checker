@@ -44,7 +44,15 @@ bad property depends on the current one-bit semantic input, and records that
 terminal input separately from the inputs that select transitions. The decoder
 accepts both versions, while the verifier rejects cross-version
 reinterpretation, missing terminal inputs, and version downgrades. The first
-production tag must freeze both search formats and their retained fingerprints.
+production tag must freeze the first two search formats and their retained
+fingerprints.
+
+Bounded search certificate v3 is additive for models with two through eight
+one-bit semantic inputs. It replaces neither retained format. V3 binds the
+ordered input-node list, packed transition valuations, and a distinct UNSAFE
+terminal valuation. Verification rejects input reordering, noncanonical high
+bits, missing values, and forced downgrade. The first production tag must also
+freeze v3 and keep the existing v1 and v2 fingerprints byte-identical.
 
 The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded
