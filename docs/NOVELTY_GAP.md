@@ -541,8 +541,7 @@ interoperability and product-validity result, not novelty evidence. Its value is
 to provide an exact, fail-closed baseline against which later dense
 proof-carrying composition can be measured on a third public embedded project.
 
-The predeclared constraint-aware bounded-search v4 experiment addresses the
-next practical exact-fallback gap. Assumption-constrained reachability and
-explicit-state search are established prior art. Even a successful public
-design result is production engineering evidence only and cannot change a
-novelty gate.
+Constraint-aware bounded search v4 closes the next practical exact-fallback
+gap on a constrained public PLIC wrapper. Assumption-constrained reachability
+and explicit-state search are established prior art. The successful result is
+production engineering evidence only and does not change a novelty gate.

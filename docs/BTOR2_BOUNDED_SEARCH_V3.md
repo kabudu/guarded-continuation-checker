@@ -97,3 +97,7 @@ byte-identical, and four hostile workflow controls fail closed.
 Retained v1 search artifacts and Caliptra v2 artifacts remain byte-identical.
 The public PLIC result is recorded in
 [`roalogic-plic-gateway-acceptance-v1.csv`](../results/roalogic-plic-gateway-acceptance-v1.csv).
+
+Models containing constraints use additive
+[certificate v4](BTOR2_BOUNDED_SEARCH_V4.md). Constraint-free multi-input
+models continue to produce byte-identical v3 evidence.

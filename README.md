@@ -340,6 +340,14 @@ verifier reconstructs every valuation for SAFE successor closure. A pinned
 public Roa Logic PLIC gateway supplies the first five-input retained case, with
 maintained Yosys and Z3 agreement and a governed resource refusal.
 
+[BTOR2 bounded search certificate v4](docs/BTOR2_BOUNDED_SEARCH_V4.md) adds
+exact all-frame environment constraints. It binds ordered constraint nodes,
+enumerates only admissible transitions and terminal observations, preserves
+empty layers after assumption dead ends, and charges resource limits against
+the full valuation space. A separate constrained PLIC workflow emits two real
+BTOR2 constraints and agrees with maintained Yosys plus Z3 through horizon 16,
+while retained v1 through v3 results remain byte-identical.
+
 The experimental [BTOR2 exact word-region certificate v1](docs/BTOR2_WORD_REGION_CERTIFICATE_V1.md)
 now replaces those layers for recognised reset-add and saturating counter
 families. A timing-free portfolio retains explicit exact search for every other

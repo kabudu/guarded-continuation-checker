@@ -19,8 +19,12 @@ control inputs, and adds two bounded protocol-integrity requirements. It does
 not modify the upstream module and must not be described as an upstream proof,
 requirement, or product guarantee.
 
+`wrapper-constrained-predicate-set.sv` retains the same source and properties
+and adds two GCC-authored environment assumptions. It is separate so the v3
+constraint-free artifact remains reproducible byte for byte. The assumptions
+are evaluation inputs, not upstream PLIC requirements or guarantees.
+
 The canonical builder requires Yosys commit
 `b8e7da6f40ae8f552c116bf6c359b07c6533e159`. It replaces only the generated
 Yosys identification comment with a revision-bound canonical comment. Semantic
 BTOR2 lines are unchanged.
-

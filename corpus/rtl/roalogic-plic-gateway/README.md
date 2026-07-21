@@ -29,3 +29,16 @@ scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
 
 Compare that output with
 `results/roalogic-plic-gateway-acceptance-v1.csv`.
+
+The separate constrained wrapper adds two legal-environment assumptions:
+claim and completion cannot coincide, and completion requires an outstanding
+claim. It exercises certificate v4 without changing the retained v3 wrapper.
+Reproduce its source-to-model and maintained-oracle acceptance with:
+
+```sh
+scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
+  target/debug/guarded-continuation-checker \
+  "$(command -v yosys)" \
+  "$(command -v yosys-smtbmc)" \
+  /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
+```

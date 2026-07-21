@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add bounded search certificate v4 for exact BTOR2 environment constraints.
+  Bind ordered input and constraint nodes, quantify only admissible all-frame
+  valuations, preserve assumption dead ends, and charge governance against the
+  full valuation space. Add a constrained public Roa Logic PLIC workflow with
+  deterministic source and evidence, hostile constraint controls, an
+  independent exhaustive oracle, and maintained Yosys plus Z3 agreement through
+  horizon 16. Retain v1, Caliptra v2, and PLIC v3 results byte-for-byte. This is
+  product-workflow evidence, not an algorithmic novelty claim.
 - Add bounded search certificate v3 for two through eight independent one-bit
   semantic inputs. Bind ordered input nodes, complete packed transition
   valuations, and a distinct UNSAFE terminal valuation; enumerate every

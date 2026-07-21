@@ -1,6 +1,7 @@
-# BTOR2 bounded search certificate v4 plan
+# BTOR2 bounded search certificate v4
 
-Status: predeclared experiment; no result is claimed.
+Status: experimental implementation with local public-design validation. Hosted
+reproduction remains open.
 
 ## Capability gap
 
@@ -67,3 +68,28 @@ practice. V4 can close a practical workflow and semantic-integrity gap, but it
 cannot establish algorithmic novelty. Any novelty candidate remains in later
 proof compression or reusable component evidence built above this exact
 fallback.
+
+## Retained local result
+
+The implementation passes the predeclared local gates. V4 binds one or more
+ordered constraint nodes and one through eight ordered one-bit inputs. Its
+producer and verifier independently enumerate the full valuation space, admit
+only valuations satisfying every current-frame constraint, preserve distinct
+terminal valuations, and retain empty suffix layers after an assumption dead
+end. Static work charging still uses all valuations.
+
+A separately implemented exhaustive trace oracle agrees across constrained
+SAFE and UNSAFE cases, state-only and input-dependent properties, mutually
+exclusive inputs, state-dependent assumptions, one- and two-input models, and
+dead-end traces. Constraint omission, rebinding, reordering, count drift,
+downgrade, inadmissible witness valuations, false successors, truncation, and
+no-clobber controls fail closed.
+
+The pinned Roa Logic PLIC wrapper now emits two actual BTOR2 constraints over
+five semantic inputs. Both properties verify SAFE through horizon 16, with
+1,138 aggregate reachable-state occurrences and a 121,639-byte predicate-set
+artifact. Two model builds and two evidence builds are byte-identical. Yosys
+plus Z3 independently checks the same assumptions and assertions through step
+16. The retained v1, Caliptra v2, and PLIC v3 result files remain byte-identical.
+The public result is recorded in
+[`roalogic-plic-gateway-constrained-acceptance-v1.csv`](../results/roalogic-plic-gateway-constrained-acceptance-v1.csv).

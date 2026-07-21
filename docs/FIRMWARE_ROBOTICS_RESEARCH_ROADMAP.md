@@ -99,9 +99,11 @@ close either register by itself.
    generated-model oracle before it can support the
    [public PLIC experiment](ROALOGIC_PLIC_GATEWAY_EXPERIMENT_V1.md).
    The next interoperability boundary is
-   [bounded search v4](BTOR2_BOUNDED_SEARCH_V4_PLAN.md): preserve exact BTOR2
+   [bounded search v4](BTOR2_BOUNDED_SEARCH_V4.md) now preserves exact BTOR2
    environment constraints, admissible terminal valuations, and assumption
-   dead ends without changing retained v1 through v3 evidence.
+   dead ends without changing retained v1 through v3 evidence. A constrained
+   public PLIC workflow agrees with maintained Yosys plus Z3 through horizon
+   16. Hosted reproduction and release compatibility remain open.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant

@@ -8,7 +8,8 @@ use std::fmt;
 
 pub const SEARCH_CERTIFICATE_V1_VERSION: u32 = 1;
 pub const SEARCH_CERTIFICATE_V2_VERSION: u32 = 2;
-pub const SEARCH_CERTIFICATE_VERSION: u32 = 3;
+pub const SEARCH_CERTIFICATE_V3_VERSION: u32 = 3;
+pub const SEARCH_CERTIFICATE_VERSION: u32 = 4;
 pub const MAX_SEARCH_INPUTS: usize = 8;
 pub const MAX_SEARCH_HORIZON: u32 = 256;
 pub const MAX_STATES_PER_LAYER: usize = 65_536;
@@ -33,6 +34,7 @@ pub struct SearchCertificate {
     pub bad_property: NodeId,
     pub input: NodeId,
     pub inputs: Vec<NodeId>,
+    pub constraints: Vec<NodeId>,
     pub result: SearchResult,
     pub bad_frame: Option<u32>,
     pub witness_inputs: Vec<bool>,
@@ -107,7 +109,7 @@ fn validate_state_shape(model: &Btor2Model, state: &SearchState) -> Result<(), S
 fn validate_model(
     model: &Btor2Model,
     bad_property: NodeId,
-) -> Result<(Vec<NodeId>, NodeId, bool), SearchError> {
+) -> Result<(Vec<NodeId>, Vec<NodeId>, NodeId, bool), SearchError> {
     if model.inputs().is_empty()
         || model.inputs().len() > MAX_SEARCH_INPUTS
         || model
@@ -118,9 +120,6 @@ fn validate_model(
         return Err(reject(
             "bounded search requires between one and eight one-bit inputs",
         ));
-    }
-    if !model.constraints().is_empty() {
-        return Err(reject("bounded search does not admit constraints"));
     }
     let expression = model
         .bad_properties()
@@ -153,7 +152,19 @@ fn validate_model(
         result
     }
     let input_dependent = depends_on_input(model, expression, &mut BTreeMap::new());
-    Ok((model.inputs().to_vec(), expression, input_dependent))
+    Ok((
+        model.inputs().to_vec(),
+        model.constraints().iter().map(|(id, _)| *id).collect(),
+        expression,
+        input_dependent,
+    ))
+}
+
+fn uses_packed_valuations(version: u32) -> bool {
+    matches!(
+        version,
+        SEARCH_CERTIFICATE_V3_VERSION | SEARCH_CERTIFICATE_VERSION
+    )
 }
 
 fn valuation_count(inputs: &[NodeId]) -> usize {
@@ -170,6 +181,26 @@ fn input_values(inputs: &[NodeId], valuation: u16) -> WordValues {
 
 fn valuation_is_canonical(inputs: &[NodeId], valuation: u16) -> bool {
     usize::from(valuation) < valuation_count(inputs)
+}
+
+fn valuation_is_admissible(
+    model: &Btor2Model,
+    state: &SearchState,
+    inputs: &[NodeId],
+    valuation: u16,
+) -> Result<bool, SearchError> {
+    let state = state_values(state);
+    let inputs = input_values(inputs, valuation);
+    for (_, expression) in model.constraints() {
+        if model
+            .evaluate(*expression, &state, &inputs)
+            .map_err(|error| reject(error.to_string()))?
+            == 0
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn bad_active(
@@ -230,9 +261,11 @@ pub fn produce(
         return Err(reject("search horizon exceeds limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let (inputs, _, input_dependent) = validate_model(&model, bad_property)?;
-    let certificate_version = if inputs.len() > 1 {
+    let (inputs, constraints, _, input_dependent) = validate_model(&model, bad_property)?;
+    let certificate_version = if !constraints.is_empty() {
         SEARCH_CERTIFICATE_VERSION
+    } else if inputs.len() > 1 {
+        SEARCH_CERTIFICATE_V3_VERSION
     } else if input_dependent {
         SEARCH_CERTIFICATE_V2_VERSION
     } else {
@@ -245,9 +278,16 @@ pub fn produce(
             .initial_state()
             .map_err(|error| reject(error.to_string()))?,
     );
-    let terminal_valuations = if input_dependent { valuations } else { 1 };
+    let terminal_valuations = if input_dependent || !constraints.is_empty() {
+        valuations
+    } else {
+        1
+    };
     let mut initial_bad_valuation = None;
     for terminal_valuation in 0..terminal_valuations {
+        if !valuation_is_admissible(&model, &initial, &inputs, terminal_valuation as u16)? {
+            continue;
+        }
         if bad_active(
             &model,
             &initial,
@@ -266,18 +306,19 @@ pub fn produce(
             query_horizon: horizon,
             bad_property,
             input,
-            inputs: if certificate_version == SEARCH_CERTIFICATE_VERSION {
+            inputs: if uses_packed_valuations(certificate_version) {
                 inputs
             } else {
                 Vec::new()
             },
+            constraints,
             result: SearchResult::Unsafe,
             bad_frame: Some(0),
             witness_inputs: Vec::new(),
             terminal_input: (certificate_version == SEARCH_CERTIFICATE_V2_VERSION)
                 .then_some(terminal_valuation != 0),
             witness_valuations: Vec::new(),
-            terminal_valuation: (certificate_version == SEARCH_CERTIFICATE_VERSION)
+            terminal_valuation: uses_packed_valuations(certificate_version)
                 .then_some(terminal_valuation),
             layers: Vec::new(),
         });
@@ -291,6 +332,9 @@ pub fn produce(
         let mut prior = BTreeMap::new();
         for state in &layers[frame as usize] {
             for valuation in 0..valuations {
+                if !valuation_is_admissible(&model, state, &inputs, valuation as u16)? {
+                    continue;
+                }
                 let values = model
                     .step(
                         &state_values(state),
@@ -308,6 +352,9 @@ pub fn produce(
         let mut bad_state = None;
         for state in &next {
             for terminal_valuation in 0..terminal_valuations {
+                if !valuation_is_admissible(&model, state, &inputs, terminal_valuation as u16)? {
+                    continue;
+                }
                 if bad_active(
                     &model,
                     state,
@@ -341,26 +388,27 @@ pub fn produce(
                 query_horizon: horizon,
                 bad_property,
                 input,
-                inputs: if certificate_version == SEARCH_CERTIFICATE_VERSION {
+                inputs: if uses_packed_valuations(certificate_version) {
                     inputs
                 } else {
                     Vec::new()
                 },
+                constraints,
                 result: SearchResult::Unsafe,
                 bad_frame: Some(frame + 1),
-                witness_inputs: if certificate_version == SEARCH_CERTIFICATE_VERSION {
+                witness_inputs: if uses_packed_valuations(certificate_version) {
                     Vec::new()
                 } else {
                     witness.iter().map(|value| *value != 0).collect()
                 },
                 terminal_input: (certificate_version == SEARCH_CERTIFICATE_V2_VERSION)
                     .then_some(terminal_valuation != 0),
-                witness_valuations: if certificate_version == SEARCH_CERTIFICATE_VERSION {
+                witness_valuations: if uses_packed_valuations(certificate_version) {
                     witness
                 } else {
                     Vec::new()
                 },
-                terminal_valuation: (certificate_version == SEARCH_CERTIFICATE_VERSION)
+                terminal_valuation: uses_packed_valuations(certificate_version)
                     .then_some(terminal_valuation),
                 layers: Vec::new(),
             });
@@ -374,11 +422,12 @@ pub fn produce(
         query_horizon: horizon,
         bad_property,
         input,
-        inputs: if certificate_version == SEARCH_CERTIFICATE_VERSION {
+        inputs: if uses_packed_valuations(certificate_version) {
             inputs
         } else {
             Vec::new()
         },
+        constraints,
         result: SearchResult::Safe,
         bad_frame: None,
         witness_inputs: Vec::new(),
@@ -400,14 +449,17 @@ pub fn verify(
         return Err(reject("search certificate horizon exceeds limit"));
     }
     let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
-    let (inputs, _, input_dependent) = validate_model(&model, certificate.bad_property)?;
+    let (inputs, constraints, _, input_dependent) =
+        validate_model(&model, certificate.bad_property)?;
     let input = inputs[0];
     if input != certificate.input {
         return Err(reject("search certificate input does not match source"));
     }
     let valuations = valuation_count(&inputs);
     match certificate.certificate_version {
-        SEARCH_CERTIFICATE_V1_VERSION if inputs.len() != 1 || input_dependent => {
+        SEARCH_CERTIFICATE_V1_VERSION
+            if inputs.len() != 1 || input_dependent || !constraints.is_empty() =>
+        {
             return Err(reject(
                 "search certificate v1 requires a state-only bad property",
             ));
@@ -417,12 +469,13 @@ pub fn verify(
                 || !certificate.inputs.is_empty()
                 || !certificate.witness_valuations.is_empty()
                 || certificate.terminal_valuation.is_some()
+                || !certificate.constraints.is_empty()
             {
                 return Err(reject("search certificate v1 has v2 or v3 fields"));
             }
         }
         SEARCH_CERTIFICATE_V2_VERSION => {
-            if inputs.len() != 1 || !input_dependent {
+            if inputs.len() != 1 || !input_dependent || !constraints.is_empty() {
                 return Err(reject(
                     "search certificate v2 requires an input-dependent bad property",
                 ));
@@ -430,17 +483,32 @@ pub fn verify(
             if !certificate.inputs.is_empty()
                 || !certificate.witness_valuations.is_empty()
                 || certificate.terminal_valuation.is_some()
+                || !certificate.constraints.is_empty()
             {
                 return Err(reject("search certificate v2 has v3 fields"));
             }
         }
-        SEARCH_CERTIFICATE_VERSION => {
+        SEARCH_CERTIFICATE_V3_VERSION => {
             if inputs.len() < 2
+                || !constraints.is_empty()
                 || certificate.inputs != inputs
+                || !certificate.constraints.is_empty()
                 || certificate.terminal_input.is_some()
                 || !certificate.witness_inputs.is_empty()
             {
                 return Err(reject("search certificate v3 input binding is invalid"));
+            }
+        }
+        SEARCH_CERTIFICATE_VERSION => {
+            if constraints.is_empty()
+                || certificate.inputs != inputs
+                || certificate.constraints != constraints
+                || certificate.terminal_input.is_some()
+                || !certificate.witness_inputs.is_empty()
+            {
+                return Err(reject(
+                    "search certificate v4 input or constraint binding is invalid",
+                ));
             }
         }
         _ => return Err(reject("unsupported search certificate version")),
@@ -452,7 +520,7 @@ pub fn verify(
     );
     match certificate.result {
         SearchResult::Unsafe => {
-            let witness_len = if certificate.certificate_version == SEARCH_CERTIFICATE_VERSION {
+            let witness_len = if uses_packed_valuations(certificate.certificate_version) {
                 certificate.witness_valuations.len()
             } else {
                 certificate.witness_inputs.len()
@@ -462,7 +530,7 @@ pub fn verify(
                 || witness_len > certificate.query_horizon as usize
                 || (certificate.certificate_version == SEARCH_CERTIFICATE_V2_VERSION
                     && certificate.terminal_input.is_none())
-                || (certificate.certificate_version == SEARCH_CERTIFICATE_VERSION
+                || (uses_packed_valuations(certificate.certificate_version)
                     && certificate.terminal_valuation.is_none())
             {
                 return Err(reject("UNSAFE search certificate shape is invalid"));
@@ -483,7 +551,7 @@ pub fn verify(
                 return Err(reject("UNSAFE witness exceeds node-step limit"));
             }
             let mut state = state_values(&initial);
-            let witness = if certificate.certificate_version == SEARCH_CERTIFICATE_VERSION {
+            let witness = if uses_packed_valuations(certificate.certificate_version) {
                 certificate.witness_valuations.clone()
             } else {
                 certificate
@@ -498,12 +566,11 @@ pub fn verify(
                     .map_err(|error| reject(error.to_string()))?;
             }
             let final_state = state_key(&state);
-            let terminal_valuation =
-                if certificate.certificate_version == SEARCH_CERTIFICATE_VERSION {
-                    certificate.terminal_valuation.unwrap_or(0)
-                } else {
-                    u16::from(certificate.terminal_input.unwrap_or(false))
-                };
+            let terminal_valuation = if uses_packed_valuations(certificate.certificate_version) {
+                certificate.terminal_valuation.unwrap_or(0)
+            } else {
+                u16::from(certificate.terminal_input.unwrap_or(false))
+            };
             if !bad_active(
                 &model,
                 &final_state,
@@ -533,7 +600,10 @@ pub fn verify(
             }
             let mut budget = SearchBudget::default();
             for (frame, layer) in certificate.layers.iter().enumerate() {
-                if layer.is_empty() || !layer.windows(2).all(|pair| pair[0] < pair[1]) {
+                if (layer.is_empty()
+                    && certificate.certificate_version != SEARCH_CERTIFICATE_VERSION)
+                    || !layer.windows(2).all(|pair| pair[0] < pair[1])
+                {
                     return Err(reject(format!("reachable layer {frame} is noncanonical")));
                 }
                 for state in layer {
@@ -541,8 +611,20 @@ pub fn verify(
                 }
                 budget.add_layer(&model, layer.len(), valuations)?;
                 for state in layer {
-                    let terminal_valuations = if input_dependent { valuations } else { 1 };
+                    let terminal_valuations = if input_dependent || !constraints.is_empty() {
+                        valuations
+                    } else {
+                        1
+                    };
                     for terminal_valuation in 0..terminal_valuations {
+                        if !valuation_is_admissible(
+                            &model,
+                            state,
+                            &inputs,
+                            terminal_valuation as u16,
+                        )? {
+                            continue;
+                        }
                         if bad_active(
                             &model,
                             state,
@@ -560,6 +642,9 @@ pub fn verify(
                     let mut expected = BTreeSet::new();
                     for state in layer {
                         for valuation in 0..valuations {
+                            if !valuation_is_admissible(&model, state, &inputs, valuation as u16)? {
+                                continue;
+                            }
                             let target = model
                                 .step(
                                     &state_values(state),
@@ -598,7 +683,10 @@ fn valid_digest(value: &str) -> bool {
 pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
     if !matches!(
         certificate.certificate_version,
-        SEARCH_CERTIFICATE_V1_VERSION | SEARCH_CERTIFICATE_V2_VERSION | SEARCH_CERTIFICATE_VERSION
+        SEARCH_CERTIFICATE_V1_VERSION
+            | SEARCH_CERTIFICATE_V2_VERSION
+            | SEARCH_CERTIFICATE_V3_VERSION
+            | SEARCH_CERTIFICATE_VERSION
     ) {
         return Err(reject("unsupported search certificate version"));
     }
@@ -626,8 +714,13 @@ pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
         format!("query_horizon={}", certificate.query_horizon),
         format!("bad_property={}", certificate.bad_property),
     ];
-    if certificate.certificate_version == SEARCH_CERTIFICATE_VERSION {
-        if certificate.inputs.len() < 2
+    if uses_packed_valuations(certificate.certificate_version) {
+        let minimum_inputs = if certificate.certificate_version == SEARCH_CERTIFICATE_V3_VERSION {
+            2
+        } else {
+            1
+        };
+        if certificate.inputs.len() < minimum_inputs
             || certificate.inputs.len() > MAX_SEARCH_INPUTS
             || !certificate.inputs.windows(2).all(|pair| pair[0] < pair[1])
             || certificate.input != certificate.inputs[0]
@@ -638,8 +731,16 @@ pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
                 .any(|valuation| !valuation_is_canonical(&certificate.inputs, *valuation))
             || !certificate.witness_inputs.is_empty()
             || certificate.terminal_input.is_some()
+            || (certificate.certificate_version == SEARCH_CERTIFICATE_V3_VERSION
+                && !certificate.constraints.is_empty())
+            || (certificate.certificate_version == SEARCH_CERTIFICATE_VERSION
+                && (certificate.constraints.is_empty()
+                    || !certificate
+                        .constraints
+                        .windows(2)
+                        .all(|pair| pair[0] < pair[1])))
         {
-            return Err(reject("search certificate v3 fields are noncanonical"));
+            return Err(reject("search certificate packed fields are noncanonical"));
         }
         lines.push(format!("input_count={}", certificate.inputs.len()));
         lines.push(format!(
@@ -651,6 +752,21 @@ pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
                 .collect::<Vec<_>>()
                 .join(",")
         ));
+        if certificate.certificate_version == SEARCH_CERTIFICATE_VERSION {
+            lines.push(format!(
+                "constraint_count={}",
+                certificate.constraints.len()
+            ));
+            lines.push(format!(
+                "constraints={}",
+                certificate
+                    .constraints
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+        }
         lines.push(format!("result={result}"));
         lines.push(format!("bad_frame={bad_frame}"));
         lines.push(format!(
@@ -670,6 +786,7 @@ pub fn encode(certificate: &SearchCertificate) -> Result<String, SearchError> {
         ));
     } else {
         if !certificate.inputs.is_empty()
+            || !certificate.constraints.is_empty()
             || !certificate.witness_valuations.is_empty()
             || certificate.terminal_valuation.is_some()
         {
@@ -739,7 +856,10 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
     let version: u32 = number(take(&mut lines, "search_certificate_version")?, "version")?;
     if !matches!(
         version,
-        SEARCH_CERTIFICATE_V1_VERSION | SEARCH_CERTIFICATE_V2_VERSION | SEARCH_CERTIFICATE_VERSION
+        SEARCH_CERTIFICATE_V1_VERSION
+            | SEARCH_CERTIFICATE_V2_VERSION
+            | SEARCH_CERTIFICATE_V3_VERSION
+            | SEARCH_CERTIFICATE_VERSION
     ) {
         return Err(reject("unsupported search certificate version"));
     }
@@ -752,9 +872,14 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         return Err(reject("search query horizon exceeds limit"));
     }
     let bad_property = number(take(&mut lines, "bad_property")?, "bad property")?;
-    let (input, inputs) = if version == SEARCH_CERTIFICATE_VERSION {
+    let (input, inputs) = if uses_packed_valuations(version) {
         let input_count: usize = number(take(&mut lines, "input_count")?, "input count")?;
-        if !(2..=MAX_SEARCH_INPUTS).contains(&input_count) {
+        let minimum_inputs = if version == SEARCH_CERTIFICATE_V3_VERSION {
+            2
+        } else {
+            1
+        };
+        if !(minimum_inputs..=MAX_SEARCH_INPUTS).contains(&input_count) {
             return Err(reject("search input count is outside limits"));
         }
         let text = take(&mut lines, "inputs")?;
@@ -769,6 +894,23 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
     } else {
         (number(take(&mut lines, "input")?, "input")?, Vec::new())
     };
+    let constraints = if version == SEARCH_CERTIFICATE_VERSION {
+        let constraint_count: usize =
+            number(take(&mut lines, "constraint_count")?, "constraint count")?;
+        if constraint_count == 0 || constraint_count > btor2::MAX_BTOR2_NODES {
+            return Err(reject("search constraint count is outside limits"));
+        }
+        let values = take(&mut lines, "constraints")?
+            .split(',')
+            .map(|value| number(value.to_string(), "constraint identifier"))
+            .collect::<Result<Vec<NodeId>, _>>()?;
+        if values.len() != constraint_count || !values.windows(2).all(|pair| pair[0] < pair[1]) {
+            return Err(reject("search constraints are not canonical"));
+        }
+        values
+    } else {
+        Vec::new()
+    };
     let result = match take(&mut lines, "result")?.as_str() {
         "SAFE" => SearchResult::Safe,
         "UNSAFE" => SearchResult::Unsafe,
@@ -779,7 +921,7 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         value => Some(number(value.to_string(), "bad frame")?),
     };
     let (witness_inputs, witness_valuations, terminal_valuation) =
-        if version == SEARCH_CERTIFICATE_VERSION {
+        if uses_packed_valuations(version) {
             let text = take(&mut lines, "witness_valuations")?;
             let values = if text.is_empty() {
                 Vec::new()
@@ -837,7 +979,7 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
             take(&mut lines, &format!("layer_{frame}_count"))?,
             "layer state count",
         )?;
-        if count == 0 || count > MAX_STATES_PER_LAYER {
+        if (count == 0 && version != SEARCH_CERTIFICATE_VERSION) || count > MAX_STATES_PER_LAYER {
             return Err(reject("search layer state count is outside limits"));
         }
         total_states = total_states
@@ -882,6 +1024,7 @@ pub fn decode(bytes: &[u8]) -> Result<SearchCertificate, SearchError> {
         bad_property,
         input,
         inputs,
+        constraints,
         result,
         bad_frame,
         witness_inputs,
@@ -901,6 +1044,10 @@ mod tests {
         include_bytes!("../examples/btor2/saturating-timer-rejected-v1.btor2");
     const INPUT_DEPENDENT_BAD: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 3\n3 input 1 reset\n4 zero 2\n5 state 2 count\n6 init 2 5 4\n7 one 2\n8 add 2 5 7\n9 ite 2 3 4 8\n10 next 2 5 9\n11 ite 2 3 4 5\n12 constd 2 2\n13 eq 1 11 12\n14 bad 13 reset_guarded\n";
     const TWO_INPUTS: &[u8] = b"1 sort bitvec 1\n2 input 1 a\n3 input 1 b\n4 state 1 state\n5 zero 1\n6 init 1 4 5\n7 xor 1 2 3\n8 next 1 4 7\n9 and 1 4 2\n10 bad 9 state_and_a\n";
+    const CONSTRAINED_TWO_INPUTS: &[u8] = b"1 sort bitvec 1\n2 input 1 a\n3 input 1 b\n4 state 1 state\n5 zero 1\n6 init 1 4 5\n7 xor 1 2 3\n8 next 1 4 7\n9 and 1 2 3\n10 not 1 9\n11 constraint 10\n12 bad 4 reached_one\n";
+    const CONSTRAINED_UNREACHABLE_BAD: &[u8] = b"1 sort bitvec 1\n2 input 1 a\n3 input 1 b\n4 state 1 state\n5 zero 1\n6 init 1 4 5\n7 xor 1 2 3\n8 next 1 4 7\n9 and 1 2 3\n10 not 1 9\n11 constraint 10\n12 bad 9 forbidden_pair\n";
+    const CONSTRAINT_DEAD_END: &[u8] = b"1 sort bitvec 1\n2 input 1 advance\n3 state 1 state\n4 zero 1\n5 init 1 3 4\n6 one 1\n7 next 1 3 6\n8 not 1 3\n9 eq 1 2 2\n10 and 1 8 9\n11 constraint 10\n12 bad 4 never_bad\n";
+    const ONE_INPUT_CONSTRAINT: &[u8] = b"1 sort bitvec 1\n2 input 1 enabled\n3 state 1 state\n4 zero 1\n5 init 1 3 4\n6 not 1 3\n7 next 1 3 6\n8 constraint 2\n9 bad 3 toggled\n";
 
     #[test]
     fn proves_both_bounded_answers_and_round_trips() {
@@ -992,7 +1139,7 @@ mod tests {
     #[test]
     fn v3_preserves_complete_multi_input_transition_and_terminal_valuations() {
         let safe = produce(TWO_INPUTS, 10, 0).unwrap();
-        assert_eq!(safe.certificate_version, SEARCH_CERTIFICATE_VERSION);
+        assert_eq!(safe.certificate_version, SEARCH_CERTIFICATE_V3_VERSION);
         assert_eq!(safe.inputs, vec![2, 3]);
         assert_eq!(safe.result, SearchResult::Safe);
         let safe_text = encode(&safe).unwrap();
@@ -1028,6 +1175,134 @@ mod tests {
         assert!(verify(TWO_INPUTS, &downgraded).is_err());
         assert!(decode(encoded.replace("inputs=2,3\n", "inputs=3,2\n").as_bytes()).is_err());
         assert!(decode(encoded.replace("terminal_valuation=1\n", "").as_bytes()).is_err());
+    }
+
+    #[test]
+    fn v4_preserves_constraints_admissible_witnesses_and_dead_ends() {
+        let unsafe_certificate = produce(CONSTRAINED_TWO_INPUTS, 12, 1).unwrap();
+        assert_eq!(
+            unsafe_certificate.certificate_version,
+            SEARCH_CERTIFICATE_VERSION
+        );
+        assert_eq!(unsafe_certificate.inputs, vec![2, 3]);
+        assert_eq!(unsafe_certificate.constraints, vec![11]);
+        assert_eq!(unsafe_certificate.result, SearchResult::Unsafe);
+        assert_eq!(unsafe_certificate.bad_frame, Some(1));
+        assert_eq!(unsafe_certificate.witness_valuations, vec![1]);
+        assert_eq!(unsafe_certificate.terminal_valuation, Some(0));
+        let encoded = encode(&unsafe_certificate).unwrap();
+        assert!(encoded.contains("constraint_count=1\nconstraints=11\n"));
+        let decoded = decode(encoded.as_bytes()).unwrap();
+        assert!(verify(CONSTRAINED_TWO_INPUTS, &decoded).is_ok());
+
+        let mut inadmissible_transition = decoded.clone();
+        inadmissible_transition.witness_valuations[0] = 3;
+        assert!(verify(CONSTRAINED_TWO_INPUTS, &inadmissible_transition).is_err());
+        let mut omitted = decoded.clone();
+        omitted.constraints.clear();
+        assert!(verify(CONSTRAINED_TWO_INPUTS, &omitted).is_err());
+        let mut downgraded = decoded;
+        downgraded.certificate_version = SEARCH_CERTIFICATE_V3_VERSION;
+        downgraded.constraints.clear();
+        assert!(verify(CONSTRAINED_TWO_INPUTS, &downgraded).is_err());
+        assert!(
+            decode(
+                encoded
+                    .replace("constraints=11\n", "constraints=10\n")
+                    .as_bytes()
+            )
+            .is_ok()
+        );
+        let rebound = decode(
+            encoded
+                .replace("constraints=11\n", "constraints=10\n")
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(verify(CONSTRAINED_TWO_INPUTS, &rebound).is_err());
+
+        let dead_end = produce(CONSTRAINT_DEAD_END, 12, 3).unwrap();
+        assert_eq!(dead_end.result, SearchResult::Safe);
+        assert_eq!(dead_end.layers.len(), 4);
+        assert_eq!(dead_end.layers[0].len(), 1);
+        assert_eq!(dead_end.layers[1].len(), 1);
+        assert!(dead_end.layers[2].is_empty());
+        assert!(dead_end.layers[3].is_empty());
+        let dead_end = decode(encode(&dead_end).unwrap().as_bytes()).unwrap();
+        assert!(verify(CONSTRAINT_DEAD_END, &dead_end).is_ok());
+        let mut false_successor = dead_end;
+        false_successor.layers[2] = false_successor.layers[1].clone();
+        assert!(verify(CONSTRAINT_DEAD_END, &false_successor).is_err());
+    }
+
+    #[test]
+    fn v4_agrees_with_a_separate_exhaustive_trace_oracle() {
+        fn oracle(
+            source: &[u8],
+            bad_property: NodeId,
+            horizon: u32,
+        ) -> (SearchResult, Option<u32>) {
+            let model = btor2::parse_bytes(source).unwrap();
+            let bad_expression = model
+                .bad_properties()
+                .iter()
+                .find_map(|(id, expression, _)| (*id == bad_property).then_some(*expression))
+                .unwrap();
+            let inputs = model.inputs().to_vec();
+            let valuation_count = 1usize << inputs.len();
+            let mut layer = BTreeSet::from([model.initial_state().unwrap()]);
+            for frame in 0..=horizon {
+                let mut successors = BTreeSet::new();
+                for state in &layer {
+                    for valuation in 0..valuation_count {
+                        let values = inputs
+                            .iter()
+                            .enumerate()
+                            .map(|(index, id)| (*id, ((valuation >> index) & 1) as u64))
+                            .collect::<WordValues>();
+                        let admissible = model.constraints().iter().all(|(_, expression)| {
+                            model.evaluate(*expression, state, &values).unwrap() != 0
+                        });
+                        if !admissible {
+                            continue;
+                        }
+                        if model.evaluate(bad_expression, state, &values).unwrap() != 0 {
+                            return (SearchResult::Unsafe, Some(frame));
+                        }
+                        if frame < horizon {
+                            successors.insert(model.step(state, &values).unwrap());
+                        }
+                    }
+                }
+                layer = successors;
+            }
+            (SearchResult::Safe, None)
+        }
+
+        for (source, bad, horizon) in [
+            (CONSTRAINED_TWO_INPUTS, 12, 0),
+            (CONSTRAINED_TWO_INPUTS, 12, 1),
+            (CONSTRAINED_UNREACHABLE_BAD, 12, 4),
+            (CONSTRAINT_DEAD_END, 12, 3),
+            (ONE_INPUT_CONSTRAINT, 9, 0),
+            (ONE_INPUT_CONSTRAINT, 9, 1),
+        ] {
+            let expected = oracle(source, bad, horizon);
+            let certificate = produce(source, bad, horizon).unwrap();
+            assert_eq!(
+                (certificate.result, certificate.bad_frame),
+                expected,
+                "oracle disagreement at property {bad}, horizon {horizon}"
+            );
+            assert_eq!(certificate.certificate_version, SEARCH_CERTIFICATE_VERSION);
+            assert!(
+                verify(
+                    source,
+                    &decode(encode(&certificate).unwrap().as_bytes()).unwrap()
+                )
+                .is_ok()
+            );
+        }
     }
 
     #[test]

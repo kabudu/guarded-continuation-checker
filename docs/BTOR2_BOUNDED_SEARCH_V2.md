@@ -38,10 +38,11 @@ decoder accepts v1 and v2, but verification rejects:
 - version downgrades or incomplete v2 text.
 
 The public `search_certificate_version` capability now reports the latest
-producer version, 3. Individual create and verify responses report the
+producer version, 4. Individual create and verify responses report the
 artifact's actual version. Existing v1 and v2 artifacts are never reported as
 v3. Multi-input models use the additive
-[v3 format](BTOR2_BOUNDED_SEARCH_V3.md).
+[v3 format](BTOR2_BOUNDED_SEARCH_V3.md), while constrained models use additive
+[v4](BTOR2_BOUNDED_SEARCH_V4.md).
 
 ## Resource and claim boundary
 

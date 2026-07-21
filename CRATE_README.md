@@ -23,8 +23,8 @@ The package provides:
 - experimental BTOR2 word semantics, counter-phase certificates, exact trace
   replay, proof-carrying exact word regions, coupled-motion curves, resettable
   braking phases, source-separated controller/plant contracts, and both-answer
-  bounded reachability with static exact-search fallbacks and fixed resource
-  limits.
+  bounded reachability with exact environment constraints, static exact-search
+  fallbacks, and fixed resource limits.
 
 ## Status and claim boundary
 

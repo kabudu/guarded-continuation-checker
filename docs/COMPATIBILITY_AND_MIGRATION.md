@@ -54,6 +54,14 @@ terminal valuation. Verification rejects input reordering, noncanonical high
 bits, missing values, and forced downgrade. The first production tag must also
 freeze v3 and keep the existing v1 and v2 fingerprints byte-identical.
 
+Bounded search certificate v4 is additive for models containing one or more
+BTOR2 constraints. It binds the ordered constraint-node and semantic-input
+lists, preserves packed transition and terminal valuations, and allows only
+canonical empty suffix layers after an assumption dead end. Constraint-free
+models continue to select v1, v2, or v3 under their original rules and retain
+byte-identical evidence. V4 cannot be downgraded or decoded as a prior format.
+The first production tag must freeze all four search formats.
+
 The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded
 portfolio v3 or any existing certificate decoder. Certificate v2 adds joint
