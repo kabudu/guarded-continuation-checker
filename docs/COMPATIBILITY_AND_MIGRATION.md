@@ -62,6 +62,16 @@ models continue to select v1, v2, or v3 under their original rules and retain
 byte-identical evidence. V4 cannot be downgraded or decoded as a prior format.
 The first production tag must freeze all four search formats.
 
+Bounded search certificate v5 is additive for models with at least one
+semantic input wider than one bit and at most eight total semantic input bits.
+It binds the ordered input identifiers and their source widths, with packed
+valuation offsets derived only from that canonical order. Constraints may be
+present or absent. Boolean-only models continue to select v1 through v4 under
+their original rules and encodings. The public `SearchCertificate` structure
+adds `input_widths`; callers constructing values directly must initialise it to
+an empty vector for v1 through v4. The first production tag must freeze all five
+formats after the remaining v5 public-design and hosted gates pass.
+
 The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded
 portfolio v3 or any existing certificate decoder. Certificate v2 adds joint

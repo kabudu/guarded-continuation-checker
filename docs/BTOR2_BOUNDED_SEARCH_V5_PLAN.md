@@ -1,6 +1,7 @@
 # BTOR2 bounded search certificate v5 plan
 
-Status: predeclared experiment; no result is claimed.
+Status: local core implemented; public-design and hosted gates remain open. No
+completed experiment or production result is claimed.
 
 ## Capability gap
 

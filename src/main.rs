@@ -27484,6 +27484,26 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "btor2-search-v5-capabilities" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-search-v5-capabilities".to_string(),
+                );
+            }
+            println!(
+                "btor2_search_capability_version=1 search_certificate_version={} min_inputs=1 max_inputs={} max_input_width={} max_total_input_bits={} max_horizon={} max_states_per_layer={} max_total_states={} max_node_steps={} max_certificate_bytes={} constraints=exact-all-frame-ordered-or-none valuation_order=input-node-ascending-then-lsb-first terminal_valuation=distinct dead_end_layers=empty-with-constraints unsafe=admissible-trace safe=complete-admissible-layers work_accounting=all-valuations resource_refusal=no-answer unsupported=fail-closed",
+                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                btor2_search::MAX_SEARCH_INPUTS,
+                btor2_search::MAX_SEARCH_INPUT_BITS,
+                btor2_search::MAX_SEARCH_INPUT_BITS,
+                btor2_search::MAX_SEARCH_HORIZON,
+                btor2_search::MAX_STATES_PER_LAYER,
+                btor2_search::MAX_TOTAL_STATES,
+                btor2_search::MAX_SEARCH_NODE_STEPS,
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
         "btor2-search-v3-capabilities" => {
             if args.len() != 1 {
                 return Err(
@@ -27510,7 +27530,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             println!(
                 "btor2_search_capability_version=1 search_certificate_version={} min_inputs=1 max_inputs={} input_width=1 min_constraints=1 max_horizon={} max_states_per_layer={} max_total_states={} max_node_steps={} max_certificate_bytes={} constraints=exact-all-frame-ordered valuation_order=input-node-ascending valuation_bit=i-maps-input-i terminal_valuation=distinct dead_end_layers=empty unsafe=admissible-trace safe=complete-admissible-layers work_accounting=all-valuations resource_refusal=no-answer unsupported=fail-closed",
-                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                btor2_search::SEARCH_CERTIFICATE_V4_VERSION,
                 btor2_search::MAX_SEARCH_INPUTS,
                 btor2_search::MAX_SEARCH_HORIZON,
                 btor2_search::MAX_STATES_PER_LAYER,
@@ -28043,6 +28063,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             if matches!(
                 certificate.certificate_version,
                 btor2_search::SEARCH_CERTIFICATE_V3_VERSION
+                    | btor2_search::SEARCH_CERTIFICATE_V4_VERSION
                     | btor2_search::SEARCH_CERTIFICATE_VERSION
             ) {
                 println!(
@@ -38163,6 +38184,7 @@ mod tests {
         assert!(run_artifact_cli(&["btor2-cli-version".to_string()]).unwrap());
         assert!(run_artifact_cli(&["btor2-search-v3-capabilities".to_string()]).unwrap());
         assert!(run_artifact_cli(&["btor2-search-v4-capabilities".to_string()]).unwrap());
+        assert!(run_artifact_cli(&["btor2-search-v5-capabilities".to_string()]).unwrap());
         assert!(
             run_artifact_cli(&[
                 "btor2-search-v3-capabilities".to_string(),
@@ -38173,6 +38195,13 @@ mod tests {
         assert!(
             run_artifact_cli(&[
                 "btor2-search-v4-capabilities".to_string(),
+                "unexpected".to_string(),
+            ])
+            .is_err()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "btor2-search-v5-capabilities".to_string(),
                 "unexpected".to_string(),
             ])
             .is_err()
@@ -38277,6 +38306,52 @@ mod tests {
             .unwrap()
         );
         fs::remove_file(&certificate).unwrap();
+
+        let word_source = certificate.with_extension("word-input.btor2");
+        fs::write(
+            &word_source,
+            b"1 sort bitvec 1\n2 sort bitvec 3\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 next 2 4 3\n8 constd 2 5\n9 eq 1 4 8\n10 bad 9 reached_five\n",
+        )
+        .unwrap();
+        assert!(
+            run_artifact_cli(&[
+                "search-btor2".to_string(),
+                word_source.display().to_string(),
+                "10".to_string(),
+                "1".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        let word_certificate = fs::read(&certificate).unwrap();
+        assert!(word_certificate.starts_with(b"search_certificate_version=5\n"));
+        assert!(
+            word_certificate
+                .windows(b"input_widths=3\n".len())
+                .any(|window| window == b"input_widths=3\n")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-search".to_string(),
+                word_source.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "search-btor2".to_string(),
+                word_source.display().to_string(),
+                "10".to_string(),
+                "1".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap_err()
+            .contains("create certificate")
+        );
+        assert_eq!(fs::read(&certificate).unwrap(), word_certificate);
+        fs::remove_file(&certificate).unwrap();
+        fs::remove_file(word_source).unwrap();
 
         for (horizon, expected) in [(2, "SAFE"), (3, "UNSAFE")] {
             assert!(

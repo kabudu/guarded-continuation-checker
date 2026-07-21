@@ -70,3 +70,23 @@ fn downstream_api_preserves_constraint_bound_admissible_valuations() {
         Some(1)
     );
 }
+
+#[test]
+fn downstream_api_preserves_word_input_widths_and_packing() {
+    let source = b"1 sort bitvec 1\n2 sort bitvec 3\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 next 2 4 3\n8 constd 2 5\n9 eq 1 4 8\n10 bad 9 reached_five\n";
+
+    let produced = btor2_search::produce(source, 10, 1).unwrap();
+    assert_eq!(produced.certificate_version, 5);
+    assert_eq!(produced.inputs, vec![3]);
+    assert_eq!(produced.input_widths, vec![3]);
+    assert_eq!(produced.result, SearchResult::Unsafe);
+    assert_eq!(produced.witness_valuations, vec![5]);
+    assert_eq!(produced.terminal_valuation, Some(0));
+
+    let encoded = btor2_search::encode(&produced).unwrap();
+    let decoded = btor2_search::decode(encoded.as_bytes()).unwrap();
+    assert_eq!(
+        btor2_search::verify(source, &decoded).unwrap().bad_frame,
+        Some(1)
+    );
+}
