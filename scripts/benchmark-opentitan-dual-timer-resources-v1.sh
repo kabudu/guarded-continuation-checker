@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+report_failure() {
+  local status=$?
+  echo "opentitan resource failure status=$status line=${BASH_LINENO[0]} command=$BASH_COMMAND" >&2
+  exit "$status"
+}
+trap report_failure ERR
+
 if [[ $# -ne 6 ]]; then
   echo "usage: $0 GCC_BINARY YOSYS_BINARY RIC3_OUTPUT CERTIFAIGER_OUTPUT OUTPUT.csv MANIFEST.txt" >&2
   exit 2
@@ -123,6 +130,7 @@ for trial in $(seq 1 "$trials"); do
       external-producer external-consumer; do
       validate_measurement "$trial_dir/$measurement.runlim"
     done
+    echo "opentitan resources phase=measured trial=$trial horizon=$horizon"
 
     gcc_first=$trial_dir/gcc-repeat-1
     external_first=$trial_dir/external-repeat-1
@@ -136,6 +144,7 @@ for trial in $(seq 1 "$trials"); do
       cmp "$external_first/h${horizon}-composed.aag" \
         "$trial_dir/external-repeat-$repetition/h${horizon}-composed.aag"
     done
+    echo "opentitan resources phase=deterministic trial=$trial horizon=$horizon"
     gcc_evidence_bytes=$(wc -c <"$gcc_first/gcc.cert" | tr -d ' ')
     if [[ "$horizon" == 4 ]]; then
       external_evidence_bytes=$(wc -c <"$external_first/h4-composed.aag" | tr -d ' ')

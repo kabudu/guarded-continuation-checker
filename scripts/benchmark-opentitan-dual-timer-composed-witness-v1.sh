@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+report_failure() {
+  local status=$?
+  echo "opentitan composed-witness failure status=$status line=${BASH_LINENO[0]} command=$BASH_COMMAND" >&2
+  exit "$status"
+}
+trap report_failure ERR
+
 if [[ $# -ne 6 ]]; then
   echo "usage: $0 GCC_BINARY YOSYS_BINARY RIC3_OUTPUT CERTIFAIGER_OUTPUT OUTPUT.csv MANIFEST.txt" >&2
   exit 2
@@ -42,6 +49,7 @@ mkdir "$evidence"
 "$repository/scripts/build-opentitan-aon-dual-timer-aiger.sh" \
   "$yosys_binary" "$models_second" >/dev/null
 diff -ru "$models" "$models_second" >/dev/null
+echo "opentitan composed-witness phase=models-deterministic"
 models=$(cd "$models" && pwd -P)
 evidence=$(cd "$evidence" && pwd -P)
 
@@ -169,6 +177,7 @@ for horizon in 4 5 7 9; do
       >>"$scratch/result.csv"
   done
 done
+echo "opentitan composed-witness phase=individual-evidence-verified"
 
 "$gcc_binary" compose-safety-witnesses-v1 "$models/h4-safe-set.aag" \
   "$evidence/h4-composed.aag" "$evidence/h4-wake.evidence.aag" \
@@ -187,6 +196,7 @@ verify_safe h4-safe-set.aag h4-composed.aag h4-composed.consumer.log
   "$evidence/h5-bite.evidence.aag" >/dev/null
 cmp "$evidence/h5-composed.aag" "$evidence/h5-composed-second.aag"
 verify_safe h5-safe-set.aag h5-composed.aag h5-composed.consumer.log
+echo "opentitan composed-witness phase=compositions-verified"
 
 # Evidence substitution, corruption, and truncation must fail independently.
 sed '1s/^aag/bag/' "$evidence/h4-wake.evidence.aag" \
@@ -205,6 +215,7 @@ reject_safe h5-wake.aag h4-wake.evidence.aag hostile-safe-wrong-model.log
 reject_safe h5-safe-set.aag h4-composed.aag hostile-composed-wrong-model.log
 reject_unsafe h5-bark.aag h5-bark.truncated.aag hostile-trace-truncated.log
 reject_unsafe h4-bark.aag h5-bark.evidence.aag hostile-trace-wrong-model.log
+echo "opentitan composed-witness phase=hostile-controls-rejected"
 
 {
   printf 'schema_version=1\n'
