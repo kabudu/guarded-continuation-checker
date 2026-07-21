@@ -108,7 +108,9 @@ close either register by itself.
    The next predeclared fallback boundary is
    [bounded search v5](BTOR2_BOUNDED_SEARCH_V5_PLAN.md), which must preserve
    small word-valued register and sensor inputs without flattening away source
-   widths, while retaining every v1 through v4 artifact.
+   widths, while retaining every v1 through v4 artifact. Its local core and
+   pinned Caliptra public-design validation now pass, including maintained
+   Yosys plus Z3 agreement. Hosted reproduction remains open.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant

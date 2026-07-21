@@ -1,0 +1,4 @@
+schema_version,horizon,property,expected_answer,actual_answer,bad_frame,certificate_version,input_widths,total_input_bits,constraints,certificate_bytes,model_deterministic,evidence_deterministic,verified,maintained_oracle,status
+1,0,24,SAFE,SAFE,none,5,2+1,3,20,372,true,true,true,true,validated
+1,1,24,UNSAFE,UNSAFE,1,5,2+1,3,20,333,true,true,true,true,validated
+1,4,24,UNSAFE,UNSAFE,1,5,2+1,3,20,333,true,true,true,true,validated

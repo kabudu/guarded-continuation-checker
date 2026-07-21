@@ -20,3 +20,9 @@ toolchain.
 bounded frame counter and exposes the three properties through Yosys BTOR2.
 It is GCC-owned instrumentation and does not modify the retained upstream
 module.
+
+`wrapper-word-input.sv` is GCC-owned formal instrumentation for the bounded
+search v5 experiment. It connects a live two-bit timeout-period input to the
+unmodified 32-bit Caliptra port, constrains zero as an illegal environment
+value, and exposes the timer-one timeout assertion. Its SHA-256 is
+`c3a0e6cc09a7835e5d0d05db27a6d6b2dfb526c05c5ed04bdcf8bcf13244ff30`.

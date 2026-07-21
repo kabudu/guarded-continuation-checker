@@ -353,9 +353,11 @@ experiment](docs/BTOR2_BOUNDED_SEARCH_V5_PLAN.md) extends the exact fallback to
 small word-valued register fields, bus values, and sensor samples. The local
 core binds each source width and reconstructs packed valuations by input-node
 order, then least-significant bit first within each word. It retains the v1
-through v4 routes and refuses models above eight total semantic input bits.
-Public Caliptra and hosted gates remain open, so this is not yet a completed
-experiment or production claim.
+through v4 routes and refuses models above eight total semantic input bits. A
+pinned Caliptra watchdog workflow preserves its live two-bit timeout field and
+agrees with maintained Yosys plus Z3 for the retained SAFE and UNSAFE bounds.
+The hosted gate remains open, so this is not yet a completed experiment or
+production claim.
 
 The experimental [BTOR2 exact word-region certificate v1](docs/BTOR2_WORD_REGION_CERTIFICATE_V1.md)
 now replaces those layers for recognised reset-add and saturating counter

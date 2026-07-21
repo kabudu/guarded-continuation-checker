@@ -76,6 +76,8 @@ jobs:
           shellcheck -s bash \
             scripts/build-caliptra-wdt-btor2-v1.sh \
             scripts/run-caliptra-wdt-word-probe-v2.sh \
+            scripts/build-caliptra-wdt-word-input-btor2-v1.sh \
+            scripts/run-caliptra-wdt-word-input-acceptance-v1.sh \
             scripts/build-roalogic-plic-gateway-btor2-v1.sh \
             scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
             scripts/build-roalogic-plic-gateway-constrained-btor2-v1.sh \
@@ -373,7 +375,7 @@ jobs:
             /tmp/opentitan-aon-watchdog-acceptance.csv
           diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
             /tmp/opentitan-aon-watchdog-acceptance.csv
-      - name: Reproduce Roa Logic PLIC search acceptance
+      - name: Reproduce Caliptra and Roa Logic PLIC search acceptance
         run: |
           scripts/run-caliptra-wdt-word-probe-v2.sh \
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
@@ -381,6 +383,13 @@ jobs:
             /tmp/caliptra-wdt-word-probe-v2.csv
           diff -u results/caliptra-wdt-word-probe-v2.csv \
             /tmp/caliptra-wdt-word-probe-v2.csv
+          scripts/run-caliptra-wdt-word-input-acceptance-v1.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            /tmp/caliptra-wdt-word-input-acceptance-v1.csv
+          diff -u results/caliptra-wdt-word-input-acceptance-v1.csv \
+            /tmp/caliptra-wdt-word-input-acceptance-v1.csv
           scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             /tmp/yosys-attestation/build/yosys \

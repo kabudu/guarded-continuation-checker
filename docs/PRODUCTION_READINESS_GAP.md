@@ -78,9 +78,10 @@ reachability and its SAFE
   Linux suite, and downstream API matrix. This closes the v4 experiment gates,
   but does not close wider release compatibility or product-validity rows.
   Word-input bounded search v5 is predeclared because v4 still refuses small
-  register fields, bus values, and sensor samples. No readiness row changes
-  until its width binding, exact fallback, public Caliptra workflow, retained
-  compatibility, and hosted gates pass.
+  register fields, bus values, and sensor samples. Its local width binding,
+  exact fallback, public Caliptra workflow, retained compatibility, hostile
+  controls, and maintained Yosys plus Z3 gates now pass. Hosted reproduction
+  remains open, and the bounded workflow does not close product validity.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,

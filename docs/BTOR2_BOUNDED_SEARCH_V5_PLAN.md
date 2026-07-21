@@ -1,7 +1,8 @@
 # BTOR2 bounded search certificate v5 plan
 
-Status: local core implemented; public-design and hosted gates remain open. No
-completed experiment or production result is claimed.
+Status: local implementation and public-design validation complete; hosted
+reproduction remains open. No completed experiment or production result is
+claimed.
 
 ## Capability gap
 
@@ -73,3 +74,28 @@ Explicit enumeration of bounded bit-vector inputs is established model-checking
 practice. V5 can close an important embedded-workflow integrity gap, but it is
 not an algorithmic novelty claim. It provides the exact fallback needed to
 measure later proof-carrying word-level composition honestly.
+
+## Retained local result
+
+The local core passes its width-binding, canonical packing, both-answer,
+constraint, assumption-dead-end, resource, no-clobber, and downstream API
+gates. A separately implemented exhaustive trace traversal agrees across one
+word, mixed Boolean and word, two-word, state-dependent, input-dependent, and
+constrained models for every total width from two through eight bits. Retained
+v1 through v4 evidence remains byte-identical.
+
+The pinned, unmodified Caliptra watchdog now receives a live two-bit timeout
+period through GCC-owned formal instrumentation. The resulting canonical model
+has digest
+`b6e0b1db627d4daf3d03f617fd08f807b3b49b4f62b599843d65369047cc34ad`,
+two semantic inputs with widths two and one, one state, one exact nonzero
+constraint, and one bad property. V5 verifies SAFE at horizon zero and UNSAFE
+at earliest frame one for horizons one and four. Two model builds and two
+certificate builds are byte-identical. Seven width, binding, valuation,
+constraint, downgrade, and truncation attacks fail closed, and output
+publication does not clobber existing evidence.
+
+Maintained Yosys plus Z3 independently proves the horizon-zero assertion and
+finds the same frame-one violation. The retained rows are in
+[`caliptra-wdt-word-input-acceptance-v1.csv`](../results/caliptra-wdt-word-input-acceptance-v1.csv).
+Hosted reproduction remains the only open predeclared gate.

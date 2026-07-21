@@ -550,4 +550,6 @@ The predeclared word-input bounded-search v5 experiment is also product
 engineering rather than a novelty candidate. Explicit finite-domain
 bit-vector enumeration, typed input reconstruction, and constrained bounded
 reachability are established. Its role is to make later word-level proof
-compression comparisons exact and source-faithful.
+compression comparisons exact and source-faithful. The pinned Caliptra result
+confirms local product interoperability and maintained-tool agreement. It does
+not change that prior-art assessment or close any novelty row.
