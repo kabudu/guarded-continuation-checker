@@ -1728,6 +1728,9 @@ mod tests {
             oracle(WORD_CONSTRAINT_DEAD_END, 14, 3)
         );
         assert!(verify(WORD_CONSTRAINT_DEAD_END, &dead_end).is_ok());
+        let mut false_dead_end = dead_end;
+        false_dead_end.layers[2] = false_dead_end.layers[1].clone();
+        assert!(verify(WORD_CONSTRAINT_DEAD_END, &false_dead_end).is_err());
 
         fn wide_state_model(state_count: usize) -> Vec<u8> {
             let mut text =
