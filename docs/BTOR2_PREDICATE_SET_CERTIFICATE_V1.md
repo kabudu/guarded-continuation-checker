@@ -139,6 +139,14 @@ separate evidence, and exercises seven hostile controls. Pinned BTOR2Tools
 parses both multi-property models. Bitwuzla 0.9.1 checks the joint SAFE
 endpoints and separate mixed-answer endpoints.
 
+Hosted run
+[`29789357950`](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29789357950)
+reproduces this complete path on exact commit `448a758`. The green gates include
+pinned Linux Yosys regeneration, the predicate-set acceptance report, official
+BTOR2Tools, maintained Bitwuzla 0.9.1, Windows, macOS, and Linux downstream API
+tests, dependency audit, the full retained test workflow, and reproducible
+Linux packaging.
+
 ## Prior-art boundary
 
 Multi-property hardware model checking is established and appeared as a

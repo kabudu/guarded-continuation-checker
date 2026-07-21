@@ -371,9 +371,12 @@ only under a deterministic encoded-size gate and otherwise preserves every
 property through exact fallback. The pinned OpenTitan bark and bite cases cover
 joint SAFE, mixed UNSAFE and SAFE, and billion-frame joint SAFE results;
 retained artifacts reproduce byte for byte and seven hostile controls fail
-closed. This closes a narrow multi-property mechanism locally. Hosted Linux
-reproduction, a frozen first-release compatibility fingerprint, external
-operator acceptance, and expert novelty review remain open.
+closed. Hosted run 29789357950 reproduces the exact implementation commit on
+Linux, including pinned Yosys, official BTOR2Tools, maintained Bitwuzla,
+three-platform downstream APIs, dependency audit, full retained regressions,
+and reproducible packaging. This closes the narrow multi-property mechanism
+and hosted-reproduction rows. A frozen first-release compatibility fingerprint,
+external operator acceptance, and expert novelty review remain open.
 
 ## Post-production-release deliverables
 
