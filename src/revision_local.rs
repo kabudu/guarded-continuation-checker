@@ -18,6 +18,11 @@ pub const MAX_LOCAL_VALUATIONS: usize = 65_536;
 pub const MAX_LOCAL_NODE_STEPS: usize = 30_000_000;
 pub const LOCAL_RELATION_CERTIFICATE_VERSION: u32 = 1;
 pub const MAX_LOCAL_CONSTRAINTS: usize = 4096;
+pub const MAX_INTERFACE_WIRES: usize = 8;
+pub const MAX_COMPOSED_PAIR_CHECKS: usize = 4_000_000;
+pub const MAX_COMPOSED_PAIRS: usize = 65_536;
+pub const WORD_INTERFACE_CONTRACT_VERSION: u32 = 1;
+pub const MAX_WORD_INTERFACE_CONTRACT_BYTES: usize = 4096;
 
 const MAGIC: &[u8; 8] = b"GCCRLCP1";
 const LOCAL_RELATION_MAGIC: &[u8; 8] = b"GCCLRL01";
@@ -79,6 +84,52 @@ pub struct LocalRelationSummary {
     pub output_bits: usize,
     pub candidate_valuations: usize,
     pub admissible_rows: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ComponentSide {
+    Left,
+    Right,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct InterfaceWire {
+    pub from: ComponentSide,
+    pub output: NodeId,
+    pub to_input: NodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WordInterfaceContract {
+    pub wires: Vec<InterfaceWire>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ComposedPair {
+    pub left_row: u32,
+    pub right_row: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComposedRelation {
+    pub interface_sha256: [u8; 32],
+    pub pairs: Vec<ComposedPair>,
+    pub pair_checks: usize,
+}
+
+pub struct VerifiedLocalRelation<'a> {
+    certificate: &'a LocalRelationCertificate,
+    summary: LocalRelationSummary,
+}
+
+impl VerifiedLocalRelation<'_> {
+    pub fn summary(&self) -> &LocalRelationSummary {
+        &self.summary
+    }
+
+    pub fn source_sha256(&self) -> &[u8; 32] {
+        &self.certificate.source_sha256
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -363,6 +414,293 @@ pub fn verify_local_relation(
         candidate_valuations: shape.candidate_valuations,
         admissible_rows,
     })
+}
+
+pub fn verify_local_relation_for_composition<'a>(
+    source: &[u8],
+    certificate: &'a LocalRelationCertificate,
+    section: EvidenceSection,
+) -> Result<VerifiedLocalRelation<'a>, RevisionLocalError> {
+    let summary = verify_local_relation(source, certificate, section)?;
+    Ok(VerifiedLocalRelation {
+        certificate,
+        summary,
+    })
+}
+
+enum ValidatedWire {
+    LeftToRight {
+        output_index: usize,
+        input_index: usize,
+    },
+    RightToLeft {
+        output_index: usize,
+        input_index: usize,
+    },
+}
+
+fn validate_interface(
+    left: &LocalRelationCertificate,
+    right: &LocalRelationCertificate,
+    contract: &WordInterfaceContract,
+) -> Result<Vec<ValidatedWire>, RevisionLocalError> {
+    if contract.wires.is_empty() || contract.wires.len() > MAX_INTERFACE_WIRES {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface requires between one and eight wires",
+        ));
+    }
+    if !contract.wires.windows(2).all(|pair| pair[0] < pair[1]) {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface wires must be unique and strictly ordered",
+        ));
+    }
+    let mut destinations = Vec::new();
+    let mut result = Vec::with_capacity(contract.wires.len());
+    for wire in &contract.wires {
+        let (source, destination, destination_side) = match wire.from {
+            ComponentSide::Left => (left, right, ComponentSide::Right),
+            ComponentSide::Right => (right, left, ComponentSide::Left),
+        };
+        let output_index = source
+            .outputs
+            .binary_search(&wire.output)
+            .map_err(|_| reject(EvidenceSection::Interface, "wire output is not projected"))?;
+        let input_index = destination
+            .inputs
+            .binary_search(&wire.to_input)
+            .map_err(|_| reject(EvidenceSection::Interface, "wire input is not semantic"))?;
+        if source.output_widths[output_index] != destination.input_widths[input_index] {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "wire output and input widths differ",
+            ));
+        }
+        let destination_key = (destination_side, wire.to_input);
+        if destinations.contains(&destination_key) {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "more than one wire drives an input",
+            ));
+        }
+        destinations.push(destination_key);
+        result.push(match wire.from {
+            ComponentSide::Left => ValidatedWire::LeftToRight {
+                output_index,
+                input_index,
+            },
+            ComponentSide::Right => ValidatedWire::RightToLeft {
+                output_index,
+                input_index,
+            },
+        });
+    }
+    Ok(result)
+}
+
+fn pair_satisfies(
+    left: &LocalRelationRow,
+    right: &LocalRelationRow,
+    wires: &[ValidatedWire],
+) -> bool {
+    wires.iter().all(|wire| match *wire {
+        ValidatedWire::LeftToRight {
+            output_index,
+            input_index,
+        } => left.output[output_index] == right.input[input_index],
+        ValidatedWire::RightToLeft {
+            output_index,
+            input_index,
+        } => right.output[output_index] == left.input[input_index],
+    })
+}
+
+pub fn encode_word_interface_contract(
+    contract: &WordInterfaceContract,
+) -> Result<String, RevisionLocalError> {
+    if contract.wires.is_empty() || contract.wires.len() > MAX_INTERFACE_WIRES {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface requires between one and eight wires",
+        ));
+    }
+    if !contract.wires.windows(2).all(|pair| pair[0] < pair[1]) {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface wires must be unique and strictly ordered",
+        ));
+    }
+    let mut text = format!(
+        "word_interface_version={WORD_INTERFACE_CONTRACT_VERSION}\nwire_count={}\n",
+        contract.wires.len()
+    );
+    for wire in &contract.wires {
+        let side = match wire.from {
+            ComponentSide::Left => "left",
+            ComponentSide::Right => "right",
+        };
+        text.push_str(&format!("wire={side},{},{}\n", wire.output, wire.to_input));
+    }
+    text.push_str("status=complete\n");
+    if text.len() > MAX_WORD_INTERFACE_CONTRACT_BYTES {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface contract exceeds byte limit",
+        ));
+    }
+    Ok(text)
+}
+
+pub fn decode_word_interface_contract(
+    bytes: &[u8],
+) -> Result<WordInterfaceContract, RevisionLocalError> {
+    if bytes.len() > MAX_WORD_INTERFACE_CONTRACT_BYTES
+        || bytes.contains(&0)
+        || bytes.contains(&b'\r')
+        || !bytes.ends_with(b"\n")
+    {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface contract is not bounded canonical LF text",
+        ));
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        reject(
+            EvidenceSection::Interface,
+            "interface contract is not UTF-8",
+        )
+    })?;
+    let mut lines = text.lines();
+    let version = lines
+        .next()
+        .and_then(|line| line.strip_prefix("word_interface_version="))
+        .and_then(|value| value.parse::<u32>().ok())
+        .ok_or_else(|| reject(EvidenceSection::Interface, "invalid interface version"))?;
+    if version != WORD_INTERFACE_CONTRACT_VERSION {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "unsupported interface version",
+        ));
+    }
+    let wire_count = lines
+        .next()
+        .and_then(|line| line.strip_prefix("wire_count="))
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|count| (1..=MAX_INTERFACE_WIRES).contains(count))
+        .ok_or_else(|| reject(EvidenceSection::Interface, "invalid interface wire count"))?;
+    let mut wires = Vec::with_capacity(wire_count);
+    for _ in 0..wire_count {
+        let value = lines
+            .next()
+            .and_then(|line| line.strip_prefix("wire="))
+            .ok_or_else(|| reject(EvidenceSection::Interface, "missing interface wire"))?;
+        let mut fields = value.split(',');
+        let from = match fields.next() {
+            Some("left") => ComponentSide::Left,
+            Some("right") => ComponentSide::Right,
+            _ => return Err(reject(EvidenceSection::Interface, "invalid wire side")),
+        };
+        let output = fields
+            .next()
+            .and_then(|field| field.parse::<NodeId>().ok())
+            .filter(|id| *id != 0)
+            .ok_or_else(|| reject(EvidenceSection::Interface, "invalid wire output"))?;
+        let to_input = fields
+            .next()
+            .and_then(|field| field.parse::<NodeId>().ok())
+            .filter(|id| *id != 0)
+            .ok_or_else(|| reject(EvidenceSection::Interface, "invalid wire input"))?;
+        if fields.next().is_some() {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "wire has trailing fields",
+            ));
+        }
+        wires.push(InterfaceWire {
+            from,
+            output,
+            to_input,
+        });
+    }
+    if lines.next() != Some("status=complete") || lines.next().is_some() {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface contract is incomplete or has trailing fields",
+        ));
+    }
+    let contract = WordInterfaceContract { wires };
+    if encode_word_interface_contract(&contract)? != text {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface contract is not canonical",
+        ));
+    }
+    Ok(contract)
+}
+
+fn compose_validated_local_relations(
+    left: &LocalRelationCertificate,
+    right: &LocalRelationCertificate,
+    contract: &WordInterfaceContract,
+) -> Result<ComposedRelation, RevisionLocalError> {
+    validate_local_relation_structure(left, EvidenceSection::Left)?;
+    validate_local_relation_structure(right, EvidenceSection::Right)?;
+    let wires = validate_interface(left, right, contract)?;
+    let pair_checks = left
+        .rows
+        .len()
+        .checked_mul(right.rows.len())
+        .filter(|count| *count <= MAX_COMPOSED_PAIR_CHECKS)
+        .ok_or_else(|| {
+            reject(
+                EvidenceSection::Interface,
+                "interface pair-check count exceeds limit",
+            )
+        })?;
+    let mut pairs = Vec::new();
+    for (left_index, left_row) in left.rows.iter().enumerate() {
+        for (right_index, right_row) in right.rows.iter().enumerate() {
+            if pair_satisfies(left_row, right_row, &wires) {
+                if pairs.len() == MAX_COMPOSED_PAIRS {
+                    return Err(reject(
+                        EvidenceSection::Interface,
+                        "composed relation pair count exceeds limit",
+                    ));
+                }
+                pairs.push(ComposedPair {
+                    left_row: u32::try_from(left_index).expect("bounded local rows fit u32"),
+                    right_row: u32::try_from(right_index).expect("bounded local rows fit u32"),
+                });
+            }
+        }
+    }
+    let interface = encode_word_interface_contract(contract)?;
+    Ok(ComposedRelation {
+        interface_sha256: evidence_digest(interface.as_bytes()),
+        pairs,
+        pair_checks,
+    })
+}
+
+pub fn compose_verified_local_relations(
+    left: &VerifiedLocalRelation<'_>,
+    right: &VerifiedLocalRelation<'_>,
+    contract: &WordInterfaceContract,
+) -> Result<ComposedRelation, RevisionLocalError> {
+    compose_validated_local_relations(left.certificate, right.certificate, contract)
+}
+
+pub fn compose_local_relations(
+    left_source: &[u8],
+    left: &LocalRelationCertificate,
+    right_source: &[u8],
+    right: &LocalRelationCertificate,
+    contract: &WordInterfaceContract,
+) -> Result<ComposedRelation, RevisionLocalError> {
+    let left = verify_local_relation_for_composition(left_source, left, EvidenceSection::Left)?;
+    let right = verify_local_relation_for_composition(right_source, right, EvidenceSection::Right)?;
+    compose_verified_local_relations(&left, &right, contract)
 }
 
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
@@ -878,6 +1216,7 @@ mod tests {
     use super::*;
 
     const WORD_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 ulte 1 3 9\n11 constraint 10\n12 zero 1\n13 bad 12 never\n";
+    const RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
 
     fn fixture() -> RevisionLocalCertificate {
         RevisionLocalCertificate {
@@ -1016,5 +1355,107 @@ mod tests {
         let error = decode_local_relation_certificate(&hostile_count).unwrap_err();
         assert_eq!(error.section, EvidenceSection::Envelope);
         assert_eq!(error.message, "local relation node count exceeds limit");
+    }
+
+    #[test]
+    fn word_interface_is_canonical_and_composes_exact_rows() {
+        let left = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let right = produce_local_relation(RIGHT_COMPONENT, &[7]).unwrap();
+        let contract = WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        };
+        let encoded = encode_word_interface_contract(&contract).unwrap();
+        assert_eq!(
+            decode_word_interface_contract(encoded.as_bytes()).unwrap(),
+            contract
+        );
+        let composed =
+            compose_local_relations(WORD_COMPONENT, &left, RIGHT_COMPONENT, &right, &contract)
+                .unwrap();
+        assert_eq!(composed.pair_checks, 192);
+        assert_eq!(composed.pairs.len(), 48);
+        assert_eq!(
+            composed.interface_sha256,
+            evidence_digest(encoded.as_bytes())
+        );
+        for pair in composed.pairs {
+            let left_row = &left.rows[pair.left_row as usize];
+            let right_row = &right.rows[pair.right_row as usize];
+            assert_eq!(left_row.output[0], right_row.input[0]);
+        }
+        let verified_left =
+            verify_local_relation_for_composition(WORD_COMPONENT, &left, EvidenceSection::Left)
+                .unwrap();
+        let verified_right =
+            verify_local_relation_for_composition(RIGHT_COMPONENT, &right, EvidenceSection::Right)
+                .unwrap();
+        assert_eq!(verified_left.summary().admissible_rows, 12);
+        assert_eq!(
+            compose_verified_local_relations(&verified_left, &verified_right, &contract)
+                .unwrap()
+                .pairs
+                .len(),
+            48
+        );
+    }
+
+    #[test]
+    fn interface_width_and_hidden_drive_mutations_fail_closed() {
+        let left = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let narrow_source = b"1 sort bitvec 1\n2 input 1 sensed\n3 state 1 state\n4 zero 1\n5 init 1 3 4\n6 next 1 3 2\n7 xor 1 3 2\n8 bad 4 never\n";
+        let narrow = produce_local_relation(narrow_source, &[7]).unwrap();
+        let contract = WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 2,
+            }],
+        };
+        let error =
+            compose_local_relations(WORD_COMPONENT, &left, narrow_source, &narrow, &contract)
+                .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Interface);
+        assert_eq!(error.message, "wire output and input widths differ");
+
+        let duplicate = WordInterfaceContract {
+            wires: vec![
+                InterfaceWire {
+                    from: ComponentSide::Left,
+                    output: 7,
+                    to_input: 3,
+                },
+                InterfaceWire {
+                    from: ComponentSide::Left,
+                    output: 7,
+                    to_input: 3,
+                },
+            ],
+        };
+        assert!(encode_word_interface_contract(&duplicate).is_err());
+
+        let right = produce_local_relation(RIGHT_COMPONENT, &[7]).unwrap();
+        let mut false_left = left;
+        false_left.rows[0].output[0] ^= 1;
+        let valid_contract = WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        };
+        let error = compose_local_relations(
+            WORD_COMPONENT,
+            &false_left,
+            RIGHT_COMPONENT,
+            &right,
+            &valid_contract,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Left);
+        assert_eq!(error.message, "local relation row does not match source");
     }
 }

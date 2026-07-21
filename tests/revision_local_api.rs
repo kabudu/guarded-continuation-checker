@@ -1,8 +1,11 @@
 use guarded_continuation_checker::revision_local::{
-    BoundEvidence, EvidenceSection, LocalEvidence, RevisionLocalCertificate,
+    BoundEvidence, ComponentSide, EvidenceSection, InterfaceWire, LocalEvidence,
+    RevisionLocalCertificate, WordInterfaceContract, compose_verified_local_relations,
     decode_local_relation_certificate, decode_revision_local_certificate,
-    encode_local_relation_certificate, encode_revision_local_certificate, produce_local_relation,
-    source_digest, unchanged_local_evidence, verify_local_relation, verify_source_bindings,
+    decode_word_interface_contract, encode_local_relation_certificate,
+    encode_revision_local_certificate, encode_word_interface_contract, produce_local_relation,
+    source_digest, unchanged_local_evidence, verify_local_relation,
+    verify_local_relation_for_composition, verify_source_bindings,
 };
 
 #[test]
@@ -47,4 +50,30 @@ fn downstream_client_can_encode_and_verify_a_complete_word_relation() {
     let summary = verify_local_relation(source, &decoded, EvidenceSection::Left).unwrap();
     assert_eq!(summary.candidate_valuations, 16);
     assert_eq!(summary.admissible_rows, 12);
+}
+
+#[test]
+fn downstream_client_can_reuse_validated_evidence_for_word_interface_composition() {
+    let left_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    let right_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    let left = produce_local_relation(left_source, &[7]).unwrap();
+    let right = produce_local_relation(right_source, &[7]).unwrap();
+    let contract = WordInterfaceContract {
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        }],
+    };
+    let contract_text = encode_word_interface_contract(&contract).unwrap();
+    let contract = decode_word_interface_contract(contract_text.as_bytes()).unwrap();
+    let verified_left =
+        verify_local_relation_for_composition(left_source, &left, EvidenceSection::Left).unwrap();
+    let verified_right =
+        verify_local_relation_for_composition(right_source, &right, EvidenceSection::Right)
+            .unwrap();
+    let composed =
+        compose_verified_local_relations(&verified_left, &verified_right, &contract).unwrap();
+    assert_eq!(composed.pair_checks, 256);
+    assert_eq!(composed.pairs.len(), 64);
 }

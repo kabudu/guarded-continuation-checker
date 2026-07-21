@@ -18,9 +18,12 @@ versioned bounded binary codec, rejects every truncation, preflights hostile
 counts before allocation, and has a downstream public API test. This is not yet
 a compact independently encoded local proof because checking uses exhaustive
 semantic re-evaluation rather than compact proof checking. Interface
-composition, final
-answer evidence, exact v5 fallback, and revision-work observations remain
-incomplete.
+composition now has a canonical bounded contract, exact constraint-preserving
+row join, width and multiple-driver rejection, a four-million pair-check cap,
+and a 65,536-pair output cap. Ordinary composition verifies both sources first;
+an unforgeable validated handle permits intentional reuse without silently
+accepting raw evidence. Final answer evidence, exact v5 fallback, revision-work
+observations, and public revision evidence remain incomplete.
 
 ## Hypothesis
 
