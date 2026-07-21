@@ -374,8 +374,12 @@ partial batch. The pinned OpenTitan cases retain four v2 artifacts, verify three
 v1 compatibility artifacts, compare every available separate baseline, record
 the billion-frame bounded-search refusal explicitly, and exercise nine hostile
 controls. Local reproduction is complete. Hosted reproduction for the exact v2
-commit, a frozen first-release compatibility fingerprint, external operator
-acceptance, and expert novelty review remain open.
+commit passes in
+[run 29791772775](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29791772775),
+including pinned Linux Yosys, official BTOR2Tools, maintained Bitwuzla,
+three-platform downstream APIs, RustSec audit, the full retained workflow, and
+reproducible packaging. A frozen first-release compatibility fingerprint,
+external operator acceptance, and expert novelty review remain open.
 
 ## Post-production-release deliverables
 

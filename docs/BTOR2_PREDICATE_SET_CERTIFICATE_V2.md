@@ -144,6 +144,13 @@ reproduces four v2 artifacts byte for byte, verifies three retained v1 artifacts
 checks all available separate-certificate measurements, records the unavailable
 bounded baseline, and exercises nine hostile controls.
 
+Hosted run
+[`29791772775`](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29791772775)
+reproduces this complete path on exact commit `f8c42bf`. Its green gates include
+pinned Linux Yosys regeneration, official BTOR2Tools parsing, maintained
+Bitwuzla 0.9.1 endpoints, Windows, macOS, and Linux downstream APIs, RustSec
+audit, the full retained workflow, and reproducible Linux packaging.
+
 ## Prior-art boundary and limitations
 
 Multi-property hardware model checking, bounded model checking, BTOR2, shared
