@@ -171,3 +171,16 @@ sizes, and composed-witness hashes. The generated AAG model text differs by 15
 bytes per property across the two hosts, so the repository does not claim
 cross-platform model-byte identity. The hosted provenance record binds the
 retained files to the successful workflow commit and artifact digest.
+
+## Canonical-export follow-up checkpoint
+
+The remaining AAG byte difference is isolated to Yosys build-identification
+text in the AAG comment and witness-map `gennerator` field. The builder now
+replaces only those two non-semantic strings with the already-attested Yosys
+commit under serialization profile `canonical-yosys-revision-v1`. Two clean
+arm64 exports are byte-identical, and the complete twelve-row proof,
+composition, independent-verification, determinism, and hostile-control
+baseline passes unchanged. The retained amd64 artifact above predates this
+canonicalisation and remains bound to its original workflow. A fresh hosted
+amd64 run is still required to confirm cross-platform byte identity; no such
+claim is made at this checkpoint.

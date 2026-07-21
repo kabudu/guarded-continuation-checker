@@ -435,6 +435,13 @@ is made. This closes the hosted reproduction and measurement subgate for this
 narrow OpenTitan experiment. Independent expert review and the repository's
 other production gates remain open.
 
+A subsequent reproducibility checkpoint canonicalises only the pinned Yosys
+build-identification strings embedded in AAG comments and witness maps. Two
+clean arm64 exports and the full local evidence baseline pass under profile
+`canonical-yosys-revision-v1`. Hosted amd64 confirmation is intentionally left
+open; the successful retained artifact above remains the pre-canonicalisation
+baseline until that follow-up runs.
+
 ## Post-production-release deliverables
 
 - Create a visually polished, accessible SVG architecture diagram after the

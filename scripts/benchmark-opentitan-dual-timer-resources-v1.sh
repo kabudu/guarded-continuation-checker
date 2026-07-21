@@ -180,6 +180,7 @@ done
   printf 'trials=%s\n' "$trials"
   printf 'sequential_invocations_per_sample=%s\n' "$repetitions"
   printf 'source_to_model_setup=excluded-common-pinned-yosys\n'
+  printf 'model_serialization_profile=canonical-yosys-revision-v1\n'
   printf 'external_producer_policy=static-ic3-safe-bmc-earliest-unsafe-race\n'
   printf 'runlim_wall_limit_seconds=300\n'
   printf 'runlim_sample_rate_microseconds=1000\n'

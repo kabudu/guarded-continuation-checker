@@ -85,6 +85,8 @@ check_opentitan_composed "$opentitan_amd_composed"
 [[ $(sed -n 's/^safe_producer_engine=//p' "$opentitan_manifest") == ric3-ic3 ]]
 [[ $(sed -n 's/^unsafe_producer_engine=//p' "$opentitan_manifest") == ric3-bmc ]]
 [[ $(sed -n 's/^unsafe_trace_contract=//p' "$opentitan_manifest") == earliest-bad-frame ]]
+[[ $(sed -n 's/^model_serialization_profile=//p' "$opentitan_manifest") == \
+  canonical-yosys-revision-v1 ]]
 [[ $(sed -n 's/^composed_safe_set_count=//p' "$opentitan_manifest") == 2 ]]
 [[ $(sed -n 's/^hostile_control_count=//p' "$opentitan_manifest") == 6 ]]
 [[ $(sed -n 's/^status=//p' "$opentitan_manifest") == validated ]]

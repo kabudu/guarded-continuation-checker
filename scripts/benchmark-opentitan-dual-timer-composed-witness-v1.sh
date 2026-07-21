@@ -251,6 +251,7 @@ echo "opentitan composed-witness phase=hostile-controls-rejected"
   printf 'safe_producer_engine=ric3-ic3\n'
   printf 'unsafe_producer_engine=ric3-bmc\n'
   printf 'unsafe_trace_contract=earliest-bad-frame\n'
+  printf 'model_serialization_profile=canonical-yosys-revision-v1\n'
   printf 'composed_safe_set_count=2\n'
   printf 'hostile_control_count=6\n'
   printf 'aiger_models_sha256=%s\n' "$(sha256sum_portable "$models/SHA256SUMS")"
