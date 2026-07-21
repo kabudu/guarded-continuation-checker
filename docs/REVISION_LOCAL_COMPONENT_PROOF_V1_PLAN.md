@@ -63,8 +63,11 @@ complete SAFE layers or joint-input UNSAFE witnesses and has a separate
 verifier that proves the earliest bad frame before replay. A retained nine-bit
 state case is outside the local-relation admission bound but preserves SAFE at
 horizon zero and UNSAFE at frame one through direct fallback. The direct
-certificate codec, static portfolio selector, and refusal taxonomy remain
-incomplete, so fallback is not yet wired into the end-to-end envelope.
+certificate now has a versioned canonical binary codec, bounded state-vector
+counts, pre-allocation count checks, every-prefix truncation rejection, and a
+downstream public API round trip. The static portfolio selector and refusal
+taxonomy remain incomplete, so fallback is not yet wired into the end-to-end
+portfolio.
 
 ## Hypothesis
 

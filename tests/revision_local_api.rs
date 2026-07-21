@@ -2,8 +2,9 @@ use guarded_continuation_checker::revision_local::{
     BoundEvidence, BoundedQuery, BoundedResult, ComponentSide, EvidenceSection, InterfaceWire,
     LocalEvidence, RevisionLocalCertificate, WordInterfaceContract,
     compose_verified_local_relations, decode_bounded_answer_certificate,
-    decode_local_relation_certificate, decode_revision_local_certificate,
-    decode_word_interface_contract, encode_bounded_answer_certificate,
+    decode_direct_answer_certificate, decode_local_relation_certificate,
+    decode_revision_local_certificate, decode_word_interface_contract,
+    encode_bounded_answer_certificate, encode_direct_answer_certificate,
     encode_local_relation_certificate, encode_revision_local_certificate,
     encode_word_interface_contract, produce_bounded_answer, produce_direct_answer,
     produce_local_relation, produce_revision_local_certificate, source_digest,
@@ -225,7 +226,8 @@ fn downstream_client_gets_exact_fallback_beyond_local_state_bounds() {
     let (certificate, produced) =
         produce_direct_answer(wide_left, right, interface.as_bytes(), &query).unwrap();
     assert_eq!(produced.result, BoundedResult::Unsafe);
-    let verified =
-        verify_direct_answer(wide_left, right, interface.as_bytes(), &certificate).unwrap();
+    let bytes = encode_direct_answer_certificate(&certificate).unwrap();
+    let decoded = decode_direct_answer_certificate(&bytes).unwrap();
+    let verified = verify_direct_answer(wide_left, right, interface.as_bytes(), &decoded).unwrap();
     assert_eq!(verified.bad_frame, Some(1));
 }

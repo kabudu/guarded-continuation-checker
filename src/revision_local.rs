@@ -29,11 +29,14 @@ pub const MAX_FINAL_TOTAL_STATES: usize = 262_144;
 pub const MAX_FINAL_TRANSITION_CHECKS: usize = 4_000_000;
 pub const MAX_DIRECT_INPUT_BITS: usize = 12;
 pub const MAX_DIRECT_INPUT_VALUATIONS: usize = 4096;
+pub const MAX_DIRECT_STATE_NODES: usize = 64;
 
 const MAGIC: &[u8; 8] = b"GCCRLCP1";
 const LOCAL_RELATION_MAGIC: &[u8; 8] = b"GCCLRL01";
 const BOUNDED_ANSWER_MAGIC: &[u8; 8] = b"GCCBA001";
+const DIRECT_ANSWER_MAGIC: &[u8; 8] = b"GCCDA001";
 pub const BOUNDED_ANSWER_CERTIFICATE_VERSION: u32 = 1;
+pub const DIRECT_ANSWER_CERTIFICATE_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EvidenceSection {
@@ -1673,6 +1676,16 @@ fn direct_context(
         .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
     let right = btor2::parse_bytes(right_source)
         .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
+    if left.states().is_empty()
+        || right.states().is_empty()
+        || left.states().len() > MAX_DIRECT_STATE_NODES
+        || right.states().len() > MAX_DIRECT_STATE_NODES
+    {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct fallback state-node count exceeds limit",
+        ));
+    }
     let left_inputs = left.inputs().to_vec();
     let right_inputs = right.inputs().to_vec();
     let left_input_widths = widths(&left, &left_inputs, EvidenceSection::Left, "input")?;
@@ -2199,6 +2212,242 @@ pub fn verify_direct_answer(
     }
 }
 
+fn validate_direct_answer_structure(
+    certificate: &DirectAnswerCertificate,
+) -> Result<(), RevisionLocalError> {
+    if certificate.query.horizon > MAX_FINAL_HORIZON || certificate.query.bad_output == 0 {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct answer query is invalid",
+        ));
+    }
+    match certificate.result {
+        BoundedResult::Safe => {
+            if certificate.bad_frame.is_some()
+                || !certificate.witness_valuations.is_empty()
+                || certificate.layers.len() != certificate.query.horizon as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "direct SAFE evidence shape is invalid",
+                ));
+            }
+        }
+        BoundedResult::Unsafe => {
+            let bad_frame = certificate.bad_frame.ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "direct UNSAFE evidence has no bad frame",
+                )
+            })?;
+            if bad_frame > certificate.query.horizon
+                || !certificate.layers.is_empty()
+                || certificate.witness_valuations.len() != bad_frame as usize + 1
+            {
+                return Err(reject(
+                    EvidenceSection::Final,
+                    "direct UNSAFE evidence shape is invalid",
+                ));
+            }
+        }
+    }
+    let mut total_states = 0usize;
+    for layer in &certificate.layers {
+        if layer.len() > MAX_FINAL_STATES_PER_LAYER
+            || layer.windows(2).any(|pair| pair[0] >= pair[1])
+            || !layer.iter().all(|state| {
+                !state.left.is_empty()
+                    && state.left.len() <= MAX_DIRECT_STATE_NODES
+                    && !state.right.is_empty()
+                    && state.right.len() <= MAX_DIRECT_STATE_NODES
+            })
+        {
+            return Err(reject(
+                EvidenceSection::Final,
+                "direct answer layer shape is invalid",
+            ));
+        }
+        total_states = total_states
+            .checked_add(layer.len())
+            .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+            .ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "direct answer total states exceed limit",
+                )
+            })?;
+    }
+    Ok(())
+}
+
+pub fn encode_direct_answer_certificate(
+    certificate: &DirectAnswerCertificate,
+) -> Result<Vec<u8>, RevisionLocalError> {
+    validate_direct_answer_structure(certificate)?;
+    let mut output = Vec::new();
+    output.extend_from_slice(DIRECT_ANSWER_MAGIC);
+    output.extend_from_slice(&DIRECT_ANSWER_CERTIFICATE_VERSION.to_be_bytes());
+    output.extend_from_slice(&certificate.left_sha256);
+    output.extend_from_slice(&certificate.right_sha256);
+    output.extend_from_slice(&certificate.interface_sha256);
+    output.extend_from_slice(&certificate.query.horizon.to_be_bytes());
+    output.push(match certificate.query.bad_side {
+        ComponentSide::Left => 0,
+        ComponentSide::Right => 1,
+    });
+    output.extend_from_slice(&certificate.query.bad_output.to_be_bytes());
+    output.push(match certificate.result {
+        BoundedResult::Safe => 0,
+        BoundedResult::Unsafe => 1,
+    });
+    output.extend_from_slice(&certificate.bad_frame.unwrap_or(u32::MAX).to_be_bytes());
+    append_u32(
+        &mut output,
+        certificate.witness_valuations.len(),
+        EvidenceSection::Final,
+    )?;
+    for valuation in &certificate.witness_valuations {
+        output.extend_from_slice(&valuation.to_be_bytes());
+    }
+    append_u32(
+        &mut output,
+        certificate.layers.len(),
+        EvidenceSection::Final,
+    )?;
+    for layer in &certificate.layers {
+        append_u32(&mut output, layer.len(), EvidenceSection::Final)?;
+        for state in layer {
+            append_values(&mut output, &state.left)?;
+            append_values(&mut output, &state.right)?;
+        }
+    }
+    if output.len() > MAX_FINAL_SECTION_BYTES {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct answer encoding exceeds byte limit",
+        ));
+    }
+    Ok(output)
+}
+
+pub fn decode_direct_answer_certificate(
+    bytes: &[u8],
+) -> Result<DirectAnswerCertificate, RevisionLocalError> {
+    if bytes.len() > MAX_FINAL_SECTION_BYTES {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct answer encoding exceeds byte limit",
+        ));
+    }
+    let mut decoder = Decoder { bytes, offset: 0 };
+    if decoder.take(DIRECT_ANSWER_MAGIC.len(), EvidenceSection::Final)? != DIRECT_ANSWER_MAGIC {
+        return Err(reject(
+            EvidenceSection::Final,
+            "invalid direct answer magic",
+        ));
+    }
+    if decoder.u32(EvidenceSection::Final)? != DIRECT_ANSWER_CERTIFICATE_VERSION {
+        return Err(reject(
+            EvidenceSection::Final,
+            "unsupported direct answer version",
+        ));
+    }
+    let left_sha256 = decoder.digest(EvidenceSection::Final)?;
+    let right_sha256 = decoder.digest(EvidenceSection::Final)?;
+    let interface_sha256 = decoder.digest(EvidenceSection::Final)?;
+    let horizon = decoder.u32(EvidenceSection::Final)?;
+    let bad_side = match decoder.byte(EvidenceSection::Final)? {
+        0 => ComponentSide::Left,
+        1 => ComponentSide::Right,
+        _ => return Err(reject(EvidenceSection::Final, "invalid direct bad side")),
+    };
+    let bad_output = decoder.u64(EvidenceSection::Final)?;
+    let result = match decoder.byte(EvidenceSection::Final)? {
+        0 => BoundedResult::Safe,
+        1 => BoundedResult::Unsafe,
+        _ => return Err(reject(EvidenceSection::Final, "invalid direct result")),
+    };
+    let encoded_bad_frame = decoder.u32(EvidenceSection::Final)?;
+    let bad_frame = (encoded_bad_frame != u32::MAX).then_some(encoded_bad_frame);
+    let witness_count = decoder.bounded_count(
+        MAX_FINAL_HORIZON as usize + 1,
+        EvidenceSection::Final,
+        "direct-witness",
+    )?;
+    let mut witness_valuations = Vec::with_capacity(witness_count);
+    for _ in 0..witness_count {
+        witness_valuations.push(decoder.u16(EvidenceSection::Final)?);
+    }
+    let layer_count = decoder.bounded_count(
+        MAX_FINAL_HORIZON as usize + 1,
+        EvidenceSection::Final,
+        "direct-layer",
+    )?;
+    let mut layers = Vec::with_capacity(layer_count);
+    let mut total_states = 0usize;
+    for _ in 0..layer_count {
+        let state_count = decoder.bounded_count(
+            MAX_FINAL_STATES_PER_LAYER,
+            EvidenceSection::Final,
+            "direct-state",
+        )?;
+        total_states = total_states
+            .checked_add(state_count)
+            .filter(|count| *count <= MAX_FINAL_TOTAL_STATES)
+            .ok_or_else(|| {
+                reject(
+                    EvidenceSection::Final,
+                    "direct answer total states exceed limit",
+                )
+            })?;
+        let mut layer = Vec::with_capacity(state_count);
+        for _ in 0..state_count {
+            let left_count = decoder.bounded_count(
+                MAX_DIRECT_STATE_NODES,
+                EvidenceSection::Final,
+                "direct-left-state-value",
+            )?;
+            let left = decoder.values(left_count, EvidenceSection::Final)?;
+            let right_count = decoder.bounded_count(
+                MAX_DIRECT_STATE_NODES,
+                EvidenceSection::Final,
+                "direct-right-state-value",
+            )?;
+            let right = decoder.values(right_count, EvidenceSection::Final)?;
+            layer.push(CombinedState { left, right });
+        }
+        layers.push(layer);
+    }
+    if decoder.offset != bytes.len() {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct answer has trailing bytes",
+        ));
+    }
+    let certificate = DirectAnswerCertificate {
+        left_sha256,
+        right_sha256,
+        interface_sha256,
+        query: BoundedQuery {
+            horizon,
+            bad_side,
+            bad_output,
+        },
+        result,
+        bad_frame,
+        witness_valuations,
+        layers,
+    };
+    validate_direct_answer_structure(&certificate)?;
+    if encode_direct_answer_certificate(&certificate)? != bytes {
+        return Err(reject(
+            EvidenceSection::Final,
+            "direct answer encoding is not canonical",
+        ));
+    }
+    Ok(certificate)
+}
+
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
     !ids.is_empty()
         && ids.len() <= maximum
@@ -2606,6 +2855,11 @@ impl<'a> Decoder<'a> {
     fn u32(&mut self, section: EvidenceSection) -> Result<u32, RevisionLocalError> {
         let bytes: [u8; 4] = self.take(4, section)?.try_into().expect("fixed size");
         Ok(u32::from_be_bytes(bytes))
+    }
+
+    fn u16(&mut self, section: EvidenceSection) -> Result<u16, RevisionLocalError> {
+        let bytes: [u8; 2] = self.take(2, section)?.try_into().expect("fixed size");
+        Ok(u16::from_be_bytes(bytes))
     }
 
     fn byte(&mut self, section: EvidenceSection) -> Result<u8, RevisionLocalError> {
@@ -3232,6 +3486,25 @@ mod tests {
             .unwrap();
             assert_eq!(verified.result, expected);
             assert_eq!(verified.bad_frame, bad_frame);
+            let encoded = encode_direct_answer_certificate(&certificate).unwrap();
+            let decoded = decode_direct_answer_certificate(&encoded).unwrap();
+            assert_eq!(decoded, certificate);
+            assert_eq!(
+                verify_direct_answer(
+                    WIDE_LEFT_COMPONENT,
+                    FINAL_RIGHT_COMPONENT,
+                    interface.as_bytes(),
+                    &decoded,
+                )
+                .unwrap()
+                .result,
+                expected
+            );
+            if horizon == 1 {
+                for length in 0..encoded.len() {
+                    assert!(decode_direct_answer_certificate(&encoded[..length]).is_err());
+                }
+            }
         }
     }
 
