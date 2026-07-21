@@ -73,6 +73,7 @@ pub enum UnaryOp {
     Dec,
     Neg,
     Redor,
+    Redand,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,6 +108,10 @@ pub enum NodeKind {
     Uext {
         value: NodeId,
         amount: u32,
+    },
+    Concat {
+        high: NodeId,
+        low: NodeId,
     },
 }
 
@@ -242,6 +247,10 @@ impl Btor2Model {
                         UnaryOp::Dec => value.wrapping_sub(1),
                         UnaryOp::Neg => 0u64.wrapping_sub(value),
                         UnaryOp::Redor => u64::from(value != 0),
+                        UnaryOp::Redand => {
+                            let operand_width = model.nodes[&operand].width;
+                            u64::from(value == width_mask(operand_width))
+                        }
                     }
                 }
                 NodeKind::Binary(operator, left, right) => {
@@ -276,6 +285,12 @@ impl Btor2Model {
                     lower,
                 } => visit(model, value, state, inputs, memo)? >> lower,
                 NodeKind::Uext { value, amount: _ } => visit(model, value, state, inputs, memo)?,
+                NodeKind::Concat { high, low } => {
+                    let high_value = visit(model, high, state, inputs, memo)?;
+                    let low_value = visit(model, low, state, inputs, memo)?;
+                    let low_width = model.nodes[&low].width;
+                    (high_value << low_width) | low_value
+                }
             } & mask;
             memo.insert(id, value);
             Ok(value)
@@ -521,6 +536,10 @@ fn semantic_input_support(
                 stack.push(*left);
                 stack.push(*right);
             }
+            NodeKind::Concat { high, low } => {
+                stack.push(*high);
+                stack.push(*low);
+            }
             NodeKind::Ite(condition, then_value, else_value) => {
                 stack.push(*condition);
                 stack.push(*then_value);
@@ -549,6 +568,7 @@ fn is_constant_expression(nodes: &BTreeMap<NodeId, Node>, root: NodeId) -> bool 
             NodeKind::Binary(_, left, right) => {
                 visit(nodes, *left, memo) && visit(nodes, *right, memo)
             }
+            NodeKind::Concat { high, low } => visit(nodes, *high, memo) && visit(nodes, *low, memo),
             NodeKind::Ite(condition, then_value, else_value) => {
                 visit(nodes, *condition, memo)
                     && visit(nodes, *then_value, memo)
@@ -658,21 +678,28 @@ fn parse_node_kind(
             };
             NodeKind::Unary(operator, operand)
         }
-        "redor" => {
+        "redor" | "redand" => {
             if width != 1 {
                 return Err(ParseError::new(
                     line,
-                    "reduction-or result sort must be bit-vector 1",
+                    "reduction result sort must be bit-vector 1",
                 ));
             }
-            let operand = parse_u64(tokens.next().as_deref(), line, "reduction-or operand")?;
+            let operand = parse_u64(tokens.next().as_deref(), line, "reduction operand")?;
             if !nodes.contains_key(&operand) {
                 return Err(ParseError::new(
                     line,
-                    "unknown or non-prior reduction-or operand",
+                    "unknown or non-prior reduction operand",
                 ));
             }
-            NodeKind::Unary(UnaryOp::Redor, operand)
+            NodeKind::Unary(
+                if operation == "redor" {
+                    UnaryOp::Redor
+                } else {
+                    UnaryOp::Redand
+                },
+                operand,
+            )
         }
         "and" | "or" | "xor" | "add" | "sub" | "mul" => {
             let left = parse_u64(tokens.next().as_deref(), line, "left operand")?;
@@ -762,6 +789,25 @@ fn parse_node_kind(
                 value,
                 amount: amount as u32,
             }
+        }
+        "concat" => {
+            let high = parse_u64(tokens.next().as_deref(), line, "high operand")?;
+            let low = parse_u64(tokens.next().as_deref(), line, "low operand")?;
+            let high_width = nodes
+                .get(&high)
+                .ok_or_else(|| ParseError::new(line, "unknown high concat operand"))?
+                .width;
+            let low_width = nodes
+                .get(&low)
+                .ok_or_else(|| ParseError::new(line, "unknown low concat operand"))?
+                .width;
+            if high_width.checked_add(low_width) != Some(width) {
+                return Err(ParseError::new(
+                    line,
+                    "concat operand widths disagree with result width",
+                ));
+            }
+            NodeKind::Concat { high, low }
         }
         _ => {
             return Err(ParseError::new(
@@ -908,6 +954,43 @@ mod tests {
         assert_eq!(model.nodes()[&7].symbol.as_deref(), Some("any_bit"));
         assert!(parse(&source.replace("7 redor 1", "7 redor 2")).is_err());
         assert!(parse(&source.replace("7 redor 1 3", "7 redor 1 99")).is_err());
+    }
+
+    #[test]
+    fn reduction_and_matches_standard_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 4\n3 state 2 word\n4 zero 2\n5 init 2 3 4\n6 next 2 3 3\n7 redand 1 3 all_bits\n8 bad 7 reduced\n";
+        let model = parse(source).unwrap();
+        assert!(
+            model
+                .active_bad(&BTreeMap::from([(3, 7)]), &BTreeMap::new())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            model
+                .active_bad(&BTreeMap::from([(3, 15)]), &BTreeMap::new())
+                .unwrap(),
+            vec![8]
+        );
+        assert_eq!(model.nodes()[&7].symbol.as_deref(), Some("all_bits"));
+        assert!(parse(&source.replace("7 redand 1", "7 redand 2")).is_err());
+        assert!(parse(&source.replace("7 redand 1 3", "7 redand 1 99")).is_err());
+    }
+
+    #[test]
+    fn concat_matches_standard_high_low_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 3\n3 sort bitvec 5\n4 sort bitvec 8\n5 state 4 word\n6 zero 4\n7 init 4 5 6\n8 next 4 5 5\n9 const 2 101\n10 const 3 10011\n11 concat 4 9 10 joined\n12 consth 4 b3\n13 eq 1 11 12\n14 bad 13 concat_ok\n";
+        let model = parse(source).unwrap();
+        assert_eq!(
+            model
+                .active_bad(&model.initial_state().unwrap(), &BTreeMap::new())
+                .unwrap(),
+            vec![14]
+        );
+        assert_eq!(model.nodes()[&11].symbol.as_deref(), Some("joined"));
+        assert!(parse(&source.replace("11 concat 4 9 10", "11 concat 3 9 10")).is_err());
+        assert!(parse(&source.replace("11 concat 4 9 10", "11 concat 4 99 10")).is_err());
+        assert!(parse(&source.replace("11 concat 4 9 10", "11 concat 4 9 99")).is_err());
     }
 
     #[test]

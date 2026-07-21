@@ -124,6 +124,9 @@ fn validate_model(
             NodeKind::Binary(_, left, right) => {
                 depends_on_input(model, left, memo) || depends_on_input(model, right, memo)
             }
+            NodeKind::Concat { high, low } => {
+                depends_on_input(model, high, memo) || depends_on_input(model, low, memo)
+            }
             NodeKind::Ite(condition, then_value, else_value) => {
                 depends_on_input(model, condition, memo)
                     || depends_on_input(model, then_value, memo)

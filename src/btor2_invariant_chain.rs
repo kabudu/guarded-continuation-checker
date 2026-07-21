@@ -106,6 +106,10 @@ fn dependencies(model: &Btor2Model, root: NodeId) -> BTreeSet<NodeId> {
                 stack.push(left);
                 stack.push(right);
             }
+            NodeKind::Concat { high, low } => {
+                stack.push(high);
+                stack.push(low);
+            }
             NodeKind::Ite(condition, then_value, else_value) => {
                 stack.push(condition);
                 stack.push(then_value);

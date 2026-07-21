@@ -15,3 +15,8 @@ modify the upstream module. It fixes the watchdog in two-stage cascade mode,
 uses small timeout constants to expose boundary behaviour, and presents three
 separately selectable safety properties to the existing AIGER comparison
 toolchain.
+
+`wrapper-predicate-set.sv` preserves the same cascade configuration without a
+bounded frame counter and exposes the three properties through Yosys BTOR2.
+It is GCC-owned instrumentation and does not modify the retained upstream
+module.

@@ -75,3 +75,36 @@ scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
   /tmp/caliptra-wdt.csv \
   /tmp/caliptra-wdt.manifest.txt
 ```
+
+## Predeclared word-level generalisation probe
+
+The next probe exports the same pinned module and fixed cascade configuration
+to canonical BTOR2 without a bounded frame counter. It asks the existing GCC
+predicate-set portfolio to check the three native timeout properties at
+horizons 2, 3, 5, and 1,000,000,000. No Caliptra-specific recogniser or route
+hint is permitted. Existing specialised admission may succeed, ordinary exact
+fallback may answer within its static limits, or the governed portfolio may
+refuse. Every outcome is retained. The probe tests generalisation of the
+word-level backend; it is not part of the completed AIGER baseline.
+
+### Retained word-level result
+
+The unchanged Yosys export first exposed missing support for the standard BTOR2
+`concat` and `redand` operations. GCC now parses, type-checks, evaluates, and
+tracks input support through both operations with explicit malformed-width and
+unknown-operand tests. The canonical model then inspects successfully with 34
+nodes, one semantic input, two states, and three bad properties.
+
+The existing predicate-set portfolio refuses all four frozen queries. Horizons
+2, 3, and 5 reach exact-search fallback, which correctly refuses because the
+asynchronous-reset lowering makes the bad expressions depend on the current
+input. The billion-frame query reaches the existing search-horizon refusal
+first. Search certificate v1 records transition inputs but no distinct input
+for evaluating the terminal bad frame. Broadening v1 would therefore change
+witness semantics and is prohibited by the compatibility policy.
+
+The result is retained in
+[`caliptra-wdt-word-probe-v1.csv`](../results/caliptra-wdt-word-probe-v1.csv).
+The next candidate is an additive search certificate v2 with an explicit
+terminal-frame input and complete two-valued bad checks for every SAFE layer.
+V1 decoding and verification must remain unchanged.

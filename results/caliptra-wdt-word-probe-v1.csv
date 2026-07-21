@@ -1,0 +1,5 @@
+schema_version,horizon,properties,portfolio_status,reason,model_deterministic,status
+1,2,23+26+30,refused,input-dependent-bad-property,true,retained-negative
+1,3,23+26+30,refused,input-dependent-bad-property,true,retained-negative
+1,5,23+26+30,refused,input-dependent-bad-property,true,retained-negative
+1,1000000000,23+26+30,refused,search-horizon-limit,true,retained-negative

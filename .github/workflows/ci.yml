@@ -74,6 +74,8 @@ jobs:
         run: |
           shellcheck -s bash scripts/build-opentitan-aon-watchdog-btor2.sh
           shellcheck -s bash \
+            scripts/build-caliptra-wdt-btor2-v1.sh \
+            scripts/run-caliptra-wdt-word-probe-v1.sh \
             scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
             scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
@@ -116,6 +118,12 @@ jobs:
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
+          scripts/run-caliptra-wdt-word-probe-v1.sh \
+            target/debug/guarded-continuation-checker \
+            "$(command -v yosys)" \
+            /tmp/caliptra-wdt-word-probe-v1.csv
+          diff -u results/caliptra-wdt-word-probe-v1.csv \
+            /tmp/caliptra-wdt-word-probe-v1.csv
       - name: Check retained certified evidence
         run: |
           shellcheck -s bash scripts/check-certified-evidence-retained-v1.sh
