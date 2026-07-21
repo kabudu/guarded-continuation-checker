@@ -670,3 +670,25 @@ This work identifies a useful specialized knowledge-compilation regime:
 3. many partial-assignment queries require complete witnesses.
 
 It is not a general SAT breakthrough and makes no P-versus-NP claim.
+
+## Invariant-chained public timer predicates
+
+The pinned OpenTitan dual-timer follow-up moves beyond sharing predicates over
+one counter. Predicate-set v3 first proves the prescaler remains zero, uses that
+fact to simplify the guarded wake-up counter, and combines it with the direct
+watchdog counter. One source-bound artifact preserves bark, wake-up, and bite
+results, including exact earliest bad frames 5, 7, and 9.
+
+Five retained horizons agree with the predeclared boundary table. Artifact size
+grows from 445 bytes at horizon 4 to 472 bytes at horizon 9 and 515 bytes at one
+billion frames. The separate GCC baseline remains unavailable for the
+input-dependent wake-up property, so this cycle makes no compression or speed
+claim against separate evidence. It establishes that exact invariant chaining
+can expand the admitted public RTL structure without hiding mixed results or
+weakening refusal semantics.
+
+This is still a narrow post-reset model with one shared reset input. A valid
+same-width cross-coupled near-neighbour is rejected, but maintained solver
+agreement beyond pinned BTOR2Tools witness replay, hosted resource gates, and
+focused prior-art review remain open. No
+broad novelty claim follows from this result.

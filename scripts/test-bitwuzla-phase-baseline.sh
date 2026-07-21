@@ -46,5 +46,14 @@ check_result sat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h1
 check_result sat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h1000000000-bite-unsafe.smt2
 check_result unsat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-scale-h1000000000-safe.smt2
 
+dual_actual=$($bitwuzla --lang smt2 -t 10000 -M 512 \
+  corpus/rtl/opentitan-aon-timer/baselines/dual-timer-boundaries.smt2)
+dual_expected=$(printf 'unsat\nsat\nunsat\nsat\nunsat\nsat')
+if [ "$dual_actual" != "$dual_expected" ]; then
+  echo "Bitwuzla dual-timer boundaries disagreed" >&2
+  printf 'expected:\n%s\nactual:\n%s\n' "$dual_expected" "$dual_actual" >&2
+  exit 1
+fi
+
 version=$($bitwuzla --version)
 printf 'bitwuzla_phase_baseline=PASS version=%s\n' "$version"

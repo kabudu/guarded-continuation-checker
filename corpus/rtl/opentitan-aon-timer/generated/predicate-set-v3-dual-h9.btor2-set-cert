@@ -1,0 +1,16 @@
+predicate_set_certificate_version=3
+route=invariant_chained_regions
+source_sha256=1fb74ecf07eaeac782f3a9131456f97992b0fa72f3c273310d4f4fec8fe6e57f
+query_horizon=9
+input=2
+logical_reachable_states=55
+invariant_count=1
+invariant=16:12:0
+recurrence_count=2
+recurrence=6:32:0:0:1:none:9
+recurrence=23:64:0:0:1:16:9
+member_count=3
+member=33:6:ugte:9:UNSAFE:9:advance_prefix
+member=37:6:ugte:5:UNSAFE:5:advance_prefix
+member=41:23:ugte:7:UNSAFE:7:advance_prefix
+status=complete

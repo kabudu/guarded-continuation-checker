@@ -381,15 +381,19 @@ three-platform downstream APIs, RustSec audit, the full retained workflow, and
 reproducible packaging. A frozen first-release compatibility fingerprint,
 external operator acceptance, and expert novelty review remain open.
 
-The next OpenTitan dual-timer probe expands the same pinned core from one live
+The OpenTitan dual-timer probe expands the same pinned core from one live
 timer path to wake-up and watchdog operation together. It adds exact parser
 support for Yosys reduction-or and freezes a post-reset three-state model with
-bad frames 5, 7, and 9. The current portfolio refuses the complete query because
-the wake-up recurrence depends on a separately proved prescaler invariant. This
-is a pre-implementation control and does not close a production-readiness row.
-The follow-up must add independently checked invariant chaining, exact fallback
-or refusal, resource bounds, hostile controls, maintained baselines, and hosted
-reproduction before the broader public-core mechanism can be reassessed.
+bad frames 5, 7, and 9. Predicate-set v3 now reconstructs the prescaler
+invariant and both timer recurrences, then emits deterministic artifacts for
+horizons 4, 5, 7, 9, and one billion. Local regeneration, exact frames, retained
+v1/v2 compatibility, ten hostile controls, and every h9 truncation pass. The
+separate baseline is explicitly unavailable, not counted as a win. Pinned
+official BTOR2Tools locally parses the model and replays isolated witnesses at
+all three exact bad boundaries. Maintained SMT agreement, Linux resource enforcement,
+three-platform downstream APIs, and hosted
+reproduction remain open, so this does not yet close a production-readiness
+row.
 
 ## Post-production-release deliverables
 

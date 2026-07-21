@@ -1,7 +1,8 @@
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
-    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase,
-    btor2_predicate_set, btor2_region, btor2_search, composed_witness, controller_mtbdd,
+    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain, btor2_motion,
+    btor2_phase, btor2_predicate_set, btor2_region, btor2_search, composed_witness,
+    controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
@@ -28147,16 +28148,20 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "btor2_predicate_set_cli_version={} certificate_versions={},{} portfolio_versions={},{} current_certificate_version={} current_portfolio_version={} max_members={} max_horizon={} max_certificate_bytes={} property_order=strictly-increasing",
+                "btor2_predicate_set_cli_version={} certificate_versions={},{},{} portfolio_versions={},{},{} current_certificate_version={} current_portfolio_version={} max_members={} max_chain_states={} max_horizon={} max_source_bytes={} max_certificate_bytes={} property_order=strictly-increasing",
                 btor2_predicate_set::PREDICATE_SET_CLI_VERSION,
                 btor2_predicate_set::PREDICATE_SET_CERTIFICATE_V1_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_V2_VERSION,
                 btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
                 btor2_predicate_set::PREDICATE_SET_PORTFOLIO_V1_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_V2_VERSION,
                 btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
                 btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
                 btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
                 btor2_predicate_set::MAX_PREDICATE_SET_MEMBERS,
+                btor2_invariant_chain::MAX_CHAIN_STATES,
                 btor2_region::MAX_REGION_HORIZON,
+                btor2::MAX_BTOR2_BYTES,
                 btor2_predicate_set::MAX_PREDICATE_SET_CERTIFICATE_BYTES,
             );
             Ok(true)

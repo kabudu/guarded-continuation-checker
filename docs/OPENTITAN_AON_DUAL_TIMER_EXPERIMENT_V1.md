@@ -28,7 +28,7 @@ This is a post-reset verification boundary. It is not a claim about an
 arbitrary power-on state, analogue reset behaviour, clock-domain crossing, or
 the complete Earlgrey integration.
 
-Pinned Yosys produces a 60-node text model with one semantic reset input, three
+Pinned Yosys produces a 44-node semantic model with one reset input, three
 states, three bad properties, no constraints, and maximum word width 64. GCC's
 strict parser initially rejected the standard BTOR2 `redor` operation emitted
 for the prescaler zero test. The parser now implements reduction-or with exact
@@ -73,14 +73,51 @@ The follow-up mechanism is accepted only if all of these hold:
    Linux resource controls, and the three-platform Rust API gate pass on the
    exact implementation commit.
 
-## Current boundary
+## Implemented result
 
-After adding `redor`, the model parses and evaluates exactly. The existing
-predicate-set v2 portfolio still refuses the complete query because it admits
-only one-state recurrences and its ordinary search fallback does not support an
-input-dependent bad expression. This is the intended pre-implementation
-control. The next cycle must implement invariant-chained multi-recurrence
-evidence without weakening the complete-query failure contract.
+Predicate-set certificate and portfolio v3 add the statically selected
+`invariant-chained-regions` route. The producer reconstructs the zero
+prescaler invariant, the direct watchdog recurrence, the invariant-guarded
+wake-up recurrence, and each ordered predicate from the source. The verifier
+repeats that reconstruction from the supplied source and compares every claim;
+it does not accept the encoded invariant or recurrence as an axiom.
+
+The retained acceptance run covers five horizons:
+
+| Horizon | Bark | Wake-up | Bite | Certificate bytes |
+| ---: | --- | --- | --- | ---: |
+| 4 | SAFE | SAFE | SAFE | 445 |
+| 5 | UNSAFE at 5 | SAFE | SAFE | 454 |
+| 7 | UNSAFE at 5 | UNSAFE at 7 | SAFE | 463 |
+| 9 | UNSAFE at 5 | UNSAFE at 7 | UNSAFE at 9 | 472 |
+| 1,000,000,000 | UNSAFE at 5 | UNSAFE at 7 | UNSAFE at 9 | 515 |
+
+The billion-frame result is produced without constructing explicit layers and
+only while both admitted additions remain non-wrapping. Existing predicate-set
+v1 and v2 artifacts continue to decode and verify under their original static
+selection contracts. Ten acceptance controls cover query omission, order and
+horizon drift, source, invariant, recurrence, result, frame, witness and route
+mutation, plus every truncation of the h9 artifact.
+
+The committed evidence is
+`results/opentitan-aon-dual-timer-acceptance-v1.csv`, reproduced by
+`scripts/run-opentitan-aon-dual-timer-acceptance.sh`. Separate per-property GCC
+evidence is reported as unavailable because the retained exact backend cannot
+answer the input-dependent wake predicate. That is not counted as a size or
+performance win.
+
+## Remaining boundary
+
+This local result does not yet close the complete experiment. Pinned official
+BTOR2Tools parses the dual model and independently replays isolated zero-reset
+witnesses for the bark, wake-up, and bite boundaries at frames 5, 7, and 9.
+Maintained SMT agreement, Linux resource enforcement,
+three-platform downstream API checks, and hosted reproduction remain required.
+A valid same-width cross-coupled recurrence and an ill-typed cross-coupling are
+both rejected in unit controls. The current verifier reconstructs source
+semantics rather than trusting certificate claims. Official replay checks the
+positive boundaries, but a maintained SMT comparison is still required before
+describing the complete result as independently validated.
 
 Multi-invariant reasoning, cone decomposition, recurrence acceleration,
 multi-property model checking, and compositional certificates all have prior

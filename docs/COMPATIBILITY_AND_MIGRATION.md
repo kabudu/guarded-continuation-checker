@@ -41,14 +41,17 @@ will become part of the first tagged compatibility baseline.
 The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded
 portfolio v3 or any existing certificate decoder. Certificate v2 adds joint
-SAFE and UNSAFE recurrence evidence and becomes the current producer format.
-The decoder and verifier continue to accept retained v1 shared and ordinary
-artifacts under their original v1 routing and member semantics; they are never
-reinterpreted as v2. The original ordered property list and horizon remain
-external verifier inputs in both versions. A future change to ordering,
-routing, witness meaning, or member semantics requires a new major artifact
-version. The first production tag must freeze retained v1 and v2 fingerprints
-before this API can enter the supported window.
+SAFE and UNSAFE recurrence evidence over one recurrence. Certificate v3 adds
+invariant-chained evidence over multiple recurrences and becomes the current
+producer format.
+
+The decoder and verifier continue to accept retained v1 and v2 artifacts under
+their original routing and member semantics; they are never reinterpreted as
+v3. The original ordered property list and horizon remain external verifier
+inputs in every version. A future change to ordering, routing, witness meaning,
+or member semantics requires a new major artifact version. The first production
+tag must freeze retained v1, v2, and v3 fingerprints before this API can enter
+the supported window.
 
 ## First production-line guarantee
 

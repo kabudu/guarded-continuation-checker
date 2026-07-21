@@ -38,8 +38,10 @@ watchdog paths together. Its pinned model contains a direct watchdog recurrence,
 a zero-prescaler invariant, and a wake-up recurrence guarded by that invariant.
 Properties 33, 37, and 41 reach their first bad frames at 9, 5, and 7
 respectively. This is the predeclared public target for GCC's multi-recurrence
-invariant-chaining experiment. The current v2 portfolio refuses the complete
-query rather than treating the guarded wake-up property as a one-state case.
+invariant-chaining experiment. Predicate-set v3 now reconstructs the invariant
+and both recurrences, then preserves all three ordered answers in one
+source-bound artifact. The h9 artifact is 472 bytes; the billion-frame artifact
+is 515 bytes. The earlier v2 refusal remains documented as the negative control.
 
 Run the self-service acceptance from the repository root:
 
@@ -57,6 +59,10 @@ scripts/run-opentitan-aon-predicate-set-acceptance.sh \
   /tmp/opentitan-aon-predicate-set.csv
 scripts/build-opentitan-aon-dual-timer-btor2.sh \
   "$(command -v yosys)" /tmp/opentitan-aon-dual-timer.btor2
+scripts/run-opentitan-aon-dual-timer-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  "$(command -v yosys)" \
+  /tmp/opentitan-aon-dual-timer.csv
 ```
 
 The build intentionally refuses a different source digest, a different Yosys
@@ -64,8 +70,9 @@ revision, symlink output directories, and overwrites. The acceptance script
 reproduces all four watchdog models and the current plus compatibility
 certificates byte for byte, independently verifies each certificate, and runs
 source, recogniser, overwrite, invalid-observation, output-path, query-binding,
-member-integrity, and publication hostile controls. The separate dual-timer
-builder currently reproduces its pre-implementation model probe.
+member-integrity, and publication hostile controls. The dual-timer acceptance
+adds five v3 boundary cases, two retained compatibility artifacts, ten hostile
+controls, and complete truncation rejection.
 
 This is evidence for a bounded mechanism exercised on real public RTL. It is not
 a verification of the complete OpenTitan AON timer, the Earlgrey product, its

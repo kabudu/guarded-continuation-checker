@@ -31,6 +31,7 @@ opentitan_small=corpus/rtl/opentitan-aon-timer/generated/watchdog-small.btor2
 opentitan_scale=corpus/rtl/opentitan-aon-timer/generated/watchdog-scale.btor2
 opentitan_predicate_set_small=corpus/rtl/opentitan-aon-timer/generated/watchdog-predicate-set-small.btor2
 opentitan_predicate_set_scale=corpus/rtl/opentitan-aon-timer/generated/watchdog-predicate-set-scale.btor2
+opentitan_dual_timer=corpus/rtl/opentitan-aon-timer/generated/dual-timer-predicate-set.btor2
 certificate=${TMPDIR:-/tmp}/gcc-btor2-phase-$$.cert
 actuator_witness=${TMPDIR:-/tmp}/gcc-btor2-actuator-$$.witness
 saturating_witness=${TMPDIR:-/tmp}/gcc-btor2-saturating-$$.witness
@@ -40,7 +41,9 @@ semi_implicit_witness=${TMPDIR:-/tmp}/gcc-btor2-semi-implicit-$$.witness
 braking_witness=${TMPDIR:-/tmp}/gcc-btor2-braking-$$.witness
 semi_implicit_braking_witness=${TMPDIR:-/tmp}/gcc-btor2-semi-implicit-braking-$$.witness
 motor_stop_witness=${TMPDIR:-/tmp}/gcc-btor2-motor-stop-$$.witness
-trap 'rm -f "$certificate" "$actuator_witness" "$saturating_witness" "$motion_witness" "$servo_witness" "$semi_implicit_witness" "$braking_witness" "$semi_implicit_braking_witness" "$motor_stop_witness"' EXIT HUP INT TERM
+dual_variant=${TMPDIR:-/tmp}/gcc-btor2-dual-$$.btor2
+dual_witness=${TMPDIR:-/tmp}/gcc-btor2-dual-$$.witness
+trap 'rm -f "$certificate" "$actuator_witness" "$saturating_witness" "$motion_witness" "$servo_witness" "$semi_implicit_witness" "$braking_witness" "$semi_implicit_braking_witness" "$motor_stop_witness" "$dual_variant" "$dual_witness"' EXIT HUP INT TERM
 
 write_zero_input_witness() {
   output=$1
@@ -88,6 +91,7 @@ printf '%s\n' "$inspection" | grep -q ' word_semantics=preserved$'
 "$btor2tools_bin_dir/catbtor" "$opentitan_scale" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$opentitan_predicate_set_small" >/dev/null
 "$btor2tools_bin_dir/catbtor" "$opentitan_predicate_set_scale" >/dev/null
+"$btor2tools_bin_dir/catbtor" "$opentitan_dual_timer" >/dev/null
 "$btor2tools_bin_dir/btorsim" -c "$model" "$witness"
 write_zero_input_witness "$actuator_witness" 201 home
 write_zero_input_witness "$saturating_witness" 255 reset
@@ -105,6 +109,15 @@ write_zero_input_witness "$semi_implicit_braking_witness" 128 reset
 "$btor2tools_bin_dir/btorsim" -c "$semi_implicit_braking" "$semi_implicit_braking_witness"
 write_zero_input_witness "$motor_stop_witness" 160 reset
 "$btor2tools_bin_dir/btorsim" -c "$motor_stop" "$motor_stop_witness"
+for boundary in 37:5 41:7 33:9; do
+  property=${boundary%:*}
+  frame=${boundary#*:}
+  awk -v property="$property" '$2 != "bad" || $1 == property' \
+    "$opentitan_dual_timer" >"$dual_variant"
+  "$btor2tools_bin_dir/catbtor" "$dual_variant" >/dev/null
+  write_zero_input_witness "$dual_witness" "$frame" reset
+  "$btor2tools_bin_dir/btorsim" -c "$dual_variant" "$dual_witness"
+done
 
 "$gcc_binary" certify-btor2-counter-phase "$model" 13 \
   1:2,0:1000000003 "$certificate"

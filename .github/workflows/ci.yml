@@ -68,6 +68,7 @@ jobs:
             scripts/run-opentitan-aon-watchdog-acceptance.sh \
             scripts/run-opentitan-aon-predicate-set-acceptance.sh \
             scripts/run-opentitan-aon-dual-timer-probe.sh \
+            scripts/run-opentitan-aon-dual-timer-acceptance.sh \
             scripts/run-btor2-search-cohort.sh \
             scripts/run-btor2-region-cohort.sh \
             scripts/run-btor2-motion-cohort.sh \
@@ -363,6 +364,14 @@ jobs:
             /tmp/opentitan-aon-dual-timer-probe.csv
           diff -u results/opentitan-aon-dual-timer-probe-v1.csv \
             /tmp/opentitan-aon-dual-timer-probe.csv
+      - name: Reproduce OpenTitan AON dual-timer predicate-set v3 acceptance
+        run: |
+          scripts/run-opentitan-aon-dual-timer-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-dual-timer-acceptance.csv
+          diff -u results/opentitan-aon-dual-timer-acceptance-v1.csv \
+            /tmp/opentitan-aon-dual-timer-acceptance.csv
       - name: Compare proof profile with maintained formal workflow
         env:
           TRIALS: 1

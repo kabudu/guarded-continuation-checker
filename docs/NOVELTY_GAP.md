@@ -475,3 +475,19 @@ not a novelty claim. A credible next claim still requires compact proof
 composition across multiple interacting dense predicates or separately changing
 public controller and plant contracts, plus equivalent-scope maintained-tool
 and prior-art comparisons.
+
+## Invariant-chained OpenTitan timer predicates
+
+Predicate-set v3 demonstrates a more specific composition contract: a proved
+state invariant simplifies one recurrence while a second recurrence remains
+direct, and one deterministic certificate preserves mixed results across both
+cones. This is stronger mechanism evidence than the single-counter predicate
+set, but invariant generation, recurrence acceleration, cone decomposition,
+and multi-property model checking are established fields.
+
+No novelty row closes. The candidate distinction is the exact combination of
+source-reconstructed invariant chaining, ordered earliest-frame claims,
+static downgrade detection, and complete-query fail-closed behaviour in a
+compact portable artifact. A focused closest-prior-art search, maintained-tool
+comparison at identical scope, and independent expert review are still required
+before even that narrow combination can be described as novel.

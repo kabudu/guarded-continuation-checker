@@ -1,15 +1,17 @@
 //! Proof-carrying batches of bounded BTOR2 predicates over one recurrence.
 
 use crate::btor2::NodeId;
-use crate::{btor2_bounded, btor2_region, btor2_search};
+use crate::{btor2_bounded, btor2_invariant_chain, btor2_region, btor2_search};
 use std::error::Error;
 use std::fmt;
 
 pub const PREDICATE_SET_CERTIFICATE_V1_VERSION: u32 = 1;
 pub const PREDICATE_SET_PORTFOLIO_V1_VERSION: u32 = 1;
-pub const PREDICATE_SET_CERTIFICATE_VERSION: u32 = 2;
-pub const PREDICATE_SET_PORTFOLIO_VERSION: u32 = 2;
-pub const PREDICATE_SET_CLI_VERSION: u32 = 2;
+pub const PREDICATE_SET_CERTIFICATE_V2_VERSION: u32 = 2;
+pub const PREDICATE_SET_PORTFOLIO_V2_VERSION: u32 = 2;
+pub const PREDICATE_SET_CERTIFICATE_VERSION: u32 = 3;
+pub const PREDICATE_SET_PORTFOLIO_VERSION: u32 = 3;
+pub const PREDICATE_SET_CLI_VERSION: u32 = 3;
 pub const MAX_PREDICATE_SET_MEMBERS: usize = 64;
 pub const MAX_PREDICATE_SET_CERTIFICATE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -62,6 +64,45 @@ pub struct SharedExactRegionCertificate {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvariantPredicateClaim {
+    pub state: NodeId,
+    pub width: u32,
+    pub value: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChainedRecurrenceClaim {
+    pub state: NodeId,
+    pub width: u32,
+    pub initial: u64,
+    pub reset: u64,
+    pub delta: u64,
+    pub guard_invariant: Option<NodeId>,
+    pub max_index: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvariantChainedMember {
+    pub bad_property: NodeId,
+    pub recurrence_state: NodeId,
+    pub predicate: btor2_region::RegionPredicate,
+    pub predicate_literal: u64,
+    pub result: btor2_search::SearchResult,
+    pub bad_frame: Option<u32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvariantChainedRegionCertificate {
+    pub source_sha256: String,
+    pub query_horizon: u32,
+    pub input: NodeId,
+    pub invariants: Vec<InvariantPredicateClaim>,
+    pub recurrences: Vec<ChainedRecurrenceClaim>,
+    pub members: Vec<InvariantChainedMember>,
+    pub logical_reachable_states: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OrdinaryPredicateSetCertificate {
     pub query_horizon: u32,
     pub members: Vec<btor2_bounded::BoundedCertificate>,
@@ -75,12 +116,15 @@ pub enum PredicateSetCertificate {
     Ordinary(OrdinaryPredicateSetCertificate),
     SharedExactRegion(SharedExactRegionCertificate),
     OrdinaryV2(OrdinaryPredicateSetCertificate),
+    InvariantChainedRegions(InvariantChainedRegionCertificate),
+    OrdinaryV3(OrdinaryPredicateSetCertificate),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PredicateSetRoute {
     SharedRegion,
     SharedExactRegion,
+    InvariantChainedRegions,
     OrdinaryExact,
 }
 
@@ -89,6 +133,7 @@ impl PredicateSetRoute {
         match self {
             Self::SharedRegion => "shared-region",
             Self::SharedExactRegion => "shared-exact-region",
+            Self::InvariantChainedRegions => "invariant-chained-regions",
             Self::OrdinaryExact => "ordinary-exact",
         }
     }
@@ -99,6 +144,7 @@ pub enum PredicateSetSelectionReason {
     SharedEvidenceSmaller,
     SingletonUnsupportedOrIntersecting,
     SharedExactRecurrence,
+    InvariantChainedRecurrences,
     SingletonOrUnsupportedExact,
 }
 
@@ -108,6 +154,7 @@ impl PredicateSetSelectionReason {
             Self::SharedEvidenceSmaller => "shared-evidence-smaller",
             Self::SingletonUnsupportedOrIntersecting => "singleton-unsupported-or-intersecting",
             Self::SharedExactRecurrence => "shared-exact-recurrence",
+            Self::InvariantChainedRecurrences => "invariant-chained-recurrences",
             Self::SingletonOrUnsupportedExact => "singleton-or-unsupported-exact",
         }
     }
@@ -158,8 +205,10 @@ pub fn certificate_version(certificate: &PredicateSetCertificate) -> u32 {
             PREDICATE_SET_CERTIFICATE_V1_VERSION
         }
         PredicateSetCertificate::SharedExactRegion(_) | PredicateSetCertificate::OrdinaryV2(_) => {
-            PREDICATE_SET_CERTIFICATE_VERSION
+            PREDICATE_SET_CERTIFICATE_V2_VERSION
         }
+        PredicateSetCertificate::InvariantChainedRegions(_)
+        | PredicateSetCertificate::OrdinaryV3(_) => PREDICATE_SET_CERTIFICATE_VERSION,
     }
 }
 
@@ -169,8 +218,10 @@ pub fn portfolio_version(certificate: &PredicateSetCertificate) -> u32 {
             PREDICATE_SET_PORTFOLIO_V1_VERSION
         }
         PredicateSetCertificate::SharedExactRegion(_) | PredicateSetCertificate::OrdinaryV2(_) => {
-            PREDICATE_SET_PORTFOLIO_VERSION
+            PREDICATE_SET_PORTFOLIO_V2_VERSION
         }
+        PredicateSetCertificate::InvariantChainedRegions(_)
+        | PredicateSetCertificate::OrdinaryV3(_) => PREDICATE_SET_PORTFOLIO_VERSION,
     }
 }
 
@@ -309,6 +360,58 @@ fn shared_exact_candidate(
     Ok(Some(shared))
 }
 
+fn invariant_chain_candidate(
+    source: &[u8],
+    properties: &[NodeId],
+    horizon: u32,
+) -> Result<Option<InvariantChainedRegionCertificate>, PredicateSetError> {
+    let Some(analysis) = btor2_invariant_chain::analyse(source, properties, horizon)
+        .map_err(|error| reject(format!("invariant-chain backend error: {error}")))?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(InvariantChainedRegionCertificate {
+        source_sha256: analysis.source_sha256,
+        query_horizon: analysis.query_horizon,
+        input: analysis.input,
+        invariants: analysis
+            .invariants
+            .into_iter()
+            .map(|claim| InvariantPredicateClaim {
+                state: claim.state,
+                width: claim.width,
+                value: claim.value,
+            })
+            .collect(),
+        recurrences: analysis
+            .recurrences
+            .into_iter()
+            .map(|claim| ChainedRecurrenceClaim {
+                state: claim.state,
+                width: claim.width,
+                initial: claim.initial,
+                reset: claim.reset,
+                delta: claim.delta,
+                guard_invariant: claim.guard_invariant,
+                max_index: claim.max_index,
+            })
+            .collect(),
+        members: analysis
+            .members
+            .into_iter()
+            .map(|member| InvariantChainedMember {
+                bad_property: member.bad_property,
+                recurrence_state: member.recurrence_state,
+                predicate: member.predicate,
+                predicate_literal: member.predicate_literal,
+                result: member.result,
+                bad_frame: member.bad_frame,
+            })
+            .collect(),
+        logical_reachable_states: analysis.logical_reachable_states,
+    }))
+}
+
 pub fn produce(
     source: &[u8],
     properties: &[NodeId],
@@ -318,6 +421,12 @@ pub fn produce(
         return Err(reject(
             "predicate set must contain 1..=64 strictly increasing property identifiers",
         ));
+    }
+    if let Some(certificate) = invariant_chain_candidate(source, properties, horizon)? {
+        return Ok(PredicateSetProduction {
+            certificate: PredicateSetCertificate::InvariantChainedRegions(certificate),
+            selection_reason: PredicateSetSelectionReason::InvariantChainedRecurrences,
+        });
     }
     if let Some(certificate) = shared_exact_candidate(source, properties, horizon)? {
         return Ok(PredicateSetProduction {
@@ -333,7 +442,7 @@ pub fn produce(
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(PredicateSetProduction {
-        certificate: PredicateSetCertificate::OrdinaryV2(OrdinaryPredicateSetCertificate {
+        certificate: PredicateSetCertificate::OrdinaryV3(OrdinaryPredicateSetCertificate {
             query_horizon: horizon,
             members,
         }),
@@ -392,6 +501,51 @@ fn exact_region_analysis(
                 bad_frame: member.bad_frame,
             })
             .collect(),
+    }
+}
+
+fn invariant_chain_analysis(
+    certificate: &InvariantChainedRegionCertificate,
+) -> btor2_invariant_chain::ChainAnalysis {
+    btor2_invariant_chain::ChainAnalysis {
+        source_sha256: certificate.source_sha256.clone(),
+        query_horizon: certificate.query_horizon,
+        input: certificate.input,
+        invariants: certificate
+            .invariants
+            .iter()
+            .map(|claim| btor2_invariant_chain::InvariantClaim {
+                state: claim.state,
+                width: claim.width,
+                value: claim.value,
+            })
+            .collect(),
+        recurrences: certificate
+            .recurrences
+            .iter()
+            .map(|claim| btor2_invariant_chain::RecurrenceClaim {
+                state: claim.state,
+                width: claim.width,
+                initial: claim.initial,
+                reset: claim.reset,
+                delta: claim.delta,
+                guard_invariant: claim.guard_invariant,
+                max_index: claim.max_index,
+            })
+            .collect(),
+        members: certificate
+            .members
+            .iter()
+            .map(|member| btor2_invariant_chain::MemberClaim {
+                bad_property: member.bad_property,
+                recurrence_state: member.recurrence_state,
+                predicate: member.predicate,
+                predicate_literal: member.predicate_literal,
+                result: member.result,
+                bad_frame: member.bad_frame,
+            })
+            .collect(),
+        logical_reachable_states: certificate.logical_reachable_states,
     }
 }
 
@@ -533,6 +687,49 @@ pub fn verify(
                 logical_reachable_states: region_summary.logical_reachable_states,
             })
         }
+        PredicateSetCertificate::InvariantChainedRegions(chained) => {
+            if chained.query_horizon != horizon
+                || chained.members.len() != properties.len()
+                || chained
+                    .members
+                    .iter()
+                    .map(|member| member.bad_property)
+                    .ne(properties.iter().copied())
+            {
+                return Err(reject(
+                    "invariant-chained certificate query binding mismatch",
+                ));
+            }
+            btor2_invariant_chain::verify(
+                source,
+                properties,
+                horizon,
+                &invariant_chain_analysis(chained),
+            )
+            .map_err(|error| reject(format!("invariant-chain verification failed: {error}")))?;
+            let safe = chained
+                .members
+                .iter()
+                .filter(|member| member.result == btor2_search::SearchResult::Safe)
+                .count();
+            Ok(PredicateSetSummary {
+                route: PredicateSetRoute::InvariantChainedRegions,
+                query_horizon: horizon,
+                members: chained
+                    .members
+                    .iter()
+                    .map(|member| PredicateSetMemberSummary {
+                        bad_property: member.bad_property,
+                        backend: btor2_bounded::BoundedBackend::WordRegion,
+                        result: member.result,
+                        bad_frame: member.bad_frame,
+                    })
+                    .collect(),
+                safe,
+                unsafe_count: chained.members.len() - safe,
+                logical_reachable_states: chained.logical_reachable_states,
+            })
+        }
         PredicateSetCertificate::Ordinary(ordinary) => {
             if ordinary.query_horizon != horizon || ordinary.members.len() != properties.len() {
                 return Err(reject("ordinary certificate query binding mismatch"));
@@ -551,6 +748,19 @@ pub fn verify(
             if shared_exact_candidate(source, properties, horizon)?.is_some() {
                 return Err(reject(
                     "ordinary v2 certificate violates static selection gate",
+                ));
+            }
+            verify_ordinary_members(source, properties, horizon, ordinary)
+        }
+        PredicateSetCertificate::OrdinaryV3(ordinary) => {
+            if ordinary.query_horizon != horizon || ordinary.members.len() != properties.len() {
+                return Err(reject("ordinary v3 certificate query binding mismatch"));
+            }
+            if invariant_chain_candidate(source, properties, horizon)?.is_some()
+                || shared_exact_candidate(source, properties, horizon)?.is_some()
+            {
+                return Err(reject(
+                    "ordinary v3 certificate violates static selection gate",
                 ));
             }
             verify_ordinary_members(source, properties, horizon, ordinary)
@@ -649,7 +859,7 @@ fn encode_shared_exact(
         .saturation
         .map_or_else(|| "none".to_string(), |value| value.to_string());
     let mut text = format!(
-        "predicate_set_certificate_version={PREDICATE_SET_CERTIFICATE_VERSION}\nroute=shared_exact_region\nsource_sha256={}\nquery_horizon={}\ninput={}\nstate={}\nwidth={}\nfamily={}\ninitial={}\nreset={}\ndelta={}\nsaturation={saturation}\nmax_index={}\nmember_count={}\n",
+        "predicate_set_certificate_version={PREDICATE_SET_CERTIFICATE_V2_VERSION}\nroute=shared_exact_region\nsource_sha256={}\nquery_horizon={}\ninput={}\nstate={}\nwidth={}\nfamily={}\ninitial={}\nreset={}\ndelta={}\nsaturation={saturation}\nmax_index={}\nmember_count={}\n",
         certificate.source_sha256,
         certificate.query_horizon,
         certificate.input,
@@ -673,6 +883,92 @@ fn encode_shared_exact(
         text.push_str(&format!(
             "member={}:{}:{}:{result}:{frame}:{witness}\n",
             member.bad_property,
+            predicate_name(member.predicate),
+            member.predicate_literal
+        ));
+    }
+    text.push_str("status=complete\n");
+    if text.len() > MAX_PREDICATE_SET_CERTIFICATE_BYTES {
+        return Err(reject("predicate-set certificate exceeds byte limit"));
+    }
+    Ok(text)
+}
+
+fn encode_invariant_chain(
+    certificate: &InvariantChainedRegionCertificate,
+) -> Result<String, PredicateSetError> {
+    if !valid_digest(&certificate.source_sha256)
+        || certificate.invariants.is_empty()
+        || certificate.invariants.len() > btor2_invariant_chain::MAX_CHAIN_STATES
+        || certificate.recurrences.len() < 2
+        || certificate.recurrences.len() > btor2_invariant_chain::MAX_CHAIN_STATES
+        || !(2..=MAX_PREDICATE_SET_MEMBERS).contains(&certificate.members.len())
+        || !certificate
+            .invariants
+            .windows(2)
+            .all(|pair| pair[0].state < pair[1].state)
+        || !certificate
+            .recurrences
+            .windows(2)
+            .all(|pair| pair[0].state < pair[1].state)
+        || !certificate
+            .members
+            .windows(2)
+            .all(|pair| pair[0].bad_property < pair[1].bad_property)
+        || certificate
+            .members
+            .iter()
+            .any(|member| match member.result {
+                btor2_search::SearchResult::Safe => member.bad_frame.is_some(),
+                btor2_search::SearchResult::Unsafe => member
+                    .bad_frame
+                    .is_none_or(|frame| frame > certificate.query_horizon),
+            })
+    {
+        return Err(reject(
+            "invariant-chained predicate-set certificate is not canonical",
+        ));
+    }
+    let mut text = format!(
+        "predicate_set_certificate_version={PREDICATE_SET_CERTIFICATE_VERSION}\nroute=invariant_chained_regions\nsource_sha256={}\nquery_horizon={}\ninput={}\nlogical_reachable_states={}\ninvariant_count={}\n",
+        certificate.source_sha256,
+        certificate.query_horizon,
+        certificate.input,
+        certificate.logical_reachable_states,
+        certificate.invariants.len(),
+    );
+    for claim in &certificate.invariants {
+        text.push_str(&format!(
+            "invariant={}:{}:{}\n",
+            claim.state, claim.width, claim.value
+        ));
+    }
+    text.push_str(&format!(
+        "recurrence_count={}\n",
+        certificate.recurrences.len()
+    ));
+    for claim in &certificate.recurrences {
+        let guard = claim
+            .guard_invariant
+            .map_or_else(|| "none".to_string(), |invariant| invariant.to_string());
+        text.push_str(&format!(
+            "recurrence={}:{}:{}:{}:{}:{guard}:{}\n",
+            claim.state, claim.width, claim.initial, claim.reset, claim.delta, claim.max_index
+        ));
+    }
+    text.push_str(&format!("member_count={}\n", certificate.members.len()));
+    for member in &certificate.members {
+        let (result, frame, witness) = match (member.result, member.bad_frame) {
+            (btor2_search::SearchResult::Safe, None) => ("SAFE", "none".to_string(), "none"),
+            (btor2_search::SearchResult::Unsafe, Some(frame)) => {
+                ("UNSAFE", frame.to_string(), "advance_prefix")
+            }
+            _ => unreachable!("member shape checked above"),
+        };
+        text.push_str(&format!(
+            "member={}:{}:{}:{}:{result}:{frame}:{witness}\n",
+            member.bad_property,
+            member.recurrence_state,
             predicate_name(member.predicate),
             member.predicate_literal
         ));
@@ -755,6 +1051,12 @@ pub fn encode(certificate: &PredicateSetCertificate) -> Result<String, Predicate
         }
         PredicateSetCertificate::SharedExactRegion(shared) => encode_shared_exact(shared),
         PredicateSetCertificate::OrdinaryV2(ordinary) => {
+            encode_ordinary(ordinary, PREDICATE_SET_CERTIFICATE_V2_VERSION)
+        }
+        PredicateSetCertificate::InvariantChainedRegions(chained) => {
+            encode_invariant_chain(chained)
+        }
+        PredicateSetCertificate::OrdinaryV3(ordinary) => {
             encode_ordinary(ordinary, PREDICATE_SET_CERTIFICATE_VERSION)
         }
     }
@@ -803,177 +1105,287 @@ pub fn decode(bytes: &[u8]) -> Result<PredicateSetCertificate, PredicateSetError
     )?;
     if ![
         PREDICATE_SET_CERTIFICATE_V1_VERSION,
+        PREDICATE_SET_CERTIFICATE_V2_VERSION,
         PREDICATE_SET_CERTIFICATE_VERSION,
     ]
     .contains(&version)
     {
         return Err(reject("unsupported predicate-set certificate version"));
     }
-    let certificate =
-        match take(&mut lines, "route")? {
-            "shared_region" if version == PREDICATE_SET_CERTIFICATE_V1_VERSION => {
-                let source_sha256 = take(&mut lines, "source_sha256")?.to_string();
-                if !valid_digest(&source_sha256) {
-                    return Err(reject("shared source digest is not canonical"));
-                }
-                let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
-                let input = number(take(&mut lines, "input")?, "input")?;
-                let state = number(take(&mut lines, "state")?, "state")?;
-                let width = number(take(&mut lines, "width")?, "width")?;
-                let family = match take(&mut lines, "family")? {
-                    "reset_add" => btor2_region::RegionFamily::ResetAdd,
-                    "reset_saturating_add" => btor2_region::RegionFamily::ResetSaturatingAdd,
-                    _ => return Err(reject("unknown shared recurrence family")),
-                };
-                let initial = number(take(&mut lines, "initial")?, "initial")?;
-                let reset = number(take(&mut lines, "reset")?, "reset")?;
-                let delta = number(take(&mut lines, "delta")?, "delta")?;
-                let saturation = match take(&mut lines, "saturation")? {
-                    "none" => None,
-                    value => Some(number(value, "saturation")?),
-                };
-                let max_index = number(take(&mut lines, "max_index")?, "max index")?;
-                let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
-                if !(2..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
-                    return Err(reject("shared member count is outside limit"));
-                }
-                let mut members = Vec::with_capacity(count);
-                for _ in 0..count {
-                    let fields = take(&mut lines, "member")?.split(':').collect::<Vec<_>>();
-                    if fields.len() != 3 {
-                        return Err(reject("shared member field is malformed"));
-                    }
-                    members.push(PredicateMember {
-                        bad_property: number(fields[0], "bad property")?,
-                        predicate: match fields[1] {
-                            "eq" => btor2_region::RegionPredicate::Equal,
-                            "ugte" => btor2_region::RegionPredicate::UnsignedGreaterEqual,
-                            _ => return Err(reject("unknown shared predicate")),
-                        },
-                        predicate_literal: number(fields[2], "predicate literal")?,
-                    });
-                }
-                if take(&mut lines, "result")? != "SAFE" {
-                    return Err(reject("shared result must be SAFE"));
-                }
-                PredicateSetCertificate::SharedRegion(SharedRegionCertificate {
-                    source_sha256,
-                    query_horizon,
-                    input,
-                    state,
-                    width,
-                    family,
-                    initial,
-                    reset,
-                    delta,
-                    saturation,
-                    max_index,
-                    members,
-                })
+    let certificate = match take(&mut lines, "route")? {
+        "shared_region" if version == PREDICATE_SET_CERTIFICATE_V1_VERSION => {
+            let source_sha256 = take(&mut lines, "source_sha256")?.to_string();
+            if !valid_digest(&source_sha256) {
+                return Err(reject("shared source digest is not canonical"));
             }
-            "shared_exact_region" if version == PREDICATE_SET_CERTIFICATE_VERSION => {
-                let source_sha256 = take(&mut lines, "source_sha256")?.to_string();
-                if !valid_digest(&source_sha256) {
-                    return Err(reject("shared exact source digest is not canonical"));
+            let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
+            let input = number(take(&mut lines, "input")?, "input")?;
+            let state = number(take(&mut lines, "state")?, "state")?;
+            let width = number(take(&mut lines, "width")?, "width")?;
+            let family = match take(&mut lines, "family")? {
+                "reset_add" => btor2_region::RegionFamily::ResetAdd,
+                "reset_saturating_add" => btor2_region::RegionFamily::ResetSaturatingAdd,
+                _ => return Err(reject("unknown shared recurrence family")),
+            };
+            let initial = number(take(&mut lines, "initial")?, "initial")?;
+            let reset = number(take(&mut lines, "reset")?, "reset")?;
+            let delta = number(take(&mut lines, "delta")?, "delta")?;
+            let saturation = match take(&mut lines, "saturation")? {
+                "none" => None,
+                value => Some(number(value, "saturation")?),
+            };
+            let max_index = number(take(&mut lines, "max_index")?, "max index")?;
+            let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
+            if !(2..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
+                return Err(reject("shared member count is outside limit"));
+            }
+            let mut members = Vec::with_capacity(count);
+            for _ in 0..count {
+                let fields = take(&mut lines, "member")?.split(':').collect::<Vec<_>>();
+                if fields.len() != 3 {
+                    return Err(reject("shared member field is malformed"));
                 }
-                let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
-                let input = number(take(&mut lines, "input")?, "input")?;
-                let state = number(take(&mut lines, "state")?, "state")?;
-                let width = number(take(&mut lines, "width")?, "width")?;
-                let family = match take(&mut lines, "family")? {
-                    "reset_add" => btor2_region::RegionFamily::ResetAdd,
-                    "reset_saturating_add" => btor2_region::RegionFamily::ResetSaturatingAdd,
-                    _ => return Err(reject("unknown shared exact recurrence family")),
+                members.push(PredicateMember {
+                    bad_property: number(fields[0], "bad property")?,
+                    predicate: match fields[1] {
+                        "eq" => btor2_region::RegionPredicate::Equal,
+                        "ugte" => btor2_region::RegionPredicate::UnsignedGreaterEqual,
+                        _ => return Err(reject("unknown shared predicate")),
+                    },
+                    predicate_literal: number(fields[2], "predicate literal")?,
+                });
+            }
+            if take(&mut lines, "result")? != "SAFE" {
+                return Err(reject("shared result must be SAFE"));
+            }
+            PredicateSetCertificate::SharedRegion(SharedRegionCertificate {
+                source_sha256,
+                query_horizon,
+                input,
+                state,
+                width,
+                family,
+                initial,
+                reset,
+                delta,
+                saturation,
+                max_index,
+                members,
+            })
+        }
+        "shared_exact_region" if version == PREDICATE_SET_CERTIFICATE_V2_VERSION => {
+            let source_sha256 = take(&mut lines, "source_sha256")?.to_string();
+            if !valid_digest(&source_sha256) {
+                return Err(reject("shared exact source digest is not canonical"));
+            }
+            let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
+            let input = number(take(&mut lines, "input")?, "input")?;
+            let state = number(take(&mut lines, "state")?, "state")?;
+            let width = number(take(&mut lines, "width")?, "width")?;
+            let family = match take(&mut lines, "family")? {
+                "reset_add" => btor2_region::RegionFamily::ResetAdd,
+                "reset_saturating_add" => btor2_region::RegionFamily::ResetSaturatingAdd,
+                _ => return Err(reject("unknown shared exact recurrence family")),
+            };
+            let initial = number(take(&mut lines, "initial")?, "initial")?;
+            let reset = number(take(&mut lines, "reset")?, "reset")?;
+            let delta = number(take(&mut lines, "delta")?, "delta")?;
+            let saturation = match take(&mut lines, "saturation")? {
+                "none" => None,
+                value => Some(number(value, "saturation")?),
+            };
+            let max_index = number(take(&mut lines, "max_index")?, "max index")?;
+            let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
+            if !(2..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
+                return Err(reject("shared exact member count is outside limit"));
+            }
+            let mut members = Vec::with_capacity(count);
+            for _ in 0..count {
+                let fields = take(&mut lines, "member")?.split(':').collect::<Vec<_>>();
+                if fields.len() != 6 {
+                    return Err(reject("shared exact member field is malformed"));
+                }
+                let result = match fields[3] {
+                    "SAFE" => btor2_search::SearchResult::Safe,
+                    "UNSAFE" => btor2_search::SearchResult::Unsafe,
+                    _ => return Err(reject("unknown shared exact member result")),
                 };
-                let initial = number(take(&mut lines, "initial")?, "initial")?;
-                let reset = number(take(&mut lines, "reset")?, "reset")?;
-                let delta = number(take(&mut lines, "delta")?, "delta")?;
-                let saturation = match take(&mut lines, "saturation")? {
+                let bad_frame = match fields[4] {
                     "none" => None,
-                    value => Some(number(value, "saturation")?),
+                    value => Some(number(value, "bad frame")?),
                 };
-                let max_index = number(take(&mut lines, "max_index")?, "max index")?;
-                let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
-                if !(2..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
-                    return Err(reject("shared exact member count is outside limit"));
+                let expected_witness = match result {
+                    btor2_search::SearchResult::Safe => "none",
+                    btor2_search::SearchResult::Unsafe => "advance_prefix",
+                };
+                if fields[5] != expected_witness {
+                    return Err(reject("shared exact witness kind is invalid"));
                 }
-                let mut members = Vec::with_capacity(count);
-                for _ in 0..count {
-                    let fields = take(&mut lines, "member")?.split(':').collect::<Vec<_>>();
-                    if fields.len() != 6 {
-                        return Err(reject("shared exact member field is malformed"));
-                    }
-                    let result = match fields[3] {
-                        "SAFE" => btor2_search::SearchResult::Safe,
-                        "UNSAFE" => btor2_search::SearchResult::Unsafe,
-                        _ => return Err(reject("unknown shared exact member result")),
-                    };
-                    let bad_frame = match fields[4] {
+                members.push(ExactPredicateMember {
+                    bad_property: number(fields[0], "bad property")?,
+                    predicate: match fields[1] {
+                        "eq" => btor2_region::RegionPredicate::Equal,
+                        "ugte" => btor2_region::RegionPredicate::UnsignedGreaterEqual,
+                        _ => return Err(reject("unknown shared exact predicate")),
+                    },
+                    predicate_literal: number(fields[2], "predicate literal")?,
+                    result,
+                    bad_frame,
+                });
+            }
+            PredicateSetCertificate::SharedExactRegion(SharedExactRegionCertificate {
+                source_sha256,
+                query_horizon,
+                input,
+                state,
+                width,
+                family,
+                initial,
+                reset,
+                delta,
+                saturation,
+                max_index,
+                members,
+            })
+        }
+        "invariant_chained_regions" if version == PREDICATE_SET_CERTIFICATE_VERSION => {
+            let source_sha256 = take(&mut lines, "source_sha256")?.to_string();
+            if !valid_digest(&source_sha256) {
+                return Err(reject("invariant-chain source digest is not canonical"));
+            }
+            let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
+            let input = number(take(&mut lines, "input")?, "input")?;
+            let logical_reachable_states = number(
+                take(&mut lines, "logical_reachable_states")?,
+                "logical reachable states",
+            )?;
+            let invariant_count: usize =
+                number(take(&mut lines, "invariant_count")?, "invariant count")?;
+            if !(1..=btor2_invariant_chain::MAX_CHAIN_STATES).contains(&invariant_count) {
+                return Err(reject("invariant count is outside limit"));
+            }
+            let mut invariants = Vec::with_capacity(invariant_count);
+            for _ in 0..invariant_count {
+                let fields = take(&mut lines, "invariant")?
+                    .split(':')
+                    .collect::<Vec<_>>();
+                if fields.len() != 3 {
+                    return Err(reject("invariant claim is malformed"));
+                }
+                invariants.push(InvariantPredicateClaim {
+                    state: number(fields[0], "invariant state")?,
+                    width: number(fields[1], "invariant width")?,
+                    value: number(fields[2], "invariant value")?,
+                });
+            }
+            let recurrence_count: usize =
+                number(take(&mut lines, "recurrence_count")?, "recurrence count")?;
+            if !(2..=btor2_invariant_chain::MAX_CHAIN_STATES).contains(&recurrence_count) {
+                return Err(reject("recurrence count is outside limit"));
+            }
+            let mut recurrences = Vec::with_capacity(recurrence_count);
+            for _ in 0..recurrence_count {
+                let fields = take(&mut lines, "recurrence")?
+                    .split(':')
+                    .collect::<Vec<_>>();
+                if fields.len() != 7 {
+                    return Err(reject("recurrence claim is malformed"));
+                }
+                recurrences.push(ChainedRecurrenceClaim {
+                    state: number(fields[0], "recurrence state")?,
+                    width: number(fields[1], "recurrence width")?,
+                    initial: number(fields[2], "recurrence initial")?,
+                    reset: number(fields[3], "recurrence reset")?,
+                    delta: number(fields[4], "recurrence delta")?,
+                    guard_invariant: match fields[5] {
                         "none" => None,
-                        value => Some(number(value, "bad frame")?),
-                    };
-                    let expected_witness = match result {
-                        btor2_search::SearchResult::Safe => "none",
-                        btor2_search::SearchResult::Unsafe => "advance_prefix",
-                    };
-                    if fields[5] != expected_witness {
-                        return Err(reject("shared exact witness kind is invalid"));
-                    }
-                    members.push(ExactPredicateMember {
-                        bad_property: number(fields[0], "bad property")?,
-                        predicate: match fields[1] {
-                            "eq" => btor2_region::RegionPredicate::Equal,
-                            "ugte" => btor2_region::RegionPredicate::UnsignedGreaterEqual,
-                            _ => return Err(reject("unknown shared exact predicate")),
-                        },
-                        predicate_literal: number(fields[2], "predicate literal")?,
-                        result,
-                        bad_frame,
-                    });
-                }
-                PredicateSetCertificate::SharedExactRegion(SharedExactRegionCertificate {
-                    source_sha256,
-                    query_horizon,
-                    input,
-                    state,
-                    width,
-                    family,
-                    initial,
-                    reset,
-                    delta,
-                    saturation,
-                    max_index,
-                    members,
-                })
+                        value => Some(number(value, "guard invariant")?),
+                    },
+                    max_index: number(fields[6], "recurrence max index")?,
+                });
             }
-            "ordinary_exact" => {
-                let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
-                let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
-                if !(1..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
-                    return Err(reject("ordinary member count is outside limit"));
+            let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
+            if !(2..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
+                return Err(reject("invariant-chain member count is outside limit"));
+            }
+            let mut members = Vec::with_capacity(count);
+            for _ in 0..count {
+                let fields = take(&mut lines, "member")?.split(':').collect::<Vec<_>>();
+                if fields.len() != 7 {
+                    return Err(reject("invariant-chain member is malformed"));
                 }
-                let mut members = Vec::with_capacity(count);
-                for _ in 0..count {
-                    let decoded = hex_decode(take(&mut lines, "certificate_hex")?)?;
-                    if decoded.len() > btor2_search::MAX_SEARCH_CERTIFICATE_BYTES {
-                        return Err(reject("ordinary member certificate exceeds byte limit"));
-                    }
-                    members.push(btor2_bounded::decode(&decoded).map_err(|error| {
-                        reject(format!("ordinary member decode failed: {error}"))
-                    })?);
-                }
-                let ordinary = OrdinaryPredicateSetCertificate {
-                    query_horizon,
-                    members,
+                let result = match fields[4] {
+                    "SAFE" => btor2_search::SearchResult::Safe,
+                    "UNSAFE" => btor2_search::SearchResult::Unsafe,
+                    _ => return Err(reject("unknown invariant-chain member result")),
                 };
-                if version == PREDICATE_SET_CERTIFICATE_V1_VERSION {
-                    PredicateSetCertificate::Ordinary(ordinary)
-                } else {
+                let bad_frame = match fields[5] {
+                    "none" => None,
+                    value => Some(number(value, "bad frame")?),
+                };
+                let expected_witness = match result {
+                    btor2_search::SearchResult::Safe => "none",
+                    btor2_search::SearchResult::Unsafe => "advance_prefix",
+                };
+                if fields[6] != expected_witness {
+                    return Err(reject("invariant-chain witness kind is invalid"));
+                }
+                members.push(InvariantChainedMember {
+                    bad_property: number(fields[0], "bad property")?,
+                    recurrence_state: number(fields[1], "recurrence state")?,
+                    predicate: match fields[2] {
+                        "eq" => btor2_region::RegionPredicate::Equal,
+                        "ugte" => btor2_region::RegionPredicate::UnsignedGreaterEqual,
+                        _ => return Err(reject("unknown invariant-chain predicate")),
+                    },
+                    predicate_literal: number(fields[3], "predicate literal")?,
+                    result,
+                    bad_frame,
+                });
+            }
+            PredicateSetCertificate::InvariantChainedRegions(InvariantChainedRegionCertificate {
+                source_sha256,
+                query_horizon,
+                input,
+                invariants,
+                recurrences,
+                members,
+                logical_reachable_states,
+            })
+        }
+        "ordinary_exact" => {
+            let query_horizon = number(take(&mut lines, "query_horizon")?, "query horizon")?;
+            let count: usize = number(take(&mut lines, "member_count")?, "member count")?;
+            if !(1..=MAX_PREDICATE_SET_MEMBERS).contains(&count) {
+                return Err(reject("ordinary member count is outside limit"));
+            }
+            let mut members = Vec::with_capacity(count);
+            for _ in 0..count {
+                let decoded = hex_decode(take(&mut lines, "certificate_hex")?)?;
+                if decoded.len() > btor2_search::MAX_SEARCH_CERTIFICATE_BYTES {
+                    return Err(reject("ordinary member certificate exceeds byte limit"));
+                }
+                members.push(
+                    btor2_bounded::decode(&decoded).map_err(|error| {
+                        reject(format!("ordinary member decode failed: {error}"))
+                    })?,
+                );
+            }
+            let ordinary = OrdinaryPredicateSetCertificate {
+                query_horizon,
+                members,
+            };
+            match version {
+                PREDICATE_SET_CERTIFICATE_V1_VERSION => PredicateSetCertificate::Ordinary(ordinary),
+                PREDICATE_SET_CERTIFICATE_V2_VERSION => {
                     PredicateSetCertificate::OrdinaryV2(ordinary)
                 }
+                PREDICATE_SET_CERTIFICATE_VERSION => PredicateSetCertificate::OrdinaryV3(ordinary),
+                _ => unreachable!("version checked above"),
             }
-            _ => return Err(reject("unknown predicate-set route")),
-        };
+        }
+        _ => return Err(reject("unknown predicate-set route")),
+    };
     if take(&mut lines, "status")? != "complete" || lines.next().is_some() {
         return Err(reject(
             "predicate-set certificate is incomplete or has trailing fields",
@@ -998,6 +1410,9 @@ mod tests {
     );
     const OPENTITAN_SMALL: &[u8] = include_bytes!(
         "../corpus/rtl/opentitan-aon-timer/generated/watchdog-predicate-set-small.btor2"
+    );
+    const OPENTITAN_DUAL: &[u8] = include_bytes!(
+        "../corpus/rtl/opentitan-aon-timer/generated/dual-timer-predicate-set.btor2"
     );
     const SATURATING_PREDICATES: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 8\n3 input 1 reset\n4 one 2\n5 state 2 count\n6 init 2 5 4\n7 constd 2 5\n8 ugte 1 5 7\n9 constd 2 2\n10 add 2 5 9\n11 ite 2 8 5 10\n12 ite 2 3 4 11\n13 next 2 5 12\n14 eq 1 5 7\n15 bad 14 equal_five\n16 constd 2 6\n17 eq 1 5 16\n18 bad 17 equal_six\n19 constd 2 4\n20 ugte 1 5 19\n21 bad 20 at_least_four\n";
 
@@ -1027,6 +1442,44 @@ mod tests {
         assert_eq!(summary.route, PredicateSetRoute::SharedExactRegion);
         assert_eq!(summary.safe, 2);
         assert_eq!(summary.unsafe_count, 0);
+    }
+
+    #[test]
+    fn invariant_chain_round_trips_and_rejects_every_claim_class() {
+        let properties = [33, 37, 41];
+        let production = produce(OPENTITAN_DUAL, &properties, 9).unwrap();
+        assert_eq!(
+            production.selection_reason,
+            PredicateSetSelectionReason::InvariantChainedRecurrences
+        );
+        let encoded = encode(&production.certificate).unwrap();
+        let decoded = decode(encoded.as_bytes()).unwrap();
+        let summary = verify(OPENTITAN_DUAL, &properties, 9, &decoded).unwrap();
+        assert_eq!(summary.route, PredicateSetRoute::InvariantChainedRegions);
+        assert_eq!((summary.safe, summary.unsafe_count), (0, 3));
+        assert_eq!(summary.logical_reachable_states, 55);
+
+        for (from, to) in [
+            ("query_horizon=9", "query_horizon=8"),
+            ("invariant=16:12:0", "invariant=16:12:1"),
+            (
+                "recurrence=6:32:0:0:1:none:9",
+                "recurrence=6:32:0:0:2:none:9",
+            ),
+            (
+                "member=33:6:ugte:9:UNSAFE:9:advance_prefix",
+                "member=33:6:ugte:8:UNSAFE:9:advance_prefix",
+            ),
+            ("logical_reachable_states=55", "logical_reachable_states=54"),
+        ] {
+            let hostile = encoded.replacen(from, to, 1);
+            if let Ok(certificate) = decode(hostile.as_bytes()) {
+                assert!(verify(OPENTITAN_DUAL, &properties, 9, &certificate).is_err())
+            }
+        }
+        for length in 0..encoded.len() {
+            assert!(decode(&encoded.as_bytes()[..length]).is_err());
+        }
     }
 
     #[test]
@@ -1121,8 +1574,10 @@ mod tests {
     fn verifies_retained_v1_shared_and_mixed_artifacts() {
         assert_eq!(PREDICATE_SET_CERTIFICATE_V1_VERSION, 1);
         assert_eq!(PREDICATE_SET_PORTFOLIO_V1_VERSION, 1);
-        assert_eq!(PREDICATE_SET_CERTIFICATE_VERSION, 2);
-        assert_eq!(PREDICATE_SET_PORTFOLIO_VERSION, 2);
+        assert_eq!(PREDICATE_SET_CERTIFICATE_V2_VERSION, 2);
+        assert_eq!(PREDICATE_SET_PORTFOLIO_V2_VERSION, 2);
+        assert_eq!(PREDICATE_SET_CERTIFICATE_VERSION, 3);
+        assert_eq!(PREDICATE_SET_PORTFOLIO_VERSION, 3);
         let shared = decode(V1_SHARED).unwrap();
         assert_eq!(certificate_version(&shared), 1);
         assert_eq!(
@@ -1176,7 +1631,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_member_routes_the_complete_query_to_exact_v2_fallback() {
+    fn unsupported_member_routes_the_complete_query_to_exact_v3_fallback() {
         let unsupported = std::str::from_utf8(TWO_PREDICATES)
             .unwrap()
             .replace("12 ugte", "12 ult");
@@ -1187,7 +1642,7 @@ mod tests {
         );
         assert!(matches!(
             production.certificate,
-            PredicateSetCertificate::OrdinaryV2(_)
+            PredicateSetCertificate::OrdinaryV3(_)
         ));
         let summary = verify(
             unsupported.as_bytes(),
