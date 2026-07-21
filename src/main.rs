@@ -28147,8 +28147,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "btor2_predicate_set_cli_version={} certificate_version={} portfolio_version={} max_members={} max_horizon={} max_certificate_bytes={} property_order=strictly-increasing",
+                "btor2_predicate_set_cli_version={} certificate_versions={},{} portfolio_versions={},{} current_certificate_version={} current_portfolio_version={} max_members={} max_horizon={} max_certificate_bytes={} property_order=strictly-increasing",
                 btor2_predicate_set::PREDICATE_SET_CLI_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_V1_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_V1_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
                 btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
                 btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
                 btor2_predicate_set::MAX_PREDICATE_SET_MEMBERS,
@@ -28197,8 +28201,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .collect::<Vec<_>>()
                 .join(",");
             println!(
-                "btor2-predicate-set status=CREATED portfolio_version={} route={} reason={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
-                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                "btor2-predicate-set status=CREATED certificate_version={} portfolio_version={} route={} reason={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
+                btor2_predicate_set::certificate_version(&certificate),
+                btor2_predicate_set::portfolio_version(&certificate),
                 summary.route.as_str(),
                 reason.as_str(),
                 summary.query_horizon,
@@ -28252,8 +28257,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .collect::<Vec<_>>()
                 .join(",");
             println!(
-                "btor2-predicate-set status=VERIFIED portfolio_version={} route={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
-                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                "btor2-predicate-set status=VERIFIED certificate_version={} portfolio_version={} route={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
+                btor2_predicate_set::certificate_version(&certificate),
+                btor2_predicate_set::portfolio_version(&certificate),
                 summary.route.as_str(),
                 summary.query_horizon,
                 summary.members.len(),
@@ -41291,7 +41297,7 @@ mod tests {
         assert!(
             fs::read_to_string(&certificate)
                 .unwrap()
-                .starts_with("predicate_set_certificate_version=1\nroute=shared_region\n")
+                .starts_with("predicate_set_certificate_version=2\nroute=shared_exact_region\n")
         );
         assert!(
             run_artifact_cli(&check)

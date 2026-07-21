@@ -352,7 +352,7 @@ jobs:
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             /tmp/yosys-attestation/build/yosys \
             /tmp/opentitan-aon-predicate-set-acceptance.csv
-          diff -u results/opentitan-aon-predicate-set-acceptance-v1.csv \
+          diff -u results/opentitan-aon-predicate-set-acceptance-v2.csv \
             /tmp/opentitan-aon-predicate-set-acceptance.csv
       - name: Compare proof profile with maintained formal workflow
         env:

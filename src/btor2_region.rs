@@ -70,6 +70,37 @@ struct Shape {
     saturation: Option<u64>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExactRegionResult {
+    Safe,
+    Unsafe,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExactRegionMember {
+    pub bad_property: NodeId,
+    pub predicate: RegionPredicate,
+    pub predicate_literal: u64,
+    pub result: ExactRegionResult,
+    pub bad_frame: Option<u32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExactRegionAnalysis {
+    pub source_sha256: String,
+    pub query_horizon: u32,
+    pub input: NodeId,
+    pub state: NodeId,
+    pub width: u32,
+    pub family: RegionFamily,
+    pub initial: u64,
+    pub reset: u64,
+    pub delta: u64,
+    pub saturation: Option<u64>,
+    pub max_index: u64,
+    pub members: Vec<ExactRegionMember>,
+}
+
 fn reject(message: impl Into<String>) -> RegionError {
     RegionError(message.into())
 }
@@ -392,6 +423,83 @@ fn predicate_is_disjoint(
     }
 }
 
+fn predicate_first_bad_frame(
+    shape: Shape,
+    predicate: RegionPredicate,
+    literal: u64,
+    max_index: u64,
+) -> Option<u32> {
+    let index = match predicate {
+        RegionPredicate::Equal => {
+            let distance = literal.checked_sub(shape.reset)?;
+            distance
+                .is_multiple_of(shape.delta)
+                .then_some(distance / shape.delta)?
+        }
+        RegionPredicate::UnsignedGreaterEqual => {
+            let distance = literal.saturating_sub(shape.reset);
+            distance.div_ceil(shape.delta)
+        }
+    };
+    (index <= max_index)
+        .then(|| u32::try_from(index).ok())
+        .flatten()
+}
+
+pub(crate) fn try_analyse_exact_set(
+    source: &[u8],
+    bad_properties: &[NodeId],
+    horizon: u32,
+) -> Result<Option<ExactRegionAnalysis>, RegionError> {
+    if horizon > MAX_REGION_HORIZON {
+        return Err(reject("region query horizon exceeds limit"));
+    }
+    if bad_properties.is_empty() || bad_properties.len() > MAX_REGION_SET_MEMBERS {
+        return Err(reject("region property-set member count is outside limit"));
+    }
+    let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
+    let Some(shape) = recognise_shape(&model) else {
+        return Ok(None);
+    };
+    let Some(max_index) = max_index(shape, horizon) else {
+        return Ok(None);
+    };
+    let mut members = Vec::with_capacity(bad_properties.len());
+    for bad_property in bad_properties {
+        let Some((predicate, predicate_literal)) =
+            recognise_predicate(&model, *bad_property, shape.state)
+        else {
+            return Ok(None);
+        };
+        let bad_frame = predicate_first_bad_frame(shape, predicate, predicate_literal, max_index);
+        members.push(ExactRegionMember {
+            bad_property: *bad_property,
+            predicate,
+            predicate_literal,
+            result: if bad_frame.is_some() {
+                ExactRegionResult::Unsafe
+            } else {
+                ExactRegionResult::Safe
+            },
+            bad_frame,
+        });
+    }
+    Ok(Some(ExactRegionAnalysis {
+        source_sha256: digest(source),
+        query_horizon: horizon,
+        input: shape.input,
+        state: shape.state,
+        width: shape.width,
+        family: shape.family,
+        initial: shape.initial,
+        reset: shape.reset,
+        delta: shape.delta,
+        saturation: shape.saturation,
+        max_index,
+        members,
+    }))
+}
+
 /// Produces a compressed exact SAFE certificate when the source is in the
 /// admitted recurrence language and the selected bad set is disjoint.
 /// `Ok(None)` means that the exact fallback must answer the original query.
@@ -523,6 +631,90 @@ pub fn verify_set(
     .ok_or_else(|| reject("logical reachable-state count overflowed"))?;
     Ok(RegionSummary {
         query_horizon: first.query_horizon,
+        max_index: expected_max,
+        logical_reachable_states,
+    })
+}
+
+pub(crate) fn verify_exact_set(
+    source: &[u8],
+    analysis: &ExactRegionAnalysis,
+) -> Result<RegionSummary, RegionError> {
+    if analysis.members.len() < 2 || analysis.members.len() > MAX_REGION_SET_MEMBERS {
+        return Err(reject("exact region member count is outside limit"));
+    }
+    if analysis.source_sha256 != digest(source) {
+        return Err(reject("exact region source digest mismatch"));
+    }
+    if analysis.query_horizon > MAX_REGION_HORIZON {
+        return Err(reject("exact region horizon exceeds limit"));
+    }
+    let model = btor2::parse_bytes(source).map_err(|error| reject(error.to_string()))?;
+    let claimed = |member: &ExactRegionMember| RegionCertificate {
+        source_sha256: analysis.source_sha256.clone(),
+        query_horizon: analysis.query_horizon,
+        bad_property: member.bad_property,
+        input: analysis.input,
+        state: analysis.state,
+        width: analysis.width,
+        family: analysis.family,
+        initial: analysis.initial,
+        reset: analysis.reset,
+        delta: analysis.delta,
+        saturation: analysis.saturation,
+        predicate: member.predicate,
+        predicate_literal: member.predicate_literal,
+        max_index: analysis.max_index,
+    };
+    let first_claim = claimed(&analysis.members[0]);
+    let shape = verify_claimed_shape(&model, &first_claim)?;
+    let expected_max = max_index(shape, analysis.query_horizon)
+        .ok_or_else(|| reject("exact word region would wrap and is not exact"))?;
+    if analysis.max_index != expected_max {
+        return Err(reject("exact region endpoint claim is invalid"));
+    }
+    for member in &analysis.members {
+        let certificate = claimed(member);
+        if verify_claimed_shape(&model, &certificate)? != shape {
+            return Err(reject("exact region member shape disagrees"));
+        }
+        verify_claimed_predicate(&model, &certificate)?;
+        let expected_frame = predicate_first_bad_frame(
+            shape,
+            member.predicate,
+            member.predicate_literal,
+            expected_max,
+        );
+        let expected_result = if expected_frame.is_some() {
+            ExactRegionResult::Unsafe
+        } else {
+            ExactRegionResult::Safe
+        };
+        if member.result != expected_result || member.bad_frame != expected_frame {
+            return Err(reject(
+                "exact region member result or earliest frame is invalid",
+            ));
+        }
+    }
+    let layers = u64::from(analysis.query_horizon) + 1;
+    let saturation_layer = expected_max + 1;
+    let logical_reachable_states = if layers <= saturation_layer {
+        layers
+            .checked_mul(layers + 1)
+            .and_then(|value| value.checked_div(2))
+    } else {
+        saturation_layer
+            .checked_mul(saturation_layer + 1)
+            .and_then(|value| value.checked_div(2))
+            .and_then(|prefix| {
+                (layers - saturation_layer)
+                    .checked_mul(saturation_layer)
+                    .and_then(|tail| prefix.checked_add(tail))
+            })
+    }
+    .ok_or_else(|| reject("logical reachable-state count overflowed"))?;
+    Ok(RegionSummary {
+        query_horizon: analysis.query_horizon,
         max_index: expected_max,
         logical_reachable_states,
     })

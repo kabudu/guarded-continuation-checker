@@ -38,14 +38,17 @@ Callers that need a raw declaration inventory must not infer it from this API.
 The change is covered by external-consumer tests on every hosted platform and
 will become part of the first tagged compatibility baseline.
 
-The predicate-set v1 Rust module and the `check-btor2-predicate-set` and
+The predicate-set Rust module and the `check-btor2-predicate-set` and
 `verify-btor2-predicate-set` commands are additive. They do not alter bounded
-portfolio v3 or any existing certificate decoder. Their certificate and
-portfolio versions start at 1, their original property list and horizon remain
-external verifier inputs, and a future change to ordering, routing, or member
-semantics requires a new major artifact version. The first production tag must
-freeze retained shared and mixed-answer fingerprints before this API can enter
-the supported window.
+portfolio v3 or any existing certificate decoder. Certificate v2 adds joint
+SAFE and UNSAFE recurrence evidence and becomes the current producer format.
+The decoder and verifier continue to accept retained v1 shared and ordinary
+artifacts under their original v1 routing and member semantics; they are never
+reinterpreted as v2. The original ordered property list and horizon remain
+external verifier inputs in both versions. A future change to ordering,
+routing, witness meaning, or member semantics requires a new major artifact
+version. The first production tag must freeze retained v1 and v2 fingerprints
+before this API can enter the supported window.
 
 ## First production-line guarantee
 

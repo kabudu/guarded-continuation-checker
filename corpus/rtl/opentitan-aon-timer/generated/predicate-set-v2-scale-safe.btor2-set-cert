@@ -1,0 +1,17 @@
+predicate_set_certificate_version=2
+route=shared_exact_region
+source_sha256=826979091e8f702e6bacb3f541454006f20d1f1cb1d53f8fbf1dd41a5d420bfe
+query_horizon=1000000000
+input=3
+state=6
+width=32
+family=reset_add
+initial=0
+reset=0
+delta=1
+saturation=none
+max_index=1000000000
+member_count=2
+member=18:ugte:2000000000:SAFE:none:none
+member=22:ugte:4000000000:SAFE:none:none
+status=complete

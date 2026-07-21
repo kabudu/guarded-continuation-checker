@@ -84,32 +84,39 @@ not a systematic or professional patent search.
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
 
-## Shared recurrence predicate-set candidate
+## Shared exact recurrence predicate-set candidate
 
-The predicate-set certificate v1 adds a narrower candidate mechanism on the
-word-level path. It shares one exact source-bound reset-add recurrence claim
-across an ordered set of comparison predicates, admits sharing only when the
-canonical artifact is smaller than separate certificates, reconstructs every
-member through the independent verifier, and rejects a forced ordinary route.
-Mixed SAFE and UNSAFE answers remain exact per-member artifacts.
+Predicate-set certificate v2 extends the narrower candidate mechanism on the
+word-level path. It shares one exact source-bound reset-add or
+reset-saturating-add recurrence claim across an ordered set of comparison
+predicates, represents SAFE and UNSAFE members together, and records an exact
+earliest bad frame plus source-reconstructed `advance_prefix` witness kind for
+each UNSAFE member. The verifier reconstructs the source recurrence, predicate,
+result, frame, route, and complete ordered query. Unsupported batches preserve
+ordinary exact fallback without partial results. Retained v1 artifacts remain
+verifiable under their original rules.
 
 This is not a claim to multi-property model checking. HWMCC introduced a
 multi-property track in 2011, the BTOR2 ecosystem supports multiple bad
 properties, and model checkers routinely share transition exploration.
 Proof-certificate frameworks, Certifaiger, and the FM 2026 composed-witness
-baseline also predate this experiment. The measured 45.8% and 44.8% reductions
-on two OpenTitan watchdog properties are consistent with removing duplicated
-headers and recurrence fields; they do not prove an asymptotic or broad
-algorithmic distinction.
+baseline also predate this experiment. The measured 41.8% joint-SAFE, 30.9%
+mixed, and 41.1% scale reductions on two OpenTitan watchdog properties are
+consistent with removing duplicated headers, recurrence fields, and
+per-property trace structure. They do not prove an asymptotic or broad
+algorithmic distinction. The billion-frame UNSAFE case extends the admitted
+capability beyond the separate explicit-search horizon, but only because the
+same narrow recurrence admits a closed-form earliest frame.
 
 The exact candidate question is whether existing systems already combine all
 of these constraints in one portable contract: caller-bound ordered property
-sets, a single independently reconstructed word-level recurrence claim,
-deterministic encoded-size admission, mixed-answer exact fallback, and forced-
-downgrade rejection. Gate 5 requires a focused implementation and patent
-search for that exact combination. Gate 6 still requires external expert
-review. Until both close, the result is useful product engineering and a
-candidate contribution only.
+sets, a single independently reconstructed word-level recurrence claim, joint
+SAFE and UNSAFE members, compact earliest-bad witness reconstruction,
+deterministic forced-downgrade rejection, complete exact fallback, and retained
+v1 semantics. Gate 5 requires a focused implementation and patent search for
+that exact combination. Gate 6 still requires external expert review. Until
+both close, the result is useful product engineering and a candidate
+contribution only.
 
 Primary starting points are the
 [HWMCC 2011 multi-property track](https://fmv.jku.at/hwmcc11/results.html),

@@ -3,6 +3,10 @@
 Status: experimental additive Rust API and self-service CLI. Not a production
 release.
 
+This page freezes the v1 contract. The current producer emits
+[predicate-set certificate v2](BTOR2_PREDICATE_SET_CERTIFICATE_V2.md), while the
+decoder and verifier retain v1 semantics for compatibility artifacts.
+
 ## Purpose
 
 The predicate-set portfolio answers several bounded safety properties over one

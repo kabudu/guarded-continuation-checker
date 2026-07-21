@@ -33,3 +33,6 @@ changed.
 `wrapper-predicate-set.sv` changes only the test boundary. It connects the
 existing `wdog_intr_o` and `wdog_reset_req_o` signals to two assertions and
 sets explicit bark and bite thresholds. It does not modify the pinned core.
+Predicate-set certificate v2 changes only the proof representation: the same
+generated BTOR2 source and ordered bad-property nodes bind joint SAFE, mixed,
+and joint UNSAFE results to one independently reconstructed recurrence.

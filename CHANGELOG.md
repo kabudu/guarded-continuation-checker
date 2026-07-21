@@ -2,20 +2,24 @@
 
 ## Unreleased
 
-- Add an exact BTOR2 predicate-set portfolio with a canonical source-bound
-  certificate that shares one recurrence claim across 2 to 64 ordered SAFE
-  predicates only when encoded evidence is smaller than separate proofs.
-  Reproduce routing during independent verification, reject omitted,
-  reordered, substituted, or downgraded queries, and preserve mixed answers
-  through the existing exact per-property portfolio. Add stable Rust and
-  no-clobber CLI surfaces, bounded canonical decoding, mutation tests, and a
-  pinned OpenTitan bark-plus-bite workflow. The retained public RTL cases save
-  45.8% and 44.8% certificate bytes at small and billion-frame SAFE bounds; the
-  frame-5 mixed case deliberately records a larger integrity envelope while
-  preserving bark UNSAFE and bite SAFE. Add official BTOR2Tools parsing,
-  maintained Bitwuzla endpoints, deterministic Yosys regeneration, seven
-  hostile controls, and explicit prior-art boundaries. This is a narrow
-  candidate contribution, not an established novelty or production claim.
+- Add an exact BTOR2 predicate-set portfolio with canonical v1 and v2
+  source-bound certificates. Version 2 shares one recurrence claim across 2 to
+  64 ordered SAFE and UNSAFE predicates, carries exact earliest bad frames, and
+  reconstructs compact `advance_prefix` witnesses instead of embedding separate
+  traces. Reproduce routing during independent verification, reject omitted,
+  reordered, substituted, or downgraded queries, and preserve unsupported
+  complete queries through the existing exact per-property portfolio without
+  partial answers. Continue to decode and verify retained v1 artifacts under
+  their original selection rules. Add stable Rust and no-clobber CLI surfaces,
+  bounded canonical decoding, mutation tests, and a pinned OpenTitan
+  bark-plus-bite workflow. The retained public RTL cases reduce certificate
+  bytes by 41.8% for joint SAFE, 30.9% for mixed UNSAFE and SAFE, and 41.1% for
+  the billion-frame scale case. A 384-byte shared artifact also gives exact bad
+  frames 5 and 9 at a billion-frame horizon where the separate bounded search
+  baseline refuses both queries. Add official BTOR2Tools parsing, maintained
+  Bitwuzla endpoints, deterministic Yosys regeneration, nine hostile controls,
+  and explicit prior-art boundaries. This is a narrow candidate contribution,
+  not an established novelty or production claim.
 - Accept standard Yosys BTOR2 observation statements and optional node symbols,
   while exposing only inputs that reach transition, constraint, or bad-property
   semantics. Admit exact Boolean identity wrappers in the independently checked

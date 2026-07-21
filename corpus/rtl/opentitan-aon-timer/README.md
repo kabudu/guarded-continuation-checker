@@ -24,12 +24,14 @@ states.
 
 The separate `wrapper-predicate-set.sv` exposes both the watchdog bark and bite
 outputs as ordered bad properties over the same counter. Its small model uses
-thresholds 5 and 9. Through frame 4, a 324-byte shared recurrence certificate
-proves both SAFE versus 598 bytes separately. At frame 5, bark is UNSAFE and
-bite remains SAFE, so the static portfolio preserves both answers through exact
-fallback. Its scale model uses thresholds 2,000,000,000 and 4,000,000,000 and
-proves both SAFE through frame 1,000,000,000 with a 360-byte shared certificate
-versus 652 bytes separately.
+thresholds 5 and 9. Predicate-set v2 proves both SAFE through frame 4 with a
+348-byte shared exact certificate versus 598 bytes separately. At frame 5, one
+357-byte artifact preserves bark UNSAFE at frame 5 and bite SAFE versus 517
+bytes separately. At a billion-frame horizon, it records exact UNSAFE frames 5
+and 9 in 384 bytes where the separate bounded search refuses both queries. The
+scale model uses thresholds 2,000,000,000 and 4,000,000,000 and proves both SAFE
+through frame 1,000,000,000 with a 384-byte shared exact certificate versus 652
+bytes separately. Retained v1 artifacts remain verification fixtures.
 
 Run the self-service acceptance from the repository root:
 
@@ -49,8 +51,8 @@ scripts/run-opentitan-aon-predicate-set-acceptance.sh \
 
 The build intentionally refuses a different source digest, a different Yosys
 revision, symlink output directories, and overwrites. The acceptance script
-reproduces all four models and all six certificates byte for byte, independently
-verifies each certificate, and runs source, recogniser, overwrite, invalid
+reproduces all four models and the current plus compatibility certificates byte
+for byte, independently verifies each certificate, and runs source, recogniser, overwrite, invalid
 observation, output-path, query-binding, member-integrity, and publication
 hostile controls.
 

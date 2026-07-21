@@ -181,15 +181,19 @@ certificates, then rejects source substitution and recogniser near-neighbours.
 It covers one configured watchdog path, not the complete OpenTitan product, and
 does not establish a novel algorithm or production validity.
 
-The additive [BTOR2 predicate-set certificate v1](docs/BTOR2_PREDICATE_SET_CERTIFICATE_V1.md)
+The additive [BTOR2 predicate-set certificate v2](docs/BTOR2_PREDICATE_SET_CERTIFICATE_V2.md)
 shares one source-bound recurrence claim across the watchdog's bark and bite
-properties. The real OpenTitan path reduces two SAFE certificates from 598 to
-324 bytes at the small boundary and from 652 to 360 bytes at the billion-frame
-scale. A mixed frame-5 case preserves bark UNSAFE and bite SAFE through exact
-per-property fallback, and verification rejects query omission, reordering,
-source drift, member mutation, and forced downgrade. Multi-property model
-checking and certificate composition are established prior art; only the
-narrow combined certificate and portfolio contract is a candidate contribution.
+properties, including mixed SAFE and UNSAFE batches. On the real OpenTitan path,
+it reduces the joint SAFE case from 598 to 348 bytes, the frame-5 mixed case
+from 517 to 357 bytes, and the billion-frame scale case from 652 to 384 bytes.
+On the small model it also proves exact UNSAFE frames 5 and 9 at a billion-frame
+horizon where the separate bounded search baseline refuses the query. The
+verifier reconstructs the recurrence, every result, and every earliest bad
+frame, rejects query drift and forced downgrade, and still verifies retained
+[v1 artifacts](docs/BTOR2_PREDICATE_SET_CERTIFICATE_V1.md) under their original
+rules. Multi-property checking, recurrence reasoning, and certificate
+composition are established prior art; this narrow combined contract remains a
+candidate contribution.
 
 The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
 keeps controller, plant, and synchronous wiring contract as separately hashed

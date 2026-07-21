@@ -42,6 +42,8 @@ check_result unsat corpus/rtl/opentitan-aon-timer/baselines/scale-h1000000000-sa
 check_result unsat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h4-safe.smt2
 check_result sat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h5-bark-unsafe.smt2
 check_result unsat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h5-bite-safe.smt2
+check_result sat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h1000000000-bark-unsafe.smt2
+check_result sat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-small-h1000000000-bite-unsafe.smt2
 check_result unsat corpus/rtl/opentitan-aon-timer/baselines/predicate-set-scale-h1000000000-safe.smt2
 
 version=$($bitwuzla --version)

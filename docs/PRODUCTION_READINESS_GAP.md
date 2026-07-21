@@ -365,18 +365,17 @@ Hosted run 29787171907 reproduces this complete path on exact commit `6f0c4d4`,
 including pinned Linux Yosys, maintained Bitwuzla, official BTOR2Tools, the
 three-platform Rust API matrix, dependency audit, and reproducible packaging.
 
-The predicate-set follow-up adds an additive Rust API and two self-service CLI
-commands for ordered multi-property queries. It shares one recurrence claim
-only under a deterministic encoded-size gate and otherwise preserves every
-property through exact fallback. The pinned OpenTitan bark and bite cases cover
-joint SAFE, mixed UNSAFE and SAFE, and billion-frame joint SAFE results;
-retained artifacts reproduce byte for byte and seven hostile controls fail
-closed. Hosted run 29789357950 reproduces the exact implementation commit on
-Linux, including pinned Yosys, official BTOR2Tools, maintained Bitwuzla,
-three-platform downstream APIs, dependency audit, full retained regressions,
-and reproducible packaging. This closes the narrow multi-property mechanism
-and hosted-reproduction rows. A frozen first-release compatibility fingerprint,
-external operator acceptance, and expert novelty review remain open.
+The predicate-set v2 follow-up keeps the additive Rust API and two self-service
+CLI commands while sharing one exact recurrence across joint SAFE, mixed, and
+joint UNSAFE batches. Each UNSAFE member carries an exact earliest frame and a
+compact source-reconstructed witness kind. Unsupported batches preserve the
+complete query through exact fallback, and any member failure returns no
+partial batch. The pinned OpenTitan cases retain four v2 artifacts, verify three
+v1 compatibility artifacts, compare every available separate baseline, record
+the billion-frame bounded-search refusal explicitly, and exercise nine hostile
+controls. Local reproduction is complete. Hosted reproduction for the exact v2
+commit, a frozen first-release compatibility fingerprint, external operator
+acceptance, and expert novelty review remain open.
 
 ## Post-production-release deliverables
 

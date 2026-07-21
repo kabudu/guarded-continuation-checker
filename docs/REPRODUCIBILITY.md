@@ -901,14 +901,16 @@ scripts/run-opentitan-aon-predicate-set-acceptance.sh \
   target/debug/guarded-continuation-checker \
   /path/to/pinned/yosys \
   /tmp/opentitan-aon-predicate-set-acceptance.csv
-diff -u results/opentitan-aon-predicate-set-acceptance-v1.csv \
+diff -u results/opentitan-aon-predicate-set-acceptance-v2.csv \
   /tmp/opentitan-aon-predicate-set-acceptance.csv
 ```
 
-The script accepts only the pinned OpenTitan source digest and Yosys revision,
-regenerates four BTOR2 files and six certificates byte for byte, independently
-verifies every answer, and runs the single-property plus predicate-set hostile
-controls. The predicate-set report compares shared and separate evidence for
-both SAFE scales and retains the mixed bark-UNSAFE, bite-SAFE exact fallback.
+The scripts accept only the pinned OpenTitan source digest and Yosys revision,
+regenerate four BTOR2 files and the retained certificates byte for byte,
+independently verify every answer, and run the single-property plus
+predicate-set hostile controls. Predicate-set v2 compares shared and separate
+evidence for joint SAFE, mixed, and billion-frame scale cases; records the
+separate bounded-search refusal for the billion-frame UNSAFE case; and verifies
+three retained v1 compatibility artifacts under their original semantics.
 Exact upstream and wrapper boundaries are documented under
 `corpus/rtl/opentitan-aon-timer`.
