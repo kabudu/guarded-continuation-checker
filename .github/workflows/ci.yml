@@ -128,20 +128,6 @@ jobs:
             /tmp/caliptra-wdt-word-probe-v2.csv
           diff -u results/caliptra-wdt-word-probe-v2.csv \
             /tmp/caliptra-wdt-word-probe-v2.csv
-          scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
-            target/debug/guarded-continuation-checker \
-            "$(command -v yosys)" \
-            "$(command -v yosys-smtbmc)" \
-            /tmp/roalogic-plic-gateway-acceptance-v1.csv
-          diff -u results/roalogic-plic-gateway-acceptance-v1.csv \
-            /tmp/roalogic-plic-gateway-acceptance-v1.csv
-          scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
-            target/debug/guarded-continuation-checker \
-            "$(command -v yosys)" \
-            "$(command -v yosys-smtbmc)" \
-            /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
-          diff -u results/roalogic-plic-gateway-constrained-acceptance-v1.csv \
-            /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
       - name: Check retained certified evidence
         run: |
           shellcheck -s bash scripts/check-certified-evidence-retained-v1.sh
@@ -393,6 +379,22 @@ jobs:
             /tmp/opentitan-aon-watchdog-acceptance.csv
           diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
             /tmp/opentitan-aon-watchdog-acceptance.csv
+      - name: Reproduce Roa Logic PLIC search acceptance
+        run: |
+          scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            /tmp/roalogic-plic-gateway-acceptance-v1.csv
+          diff -u results/roalogic-plic-gateway-acceptance-v1.csv \
+            /tmp/roalogic-plic-gateway-acceptance-v1.csv
+          scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
+          diff -u results/roalogic-plic-gateway-constrained-acceptance-v1.csv \
+            /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
       - name: Reproduce OpenTitan AON predicate-set acceptance
         run: |
           scripts/run-opentitan-aon-predicate-set-acceptance.sh \
