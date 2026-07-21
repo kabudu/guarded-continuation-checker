@@ -172,6 +172,42 @@ pub struct RevisionLocalSummary {
     pub certificate_bytes: usize,
 }
 
+pub struct ValidatedLocalArtifact {
+    certificate: LocalRelationCertificate,
+    summary: LocalRelationSummary,
+    encoded: Vec<u8>,
+}
+
+impl ValidatedLocalArtifact {
+    pub fn summary(&self) -> &LocalRelationSummary {
+        &self.summary
+    }
+
+    pub fn source_sha256(&self) -> &[u8; 32] {
+        &self.certificate.source_sha256
+    }
+
+    pub fn encoded(&self) -> &[u8] {
+        &self.encoded
+    }
+
+    fn verified(&self) -> VerifiedLocalRelation<'_> {
+        VerifiedLocalRelation {
+            certificate: &self.certificate,
+            summary: self.summary.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionWorkObservation {
+    pub decoded_local_sections: usize,
+    pub semantically_verified_local_sections: usize,
+    pub reused_local_sections: usize,
+    pub composed_pair_checks: usize,
+    pub final_transition_checks: usize,
+}
+
 pub struct VerifiedLocalRelation<'a> {
     certificate: &'a LocalRelationCertificate,
     summary: LocalRelationSummary,
@@ -1505,6 +1541,84 @@ pub fn verify_revision_local_certificate(
     })
 }
 
+pub fn validate_local_artifact(
+    source: &[u8],
+    encoded: &[u8],
+    section: EvidenceSection,
+) -> Result<ValidatedLocalArtifact, RevisionLocalError> {
+    if !matches!(section, EvidenceSection::Left | EvidenceSection::Right) {
+        return Err(reject(
+            EvidenceSection::Envelope,
+            "local artifact validation requires left or right attribution",
+        ));
+    }
+    let certificate =
+        decode_local_relation_certificate(encoded).map_err(|error| attribute(error, section))?;
+    let summary = verify_local_relation(source, &certificate, section)?;
+    Ok(ValidatedLocalArtifact {
+        certificate,
+        summary,
+        encoded: encoded.to_vec(),
+    })
+}
+
+pub fn verify_revision_with_retained_left(
+    retained_left: &ValidatedLocalArtifact,
+    right_source: &[u8],
+    interface_source: &[u8],
+    certificate: &RevisionLocalCertificate,
+) -> Result<(RevisionLocalSummary, RevisionWorkObservation), RevisionLocalError> {
+    if certificate.left.source_sha256 != *retained_left.source_sha256()
+        || certificate.left.evidence != retained_left.encoded()
+    {
+        return Err(reject(
+            EvidenceSection::Left,
+            "retained left evidence is not byte-identical",
+        ));
+    }
+    if certificate.right.source_sha256 != source_digest(right_source) {
+        return Err(reject(
+            EvidenceSection::Right,
+            "right source binding is invalid",
+        ));
+    }
+    if certificate.interface.source_sha256 != source_digest(interface_source)
+        || certificate.interface.evidence != interface_source
+    {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface source binding is invalid",
+        ));
+    }
+    let right_artifact = validate_local_artifact(
+        right_source,
+        &certificate.right.evidence,
+        EvidenceSection::Right,
+    )?;
+    let left = retained_left.verified();
+    let right = right_artifact.verified();
+    let contract = decode_word_interface_contract(interface_source)?;
+    let composed = compose_verified_local_relations(&left, &right, &contract)?;
+    let answer = decode_bounded_answer_certificate(&certificate.final_evidence)?;
+    let answer_summary = verify_bounded_answer(&left, &right, &contract, &answer)?;
+    let certificate_bytes = encode_revision_local_certificate(certificate)?.len();
+    Ok((
+        RevisionLocalSummary {
+            left: retained_left.summary.clone(),
+            right: right_artifact.summary.clone(),
+            answer: answer_summary.clone(),
+            certificate_bytes,
+        },
+        RevisionWorkObservation {
+            decoded_local_sections: 1,
+            semantically_verified_local_sections: 1,
+            reused_local_sections: 1,
+            composed_pair_checks: composed.pair_checks,
+            final_transition_checks: answer_summary.transition_checks,
+        },
+    ))
+}
+
 fn valid_ids(ids: &[NodeId], maximum: usize) -> bool {
     !ids.is_empty()
         && ids.len() <= maximum
@@ -2024,6 +2138,7 @@ mod tests {
     const WORD_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 ulte 1 3 9\n11 constraint 10\n12 zero 1\n13 bad 12 never\n";
     const RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
     const FINAL_RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    const FINAL_RIGHT_COMPONENT_V2: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
 
     fn fixture() -> RevisionLocalCertificate {
         RevisionLocalCertificate {
@@ -2425,5 +2540,76 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.section, EvidenceSection::Left);
+    }
+
+    #[test]
+    fn changed_right_revision_reuses_validated_left_without_rechecking() {
+        let interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+        })
+        .unwrap();
+        let query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let (previous, _) = produce_revision_local_certificate(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            interface.as_bytes(),
+            &query,
+        )
+        .unwrap();
+        let retained_left = validate_local_artifact(
+            WORD_COMPONENT,
+            &previous.left.evidence,
+            EvidenceSection::Left,
+        )
+        .unwrap();
+        let (next, _) = produce_revision_local_certificate(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT_V2,
+            &[7, 10],
+            interface.as_bytes(),
+            &query,
+        )
+        .unwrap();
+        assert_eq!(previous.left, next.left);
+        assert_ne!(previous.right, next.right);
+        let (summary, work) = verify_revision_with_retained_left(
+            &retained_left,
+            FINAL_RIGHT_COMPONENT_V2,
+            interface.as_bytes(),
+            &next,
+        )
+        .unwrap();
+        assert_eq!(summary.answer.result, BoundedResult::Unsafe);
+        assert_eq!(work.decoded_local_sections, 1);
+        assert_eq!(work.semantically_verified_local_sections, 1);
+        assert_eq!(work.reused_local_sections, 1);
+        assert!(work.composed_pair_checks > 0);
+        assert!(work.final_transition_checks > 0);
+
+        let mut stale = next;
+        stale.left.evidence.push(0);
+        let error = verify_revision_with_retained_left(
+            &retained_left,
+            FINAL_RIGHT_COMPONENT_V2,
+            interface.as_bytes(),
+            &stale,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Left);
+        assert_eq!(
+            error.message,
+            "retained left evidence is not byte-identical"
+        );
     }
 }

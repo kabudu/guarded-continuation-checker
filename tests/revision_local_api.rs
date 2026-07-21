@@ -7,8 +7,9 @@ use guarded_continuation_checker::revision_local::{
     encode_local_relation_certificate, encode_revision_local_certificate,
     encode_word_interface_contract, produce_bounded_answer, produce_local_relation,
     produce_revision_local_certificate, source_digest, unchanged_local_evidence,
-    verify_bounded_answer, verify_local_relation, verify_local_relation_for_composition,
-    verify_revision_local_certificate, verify_source_bindings,
+    validate_local_artifact, verify_bounded_answer, verify_local_relation,
+    verify_local_relation_for_composition, verify_revision_local_certificate,
+    verify_revision_with_retained_left, verify_source_bindings,
 };
 
 #[test]
@@ -154,4 +155,51 @@ fn downstream_client_can_exchange_a_complete_revision_local_envelope() {
     assert_eq!(summary.answer.result, BoundedResult::Unsafe);
     assert_eq!(summary.answer.bad_frame, Some(1));
     assert_eq!(summary.certificate_bytes, bytes.len());
+}
+
+#[test]
+fn downstream_client_can_measure_retained_left_revision_work() {
+    let left_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    let right_v1 = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    let right_v2 = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    let interface = encode_word_interface_contract(&WordInterfaceContract {
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        }],
+    })
+    .unwrap();
+    let query = BoundedQuery {
+        horizon: 1,
+        bad_side: ComponentSide::Right,
+        bad_output: 10,
+    };
+    let (previous, _) = produce_revision_local_certificate(
+        left_source,
+        &[7],
+        right_v1,
+        &[7, 10],
+        interface.as_bytes(),
+        &query,
+    )
+    .unwrap();
+    let retained =
+        validate_local_artifact(left_source, &previous.left.evidence, EvidenceSection::Left)
+            .unwrap();
+    let (next, _) = produce_revision_local_certificate(
+        left_source,
+        &[7],
+        right_v2,
+        &[7, 10],
+        interface.as_bytes(),
+        &query,
+    )
+    .unwrap();
+    let (_, work) =
+        verify_revision_with_retained_left(&retained, right_v2, interface.as_bytes(), &next)
+            .unwrap();
+    assert_eq!(work.decoded_local_sections, 1);
+    assert_eq!(work.semantically_verified_local_sections, 1);
+    assert_eq!(work.reused_local_sections, 1);
 }

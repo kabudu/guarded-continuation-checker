@@ -44,6 +44,17 @@ decodes and semantically verifies both local relations, rebuilds composition,
 and independently checks the final answer. SAFE and UNSAFE queries retain
 byte-identical component and interface sections when only the query changes.
 
+An owned validated-local-artifact API now demonstrates the revision boundary.
+After the left evidence is decoded and semantically verified once, a changed
+right source and certificate can be checked without decoding or semantically
+rechecking the retained left section. The reuse path requires the embedded left
+bytes and source digest to remain identical, validates the changed right side,
+and reports one decoded section, one semantic verification, one retained
+section, interface pair checks, and final transition checks. A right-side
+internal transition revision retains the left bytes and both answers in local
+tests. Whole-process timing, memory, artifact baselines, and public revision
+evidence are still required before the revision-reuse gate passes.
+
 ## Hypothesis
 
 For two source-separated constrained BTOR2 components connected through a
