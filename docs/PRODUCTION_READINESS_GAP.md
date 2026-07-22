@@ -510,6 +510,16 @@ This falsifies a revision-local advantage for this pair and shows that it does
 not contain the required semantic internal-logic change. A new public revision
 cohort with changed reachable semantics is mandatory.
 
+The OpenTitan `prim_count` cohort now closes that semantic-change prerequisite.
+An authentic stable-interface revision changes the bounded answer from SAFE to
+UNSAFE at reset, while GCC reuses and reverifies the unchanged environment
+section and recomputes the counter relation. A separate Yosys plus Z3 oracle
+agrees, and local regeneration is byte-identical. The fixture is currently an
+auditable parameter specialisation rather than a machine-checked translation
+of verbatim upstream SystemVerilog, and the hosted, closest-system, portable,
+compatibility, and independent-review gates remain open. The top-level
+production status therefore does not change yet.
+
 The component parser now admits property-free BTOR2 using explicit projected
 semantic roots. The authentic PLIC cohort no longer adds a false assertion to
 make the component parseable. Local and exact-fallback paths produce and

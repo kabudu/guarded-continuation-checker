@@ -380,6 +380,18 @@ jobs:
             /tmp/opentitan-aon-watchdog-acceptance.csv
           diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
             /tmp/opentitan-aon-watchdog-acceptance.csv
+      - name: Reproduce OpenTitan semantic revision acceptance
+        run: |
+          mkdir /tmp/opentitan-prim-count-revision-v1
+          scripts/run-opentitan-prim-count-revision-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/opentitan-prim-count-revision-v1.csv \
+            /tmp/opentitan-prim-count-revision-amd64-v1.manifest.txt \
+            /tmp/opentitan-prim-count-revision-v1
+          diff -u results/opentitan-prim-count-revision-v1.csv \
+            /tmp/opentitan-prim-count-revision-v1.csv
       - name: Reproduce Caliptra and Roa Logic PLIC search acceptance
         run: |
           cargo build --release --locked \

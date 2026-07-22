@@ -278,6 +278,15 @@ old revision verifies unchanged against the new revision, so the established
 model-level route regenerates zero semantic evidence bytes. A new authentic
 revision pair with changed reachable semantics is required.
 
+The [OpenTitan `prim_count` semantic revision cohort](docs/OPENTITAN_PRIM_COUNT_REVISION_V1.md)
+now supplies that required precondition. Authentic stable-interface commit
+`369cffc8` changes a pinned cross-counter configuration from SAFE to UNSAFE at
+reset. GCC retains and reverifies the unchanged environment evidence while
+recomputing the changed counter relation, and a separate Yosys plus Z3 oracle
+agrees. Verbatim-source frontend equivalence and the same-scope maintained-tool
+comparison remain open, so this is a qualified research result rather than a
+novelty or production-readiness claim.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

@@ -611,3 +611,17 @@ evidence, which is strictly stronger reuse than GCC demonstrates on this pair.
 These revisions change source syntax but not reachable transition semantics,
 so they cannot support a novelty claim. The candidate remains open only for a
 new authentic revision pair with a semantic internal-logic change.
+
+The OpenTitan `prim_count` cohort supplies that missing semantic-change
+precondition. Across authentic stable-interface commit `369cffc8`, a pinned
+two-bit cross-counter configuration changes from SAFE to UNSAFE at reset. GCC
+reuses and semantically reverifies the unchanged environment section, then
+recomputes the changed component exactly. A separate Yosys plus Z3 assertion
+oracle agrees, and two clean runs reproduce byte-identical models,
+certificates, result CSV, and manifest.
+
+This revives the closest-system experiment, not the novelty claim. The current
+fixture is a reviewable parameter specialisation because pinned Yosys cannot
+parse the complete upstream package-based SystemVerilog directly. Verbatim
+source frontend equivalence, an identical-scope maintained-system comparison,
+portable certificate identity, and independent review remain mandatory.
