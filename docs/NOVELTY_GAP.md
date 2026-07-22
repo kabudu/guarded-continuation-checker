@@ -495,8 +495,8 @@ answer but is about 21,306.5 times smaller in model-plus-evidence bytes and uses
 far less peak memory. This strengthens the integrity mechanism while further
 weakening any product-efficiency distinction. GCC is also about 1.63 times
 slower from synthesis through certificate production. Broader prior-art
-comparison, portability, and independent review remain open; no novelty row
-closes.
+comparison and independent review remain open. Three-platform identity passes
+for the frozen certificate fixture, but no novelty row closes.
 
 ## Production-tagged OpenTitan watchdog
 

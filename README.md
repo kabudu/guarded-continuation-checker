@@ -326,8 +326,9 @@ Certifaiger agree on all eight scenario answers, but their complete package is
 about 21,306.5 times smaller. The baseline therefore falsifies current artifact
 efficiency, and its producer/checker jobs also use substantially less peak
 memory. GCC is also about 1.63 times slower from synthesis through production
-on this cohort. Cross-platform identity and larger multi-atom product evidence
-remain open, so this is not yet part of the production support profile.
+on this cohort. A frozen certificate has identical bytes and semantics on
+hosted Linux, macOS, and Windows. Larger multi-atom product evidence remains
+open, so this is not yet part of the production support profile.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

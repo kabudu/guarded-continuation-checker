@@ -529,8 +529,9 @@ mechanism prerequisite. It does not close production readiness: the
 identical-scope maintained baseline agrees semantically but is about 21,306.5
 times smaller and has substantially lower producer and checker peak RSS.
 GCC is also about 1.63 times slower from synthesis through production. Hosted
-three-platform identity, release-build acceptance, and independent review
-remain open.
+Linux, macOS, and Windows now agree on a frozen certificate's bytes and
+semantics. Larger public-subsystem evidence, release-build acceptance, and
+independent review remain open.
 
 The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
 locally. Both cross-revision evidence swaps fail, and the new model needs only

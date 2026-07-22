@@ -73,6 +73,12 @@
   total producer-time slices with a strong negative result. The apparent GCC
   checker-time advantage is not claimed because the maintained checker uses
   eight isolated Docker launches. No novelty claim is made.
+- Freeze an 888-byte revision-impact certificate fixture at SHA-256
+  `63f65c7ee9c8a296af0f2dace3cea9f129f159bc70f2fafb33633f70724b12f0`.
+  Hosted Actions run 29905014426 reproduces the exact bytes, decoding, and all
+  16 independently replayed observations on Linux, macOS, and Windows. This
+  closes the certificate-format portability gate; larger public-subsystem and
+  independent-review gates remain open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

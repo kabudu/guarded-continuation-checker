@@ -4,8 +4,9 @@
 
 Accepted local public-product mechanism evidence with a disconfirming
 maintained baseline. The complete four-transition answer gate passes. Hosted
-portability and independent review remain open, so this is not a production or
-novelty claim.
+format portability passes on a frozen certificate fixture. A larger multi-atom
+public subsystem and independent review remain open, so this is not a
+production or novelty claim.
 
 ## Question
 
@@ -129,5 +130,5 @@ invalidating sets are novel individually. It also does not show a performance
 or artifact-size advantage. The baseline strongly falsifies artifact
 efficiency for the current duplicated-evidence container. A larger multi-atom
 public revision with nontrivial minimal invalidating sets, shared-section
-storage, hosted identity, and independent review remain necessary before any
-narrower distinction can advance.
+storage, larger public-subsystem evidence, and independent review remain
+necessary before any narrower distinction can advance.

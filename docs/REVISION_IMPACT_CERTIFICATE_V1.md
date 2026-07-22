@@ -17,8 +17,9 @@ atomic no-clobber publication. The first public OpenTitan cohort now covers all
 four old and new answer transitions in one deterministic aggregate. Its
 maintained baseline agrees semantically and independently checks every answer,
 while strongly disfavouring GCC on transfer bytes, total producer time, and
-peak RSS. Hosted portability, a larger multi-atom subsystem, and the remaining
-gates are still open.
+peak RSS. A frozen 888-byte certificate now has identical SHA-256 and replayed
+semantics on hosted Linux, macOS, and Windows. A larger multi-atom subsystem
+and the remaining product gates are still open.
 
 The public `RevisionImpactTool` adds a shell-free process boundary with runtime
 deadlines, output limits, file-size limits, process-group containment where
@@ -226,6 +227,9 @@ reordered, malformed, or noncanonical transition lines.
     calibration.
 13. **Portability:** Linux amd64, macOS arm64, and Windows amd64 produce the
     same canonical certificate and logical result.
+    Hosted Actions run 29905014426 closes this gate for the frozen 888-byte
+    fixture with SHA-256
+    `63f65c7ee9c8a296af0f2dace3cea9f129f159bc70f2fafb33633f70724b12f0`.
 
 ## Decision rule
 
