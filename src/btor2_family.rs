@@ -16,8 +16,12 @@ use crate::btor2::{
 };
 
 pub const BTOR2_FAMILY_COMPOSITION_VERSION: u32 = 1;
+pub const BTOR2_FAMILY_ARTIFACT_VERSION: u32 = 1;
 pub const MAX_FAMILY_INSTANCES: usize = 64;
 pub const MAX_FAMILY_ROOTS: usize = 256;
+pub const MAX_FAMILY_BINDINGS: usize = 1024;
+pub const MAX_FAMILY_ARTIFACT_BYTES: usize = 1024 * 1024;
+const ARTIFACT_MAGIC: &[u8; 8] = b"GCCBTF01";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FamilyInputBinding {
@@ -34,6 +38,7 @@ pub struct Btor2FamilyInstance {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2FamilyPolicy {
+    max_artifact_bytes: usize,
     max_instances: usize,
     max_roots_per_component: usize,
     max_expanded_nodes: usize,
@@ -42,12 +47,15 @@ pub struct Btor2FamilyPolicy {
 
 impl Btor2FamilyPolicy {
     pub fn new(
+        max_artifact_bytes: usize,
         max_instances: usize,
         max_roots_per_component: usize,
         max_expanded_nodes: usize,
         max_expanded_bytes: usize,
     ) -> Result<Self, Btor2FamilyError> {
-        if max_instances == 0
+        if max_artifact_bytes == 0
+            || max_artifact_bytes > MAX_FAMILY_ARTIFACT_BYTES
+            || max_instances == 0
             || max_instances > MAX_FAMILY_INSTANCES
             || max_roots_per_component == 0
             || max_roots_per_component > MAX_FAMILY_ROOTS
@@ -59,11 +67,16 @@ impl Btor2FamilyPolicy {
             return Err(reject("BTOR2 family policy is outside static limits"));
         }
         Ok(Self {
+            max_artifact_bytes,
             max_instances,
             max_roots_per_component,
             max_expanded_nodes,
             max_expanded_bytes,
         })
+    }
+
+    pub fn max_artifact_bytes(self) -> usize {
+        self.max_artifact_bytes
     }
 
     pub fn max_instances(self) -> usize {
@@ -86,6 +99,7 @@ impl Btor2FamilyPolicy {
 impl Default for Btor2FamilyPolicy {
     fn default() -> Self {
         Self {
+            max_artifact_bytes: MAX_FAMILY_ARTIFACT_BYTES,
             max_instances: MAX_FAMILY_INSTANCES,
             max_roots_per_component: MAX_FAMILY_ROOTS,
             max_expanded_nodes: MAX_BTOR2_NODES,
@@ -106,6 +120,17 @@ pub struct Btor2FamilyComposition {
     pub expanded_inputs: usize,
     pub expanded_bad_properties: usize,
     pub expanded_model: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2FamilyArtifact {
+    pub version: u32,
+    pub core_sha256: [u8; 32],
+    pub channel_sha256: [u8; 32],
+    pub expanded_sha256: [u8; 32],
+    pub core_roots: Vec<NodeId>,
+    pub channel_roots: Vec<NodeId>,
+    pub instances: Vec<Btor2FamilyInstance>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -520,6 +545,358 @@ pub fn compose_btor2_channel_family(
     })
 }
 
+fn checked_u32(value: usize, label: &str) -> Result<u32, Btor2FamilyError> {
+    u32::try_from(value).map_err(|_| reject(format!("{label} exceeds canonical integer range")))
+}
+
+fn validate_artifact_shape(
+    artifact: &Btor2FamilyArtifact,
+    policy: Btor2FamilyPolicy,
+) -> Result<(), Btor2FamilyError> {
+    if artifact.version != BTOR2_FAMILY_ARTIFACT_VERSION {
+        return Err(reject("BTOR2 family artifact version mismatch"));
+    }
+    if artifact.core_roots.is_empty()
+        || artifact.core_roots.len() > policy.max_roots_per_component
+        || artifact.channel_roots.is_empty()
+        || artifact.channel_roots.len() > policy.max_roots_per_component
+        || artifact.instances.is_empty()
+        || artifact.instances.len() > policy.max_instances
+    {
+        return Err(reject(
+            "BTOR2 family artifact dimensions are outside policy",
+        ));
+    }
+    if artifact
+        .core_roots
+        .windows(2)
+        .chain(artifact.channel_roots.windows(2))
+        .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(reject(
+            "BTOR2 family artifact roots must be unique and strictly ordered",
+        ));
+    }
+    let mut previous: Option<&str> = None;
+    let parameter = artifact.instances[0].parameter_sha256;
+    for instance in &artifact.instances {
+        if !valid_identifier(&instance.identifier)
+            || previous.is_some_and(|value| value >= instance.identifier.as_str())
+            || instance.parameter_sha256 != parameter
+            || instance.input_bindings.len() > MAX_FAMILY_BINDINGS
+        {
+            return Err(reject(
+                "BTOR2 family artifact instance table is non-canonical",
+            ));
+        }
+        previous = Some(&instance.identifier);
+    }
+    Ok(())
+}
+
+/// Produce a compact family artifact and the independently reproducible model.
+pub fn produce_btor2_family_artifact(
+    core_bytes: &[u8],
+    core_roots: &[NodeId],
+    channel_bytes: &[u8],
+    channel_roots: &[NodeId],
+    parameter_bytes: &[u8],
+    instances: &[Btor2FamilyInstance],
+    policy: Btor2FamilyPolicy,
+) -> Result<(Btor2FamilyArtifact, Btor2FamilyComposition), Btor2FamilyError> {
+    let parameter_sha256: [u8; 32] = Sha256::digest(parameter_bytes).into();
+    if instances
+        .iter()
+        .any(|instance| instance.parameter_sha256 != parameter_sha256)
+    {
+        return Err(reject("BTOR2 family parameter digest mismatch"));
+    }
+    let composition = compose_btor2_channel_family(
+        core_bytes,
+        core_roots,
+        channel_bytes,
+        channel_roots,
+        instances,
+        policy,
+    )?;
+    let artifact = Btor2FamilyArtifact {
+        version: BTOR2_FAMILY_ARTIFACT_VERSION,
+        core_sha256: composition.core_sha256,
+        channel_sha256: composition.channel_sha256,
+        expanded_sha256: composition.expanded_sha256,
+        core_roots: core_roots.to_vec(),
+        channel_roots: channel_roots.to_vec(),
+        instances: instances.to_vec(),
+    };
+    validate_artifact_shape(&artifact, policy)?;
+    let _ = encode_btor2_family_artifact(&artifact, policy)?;
+    Ok((artifact, composition))
+}
+
+/// Reconstruct and authenticate a family model from separately supplied bytes.
+pub fn verify_btor2_family_artifact(
+    core_bytes: &[u8],
+    channel_bytes: &[u8],
+    parameter_bytes: &[u8],
+    artifact: &Btor2FamilyArtifact,
+    policy: Btor2FamilyPolicy,
+) -> Result<Btor2FamilyComposition, Btor2FamilyError> {
+    validate_artifact_shape(artifact, policy)?;
+    let _ = encode_btor2_family_artifact(artifact, policy)?;
+    if <[u8; 32]>::from(Sha256::digest(core_bytes)) != artifact.core_sha256 {
+        return Err(reject("BTOR2 family core digest mismatch"));
+    }
+    if <[u8; 32]>::from(Sha256::digest(channel_bytes)) != artifact.channel_sha256 {
+        return Err(reject("BTOR2 family channel digest mismatch"));
+    }
+    let parameter_sha256: [u8; 32] = Sha256::digest(parameter_bytes).into();
+    if artifact
+        .instances
+        .iter()
+        .any(|instance| instance.parameter_sha256 != parameter_sha256)
+    {
+        return Err(reject("BTOR2 family parameter digest mismatch"));
+    }
+    let composition = compose_btor2_channel_family(
+        core_bytes,
+        &artifact.core_roots,
+        channel_bytes,
+        &artifact.channel_roots,
+        &artifact.instances,
+        policy,
+    )?;
+    if composition.expanded_sha256 != artifact.expanded_sha256 {
+        return Err(reject("BTOR2 family expanded model digest mismatch"));
+    }
+    Ok(composition)
+}
+
+fn push_u16(bytes: &mut Vec<u8>, value: u16) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u64(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Encode the canonical, checksummed family artifact format.
+pub fn encode_btor2_family_artifact(
+    artifact: &Btor2FamilyArtifact,
+    policy: Btor2FamilyPolicy,
+) -> Result<Vec<u8>, Btor2FamilyError> {
+    validate_artifact_shape(artifact, policy)?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(ARTIFACT_MAGIC);
+    push_u32(&mut bytes, artifact.version);
+    bytes.extend_from_slice(&artifact.core_sha256);
+    bytes.extend_from_slice(&artifact.channel_sha256);
+    bytes.extend_from_slice(&artifact.expanded_sha256);
+    push_u32(
+        &mut bytes,
+        checked_u32(artifact.core_roots.len(), "core root count")?,
+    );
+    for root in &artifact.core_roots {
+        push_u64(&mut bytes, *root);
+    }
+    push_u32(
+        &mut bytes,
+        checked_u32(artifact.channel_roots.len(), "channel root count")?,
+    );
+    for root in &artifact.channel_roots {
+        push_u64(&mut bytes, *root);
+    }
+    push_u32(
+        &mut bytes,
+        checked_u32(artifact.instances.len(), "family instance count")?,
+    );
+    for instance in &artifact.instances {
+        let identifier_len = u16::try_from(instance.identifier.len())
+            .map_err(|_| reject("family instance identifier is too long"))?;
+        push_u16(&mut bytes, identifier_len);
+        bytes.extend_from_slice(instance.identifier.as_bytes());
+        bytes.extend_from_slice(&instance.parameter_sha256);
+        push_u32(
+            &mut bytes,
+            checked_u32(instance.input_bindings.len(), "family binding count")?,
+        );
+        for binding in &instance.input_bindings {
+            let (tag, index) = match *binding {
+                FamilyInputBinding::CoreInput(index) => (0u8, index),
+                FamilyInputBinding::CoreRoot(index) => (1u8, index),
+            };
+            bytes.push(tag);
+            push_u32(&mut bytes, checked_u32(index, "family binding index")?);
+        }
+    }
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    if bytes.len() > policy.max_artifact_bytes {
+        return Err(reject("BTOR2 family artifact exceeds byte policy"));
+    }
+    Ok(bytes)
+}
+
+struct ArtifactCursor<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> ArtifactCursor<'a> {
+    fn take(&mut self, count: usize) -> Result<&'a [u8], Btor2FamilyError> {
+        let end = self
+            .offset
+            .checked_add(count)
+            .filter(|end| *end <= self.bytes.len())
+            .ok_or_else(|| reject("truncated BTOR2 family artifact"))?;
+        let result = &self.bytes[self.offset..end];
+        self.offset = end;
+        Ok(result)
+    }
+
+    fn u8(&mut self) -> Result<u8, Btor2FamilyError> {
+        Ok(self.take(1)?[0])
+    }
+
+    fn u16(&mut self) -> Result<u16, Btor2FamilyError> {
+        Ok(u16::from_le_bytes(
+            self.take(2)?.try_into().expect("fixed length"),
+        ))
+    }
+
+    fn u32(&mut self) -> Result<u32, Btor2FamilyError> {
+        Ok(u32::from_le_bytes(
+            self.take(4)?.try_into().expect("fixed length"),
+        ))
+    }
+
+    fn u64(&mut self) -> Result<u64, Btor2FamilyError> {
+        Ok(u64::from_le_bytes(
+            self.take(8)?.try_into().expect("fixed length"),
+        ))
+    }
+
+    fn digest(&mut self) -> Result<[u8; 32], Btor2FamilyError> {
+        Ok(self.take(32)?.try_into().expect("fixed length"))
+    }
+}
+
+fn bounded_count(value: u32, maximum: usize, label: &str) -> Result<usize, Btor2FamilyError> {
+    let value = usize::try_from(value).map_err(|_| reject(format!("invalid {label}")))?;
+    if value == 0 || value > maximum {
+        return Err(reject(format!("{label} is outside policy")));
+    }
+    Ok(value)
+}
+
+fn bounded_count_allow_zero(
+    value: u32,
+    maximum: usize,
+    label: &str,
+) -> Result<usize, Btor2FamilyError> {
+    let value = usize::try_from(value).map_err(|_| reject(format!("invalid {label}")))?;
+    if value > maximum {
+        return Err(reject(format!("{label} is outside policy")));
+    }
+    Ok(value)
+}
+
+/// Decode only the canonical family artifact format under caller limits.
+pub fn decode_btor2_family_artifact(
+    bytes: &[u8],
+    policy: Btor2FamilyPolicy,
+) -> Result<Btor2FamilyArtifact, Btor2FamilyError> {
+    const MINIMUM_BYTES: usize = 8 + 4 + 32 + 32 + 32 + 4 + 8 + 4 + 8 + 4 + 32;
+    if bytes.len() < MINIMUM_BYTES || bytes.len() > policy.max_artifact_bytes {
+        return Err(reject("BTOR2 family artifact size is outside policy"));
+    }
+    let payload_len = bytes
+        .len()
+        .checked_sub(32)
+        .ok_or_else(|| reject("truncated BTOR2 family artifact"))?;
+    let expected: [u8; 32] = bytes[payload_len..].try_into().expect("fixed suffix");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_len])) != expected {
+        return Err(reject("BTOR2 family artifact checksum mismatch"));
+    }
+    let mut cursor = ArtifactCursor {
+        bytes: &bytes[..payload_len],
+        offset: 0,
+    };
+    if cursor.take(8)? != ARTIFACT_MAGIC {
+        return Err(reject("BTOR2 family artifact magic mismatch"));
+    }
+    let version = cursor.u32()?;
+    let core_sha256 = cursor.digest()?;
+    let channel_sha256 = cursor.digest()?;
+    let expanded_sha256 = cursor.digest()?;
+    let core_count = bounded_count(
+        cursor.u32()?,
+        policy.max_roots_per_component,
+        "core root count",
+    )?;
+    let mut core_roots = Vec::with_capacity(core_count);
+    for _ in 0..core_count {
+        core_roots.push(cursor.u64()?);
+    }
+    let channel_count = bounded_count(
+        cursor.u32()?,
+        policy.max_roots_per_component,
+        "channel root count",
+    )?;
+    let mut channel_roots = Vec::with_capacity(channel_count);
+    for _ in 0..channel_count {
+        channel_roots.push(cursor.u64()?);
+    }
+    let instance_count =
+        bounded_count(cursor.u32()?, policy.max_instances, "family instance count")?;
+    let mut instances = Vec::with_capacity(instance_count);
+    for _ in 0..instance_count {
+        let identifier_len = usize::from(cursor.u16()?);
+        if identifier_len == 0 || identifier_len > 64 {
+            return Err(reject("family instance identifier length is outside limit"));
+        }
+        let identifier = std::str::from_utf8(cursor.take(identifier_len)?)
+            .map_err(|_| reject("family instance identifier is not UTF-8"))?
+            .to_string();
+        let parameter_sha256 = cursor.digest()?;
+        let binding_count =
+            bounded_count_allow_zero(cursor.u32()?, MAX_FAMILY_BINDINGS, "family binding count")?;
+        let mut input_bindings = Vec::with_capacity(binding_count);
+        for _ in 0..binding_count {
+            let tag = cursor.u8()?;
+            let index = usize::try_from(cursor.u32()?)
+                .map_err(|_| reject("family binding index is outside range"))?;
+            input_bindings.push(match tag {
+                0 => FamilyInputBinding::CoreInput(index),
+                1 => FamilyInputBinding::CoreRoot(index),
+                _ => return Err(reject("unknown family input binding tag")),
+            });
+        }
+        instances.push(Btor2FamilyInstance {
+            identifier,
+            parameter_sha256,
+            input_bindings,
+        });
+    }
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject("trailing BTOR2 family artifact bytes"));
+    }
+    let artifact = Btor2FamilyArtifact {
+        version,
+        core_sha256,
+        channel_sha256,
+        expanded_sha256,
+        core_roots,
+        channel_roots,
+        instances,
+    };
+    validate_artifact_shape(&artifact, policy)?;
+    Ok(artifact)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,6 +922,7 @@ mod tests {
 9 xor 1 4 2
 10 output 9 mismatch
 "#;
+    const PARAMETERS: &[u8] = b"phase_width=1\n";
 
     const OPENTITAN_CORE: &[u8] =
         include_bytes!("../corpus/rtl/opentitan-pwm-crosstalk-impact/generated/core-after.btor2");
@@ -555,7 +933,7 @@ mod tests {
     fn instance(identifier: &str) -> Btor2FamilyInstance {
         Btor2FamilyInstance {
             identifier: identifier.to_string(),
-            parameter_sha256: [7; 32],
+            parameter_sha256: Sha256::digest(PARAMETERS).into(),
             input_bindings: vec![
                 FamilyInputBinding::CoreRoot(0),
                 FamilyInputBinding::CoreInput(0),
@@ -667,7 +1045,7 @@ mod tests {
             .is_err()
         );
 
-        let policy = Btor2FamilyPolicy::new(1, 1, 2, 1024).unwrap();
+        let policy = Btor2FamilyPolicy::new(1024, 1, 1, 2, 1024).unwrap();
         assert!(
             compose_btor2_channel_family(
                 CORE,
@@ -763,6 +1141,129 @@ mod tests {
                 &[9],
                 &[instance("channel0")],
                 Btor2FamilyPolicy::default(),
+            )
+            .is_err()
+        );
+    }
+
+    fn artifact_fixture() -> (Btor2FamilyArtifact, Btor2FamilyComposition) {
+        produce_btor2_family_artifact(
+            CORE,
+            &[3],
+            CHANNEL,
+            &[9],
+            PARAMETERS,
+            &[instance("channel0"), instance("channel1")],
+            Btor2FamilyPolicy::default(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn artifact_round_trip_is_canonical_and_independently_reconstructed() {
+        let (artifact, produced) = artifact_fixture();
+        let bytes = encode_btor2_family_artifact(&artifact, Btor2FamilyPolicy::default()).unwrap();
+        let decoded = decode_btor2_family_artifact(&bytes, Btor2FamilyPolicy::default()).unwrap();
+        let verified = verify_btor2_family_artifact(
+            CORE,
+            CHANNEL,
+            PARAMETERS,
+            &decoded,
+            Btor2FamilyPolicy::default(),
+        )
+        .unwrap();
+
+        assert_eq!(artifact, decoded);
+        assert_eq!(produced, verified);
+        assert_eq!(
+            bytes,
+            encode_btor2_family_artifact(&decoded, Btor2FamilyPolicy::default()).unwrap()
+        );
+        assert!(bytes.len() < produced.expanded_model.len());
+    }
+
+    #[test]
+    fn every_artifact_byte_mutation_and_truncation_fails_closed() {
+        let (artifact, _) = artifact_fixture();
+        let bytes = encode_btor2_family_artifact(&artifact, Btor2FamilyPolicy::default()).unwrap();
+        for end in 0..bytes.len() {
+            assert!(
+                decode_btor2_family_artifact(&bytes[..end], Btor2FamilyPolicy::default()).is_err(),
+                "accepted truncation at {end}"
+            );
+        }
+        for offset in 0..bytes.len() {
+            let mut changed = bytes.clone();
+            changed[offset] ^= 1;
+            assert!(
+                decode_btor2_family_artifact(&changed, Btor2FamilyPolicy::default()).is_err(),
+                "accepted mutation at {offset}"
+            );
+        }
+        let mut trailing = bytes;
+        trailing.push(0);
+        assert!(decode_btor2_family_artifact(&trailing, Btor2FamilyPolicy::default()).is_err());
+    }
+
+    #[test]
+    fn verifier_rejects_source_and_wiring_drift_with_fresh_checksums() {
+        let (artifact, _) = artifact_fixture();
+        assert!(
+            verify_btor2_family_artifact(
+                b"changed core",
+                CHANNEL,
+                PARAMETERS,
+                &artifact,
+                Btor2FamilyPolicy::default(),
+            )
+            .is_err()
+        );
+        assert!(
+            verify_btor2_family_artifact(
+                CORE,
+                CHANNEL,
+                b"phase_width=2\n",
+                &artifact,
+                Btor2FamilyPolicy::default(),
+            )
+            .is_err()
+        );
+
+        let mut rewired = artifact;
+        rewired.instances[0].input_bindings.swap(0, 1);
+        let encoded = encode_btor2_family_artifact(&rewired, Btor2FamilyPolicy::default()).unwrap();
+        let decoded = decode_btor2_family_artifact(&encoded, Btor2FamilyPolicy::default()).unwrap();
+        assert!(
+            verify_btor2_family_artifact(
+                CORE,
+                CHANNEL,
+                PARAMETERS,
+                &decoded,
+                Btor2FamilyPolicy::default(),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn artifact_decoder_applies_caller_byte_and_instance_limits() {
+        let (artifact, _) = artifact_fixture();
+        let bytes = encode_btor2_family_artifact(&artifact, Btor2FamilyPolicy::default()).unwrap();
+        let byte_limited = Btor2FamilyPolicy::new(bytes.len() - 1, 2, 1, 32, 4096).unwrap();
+        assert!(decode_btor2_family_artifact(&bytes, byte_limited).is_err());
+
+        let instance_limited = Btor2FamilyPolicy::new(bytes.len(), 1, 1, 32, 4096).unwrap();
+        assert!(decode_btor2_family_artifact(&bytes, instance_limited).is_err());
+
+        assert!(
+            produce_btor2_family_artifact(
+                CORE,
+                &[3],
+                CHANNEL,
+                &[9],
+                PARAMETERS,
+                &[instance("channel0"), instance("channel1")],
+                byte_limited,
             )
             .is_err()
         );
