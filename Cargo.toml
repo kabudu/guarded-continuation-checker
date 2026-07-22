@@ -11,12 +11,12 @@ documentation = "https://docs.rs/guarded-continuation-checker"
 keywords = ["verification", "embedded", "sat", "aiger", "firmware"]
 categories = ["development-tools", "science", "algorithms"]
 include = [
-    "Cargo.lock",
-    "Cargo.toml",
-    "CRATE_README.md",
-    "LICENSE",
-    "README.md",
-    "src/**",
+    "/Cargo.lock",
+    "/Cargo.toml",
+    "/CRATE_README.md",
+    "/LICENSE",
+    "/README.md",
+    "/src/**",
 ]
 
 [features]

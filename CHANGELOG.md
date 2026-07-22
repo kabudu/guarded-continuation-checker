@@ -7,7 +7,10 @@
 - Bound the crates.io source payload to the executable and library sources,
   licence and user-facing READMEs. Add a 64-file and 768 KiB compressed package
   gate that excludes CI, corpora, retained results, research examples, scripts
-  and tests from the installed product payload.
+  and tests from the installed product payload. Permit Cargo's platform-specific
+  empty auto-target directories while continuing to reject files and symlinks
+  below them, and root-anchor every include pattern so nested research READMEs
+  cannot enter through basename matching.
 
 - Freeze production support profile v1 around firmware CLI contract v2 and RTL
   artifact schema v4. Add a build feature and machine-readable capability that

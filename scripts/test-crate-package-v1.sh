@@ -33,7 +33,12 @@ crate_bytes=$(wc -c <"$crate" | tr -d ' ')
   exit 1
 }
 for excluded in .github corpus docs examples packaging results scripts tests; do
-  [[ ! -e "$source/$excluded" ]]
+  if [[ -e "$source/$excluded" ]] && \
+     find "$source/$excluded" -mindepth 1 \( -type f -o -type l \) \
+       -print -quit | grep -q .; then
+    echo "crate payload contains excluded content below $excluded" >&2
+    exit 1
+  fi
 done
 
 for file in Cargo.toml Cargo.lock CRATE_README.md LICENSE README.md \
