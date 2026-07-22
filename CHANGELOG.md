@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare QatQ transport qualification v1 as an additive research-only
+  experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
+  length, digest, codec and resource envelope, streaming exact recovery,
+  hostile-input rejection, cross-platform identity, realistic resource
+  measurements, semantic replay and retained negative compression rows before
+  considering integration. QatQ remains outside `firmware-rtl-v1`.
+
 ## 0.29.0 - 2026-07-22
 
 - Bound the crates.io source payload to the executable and library sources,
