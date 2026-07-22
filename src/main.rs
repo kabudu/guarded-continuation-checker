@@ -25932,7 +25932,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let policy = revision_impact::RevisionImpactPolicy::default();
             println!(
-                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 routing=none fallback=none unsupported=fail-closed",
+                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 work_schema=verification-v1 routing=none fallback=none unsupported=fail-closed",
                 revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
                 policy.max_input_bytes,
                 policy.max_evidence_bytes,
@@ -27951,10 +27951,11 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         .map_err(|error| error.to_string())?;
                 (bundle, encoded)
             };
-            let summary = revision_impact::verify_two_component_revision_impact_with_policy(
-                &input, &bundle, policy,
-            )
-            .map_err(|error| error.to_string())?;
+            let (summary, work) =
+                revision_impact::verify_two_component_revision_impact_observed_with_policy(
+                    &input, &bundle, policy,
+                )
+                .map_err(|error| error.to_string())?;
             if command == "check-btor2-revision-impact" {
                 write_new_certificate(Path::new(&args[10]), &encoded)?;
             }
@@ -27964,7 +27965,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "VERIFIED"
             };
             println!(
-                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} evidence_members={} certificate_bytes={} elapsed_micros={}",
+                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} evidence_members={} certificate_bytes={} parsed_evidence_bytes={} semantic_replays={} component_validations={} composed_pair_checks={} final_transition_checks={} result_comparisons={} elapsed_micros={}",
                 revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
                 summary.atoms,
                 summary.queries,
@@ -27974,6 +27975,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 summary.minimal_invalidating_sets,
                 bundle.revision_evidence.len(),
                 encoded.len(),
+                work.parsed_evidence_bytes,
+                work.semantic_replays,
+                work.component_validations,
+                work.composed_pair_checks,
+                work.final_transition_checks,
+                work.result_comparisons,
                 started.elapsed().as_micros(),
             );
             Ok(true)

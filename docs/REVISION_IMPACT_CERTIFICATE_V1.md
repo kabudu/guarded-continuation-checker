@@ -21,6 +21,19 @@ deadlines, output limits, file-size limits, process-group containment where
 available, strict capability negotiation, exact response parsing, and
 per-invocation success or failure metrics. Its default file limit is 64 MiB so
 the client can admit the complete advertised v1 bundle range.
+
+Independent verification also emits deterministic `verification-v1` work:
+parsed scenario-evidence bytes, semantic replays, component validations,
+composed pair checks, final transition checks, and result comparisons. Every
+counter uses checked arithmetic. Replay, validation, comparison, and byte
+totals must equal the complete evidence table before verification succeeds.
+These logical counters are reproducible evidence; elapsed microseconds remain
+ordinary local telemetry and are not part of certificate identity.
+
+The file boundary is exercised at the inclusive 32-query limit on a one-atom
+cohort. Query 33, a 16,385-byte manifest, CRLF text, and a manifest symlink are
+refused before output creation. Aggregate API tests separately cover each
+source, scenario-evidence, bundle, combination, and query policy ceiling.
 This is a falsification experiment, not a novelty claim or
 production-supported interface.
 
@@ -158,7 +171,8 @@ guarded-continuation-checker btor2-revision-impact-cli-version
 
 It binds CLI, impact, and query-manifest versions; all source, evidence, bundle,
 atom, combination, and query limits; `exact-counterfactual-v1` semantics; no
-routing; no fallback; and fail-closed handling of unsupported inputs. The typed
+routing; no fallback; the `verification-v1` work schema; and fail-closed
+handling of unsupported inputs. The typed
 Rust client refuses any missing, reordered, noncanonical, or changed field
 before exposing the executable as compatible.
 

@@ -663,6 +663,12 @@ pub struct RevisionImpactProcessSummary {
     pub minimal_invalidating_sets: usize,
     pub evidence_members: usize,
     pub certificate_bytes: usize,
+    pub parsed_evidence_bytes: usize,
+    pub semantic_replays: usize,
+    pub component_validations: usize,
+    pub composed_pair_checks: usize,
+    pub final_transition_checks: usize,
+    pub result_comparisons: usize,
     pub elapsed_micros: usize,
 }
 
@@ -4669,6 +4675,7 @@ fn parse_revision_impact_capabilities(
         "max_combinations",
         "max_queries",
         "semantics",
+        "work_schema",
         "routing",
         "fallback",
         "unsupported",
@@ -4683,7 +4690,15 @@ fn parse_revision_impact_capabilities(
         .zip(keys)
         .map(|(field, key)| token_value(field, key))
         .collect::<Result<Vec<_>, _>>()?;
-    if values[10..] != ["exact-counterfactual-v1", "none", "none", "fail-closed"] {
+    if values[10..]
+        != [
+            "exact-counterfactual-v1",
+            "verification-v1",
+            "none",
+            "none",
+            "fail-closed",
+        ]
+    {
         return Err(PredicateApiError::IncompatibleContract(
             "revision impact semantic or fallback contract is unsupported".to_string(),
         ));
@@ -4744,7 +4759,7 @@ fn parse_revision_impact_summary(
             ));
         }
         let fields = stdout.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
-        if fields.len() != 12 || fields.first().copied() != Some("btor2-revision-impact") {
+        if fields.len() != 18 || fields.first().copied() != Some("btor2-revision-impact") {
             return Err(PredicateApiError::InvalidResponse(
                 "revision impact summary shape is invalid".to_string(),
             ));
@@ -4760,9 +4775,15 @@ fn parse_revision_impact_summary(
             "minimal_invalidating_sets",
             "evidence_members",
             "certificate_bytes",
+            "parsed_evidence_bytes",
+            "semantic_replays",
+            "component_validations",
+            "composed_pair_checks",
+            "final_transition_checks",
+            "result_comparisons",
             "elapsed_micros",
         ];
-        let values = fields[1..12]
+        let values = fields[1..18]
             .iter()
             .zip(keys)
             .map(|(field, key)| token_value(field, key))
@@ -4789,6 +4810,11 @@ fn parse_revision_impact_summary(
             || numeric[6] != numeric[2] * numeric[1]
             || numeric[7] == 0
             || numeric[7] > capabilities.max_bundle_bytes
+            || numeric[8] == 0
+            || numeric[8] > capabilities.max_bundle_bytes
+            || numeric[9] != numeric[6]
+            || numeric[10] != numeric[6] * 2
+            || numeric[13] != numeric[6]
         {
             return Err(PredicateApiError::InvalidResponse(
                 "revision impact summary violates advertised dimensions".to_string(),
@@ -4804,7 +4830,13 @@ fn parse_revision_impact_summary(
             minimal_invalidating_sets: numeric[5],
             evidence_members: numeric[6],
             certificate_bytes: numeric[7],
-            elapsed_micros: numeric[8],
+            parsed_evidence_bytes: numeric[8],
+            semantic_replays: numeric[9],
+            component_validations: numeric[10],
+            composed_pair_checks: numeric[11],
+            final_transition_checks: numeric[12],
+            result_comparisons: numeric[13],
+            elapsed_micros: numeric[14],
         })
     })();
     match parsed {
@@ -7068,7 +7100,7 @@ mod tests {
 
     #[test]
     fn revision_impact_capability_parser_is_strict_and_fail_closed() {
-        let canonical = "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 routing=none fallback=none unsupported=fail-closed\n";
+        let canonical = "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 routing=none fallback=none unsupported=fail-closed\n";
         let parsed = parse_revision_impact_capabilities(canonical).unwrap();
         assert_eq!(parsed.cli_version, 1);
         assert_eq!(parsed.max_bundle_bytes, 64 * 1024 * 1024);
@@ -7077,6 +7109,7 @@ mod tests {
             canonical.replace("max_atoms=8", "max_atoms=08"),
             canonical.replace("max_queries=32", "max_queries=33"),
             canonical.replace("routing=none", "routing=heuristic"),
+            canonical.replace("work_schema=verification-v1", "work_schema=timing-v1"),
             canonical.replace("fallback=none", "fallback=exact"),
             canonical.replace("unsupported=fail-closed", "unsupported=ignore"),
             canonical.replace('\n', "\r\n"),

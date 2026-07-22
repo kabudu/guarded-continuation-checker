@@ -5,7 +5,8 @@ use guarded_continuation_checker::revision_impact::{
     encode_revision_impact_certificate, encode_two_component_revision_impact_bundle,
     produce_revision_impact_certificate, produce_two_component_revision_impact,
     produce_two_component_revision_impact_with_policy, verify_revision_impact_with,
-    verify_two_component_revision_impact, verify_two_component_revision_impact_with_policy,
+    verify_two_component_revision_impact, verify_two_component_revision_impact_observed,
+    verify_two_component_revision_impact_with_policy,
 };
 use guarded_continuation_checker::revision_local::{
     BoundedQuery, BoundedResult, ComponentSide, InterfaceWire, WordInterfaceContract,
@@ -257,6 +258,18 @@ fn exact_revision_local_evidence_drives_every_counterfactual() {
     let summary = verify_two_component_revision_impact(&input, &bundle).unwrap();
     assert_eq!(summary.combinations, 2);
     assert_eq!(summary.minimal_invalidating_sets, 2);
+    let (observed_summary, work) =
+        verify_two_component_revision_impact_observed(&input, &bundle).unwrap();
+    assert_eq!(observed_summary, summary);
+    assert_eq!(work.semantic_replays, 4);
+    assert_eq!(work.component_validations, 8);
+    assert_eq!(work.result_comparisons, 4);
+    assert_eq!(
+        work.parsed_evidence_bytes,
+        bundle.revision_evidence.iter().map(Vec::len).sum()
+    );
+    assert!(work.composed_pair_checks > 0);
+    assert!(work.final_transition_checks > 0);
 
     let mut hostile_boundary = bundle.clone();
     hostile_boundary.impact.queries[0].name = "query-renamed".into();

@@ -90,6 +90,12 @@ fn typed_revision_impact_tool_discovers_certifies_verifies_and_observes_failures
     assert_eq!(created.value.queries, 2);
     assert_eq!(created.value.combinations, 8);
     assert_eq!(created.value.evidence_members, 16);
+    assert_eq!(created.value.semantic_replays, 16);
+    assert_eq!(created.value.component_validations, 32);
+    assert_eq!(created.value.result_comparisons, 16);
+    assert!(created.value.parsed_evidence_bytes > 0);
+    assert!(created.value.composed_pair_checks > 0);
+    assert!(created.value.final_transition_checks > 0);
     assert_eq!(
         created.value.certificate_bytes,
         fs::metadata(&artifact).unwrap().len() as usize
@@ -124,6 +130,30 @@ fn typed_revision_impact_tool_discovers_certifies_verifies_and_observes_failures
     assert_eq!(
         verified.value.certificate_bytes,
         created.value.certificate_bytes
+    );
+    assert_eq!(
+        verified.value.parsed_evidence_bytes,
+        created.value.parsed_evidence_bytes
+    );
+    assert_eq!(
+        verified.value.semantic_replays,
+        created.value.semantic_replays
+    );
+    assert_eq!(
+        verified.value.component_validations,
+        created.value.component_validations
+    );
+    assert_eq!(
+        verified.value.composed_pair_checks,
+        created.value.composed_pair_checks
+    );
+    assert_eq!(
+        verified.value.final_transition_checks,
+        created.value.final_transition_checks
+    );
+    assert_eq!(
+        verified.value.result_comparisons,
+        created.value.result_comparisons
     );
 
     let invalid_files = RevisionImpactFiles {

@@ -1,11 +1,17 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
+static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 
 fn fixture() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("gcc revision impact cli {}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "gcc revision impact cli {} {}",
+        std::process::id(),
+        NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed),
+    ));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(
@@ -72,7 +78,7 @@ fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
     assert!(capabilities.status.success());
     assert_eq!(
         String::from_utf8(capabilities.stdout).unwrap(),
-        "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 routing=none fallback=none unsupported=fail-closed\n"
+        "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 routing=none fallback=none unsupported=fail-closed\n"
     );
     assert_eq!(
         Command::new(BINARY)
@@ -157,6 +163,89 @@ fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
     );
     assert_eq!(crlf.status.code(), Some(2));
     assert!(!rejected_artifact.exists());
+
+    fs::write(
+        root.join("oversized-queries.txt"),
+        vec![b'a'; 16 * 1024 + 1],
+    )
+    .unwrap();
+    let oversized_artifact = root.join("oversized.revision-impact");
+    let oversized = invoke(
+        &root,
+        "check-btor2-revision-impact",
+        &root.join("oversized-queries.txt"),
+        &oversized_artifact,
+    );
+    assert_eq!(oversized.status.code(), Some(2));
+    assert!(
+        String::from_utf8(oversized.stderr)
+            .unwrap()
+            .contains("exceeds 16384 bytes")
+    );
+    assert!(!oversized_artifact.exists());
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&queries, root.join("queries-link.txt")).unwrap();
+        let symlink_artifact = root.join("symlink.revision-impact");
+        let symlink = invoke(
+            &root,
+            "check-btor2-revision-impact",
+            &root.join("queries-link.txt"),
+            &symlink_artifact,
+        );
+        assert_eq!(symlink.status.code(), Some(2));
+        assert!(!symlink_artifact.exists());
+    }
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn revision_impact_cli_admits_the_query_limit_and_refuses_one_beyond_it() {
+    let root = fixture();
+    fs::copy(root.join("left-old.btor2"), root.join("left-new.btor2")).unwrap();
+    fs::copy(
+        root.join("interface-old.txt"),
+        root.join("interface-new.txt"),
+    )
+    .unwrap();
+    let manifest = |count: usize| {
+        let mut text = "gcc-btor2-revision-impact-queries-v1\n".to_string();
+        for horizon in 0..count {
+            text.push_str(&format!("{horizon},right,10\n"));
+        }
+        text
+    };
+    fs::write(root.join("queries-32.txt"), manifest(32)).unwrap();
+    let boundary_artifact = root.join("boundary.revision-impact");
+    let boundary = invoke(
+        &root,
+        "check-btor2-revision-impact",
+        &root.join("queries-32.txt"),
+        &boundary_artifact,
+    );
+    assert!(boundary.status.success(), "{:?}", boundary.stderr);
+    let boundary_stdout = String::from_utf8(boundary.stdout).unwrap();
+    assert!(boundary_stdout.contains("atoms=1 queries=32 combinations=2"));
+    assert!(boundary_stdout.contains("evidence_members=64"));
+    assert!(boundary_stdout.contains("semantic_replays=64 component_validations=128"));
+
+    fs::write(root.join("queries-33.txt"), manifest(33)).unwrap();
+    let refused_artifact = root.join("refused.revision-impact");
+    let refused = invoke(
+        &root,
+        "check-btor2-revision-impact",
+        &root.join("queries-33.txt"),
+        &refused_artifact,
+    );
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(
+        String::from_utf8(refused.stderr)
+            .unwrap()
+            .contains("1..=32 queries")
+    );
+    assert!(!refused_artifact.exists());
 
     fs::remove_dir_all(root).unwrap();
 }

@@ -47,6 +47,14 @@
   bounded, validate output-node lists before spawning, parse one exact summary
   schema, and expose success and failure invocation metrics. The client default
   file limit now matches the advertised 64 MiB bundle ceiling.
+- Add deterministic verifier-work observability to the exact aggregate path.
+  Independent checking now reports parsed evidence bytes, semantic replays,
+  component validations, composed pair checks, final transition checks, and
+  result comparisons with checked arithmetic and completeness invariants. The
+  CLI and typed process client expose the same `verification-v1` work schema;
+  these counters describe logical work and never substitute wall time. File-CLI
+  tests admit the inclusive 32-query boundary and refuse query 33, oversized
+  manifests, noncanonical text, and manifest symlinks without partial output.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

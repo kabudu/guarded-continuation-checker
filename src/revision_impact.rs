@@ -103,6 +103,18 @@ pub struct RevisionImpactSummary {
     pub minimal_invalidating_sets: usize,
 }
 
+/// Deterministic work independently observed while checking an aggregate
+/// two-component revision-impact bundle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionImpactVerificationWork {
+    pub parsed_evidence_bytes: usize,
+    pub semantic_replays: usize,
+    pub component_validations: usize,
+    pub composed_pair_checks: usize,
+    pub final_transition_checks: usize,
+    pub result_comparisons: usize,
+}
+
 /// Old and new sources for one exact two-component revision cohort.
 pub struct TwoComponentRevisionImpactInput<'a> {
     pub left_old: &'a [u8],
@@ -293,6 +305,26 @@ pub fn verify_two_component_revision_impact_with_policy(
     bundle: &TwoComponentRevisionImpactBundle,
     policy: RevisionImpactPolicy,
 ) -> Result<RevisionImpactSummary, RevisionImpactError> {
+    verify_two_component_revision_impact_observed_with_policy(input, bundle, policy)
+        .map(|(summary, _)| summary)
+}
+
+pub fn verify_two_component_revision_impact_observed(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    bundle: &TwoComponentRevisionImpactBundle,
+) -> Result<(RevisionImpactSummary, RevisionImpactVerificationWork), RevisionImpactError> {
+    verify_two_component_revision_impact_observed_with_policy(
+        input,
+        bundle,
+        RevisionImpactPolicy::default(),
+    )
+}
+
+pub fn verify_two_component_revision_impact_observed_with_policy(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    bundle: &TwoComponentRevisionImpactBundle,
+    policy: RevisionImpactPolicy,
+) -> Result<(RevisionImpactSummary, RevisionImpactVerificationWork), RevisionImpactError> {
     validate_policy(policy)?;
     validate_input_bytes(input, policy)?;
     encode_two_component_revision_impact_bundle(bundle, policy)?;
@@ -323,7 +355,15 @@ pub fn verify_two_component_revision_impact_with_policy(
     if bundle.impact.atoms != expected_atoms || bundle.impact.queries != expected_queries {
         return Err(reject("impact boundary differs from supplied revision"));
     }
-    verify_revision_impact_with(&bundle.impact, |mask, query_index| {
+    let mut work = RevisionImpactVerificationWork {
+        parsed_evidence_bytes: 0,
+        semantic_replays: 0,
+        component_validations: 0,
+        composed_pair_checks: 0,
+        final_transition_checks: 0,
+        result_comparisons: 0,
+    };
+    let summary = verify_revision_impact_with(&bundle.impact, |mask, query_index| {
         let index = mask as usize * input.queries.len() + query_index;
         let evidence = bundle
             .revision_evidence
@@ -339,6 +379,36 @@ pub fn verify_two_component_revision_impact_with_policy(
             &certificate,
         )
         .map_err(|error| reject(format!("independent checker rejected scenario: {error}")))?;
+        work.parsed_evidence_bytes = work
+            .parsed_evidence_bytes
+            .checked_add(evidence.len())
+            .ok_or_else(|| reject("verification evidence byte count overflow"))?;
+        work.semantic_replays = work
+            .semantic_replays
+            .checked_add(1)
+            .ok_or_else(|| reject("semantic replay count overflow"))?;
+        work.component_validations = work
+            .component_validations
+            .checked_add(2)
+            .ok_or_else(|| reject("component validation count overflow"))?;
+        work.composed_pair_checks = work
+            .composed_pair_checks
+            .checked_add(
+                checked
+                    .left
+                    .admissible_rows
+                    .checked_mul(checked.right.admissible_rows)
+                    .ok_or_else(|| reject("composed pair check count overflow"))?,
+            )
+            .ok_or_else(|| reject("composed pair check count overflow"))?;
+        work.final_transition_checks = work
+            .final_transition_checks
+            .checked_add(checked.answer.transition_checks)
+            .ok_or_else(|| reject("final transition check count overflow"))?;
+        work.result_comparisons = work
+            .result_comparisons
+            .checked_add(1)
+            .ok_or_else(|| reject("result comparison count overflow"))?;
         if checked.answer.horizon != input.queries[query_index].horizon
             || certificate_query(&certificate)? != input.queries[query_index]
         {
@@ -351,7 +421,15 @@ pub fn verify_two_component_revision_impact_with_policy(
             mask == 0,
             Sha256::digest(evidence).into(),
         ))
-    })
+    })?;
+    if work.semantic_replays != bundle.impact.observations.len()
+        || work.component_validations != bundle.impact.observations.len() * 2
+        || work.result_comparisons != bundle.impact.observations.len()
+        || work.parsed_evidence_bytes != evidence_total
+    {
+        return Err(reject("verification work accounting is incomplete"));
+    }
+    Ok((summary, work))
 }
 
 pub fn encode_two_component_revision_impact_bundle(
