@@ -5,7 +5,7 @@
 //! their canonical position. Equal signatures therefore prove the same local
 //! transition and outgoing-observation functions under that state renaming.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use sha2::{Digest, Sha256};
 
@@ -17,6 +17,7 @@ use crate::btor2_region_extract::{
 pub const BTOR2_REGION_EQUIVALENCE_VERSION: u32 = 1;
 pub const MAX_REGION_EQUIVALENCE_HORIZON: u32 = 4096;
 pub const MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES: usize = 1024 * 1024;
+pub const MAX_REGION_EQUIVALENCE_QUERIES: usize = 65_536;
 const REACHABLE_ARTIFACT_MAGIC: &[u8; 8] = b"GCCBRE01";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,6 +65,96 @@ pub struct Btor2ReachableRegionEquivalenceArtifact {
     pub semantic_roots: Vec<NodeId>,
     pub expected_channels: usize,
     pub summary: Btor2ReachableRegionEquivalenceSummary,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelTraceQuery {
+    pub query_id: u32,
+    pub channel_index: usize,
+    pub start_frame: u32,
+    pub end_frame: u32,
+    pub mask: u64,
+    pub value: u64,
+}
+
+impl Btor2ChannelTraceQuery {
+    pub fn new(
+        query_id: u32,
+        channel_index: usize,
+        start_frame: u32,
+        end_frame: u32,
+        mask: u64,
+        value: u64,
+    ) -> Result<Self, Btor2RegionError> {
+        if start_frame > end_frame || mask == 0 || value & !mask != 0 {
+            return Err(reject(
+                "BTOR2 channel trace query window, mask and value are not canonical",
+            ));
+        }
+        Ok(Self {
+            query_id,
+            channel_index,
+            start_frame,
+            end_frame,
+            mask,
+            value,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2TraceQueryBackend {
+    RepresentativeClass,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelTraceResult {
+    pub query_id: u32,
+    pub channel_index: usize,
+    pub matched: bool,
+    pub earliest_frame: Option<u32>,
+    pub backend: Btor2TraceQueryBackend,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2TracePortfolioMetrics {
+    pub logical_queries: usize,
+    pub representative_classes: usize,
+    pub representative_predicate_evaluations: usize,
+    pub exact_singleton_predicate_evaluations: usize,
+    pub reused_logical_queries: usize,
+    pub direct_predicate_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2TracePortfolioSummary {
+    pub results: Vec<Btor2ChannelTraceResult>,
+    pub metrics: Btor2TracePortfolioMetrics,
+}
+
+/// Opaque capability created only by independent source replay.
+#[derive(Clone, Debug)]
+pub struct Btor2ReachableEquivalenceAdmission {
+    model_sha256: [u8; 32],
+    horizon: u32,
+    classes: Vec<Vec<usize>>,
+    channel_to_class: Vec<usize>,
+    representative_observations: Vec<Vec<u64>>,
+}
+
+impl Btor2ReachableEquivalenceAdmission {
+    pub fn model_sha256(&self) -> [u8; 32] {
+        self.model_sha256
+    }
+
+    pub fn horizon(&self) -> u32 {
+        self.horizon
+    }
+
+    pub fn classes(&self) -> &[Vec<usize>] {
+        &self.classes
+    }
 }
 
 fn reject(message: impl Into<String>) -> Btor2RegionError {
@@ -323,16 +414,15 @@ pub fn derive_btor2_region_equivalence(
 ///
 /// Version 1 accepts exactly one observation edge per channel. It hashes every
 /// local state value under the canonical state renaming and that observation at
-/// every frame from zero through `horizon`. Equal signatures therefore prove
-/// equal reachable bounded traces for this exact source model, not equivalent
-/// transition functions for arbitrary environments.
-pub fn derive_btor2_reachable_region_equivalence(
+/// every frame from zero through `horizon`. Exact trace vectors decide class
+/// membership; signatures are identifiers rather than the equality oracle.
+fn derive_btor2_reachable_region_equivalence_with_observations(
     model_bytes: &[u8],
     semantic_roots: &[NodeId],
     expected_channels: usize,
     horizon: u32,
     policy: Btor2RegionPolicy,
-) -> Result<Btor2ReachableRegionEquivalenceSummary, Btor2RegionError> {
+) -> Result<(Btor2ReachableRegionEquivalenceSummary, Vec<Vec<u64>>), Btor2RegionError> {
     if horizon > MAX_REGION_EQUIVALENCE_HORIZON {
         return Err(reject("BTOR2 reachable equivalence horizon exceeds policy"));
     }
@@ -364,6 +454,9 @@ pub fn derive_btor2_reachable_region_equivalence(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let mut traces = (0..expected_channels)
+        .map(|_| Vec::<u64>::new())
+        .collect::<Vec<_>>();
+    let mut observations = (0..expected_channels)
         .map(|_| Vec::<u64>::new())
         .collect::<Vec<_>>();
     let mut hashes = (0..expected_channels)
@@ -400,6 +493,7 @@ pub fn derive_btor2_reachable_region_equivalence(
                         reject(format!("reachable equivalence observation failed: {error}"))
                     })?;
             traces[channel].push(observation);
+            observations[channel].push(observation);
             hashes[channel].update(observation.to_le_bytes());
         }
         if frame != horizon {
@@ -427,12 +521,33 @@ pub fn derive_btor2_reachable_region_equivalence(
     }
     let mut classes = by_trace.into_values().collect::<Vec<_>>();
     classes.sort_by_key(|class| class[0]);
-    Ok(Btor2ReachableRegionEquivalenceSummary {
-        version: BTOR2_REGION_EQUIVALENCE_VERSION,
+    Ok((
+        Btor2ReachableRegionEquivalenceSummary {
+            version: BTOR2_REGION_EQUIVALENCE_VERSION,
+            horizon,
+            signatures,
+            classes,
+        },
+        observations,
+    ))
+}
+
+/// Derives exact bounded trace classes for a deterministic, input-free model.
+pub fn derive_btor2_reachable_region_equivalence(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    horizon: u32,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2ReachableRegionEquivalenceSummary, Btor2RegionError> {
+    Ok(derive_btor2_reachable_region_equivalence_with_observations(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
         horizon,
-        signatures,
-        classes,
-    })
+        policy,
+    )?
+    .0)
 }
 
 fn push_u32(bytes: &mut Vec<u8>, value: usize, label: &str) -> Result<(), Btor2RegionError> {
@@ -705,27 +820,231 @@ pub fn decode_btor2_reachable_region_equivalence_artifact(
     Ok(artifact)
 }
 
-/// Independently verifies source binding and every exact bounded trace class.
-pub fn verify_btor2_reachable_region_equivalence_artifact(
+fn replay_btor2_reachable_region_equivalence_artifact(
     model_bytes: &[u8],
     artifact: &Btor2ReachableRegionEquivalenceArtifact,
     policy: Btor2RegionPolicy,
-) -> Result<Btor2ReachableRegionEquivalenceSummary, Btor2RegionError> {
+) -> Result<(Btor2ReachableRegionEquivalenceSummary, Vec<Vec<u64>>), Btor2RegionError> {
     let _ = encode_btor2_reachable_region_equivalence_artifact(artifact)?;
     if <[u8; 32]>::from(Sha256::digest(model_bytes)) != artifact.model_sha256 {
         return Err(reject("reachable-equivalence model digest mismatch"));
     }
-    let recomputed = derive_btor2_reachable_region_equivalence(
+    let recomputed = derive_btor2_reachable_region_equivalence_with_observations(
         model_bytes,
         &artifact.semantic_roots,
         artifact.expected_channels,
         artifact.summary.horizon,
         policy,
     )?;
-    if recomputed != artifact.summary {
+    if recomputed.0 != artifact.summary {
         return Err(reject(
             "reachable-equivalence artifact disagrees with exact source traces",
         ));
     }
     Ok(recomputed)
+}
+
+/// Independently verifies source binding and every exact bounded trace class.
+pub fn verify_btor2_reachable_region_equivalence_artifact(
+    model_bytes: &[u8],
+    artifact: &Btor2ReachableRegionEquivalenceArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2ReachableRegionEquivalenceSummary, Btor2RegionError> {
+    Ok(replay_btor2_reachable_region_equivalence_artifact(model_bytes, artifact, policy)?.0)
+}
+
+/// Verifies an artifact once and retains only one observation trace per class.
+pub fn admit_btor2_reachable_region_equivalence_artifact(
+    model_bytes: &[u8],
+    artifact: &Btor2ReachableRegionEquivalenceArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2ReachableEquivalenceAdmission, Btor2RegionError> {
+    let (summary, observations) =
+        replay_btor2_reachable_region_equivalence_artifact(model_bytes, artifact, policy)?;
+    let mut channel_to_class = vec![usize::MAX; artifact.expected_channels];
+    let mut representative_observations = Vec::with_capacity(summary.classes.len());
+    for (class_index, class) in summary.classes.iter().enumerate() {
+        let representative = observations[class[0]].clone();
+        for channel in class {
+            if observations[*channel] != representative {
+                return Err(reject(
+                    "reachable-equivalence class observations disagree after replay",
+                ));
+            }
+            channel_to_class[*channel] = class_index;
+        }
+        representative_observations.push(representative);
+    }
+    if channel_to_class.contains(&usize::MAX) {
+        return Err(reject("reachable-equivalence admission is incomplete"));
+    }
+    Ok(Btor2ReachableEquivalenceAdmission {
+        model_sha256: artifact.model_sha256,
+        horizon: summary.horizon,
+        classes: summary.classes,
+        channel_to_class,
+        representative_observations,
+    })
+}
+
+fn validate_trace_queries(
+    queries: &[Btor2ChannelTraceQuery],
+    channels: usize,
+    horizon: u32,
+) -> Result<(), Btor2RegionError> {
+    if queries.is_empty()
+        || queries.len() > MAX_REGION_EQUIVALENCE_QUERIES
+        || queries
+            .windows(2)
+            .any(|pair| pair[0].query_id >= pair[1].query_id)
+        || queries.iter().any(|query| {
+            query.channel_index >= channels
+                || query.start_frame > query.end_frame
+                || query.end_frame > horizon
+                || query.mask == 0
+                || query.value & !query.mask != 0
+        })
+    {
+        return Err(reject("BTOR2 channel trace query batch is outside policy"));
+    }
+    Ok(())
+}
+
+fn evaluate_trace_query(
+    observations: &[u64],
+    query: Btor2ChannelTraceQuery,
+) -> Result<(bool, Option<u32>), Btor2RegionError> {
+    let start = usize::try_from(query.start_frame)
+        .map_err(|_| reject("trace query start frame exceeds platform range"))?;
+    let end = usize::try_from(query.end_frame)
+        .map_err(|_| reject("trace query end frame exceeds platform range"))?;
+    let window = observations
+        .get(start..=end)
+        .ok_or_else(|| reject("trace query window exceeds admitted observations"))?;
+    let earliest = window
+        .iter()
+        .position(|observation| observation & query.mask == query.value)
+        .map(|frame| {
+            let absolute = start
+                .checked_add(frame)
+                .ok_or_else(|| reject("trace query frame overflow"))?;
+            u32::try_from(absolute).map_err(|_| reject("trace query frame exceeds encoding range"))
+        })
+        .transpose()?;
+    Ok((earliest.is_some(), earliest))
+}
+
+/// Evaluates every query independently from the source, providing the exact
+/// fallback and comparison path for the representative portfolio.
+pub fn evaluate_btor2_channel_trace_queries_exact(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    horizon: u32,
+    queries: &[Btor2ChannelTraceQuery],
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2TracePortfolioSummary, Btor2RegionError> {
+    validate_trace_queries(queries, expected_channels, horizon)?;
+    let (_, observations) = derive_btor2_reachable_region_equivalence_with_observations(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        horizon,
+        policy,
+    )?;
+    let results = queries
+        .iter()
+        .map(|query| {
+            let (matched, earliest_frame) =
+                evaluate_trace_query(&observations[query.channel_index], *query)?;
+            Ok(Btor2ChannelTraceResult {
+                query_id: query.query_id,
+                channel_index: query.channel_index,
+                matched,
+                earliest_frame,
+                backend: Btor2TraceQueryBackend::DirectExact,
+            })
+        })
+        .collect::<Result<Vec<_>, Btor2RegionError>>()?;
+    Ok(Btor2TracePortfolioSummary {
+        results,
+        metrics: Btor2TracePortfolioMetrics {
+            logical_queries: queries.len(),
+            representative_classes: 0,
+            representative_predicate_evaluations: 0,
+            exact_singleton_predicate_evaluations: queries.len(),
+            reused_logical_queries: 0,
+            direct_predicate_evaluation_bound: queries.len(),
+        },
+    })
+}
+
+/// Evaluates one trace predicate per equivalence class and exact predicates for
+/// singleton classes. Invalid admission evidence propagates and never falls
+/// back; only statically non-reusable queries take the direct exact route.
+pub fn evaluate_btor2_channel_trace_queries_portfolio(
+    admission: &Btor2ReachableEquivalenceAdmission,
+    queries: &[Btor2ChannelTraceQuery],
+) -> Result<Btor2TracePortfolioSummary, Btor2RegionError> {
+    validate_trace_queries(queries, admission.channel_to_class.len(), admission.horizon)?;
+    let mut representative_cache =
+        HashMap::<(usize, u32, u32, u64, u64), (bool, Option<u32>)>::with_capacity(queries.len());
+    let mut representative_predicate_evaluations = 0usize;
+    let mut exact_singleton_predicate_evaluations = 0usize;
+    let mut reused_logical_queries = 0usize;
+    let mut results = Vec::with_capacity(queries.len());
+    for query in queries {
+        let class_index = admission.channel_to_class[query.channel_index];
+        let class = &admission.classes[class_index];
+        let (matched, earliest_frame, backend) = if class.len() == 1 {
+            exact_singleton_predicate_evaluations += 1;
+            let (matched, frame) =
+                evaluate_trace_query(&admission.representative_observations[class_index], *query)?;
+            (matched, frame, Btor2TraceQueryBackend::DirectExact)
+        } else {
+            let key = (
+                class_index,
+                query.start_frame,
+                query.end_frame,
+                query.mask,
+                query.value,
+            );
+            let cached = representative_cache.get(&key).copied();
+            let (matched, frame) = if let Some(result) = cached {
+                reused_logical_queries += 1;
+                result
+            } else {
+                representative_predicate_evaluations += 1;
+                let result = evaluate_trace_query(
+                    &admission.representative_observations[class_index],
+                    *query,
+                )?;
+                representative_cache.insert(key, result);
+                result
+            };
+            (matched, frame, Btor2TraceQueryBackend::RepresentativeClass)
+        };
+        results.push(Btor2ChannelTraceResult {
+            query_id: query.query_id,
+            channel_index: query.channel_index,
+            matched,
+            earliest_frame,
+            backend,
+        });
+    }
+    Ok(Btor2TracePortfolioSummary {
+        results,
+        metrics: Btor2TracePortfolioMetrics {
+            logical_queries: queries.len(),
+            representative_classes: admission
+                .classes
+                .iter()
+                .filter(|class| class.len() > 1)
+                .count(),
+            representative_predicate_evaluations,
+            exact_singleton_predicate_evaluations,
+            reused_logical_queries,
+            direct_predicate_evaluation_bound: queries.len(),
+        },
+    })
 }

@@ -727,3 +727,12 @@ composition. The candidate remains open only if one verified admission can be
 amortised across several explicitly bound predicates, using one representative
 per class, unchanged exact evaluation for singletons and refused inputs, and a
 complete-batch advantage over direct exact and maintained-tool baselines.
+
+The first amortised predicate portfolio does not provide that advantage. It
+uses an opaque verified admission, one representative for each non-singleton
+class, and direct exact singleton routing across as many as 49,152 temporal
+window queries. Candidate and direct answers agree, and logical predicate work
+falls by exactly one third, but end-to-end speed stays within roughly half a
+percent of parity. Cheap trace scans are therefore a falsified target. A viable
+candidate must reuse substantially more expensive proof obligations and still
+pay for independent equivalence admission and complete exact fallback.

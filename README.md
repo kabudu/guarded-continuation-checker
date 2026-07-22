@@ -363,6 +363,15 @@ close an integrity mechanism, not a novelty or performance gate. Property
 reuse with exact fallback and equivalent-scope baseline measurement remains
 the next experiment.
 
+That [trace-predicate portfolio experiment](docs/OPENTITAN_PWM_TRACE_PREDICATE_PORTFOLIO_V1.md)
+now evaluates 96 through 49,152 legitimate temporal-window queries. It reuses
+only the two independently admitted non-singleton classes, routes singleton
+channels through direct exact evaluation, and agrees on every match and
+earliest frame. Logical predicate evaluations fall by exactly one third, but
+end-to-end medians remain between 0.996 and 1.005 times direct. This falsifies
+cheap trace scanning as the practical reuse target. The next candidate must
+share an expensive independently checked property obligation.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies

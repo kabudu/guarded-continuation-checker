@@ -1,7 +1,10 @@
 use guarded_continuation_checker::btor2;
 use guarded_continuation_checker::btor2_region_equivalence::{
+    Btor2ChannelTraceQuery, Btor2TraceQueryBackend,
+    admit_btor2_reachable_region_equivalence_artifact,
     decode_btor2_reachable_region_equivalence_artifact, derive_btor2_reachable_region_equivalence,
     derive_btor2_region_equivalence, encode_btor2_reachable_region_equivalence_artifact,
+    evaluate_btor2_channel_trace_queries_exact, evaluate_btor2_channel_trace_queries_portfolio,
     produce_btor2_reachable_region_equivalence_artifact,
     verify_btor2_reachable_region_equivalence_artifact,
 };
@@ -218,4 +221,62 @@ fn reachable_equivalence_artifact_fails_closed_under_hostile_changes() {
     assert!(
         verify_btor2_reachable_region_equivalence_artifact(bytes, &digest_drift, policy).is_err()
     );
+}
+
+#[test]
+fn reachable_equivalence_portfolio_reuses_only_proven_classes() {
+    let bytes =
+        include_bytes!("../corpus/rtl/opentitan-pwm-channel-family/generated/authentic-6.btor2");
+    let policy = Btor2RegionPolicy::default();
+    let artifact =
+        produce_btor2_reachable_region_equivalence_artifact(bytes, &[5, 36], 6, 63, policy)
+            .unwrap();
+    let admission =
+        admit_btor2_reachable_region_equivalence_artifact(bytes, &artifact, policy).unwrap();
+    let queries = (0..6)
+        .flat_map(|channel| {
+            [0, 1].map(move |value| {
+                Btor2ChannelTraceQuery::new(
+                    u32::try_from(channel * 2 + value).unwrap(),
+                    channel,
+                    0,
+                    63,
+                    1,
+                    value as u64,
+                )
+                .unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+    let exact =
+        evaluate_btor2_channel_trace_queries_exact(bytes, &[5, 36], 6, 63, &queries, policy)
+            .unwrap();
+    let portfolio = evaluate_btor2_channel_trace_queries_portfolio(&admission, &queries).unwrap();
+
+    assert_eq!(portfolio.results.len(), exact.results.len());
+    for (candidate, baseline) in portfolio.results.iter().zip(&exact.results) {
+        assert_eq!(candidate.query_id, baseline.query_id);
+        assert_eq!(candidate.channel_index, baseline.channel_index);
+        assert_eq!(candidate.matched, baseline.matched);
+        assert_eq!(candidate.earliest_frame, baseline.earliest_frame);
+        let expected_backend = if candidate.channel_index < 2 {
+            Btor2TraceQueryBackend::DirectExact
+        } else {
+            Btor2TraceQueryBackend::RepresentativeClass
+        };
+        assert_eq!(candidate.backend, expected_backend);
+    }
+    assert_eq!(portfolio.metrics.logical_queries, 12);
+    assert_eq!(portfolio.metrics.representative_classes, 2);
+    assert_eq!(portfolio.metrics.representative_predicate_evaluations, 4);
+    assert_eq!(portfolio.metrics.exact_singleton_predicate_evaluations, 4);
+    assert_eq!(portfolio.metrics.reused_logical_queries, 4);
+    assert_eq!(portfolio.metrics.direct_predicate_evaluation_bound, 12);
+
+    let mut duplicate_id = queries.clone();
+    duplicate_id[1].query_id = duplicate_id[0].query_id;
+    assert!(evaluate_btor2_channel_trace_queries_portfolio(&admission, &duplicate_id).is_err());
+    let mut invalid_channel = queries;
+    invalid_channel[0].channel_index = 6;
+    assert!(evaluate_btor2_channel_trace_queries_portfolio(&admission, &invalid_channel).is_err());
 }

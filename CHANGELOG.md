@@ -76,6 +76,13 @@
   source-drift and semantic-drift tests fail closed. At horizon 63, authentic
   2-, 4- and 6-channel artifacts occupy 220, 324 and 420 bytes; only the
   6-channel source admits two channels for future representative reuse.
+- Add an opaque independently replayed admission capability and a bounded
+  masked temporal-predicate portfolio. Non-singleton classes reuse one
+  representative result, singleton classes remain direct exact, and invalid
+  evidence fails closed. A retained 96- to 49,152-query authentic PWM matrix
+  removes exactly one third of predicate evaluations with exact earliest-frame
+  agreement, but produces no stable end-to-end speedup (0.996 to 1.005 times).
+  Preserve this as a falsified cheap-scan reuse strategy.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

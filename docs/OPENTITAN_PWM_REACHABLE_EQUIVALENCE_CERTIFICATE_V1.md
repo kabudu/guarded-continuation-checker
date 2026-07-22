@@ -59,11 +59,10 @@ evidence. Bounded trace equivalence, symmetry reduction, cryptographic source
 binding, and canonical certificates are established techniques. This cycle is
 production-hardening evidence, not a novelty claim.
 
-The artifact does not itself carry a property answer and does not yet reduce
-checker work, because independent verification deliberately replays every
-channel. The next gate is an amortised portfolio: verify this admission once,
-evaluate one representative per admitted class for an explicitly bound trace
-predicate, expand the answers, and retain unchanged exact evaluation for every
-singleton or refused query. That experiment must count admission, representative
-and fallback work separately and compare complete batches against direct exact
-evaluation.
+The artifact does not itself carry a property answer, and independent
+verification deliberately replays every channel. The predeclared amortised
+trace-predicate follow-up is now complete. It removes exactly one third of
+logical predicate evaluations but does not improve end-to-end time. See
+[the retained portfolio result](OPENTITAN_PWM_TRACE_PREDICATE_PORTFOLIO_V1.md).
+The next gate must reuse an expensive independently checked property obligation
+rather than another scan over materialised traces.

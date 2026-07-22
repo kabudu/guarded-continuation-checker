@@ -1,0 +1,21 @@
+schema_version=1
+scope=opentitan-pwm-authentic-trace-predicate-portfolio
+status=falsified-end-to-end-performance-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=0b35a3f20cdc5d0f4bebb727410a29a6e9c6ccac
+channel_count=6
+horizon=4095
+trials=5
+selection=none
+discarded_rows=0
+timing_scope=single-process-release-admission-plus-query-batch
+memory_scope=not-measured
+sha256=1a902e884d8c71ebfedd99cc6161c207278909c83c54bd327815c8743c17062e file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-6.btor2
+sha256=298a09880ed6e161ef9a60a44c792a790863ca7981c15ab2ccdad82baf23447d file=src/btor2_region_equivalence.rs
+sha256=921191ccc17c5f54b71223e340bbb2d5cedf6e348267bf3ad78fad73fe2b0793 file=examples/btor2_trace_portfolio_probe.rs
+sha256=83310e679075e5b80282cbf42666aa5865963e0ff12d847532a808f87a45de05 file=scripts/run-btor2-trace-portfolio-probe-v1.sh
+sha256=805665fe63f38d2f60bbd69bc859d1db0061bc80ce5f02a010fdb60bcb0d4909 file=scripts/check-btor2-trace-portfolio-probe-v1.sh
+sha256=6b2937a4372e257c52d1124cf4d6e7a4e7701c444b232eb21299a8028f7fac48 file=Cargo.lock
+sha256=5b968a373451110e92bb9664060b79a21bfbd71eb544b710d06cd24fc105e237 file=results/opentitan-pwm-trace-predicate-portfolio-arm64-v1.csv
