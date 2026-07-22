@@ -455,6 +455,13 @@ target/release/guarded-continuation-checker \
   /new/result.channel-traces
 ```
 
+A retained
+[six-case simulated acceptance run](results/btor2-channel-trace-self-service-acceptance-v1.md)
+repeats capability discovery, the complete 42-query workflow, independent
+verification, collision preservation, query-drift rejection, and typed resource
+refusal from clean input copies without per-formula calibration. It is not
+partner evidence.
+
 Use `verify-btor2-channel-traces` with the same four paths to verify the saved
 artifact. Use `btor2-channel-trace-cli-version` for machine-readable limits and
 semantics. Output publication is create-new and no-clobber; existing files and

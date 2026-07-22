@@ -210,6 +210,14 @@ jobs:
           awk -F, -v trials="$TRIALS" 'NR > 1 { if ($5 <= 0 || $6 != 4899434 || $11 != 42 || $12 != "ok") exit 1; digest[$10]++; seen[$2]++ } END { exit !(seen["certify"] == trials && seen["verify"] == trials && length(digest) == 1) }' \
             /tmp/channel-trace-process-resources.csv
           cat /tmp/channel-trace-process-resources.csv
+      - name: Reproduce channel trace self-service acceptance
+        run: |
+          shellcheck -s sh scripts/run-btor2-channel-trace-self-service-acceptance-v1.sh
+          scripts/run-btor2-channel-trace-self-service-acceptance-v1.sh \
+            target/release/guarded-continuation-checker \
+            /tmp/channel-trace-self-service-acceptance.csv
+          diff -u results/btor2-channel-trace-self-service-acceptance-v1.csv \
+            /tmp/channel-trace-self-service-acceptance.csv
       - name: Exercise proof-carrying MTBDD whole-process comparison
         env:
           TRIALS: 3

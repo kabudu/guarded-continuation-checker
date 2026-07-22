@@ -1,14 +1,13 @@
 # BTOR2 channel trace monitor experiment v1
 
-Status: predeclared before implementation or measurement. The strict pattern
-type, canonical monitor-model construction, in-memory proof composition, and
-canonical wire artifact now pass their first semantic and hostile-boundary
-tests. An eighteen-query both-answer control uses nine exact members, mixed
-static solver routing, aggregate work refusal, and target witness replay. The
-full retained cohort and maintained comparison now pass locally. A bounded
-create-new file workflow is implemented and passes its first hostile checks.
-Injected publication failure, cross-platform consumer evidence, and
-whole-process resource evidence remain open.
+Status: implementation and local gates 1 through 12 pass. The strict pattern
+type, canonical monitor-model construction, in-memory proof composition,
+canonical wire artifact, complete authentic cohort, maintained comparison,
+bounded create-new file workflow, and injected partial-write failure all pass.
+A six-case simulated self-service run also passes without formula-specific
+calibration. Hosted cross-platform consumer evidence, hosted Linux
+whole-process evidence, compatibility history, and independent acceptance
+remain open.
 
 ## Product question
 
@@ -183,6 +182,13 @@ symlinked input refusal, collision preservation, and temporary-file cleanup.
 The unit-level publication test injects an error after writing partial bytes to
 the temporary file, then proves that the destination does not exist and the
 temporary directory is empty. This closes acceptance gate 12 locally.
+
+The retained
+[six-case self-service run](../results/btor2-channel-trace-self-service-acceptance-v1.md)
+uses clean copies of the published model, query manifest, and policy. It covers
+capability discovery, complete production, fresh verification, create-new
+collision preservation, query drift, and typed work refusal. It is simulated,
+not independent partner evidence.
 
 ## Whole-process resource evidence
 

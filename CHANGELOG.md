@@ -41,7 +41,10 @@
   Add a portable whole-process resource harness and retain three macOS arm64
   production and verification trials with one artifact digest. Extend the
   Linux, macOS, and Windows downstream matrix to exercise the trace CLI and
-  frozen full-cohort artifact identities; hosted results remain pending.
+  frozen full-cohort artifact identities; hosted results remain pending. Add a
+  six-case simulated self-service run covering discovery, full production,
+  fresh verification, immutable output, query drift, and resource refusal from
+  clean copies without per-formula calibration.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
