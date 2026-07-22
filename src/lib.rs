@@ -10,6 +10,7 @@ pub mod btor2_bounded;
 pub mod btor2_braking;
 pub mod btor2_component;
 pub mod btor2_family;
+pub mod btor2_family_orbit;
 pub mod btor2_family_proof;
 pub mod btor2_invariant_chain;
 pub mod btor2_motion;

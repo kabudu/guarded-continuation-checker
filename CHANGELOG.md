@@ -28,6 +28,12 @@
   exact proof evidence is identical and the complete family portfolio remains
   292 to 476 bytes larger than direct exact evidence. Full authentic-subsystem
   and maintained-baseline gates remain open.
+- Add a distinct representative-orbit proof format for the preliminary
+  identical-binding regime. It admits only two or more instances with identical
+  parameter digests and core bindings, requires one ordered exact certificate
+  for every channel root, and independently verifies those representatives
+  before deriving each isomorphic instance result. Distinct bindings,
+  incomplete roots, source drift, mutation, and truncation fail closed.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
