@@ -1,6 +1,6 @@
 [package]
 name = "guarded-continuation-checker"
-version = "0.29.0"
+version = "0.30.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT"
@@ -19,6 +19,12 @@ include = [
     "/src/**",
 ]
 
+[package.metadata.cargo-semver-checks.lints]
+# Before 1.0, additive operation telemetry variants are permitted in a minor
+# release. Every other default major-change lint remains enforced by the
+# version-aware compatibility check.
+enum_variant_added = { required-update = "minor" }
+
 [features]
 default = []
 production-firmware = []
@@ -29,7 +35,7 @@ debug = true
 
 [dependencies]
 libc = "0.2.186"
-qatq = { version = "=0.1.1", optional = true }
+qatq = { version = "=0.1.4", optional = true }
 sha2 = "0.11.0"
 varisat = "0.2.2"
 varisat-checker = "0.2.2"

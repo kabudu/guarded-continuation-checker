@@ -478,6 +478,45 @@ with the same proof-cache boundary, and a non-repository-authored changing plant
 remain open. The narrow hypothesis advances; every broader novelty or product
 superiority claim remains prohibited.
 
+A broader prior-art pass further constrains this direction. Incremental IC3
+already reuses and patches proofs and counterexamples after hardware changes;
+precision reuse has been evaluated across large software revision histories;
+mutation impact has been propagated to determine which model proofs remain
+valid; and machine-checked hierarchical RTL lemmas are reusable. GCC therefore
+cannot claim novelty for revision-local reuse or impact propagation. The next
+candidate is the narrower
+[revision impact certificate](REVISION_IMPACT_CERTIFICATE_V1.md): a portable,
+source-bound artifact whose independent checker exhaustively proves complete
+inclusion-minimal invalidating change sets, both-answer replay, and exact
+fail-closed fallback. The first public OpenTitan aggregate now preserves all
+four old/new answer classes with byte-identical repeated production and exact
+independent replay. The same-scope rIC3 and Certifaiger baseline agrees on every
+answer but is about 21,306.5 times smaller in model-plus-evidence bytes and uses
+far less peak memory. This strengthens the integrity mechanism while further
+weakening any product-efficiency distinction. GCC is also about 1.67 times
+slower from synthesis through certificate production. Broader prior-art
+comparison and independent review remain open. Three-platform identity passes
+for the frozen certificate fixture, but no novelty row closes.
+
+The larger OpenTitan PWM crosstalk cohort adds a narrower, materially different
+capability: GCC now separates source changes that merely invalidate cached
+evidence from inclusion-minimal atom combinations that actually change a
+bounded SAFE/UNSAFE answer. Its complete four-combination table identifies
+core-only mask `1`, channel-only mask `2`, and joint mask `3` for three distinct
+properties, with independent replay rather than learned attribution. This is a
+credible mechanism distinction, not yet a novelty conclusion. The maintained
+Yosys, rIC3 and Certifaiger route agrees on all 20 answers and independently
+checks every artifact. Comparing that checked table derives the same three
+minimal semantic change sets, although it does not emit them in one
+source-bound aggregate. Its 15,479-byte model-plus-evidence package is about
+8.32 times smaller than GCC's current aggregate. Conversely, five matched
+arm64 trials put GCC's median source-through-answer time at 0.09 seconds versus
+4.84 seconds for 20 isolated maintained jobs, with about 20.0% lower
+producer-path peak RSS. This is evidence for a shared-model orchestration
+advantage, not yet a novel algorithm. Broader subsystem evidence, parallel and
+warm-service baselines, a tighter closest-system comparison, and independent
+review remain open.
+
 ## Production-tagged OpenTitan watchdog
 
 The OpenTitan AON watchdog experiment demonstrates pinned public-source

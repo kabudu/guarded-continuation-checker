@@ -236,3 +236,21 @@ whole-circuit models, and qualified SAFE and UNSAFE evidence is reusable
 without rebuilding. GCC has no novelty-supporting reuse distinction on this
 pair. A subsequent test must start from a revision-pinned public subsystem
 whose reachable transition semantics actually change.
+
+The subsequent OpenTitan `prim_count` pair satisfies that semantic-change
+condition, but a broader search further narrows the claim. FMCAD 2011 already
+reuses and patches IC3 proofs and counterexamples after hardware revisions and
+reports improvements of up to two orders of magnitude. Precision reuse has
+been measured across 1,119 Linux driver revisions. A 2024 SysML method
+propagates mutations to determine which proofs remain valid, while 2026
+Rtl2lean generates machine-checked hierarchical RTL lemmas with substantial
+reuse. Incremental verification, maximum valid proof reuse, proof-impact
+propagation, and hierarchical lemma reuse are therefore established.
+
+The next bounded hypothesis is reduced to a portable
+[revision impact certificate](REVISION_IMPACT_CERTIFICATE_V1.md) that combines
+source-bound component evidence, exact counterfactual invalidation, complete
+inclusion-minimal change sets, both-answer replay, and fail-closed self-service
+firmware integration. Even that combination is only a candidate until the
+predeclared maintained baseline, public semantic-revision, and independent
+review gates pass.

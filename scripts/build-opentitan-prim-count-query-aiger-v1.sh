@@ -1,19 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 YOSYS OUTPUT_DIR" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "usage: $0 YOSYS OUTPUT_DIR [PROPERTY_INDEXES]" >&2
   exit 2
 fi
 
 yosys=$1
 output=$2
+property_indexes=${3:-0,1,2,3,4,5,6,7}
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 fixture=$repo/corpus/rtl/opentitan-prim-count-revision
 expected_yosys=b8e7da6f40ae8f552c116bf6c359b07c6533e159
 [[ -x "$yosys" ]] || { echo "Yosys must be executable" >&2; exit 2; }
 [[ ! -e "$output" && ! -L "$output" ]] || { echo "refusing to overwrite $output" >&2; exit 2; }
 [[ $($yosys -V) == *"git sha1 $expected_yosys,"* ]] || { echo "Yosys revision mismatch" >&2; exit 2; }
+
+IFS=, read -r -a properties <<<"$property_indexes"
+[[ ${#properties[@]} -ge 1 && ${#properties[@]} -le 8 ]] || {
+  echo "PROPERTY_INDEXES must contain between one and eight indexes" >&2
+  exit 2
+}
+previous=-1
+for property in "${properties[@]}"; do
+  case "$property" in
+    [0-7]) ;;
+    *) echo "PROPERTY_INDEXES must be strictly increasing indexes from 0 to 7" >&2; exit 2 ;;
+  esac
+  (( property > previous )) || {
+    echo "PROPERTY_INDEXES must be strictly increasing indexes from 0 to 7" >&2
+    exit 2
+  }
+  previous=$property
+done
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';
@@ -31,7 +50,7 @@ trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 mkdir "$scratch/out"
 cp "$fixture"/{prim-count-before-specialized.sv,prim-count-after-specialized.sv,query-oracle-wrapper.sv} "$scratch/"
 for revision in before after; do
-  for property in {0..7}; do
+  for property in "${properties[@]}"; do
     (
       cd "$scratch"
       "$yosys" -Q -q -p "
@@ -51,4 +70,4 @@ done
   for file in *.aag; do printf '%s  %s\n' "$(sha256_file "$file")" "$file"; done
 ) >"$scratch/out/SHA256SUMS"
 mv "$scratch/out" "$output"
-echo "opentitan_prim_count_query_aiger_v1=GENERATED revisions=2 distinct_properties=8 models=16 output=$output"
+echo "opentitan_prim_count_query_aiger_v1=GENERATED revisions=2 distinct_properties=${#properties[@]} models=$((${#properties[@]} * 2)) output=$output"

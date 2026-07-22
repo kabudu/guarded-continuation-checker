@@ -311,6 +311,43 @@ agrees on all 16 answers with about 12,738 times less model-plus-evidence data.
 The current container therefore has no artifact advantage. The measured result
 points to a shared-section batch certificate as the next experiment.
 
+The newer [revision-impact certificate v1 experiment](docs/REVISION_IMPACT_CERTIFICATE_V1.md)
+extends the exact revision-local path across every bounded old/new combination.
+It records which changed component or interface boundaries invalidate reuse,
+derives every inclusion-minimal invalidating set, and binds every observation
+to independently checkable revision-local evidence. A strict research CLI and
+typed bounded Rust process client now create and verify the aggregate file
+without per-formula calibration. Machine-readable discovery pins the exact
+semantics, limits, fail-closed no-fallback contract, and typed old/new query
+transitions. The [public OpenTitan four-transition cohort](docs/OPENTITAN_PRIM_COUNT_REVISION_IMPACT_V1.md)
+now preserves unchanged UNSAFE, UNSAFE-to-SAFE, unchanged SAFE, and
+SAFE-to-UNSAFE in one byte-identical exact bundle. Qualified rIC3 and
+Certifaiger agree on all eight scenario answers, but their complete package is
+about 21,306.5 times smaller. The baseline therefore falsifies current artifact
+efficiency, and its producer/checker jobs also use substantially less peak
+memory. GCC is also about 1.67 times slower from synthesis through production
+on this cohort. A frozen certificate has identical bytes and semantics on
+hosted Linux, macOS, and Windows. The multi-atom follow-up below closes the
+next mechanism gate, but revision impact remains outside the production support
+profile.
+
+The larger [OpenTitan PWM crosstalk cohort](docs/OPENTITAN_PWM_CROSSTALK_REVISION_IMPACT_V1.md)
+now separates evidence invalidation from actual semantic impact. Across two
+connected authentic source changes, GCC derives a core-only fix, a
+channel-only fix, and a joint regression that becomes SAFE only when both
+atoms change. The explanation comes from complete independently replayed
+counterfactuals, not a learned attribution score. Pinned Yosys, rIC3 and
+Certifaiger agree on all 20 results and validate every separate artifact. Their
+15,479-byte package is about 8.32 times smaller than GCC's current aggregate,
+so artifact efficiency is currently negative. In five matched arm64 trials,
+GCC is about 53.78 times faster from source through answer and uses about 20.0%
+less producer-path peak RSS than 20 isolated maintained jobs. This is a scoped
+shared-model orchestration result, not a universal solver claim. The exact
+upstream patch and nine-case hostile-drift matrix are retained. Hosted Linux
+release-build run 29910725650 reproduces the frozen bytes and semantics, so all
+nine predeclared cohort gates now pass. Broader production and novelty gates
+remain open.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies
@@ -335,8 +372,10 @@ than the strongest retained zstd result on the revision batch. The negative
 maintained-proof-package control is 73.23% larger than zstd, so QatQ is not
 admitted universally. Hosted Linux, macOS and Windows reproduce the frozen
 envelope identity, and hosted Linux reproduces the resource measurement. QatQ
-remains outside `firmware-rtl-v1` pending compatibility history, an opaque-byte
-dependency boundary and independent review.
+0.1.4 now owns the exact-byte container framing, bounded inspection and
+chunk-at-a-time byte decode boundary, while retaining the frozen envelope
+bytes. QatQ remains outside `firmware-rtl-v1` pending compatibility history
+and independent review.
 
 Validated findings:
 

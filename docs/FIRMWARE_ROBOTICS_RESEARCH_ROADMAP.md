@@ -177,13 +177,16 @@ constrained workflow and external suitability assessment remain open.
 
 The next data-delivery cycle is predeclared as
 [QatQ transport qualification v1](QATQ_TRANSPORT_QUALIFICATION_V1.md). It proves
-whether exact QatQ 0.1.1 compression can sit behind a GCC-owned, fail-closed
+whether exact QatQ compression can sit behind a GCC-owned, fail-closed
 transport envelope for large proof-carrying revision batches. The experiment
 passes hostile-input rejection, explicit resource limits, cross-platform byte
 identity, Linux and macOS process resource measurements, semantic replay and a
-retained zstd baseline. Compatibility history, an opaque-byte dependency
-boundary and independent review remain open. It cannot change certificate
-semantics, novelty status, or the `firmware-rtl-v1` support boundary.
+retained zstd baseline. QatQ 0.1.4 now owns the exact-byte container and bounded
+byte-chunk boundary, closing that promotion gate without changing the frozen
+envelope.
+Compatibility history and independent review remain open. It cannot change
+certificate semantics, novelty status, or the `firmware-rtl-v1` support
+boundary.
 
 The next proof-delivery cycle now has a first
 [governed proof-carrying MTBDD API](GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md).
@@ -205,6 +208,19 @@ synthesis recipes, and byte-identical regenerated AIGER models. This closes the
 public benchmark's local provenance mechanism gap. General signed partner build
 provenance, independent synthesis equivalence, and compatibility history remain
 open.
+
+The [revision impact certificate v1](REVISION_IMPACT_CERTIFICATE_V1.md) cycle
+now passes its predeclared OpenTitan PWM cohort gates. It provides a bounded,
+deterministic certificate for counterfactual evidence invalidation and complete
+inclusion-minimal semantic change sets across firmware revisions. A pinned
+full-rebuild proof-producing baseline agrees on all 20 answers and independently
+checks every artifact. GCC is faster at the matched shared-model orchestration
+scope but produces a larger artifact. Prior work already establishes
+incremental IC3 proof reuse, abstraction-precision reuse, mutation-impact
+propagation, and hierarchical RTL lemma reuse, so the result remains a narrow
+candidate contribution rather than a novelty claim. The next comparison must
+remove isolated-process bias with warm-service and parallel maintained-tool
+baselines, then test a larger connected public subsystem.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit

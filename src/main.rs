@@ -20,7 +20,7 @@ use guarded_continuation_checker::{
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
-    revision_local,
+    revision_impact, revision_local,
     source_model_attestation::{self, SourceModelBindingInput},
     unsat_proof::{self, CnfClause as Clause},
 };
@@ -75,6 +75,9 @@ const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION: u32 = 1;
 const SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+const REVISION_IMPACT_CLI_VERSION: u32 = 2;
+const REVISION_IMPACT_QUERY_MANIFEST_VERSION: u32 = 1;
+const REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES: usize = 16 * 1024;
 
 #[derive(Debug)]
 struct ComponentBatchManifestMember {
@@ -25842,11 +25845,104 @@ fn parse_revision_output_nodes(value: &str, label: &str) -> Result<Vec<btor2::No
     Ok(nodes)
 }
 
+fn parse_revision_impact_queries(path: &Path) -> Result<Vec<revision_local::BoundedQuery>, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES,
+        "revision impact query manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "revision impact query manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "revision impact query manifest must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    if lines.next() != Some("gcc-btor2-revision-impact-queries-v1") {
+        return Err("revision impact query manifest has an unsupported header".to_string());
+    }
+    let mut queries = Vec::new();
+    let mut keys = Vec::new();
+    for (index, line) in lines.enumerate() {
+        let fields = line.split(',').collect::<Vec<_>>();
+        if fields.len() != 3 || fields.iter().any(|field| field.is_empty()) {
+            return Err(format!(
+                "revision impact query {} must use HORIZON,BAD_SIDE,BAD_OUTPUT syntax",
+                index + 1
+            ));
+        }
+        let horizon = fields[0]
+            .parse::<u32>()
+            .map_err(|_| format!("revision impact query {} has an invalid horizon", index + 1))?;
+        let (bad_side, side_key) = match fields[1] {
+            "left" => (revision_local::ComponentSide::Left, 0_u8),
+            "right" => (revision_local::ComponentSide::Right, 1_u8),
+            _ => {
+                return Err(format!(
+                    "revision impact query {} side must be left or right",
+                    index + 1
+                ));
+            }
+        };
+        let bad_output = fields[2]
+            .parse::<btor2::NodeId>()
+            .ok()
+            .filter(|node| *node != 0)
+            .ok_or_else(|| {
+                format!(
+                    "revision impact query {} bad output must be nonzero",
+                    index + 1
+                )
+            })?;
+        let key = (horizon, side_key, bad_output);
+        if keys.last().is_some_and(|previous| *previous >= key) {
+            return Err(
+                "revision impact queries must be unique and strictly ordered by horizon, side, and output"
+                    .to_string(),
+            );
+        }
+        keys.push(key);
+        queries.push(revision_local::BoundedQuery {
+            horizon,
+            bad_side,
+            bad_output,
+        });
+    }
+    if queries.is_empty() || queries.len() > revision_impact::MAX_IMPACT_QUERIES {
+        return Err(format!(
+            "revision impact query manifest must contain 1..={} queries",
+            revision_impact::MAX_IMPACT_QUERIES
+        ));
+    }
+    Ok(queries)
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
     };
     match command {
+        "btor2-revision-impact-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-revision-impact-cli-version"
+                        .to_string(),
+                );
+            }
+            let policy = revision_impact::RevisionImpactPolicy::default();
+            println!(
+                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-semantic-set-v1 routing=none fallback=none unsupported=fail-closed",
+                revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
+                policy.max_input_bytes,
+                policy.max_evidence_bytes,
+                policy.max_bundle_bytes,
+                revision_impact::MAX_IMPACT_ATOMS,
+                policy.max_combinations,
+                policy.max_queries,
+            );
+            Ok(true)
+        }
         "composed-witness-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -27776,6 +27872,153 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     String::new()
                 }
             );
+            Ok(true)
+        }
+        "check-btor2-revision-impact" | "verify-btor2-revision-impact" => {
+            if args.len() != 11 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} LEFT_OLD.btor2 LEFT_NEW.btor2 LEFT_OUTPUTS RIGHT_OLD.btor2 RIGHT_NEW.btor2 RIGHT_OUTPUTS INTERFACE_OLD.txt INTERFACE_NEW.txt QUERIES.txt {}",
+                    if command == "check-btor2-revision-impact" {
+                        "OUTPUT.revision-impact"
+                    } else {
+                        "INPUT.revision-impact"
+                    }
+                ));
+            }
+            let left_old = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "old left BTOR2 input",
+            )?;
+            let left_new = read_bounded_regular_file(
+                Path::new(&args[2]),
+                btor2::MAX_BTOR2_BYTES,
+                "new left BTOR2 input",
+            )?;
+            let left_outputs = parse_revision_output_nodes(&args[3], "LEFT_OUTPUTS")?;
+            let right_old = read_bounded_regular_file(
+                Path::new(&args[4]),
+                btor2::MAX_BTOR2_BYTES,
+                "old right BTOR2 input",
+            )?;
+            let right_new = read_bounded_regular_file(
+                Path::new(&args[5]),
+                btor2::MAX_BTOR2_BYTES,
+                "new right BTOR2 input",
+            )?;
+            let right_outputs = parse_revision_output_nodes(&args[6], "RIGHT_OUTPUTS")?;
+            let interface_old = read_bounded_regular_file(
+                Path::new(&args[7]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "old word interface contract",
+            )?;
+            let interface_new = read_bounded_regular_file(
+                Path::new(&args[8]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "new word interface contract",
+            )?;
+            let queries = parse_revision_impact_queries(Path::new(&args[9]))?;
+            let input = revision_impact::TwoComponentRevisionImpactInput {
+                left_old: &left_old,
+                left_new: &left_new,
+                left_outputs: &left_outputs,
+                right_old: &right_old,
+                right_new: &right_new,
+                right_outputs: &right_outputs,
+                interface_old: &interface_old,
+                interface_new: &interface_new,
+                queries: &queries,
+            };
+            let policy = revision_impact::RevisionImpactPolicy::default();
+            let started = Instant::now();
+            let (bundle, encoded) = if command == "check-btor2-revision-impact" {
+                let bundle = revision_impact::produce_two_component_revision_impact_with_policy(
+                    &input, policy,
+                )
+                .map_err(|error| error.to_string())?;
+                let encoded =
+                    revision_impact::encode_two_component_revision_impact_bundle(&bundle, policy)
+                        .map_err(|error| error.to_string())?;
+                (bundle, encoded)
+            } else {
+                let encoded = read_bounded_regular_file(
+                    Path::new(&args[10]),
+                    policy.max_bundle_bytes,
+                    "revision impact bundle",
+                )?;
+                let bundle =
+                    revision_impact::decode_two_component_revision_impact_bundle(&encoded, policy)
+                        .map_err(|error| error.to_string())?;
+                (bundle, encoded)
+            };
+            let (summary, work) =
+                revision_impact::verify_two_component_revision_impact_observed_with_policy(
+                    &input, &bundle, policy,
+                )
+                .map_err(|error| error.to_string())?;
+            let semantic_sets =
+                revision_impact::derive_minimal_semantic_change_sets(&bundle.impact)
+                    .map_err(|error| error.to_string())?;
+            if semantic_sets.len() != summary.minimal_semantic_change_sets {
+                return Err("revision impact semantic-change count mismatch".to_string());
+            }
+            if command == "check-btor2-revision-impact" {
+                write_new_certificate(Path::new(&args[10]), &encoded)?;
+            }
+            let status = if command == "check-btor2-revision-impact" {
+                "CREATED"
+            } else {
+                "VERIFIED"
+            };
+            println!(
+                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} minimal_semantic_change_sets={} evidence_members={} certificate_bytes={} parsed_evidence_bytes={} semantic_replays={} component_validations={} composed_pair_checks={} final_transition_checks={} result_comparisons={} elapsed_micros={}",
+                revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
+                summary.atoms,
+                summary.queries,
+                summary.combinations,
+                summary.reusable_observations,
+                summary.invalidated_observations,
+                summary.minimal_invalidating_sets,
+                summary.minimal_semantic_change_sets,
+                bundle.revision_evidence.len(),
+                encoded.len(),
+                work.parsed_evidence_bytes,
+                work.semantic_replays,
+                work.component_validations,
+                work.composed_pair_checks,
+                work.final_transition_checks,
+                work.result_comparisons,
+                started.elapsed().as_micros(),
+            );
+            let new_mask = summary.combinations - 1;
+            let result = |value| match value {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
+            for (index, query) in queries.iter().enumerate() {
+                let old = bundle.impact.observations[index];
+                let new = bundle.impact.observations[new_mask * summary.queries + index];
+                let side = match query.bad_side {
+                    revision_local::ComponentSide::Left => "left",
+                    revision_local::ComponentSide::Right => "right",
+                };
+                println!(
+                    "btor2-revision-impact-query index={index} horizon={} bad_side={side} bad_output={} old_result={} new_result={}",
+                    query.horizon,
+                    query.bad_output,
+                    result(old.result),
+                    result(new.result),
+                );
+            }
+            for set in semantic_sets {
+                println!(
+                    "btor2-revision-impact-semantic-set query_index={} changed_mask={} baseline_result={} changed_result={}",
+                    set.query_index,
+                    set.changed_mask,
+                    result(set.baseline_result),
+                    result(set.changed_result),
+                );
+            }
             Ok(true)
         }
         "check-btor2-revision-retained-left" => {

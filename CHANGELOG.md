@@ -2,14 +2,132 @@
 
 ## Unreleased
 
+## 0.30.0 - 2026-07-22
+
+- Predeclare revision impact certificate v1 for selective firmware regression.
+  Freeze exact source-bound reuse, exhaustive bounded counterfactuals, complete
+  inclusion-minimal invalidating sets, both-answer replay, resource governance,
+  hostile-input rejection, exact fallback, maintained full-rebuild comparison,
+  public semantic-revision evidence, self-service integration and three-platform
+  identity gates. Record incremental IC3, precision reuse, mutation-impact
+  propagation and hierarchical RTL lemma reuse as disconfirming prior art, so
+  no broad incremental-verification novelty claim is permitted.
+- Implement the first public revision-impact certificate core. Canonical
+  bounded atoms, dependency edges, query support, complete counterfactual
+  observations and inclusion-minimal invalidating sets round-trip through a
+  strict binary format. Verification rederives every minimal set and requires
+  an independent semantic evaluator for every table entry. Five API tests cover
+  deterministic round trips, semantic disagreement, graph and support errors,
+  truncation, mutation, trailing data and missing or extra minimal sets. This
+  closes the certificate-mechanics slice only; exact revision-local integration
+  remains open.
+- Bind every impact observation to the SHA-256 of canonical revision-local
+  evidence. Add an exact two-component adapter that enumerates every old/new
+  source combination, produces its bounded answer, independently decodes and
+  verifies each semantic artifact, and rejects query, boundary, source,
+  evidence, digest or result drift. A both-answer mechanism test preserves an
+  UNSAFE-to-SAFE semantic revision and an unchanged SAFE query. Public-product
+  integration and the complete four-transition answer cohort remain open.
+- Add a canonical aggregate impact bundle and symmetric production,
+  verification, encode and decode policies for total input bytes, per-scenario
+  evidence, total bundle bytes, counterfactual combinations and query count.
+  Seven focused tests now include every aggregate policy dimension and every
+  bundle truncation. Production, encoding, decoding and verification enforce
+  the same caller-selected dimensions. Resource refusal occurs before retaining
+  or decoding an over-limit artifact.
+- Add the first self-service revision-impact file CLI. Strict old/new component
+  and interface inputs plus a canonical bounded-query manifest produce or
+  independently verify the aggregate certificate. The workflow uses bounded
+  non-symlink reads, exact query and source binding, atomic no-clobber output,
+  and fail-closed rejection of manifest drift, certificate mutation, and
+  noncanonical text. This closes the file-CLI portion of the integration gate;
+  the typed process client, capabilities, baselines, public cohort, and
+  portability evidence remain open.
+- Add a strict machine-readable capability contract and the public
+  `RevisionImpactTool` process client. Discovery pins the v1 semantic,
+  no-routing, no-fallback, fail-closed contract and every supported resource
+  ceiling. Certify and verify calls are shell-free, deadline/output/file
+  bounded, validate output-node lists before spawning, parse one exact summary
+  schema, and expose success and failure invocation metrics. The client default
+  file limit now matches the advertised 64 MiB bundle ceiling.
+- Add deterministic verifier-work observability to the exact aggregate path.
+  Independent checking now reports parsed evidence bytes, semantic replays,
+  component validations, composed pair checks, final transition checks, and
+  result comparisons with checked arithmetic and completeness invariants. The
+  CLI and typed process client expose the same `verification-v1` work schema;
+  these counters describe logical work and never substitute wall time. File-CLI
+  tests admit the inclusive 32-query boundary and refuse query 33, oversized
+  manifests, noncanonical text, and manifest symlinks without partial output.
+- Add strict per-query `transition-v1` output and typed parsing for old and new
+  SAFE or UNSAFE results. Retain the first public OpenTitan `prim_count`
+  revision-impact cohort spanning unchanged UNSAFE, UNSAFE-to-SAFE, unchanged
+  SAFE, and SAFE-to-UNSAFE in one exact bundle. Two clean productions emit the
+  same 56,632,691-byte certificate and SHA-256, and independent verification
+  repeats all eight semantic results and deterministic work counters. The
+  portable-host gate remains open.
+- Qualify the identical four-query maintained baseline. Pinned Yosys plus rIC3
+  and Certifaiger agree on four SAFE and four UNSAFE scenario answers and
+  independently validate every witness or trace. Their complete 2,658-byte
+  model-plus-evidence package is about 21,306.5 times smaller than GCC's
+  56,632,691-byte aggregate. GCC source-through-production and checker peak RSS
+  are about 17.7 and 57.3 times larger. GCC also takes 3.03 seconds from
+  synthesis through production versus 1.81 seconds for the maintained route.
+  This closes the local semantic, transfer, evidence-checking, peak-memory, and
+  total producer-time slices with a strong negative result. The apparent GCC
+  checker-time advantage is not claimed because the maintained checker uses
+  eight isolated Docker launches. No novelty claim is made.
+- Freeze an 888-byte revision-impact certificate fixture at SHA-256
+  `63f65c7ee9c8a296af0f2dace3cea9f129f159bc70f2fafb33633f70724b12f0`.
+  Hosted Actions run 29905014426 reproduces the exact bytes, decoding, and all
+  16 independently replayed observations on Linux, macOS, and Windows. This
+  closes the certificate-format portability gate; larger public-subsystem and
+  independent-review gates remain open.
+- Predeclare the larger public two-atom revision cohort against OpenTitan PWM
+  commit `86db2898288664d8d5e8fc635b48951ef63e3439`. Freeze the parent/child
+  source digests, connected core-clear and channel-output atom boundary, five
+  query classes including a combination-only regression, provenance,
+  deterministic production, independent replay, hostile drift, maintained
+  proof-producing baseline, resource, and hosted release-build gates before
+  extracting or measuring the fixture.
+- Implement the OpenTitan PWM two-atom cohort from specialised, source-digested
+  SystemVerilog and reproducible pinned-Yosys BTOR2. Add an exact public API
+  distinction between minimal evidence-invalidating sets and minimal semantic
+  answer-changing sets, plus machine-readable CLI v2 output and strict typed
+  process parsing. The four-combination matrix proves separate `{core}` and
+  `{channel}` fixes and a joint `{core, channel}` regression while preserving
+  unchanged SAFE and UNSAFE controls. Two clean local productions emit the
+  same 128,768-byte aggregate; maintained and hosted gates remain open.
+- Qualify the matching OpenTitan PWM maintained baseline across all four source
+  combinations and five properties. Pinned Yosys, rIC3 and Certifaiger agree
+  with GCC on 9 SAFE and 11 UNSAFE observations and independently validate all
+  20 artifacts. The maintained model-plus-evidence package is 15,479 bytes,
+  making GCC's current aggregate about 8.32 times larger. Retain this negative
+  result while the matched GCC resource, hostile-drift, exact-patch and hosted
+  gates remain open.
+- Add five matched arm64 trials for the OpenTitan PWM cohort. GCC's median
+  source-through-answer time is 0.09 seconds versus 4.84 seconds for 20
+  isolated maintained jobs, about 53.78 times faster, with about 20.0% lower
+  producer-path peak RSS. GCC's artifact remains about 8.32 times larger. Treat
+  this as a scoped shared-model and orchestration advantage, not a universal
+  solver-performance claim.
+- Retain the exact 3,810-byte upstream OpenTitan PWM commit patch and bind its
+  authoritative SHA-256 into both source-generation routes. Add a public-cohort
+  hostile matrix proving fail-closed rejection of source, interface, query,
+  revision-direction, atom-order, evidence, digest, result and minimal-set
+  drift.
+- Add a dedicated hosted Linux release-build gate for the public OpenTitan PWM
+  cohort. Actions run 29910725650 reproduces the exact 128,768-byte bundle and
+  frozen SHA-256, all 20 observations, three minimal semantic change sets and
+  all nine hostile rejections. This closes every predeclared cohort gate, not
+  the broader production or novelty programme.
 - Predeclare QatQ transport qualification v1 as an additive research-only
-  experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
+  experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,
   hostile-input rejection, cross-platform identity, realistic resource
   measurements, semantic replay and retained negative compression rows before
   considering integration. QatQ remains outside `firmware-rtl-v1`.
-- Implement the optional `research-qatq-transport` Rust API against exact QatQ
-  0.1.1. Add a canonical length, codec, parameter, canonical-digest and
+- Implement the optional `research-qatq-transport` Rust API against exact QatQ.
+  Add a canonical length, codec, parameter, canonical-digest and
   encoded-digest envelope; checked resource policy; pre-allocation per-chunk
   framing limits; independent QatQ checksum validation; chunked exact recovery;
   and atomic create-new file publication. Eight boundary and hostile tests pass.
@@ -19,8 +137,13 @@
   maintained-proof-package row, where QatQ is 73.23% larger than zstd. Hosted
   run 29893368169 reproduces the frozen envelope on Linux, macOS and Windows;
   Linux records 456.823 ms median encode, 79.591 ms median decode and
-  68,968,448-byte peak RSS. Keep compatibility, opaque-byte API and independent
-  review promotion gates open.
+  68,968,448-byte peak RSS.
+- Upstream and adopt QatQ 0.1.4's exact-byte container and bounded byte-chunk
+  visitor APIs. Remove GCC's private byte-to-`u32` packing, QATC/QATQ framing
+  parser and public floating-point-labelled mapping without changing a frozen
+  envelope byte. Preserve chunk-bounded recovery, callback-before-validation
+  exclusion, resource policy, hostile rejection and the prior exact hash.
+  Compatibility history and independent review remain open promotion gates.
 
 ## 0.29.0 - 2026-07-22
 

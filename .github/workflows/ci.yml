@@ -337,7 +337,16 @@ jobs:
           cargo test --locked --test opentitan_aon_watchdog_api
           cargo test --locked --lib btor2_predicate_set
           cargo test --locked --test btor2_predicate_set_api
+          cargo test --locked --test revision_impact_api portable_certificate_fixture_has_frozen_identity_and_semantics
           cargo test --locked --features research-qatq-transport --test qatq_transport_api portable_fixture_has_frozen_envelope_identity
+
+  revision-impact-public-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Reproduce public multi-atom certificate in a release build
+        run: cargo test --release --locked --test opentitan_pwm_revision_impact_api
 
   public-rtl-corpus:
     runs-on: ubuntu-latest
@@ -659,6 +668,16 @@ jobs:
         run: cargo install cargo-audit --version 0.22.1 --locked
       - name: Audit locked dependencies
         run: cargo audit
+
+  public-api-semver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Install pinned public API checker
+        run: cargo install cargo-semver-checks --version 0.49.0 --locked
+      - name: Compare with the latest published crate
+        run: scripts/check-public-api-semver-v1.sh
 
   bitwuzla-phase-baseline:
     runs-on: ubuntu-latest

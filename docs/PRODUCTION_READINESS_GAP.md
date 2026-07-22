@@ -1,9 +1,9 @@
 # Production-readiness gap register
 
-Guarded Continuation Checker v0.28.0 is an evaluation-ready research prototype. This register is
-the authoritative checklist for any future production-grade claim. A gate is
-closed only by linked, reproducible evidence; passing unit tests alone is not
-sufficient.
+Guarded Continuation Checker is an evaluation-ready research prototype. This
+register is the authoritative checklist for any future production-grade claim.
+A gate is closed only by linked, reproducible evidence; passing unit tests
+alone is not sufficient.
 
 | Gate | Current evidence | Closure requirement | Status |
 |---|---|---|---|
@@ -520,6 +520,37 @@ specialisation sequentially equivalent. The hosted, closest-system, portable,
 compatibility, and independent-review gates remain open. The top-level
 production status therefore does not change yet.
 
+The revision-impact follow-up now places unchanged UNSAFE, UNSAFE-to-SAFE,
+unchanged SAFE, and SAFE-to-UNSAFE queries into one exact OpenTitan aggregate.
+Two clean productions are byte-identical, and the independent verifier repeats
+all eight scenario results plus deterministic parsing, validation, composition,
+transition, and comparison work. This closes the local four-transition
+mechanism prerequisite. It does not close production readiness: the
+identical-scope maintained baseline agrees semantically but is about 21,306.5
+times smaller and has substantially lower producer and checker peak RSS.
+GCC is also about 1.67 times slower from synthesis through production. Hosted
+Linux, macOS, and Windows now agree on a frozen certificate's bytes and
+semantics. Larger public-subsystem evidence, release-build acceptance, and
+independent review remain open.
+
+The OpenTitan PWM follow-up now supplies the first connected two-atom semantic
+explanation: core-only mask `1`, channel-only mask `2`, and joint mask `3` are
+derived separately from a complete independently replayed result table. CLI v2
+and the typed process API distinguish these answer-changing sets from ordinary
+evidence invalidation. Reproducible source extraction and local deterministic
+production pass. The maintained baseline now agrees on all 20 results and
+independently checks every witness and trace. Its complete 15,479-byte package
+is about 8.32 times smaller than GCC's current aggregate. Five matched arm64
+trials nevertheless show a 0.09-second GCC median from source through answer,
+versus 4.84 seconds for 20 isolated maintained jobs, and about 20.0% lower
+producer-path peak RSS. This closes the local matched-resource gate only. The
+exact upstream patch and nine-case hostile-drift matrix now pass. The hosted
+Linux release-build identity and semantic gate passes in Actions run
+29910725650. This closes the predeclared PWM cohort qualification. Parallel and
+warm-service comparisons, larger public subsystems, independent review, and
+external product evaluation remain open before the mechanism can enter the
+production support profile.
+
 The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
 locally. Both cross-revision evidence swaps fail, and the new model needs only
 a 13-byte regenerated trace. GCC's roughly 1.7 MB retained portfolio therefore
@@ -580,15 +611,17 @@ mapping treats opaque evidence as f32 words and lacks GCC-specific latency,
 memory, portability and hostile-container qualification.
 
 QatQ transport qualification v1 now supplies a research-only GCC envelope,
-explicit resource policy, pre-allocation framing checks, digest-bound chunked
+explicit resource policy, QatQ-owned pre-allocation framing checks, digest-bound chunked
 recovery, atomic no-clobber output, hostile API tests and local arm64 process
 measurements. Its 82,428-byte revision-batch envelope is 29.41% smaller than the
 retained zstd result. The maintained-proof-package negative control is 73.23%
 larger than zstd. Hosted run 29893368169 reproduces the exact envelope identity
 on Linux, macOS, and Windows and the Linux resource result with 68,968,448-byte
-peak RSS. Compatibility history, an opaque-byte API boundary, and independent
-review remain open, so the transport is not in `firmware-rtl-v1` and no
-production-readiness row closes.
+peak RSS. QatQ 0.1.4 closes the opaque-byte API boundary with exact-byte
+containers and a bounded byte-chunk visitor while preserving the frozen
+envelope.
+Compatibility history and independent review remain open, so the transport is
+not in `firmware-rtl-v1` and no production-readiness row closes.
 
 The remaining gates include long-lived multi-revision service amortisation,
 hosted reproduction of the semantic-changing closest-system comparison, tagged

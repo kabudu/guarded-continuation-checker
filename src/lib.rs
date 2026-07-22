@@ -26,6 +26,7 @@ pub mod dense_relation;
 #[cfg(feature = "research-qatq-transport")]
 pub mod qatq_transport;
 pub mod revision_batch;
+pub mod revision_impact;
 pub mod revision_local;
 pub mod source_model_attestation;
 pub mod unsat_proof;
@@ -187,6 +188,9 @@ pub enum OperationKind {
     VerifyBoundPlantResultSetResourcesAllocationObserved,
     DiscoverControllerSplitCacheObservability,
     VerifyBoundPlantResultSetResourcesCacheObserved,
+    DiscoverRevisionImpact,
+    CertifyRevisionImpact,
+    VerifyRevisionImpact,
 }
 
 impl OperationKind {
@@ -256,6 +260,9 @@ impl OperationKind {
             Self::VerifyBoundPlantResultSetResourcesCacheObserved => {
                 "verify_bound_plant_result_set_resources_cache_observed"
             }
+            Self::DiscoverRevisionImpact => "discover_revision_impact",
+            Self::CertifyRevisionImpact => "certify_revision_impact",
+            Self::VerifyRevisionImpact => "verify_revision_impact",
         }
     }
 }
@@ -613,6 +620,77 @@ pub struct ControllerMtbddCapabilities {
     pub max_terminals: usize,
     pub max_assignments: usize,
     pub max_horizon: usize,
+}
+
+/// Machine-discovered limits and semantics for revision-impact CLI v2.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionImpactCapabilities {
+    pub cli_version: u32,
+    pub impact_version: u32,
+    pub query_manifest_version: u32,
+    pub max_query_manifest_bytes: usize,
+    pub max_input_bytes: usize,
+    pub max_evidence_bytes: usize,
+    pub max_bundle_bytes: usize,
+    pub max_atoms: usize,
+    pub max_combinations: usize,
+    pub max_queries: usize,
+}
+
+/// Paths and projected output nodes bound into one revision-impact job.
+#[derive(Clone, Debug)]
+pub struct RevisionImpactFiles<'a> {
+    pub left_old: &'a Path,
+    pub left_new: &'a Path,
+    pub left_outputs: &'a [u64],
+    pub right_old: &'a Path,
+    pub right_new: &'a Path,
+    pub right_outputs: &'a [u64],
+    pub interface_old: &'a Path,
+    pub interface_new: &'a Path,
+    pub queries: &'a Path,
+}
+
+/// Canonical summary returned by revision-impact production or verification.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionImpactProcessSummary {
+    pub impact_version: u32,
+    pub atoms: usize,
+    pub queries: usize,
+    pub combinations: usize,
+    pub reusable_observations: usize,
+    pub invalidated_observations: usize,
+    pub minimal_invalidating_sets: usize,
+    pub minimal_semantic_change_sets: usize,
+    pub evidence_members: usize,
+    pub certificate_bytes: usize,
+    pub parsed_evidence_bytes: usize,
+    pub semantic_replays: usize,
+    pub component_validations: usize,
+    pub composed_pair_checks: usize,
+    pub final_transition_checks: usize,
+    pub result_comparisons: usize,
+    pub elapsed_micros: usize,
+    pub transitions: Vec<RevisionImpactQueryTransition>,
+    pub semantic_change_sets: Vec<RevisionImpactSemanticChangeSet>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionImpactQueryTransition {
+    pub index: usize,
+    pub horizon: u32,
+    pub bad_side: revision_local::ComponentSide,
+    pub bad_output: u64,
+    pub old_result: revision_local::BoundedResult,
+    pub new_result: revision_local::BoundedResult,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionImpactSemanticChangeSet {
+    pub query_index: usize,
+    pub changed_mask: u16,
+    pub baseline_result: revision_local::BoundedResult,
+    pub changed_result: revision_local::BoundedResult,
 }
 
 /// Machine-discovered limits for proof-carrying controller MTBDD CLI v1.
@@ -1343,6 +1421,167 @@ impl PredicateTool {
             });
         }
         Ok(())
+    }
+}
+
+/// Typed, shell-free client for revision-impact CLI v2.
+#[derive(Clone, Debug)]
+pub struct RevisionImpactTool {
+    executable: PathBuf,
+    capabilities: RevisionImpactCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl RevisionImpactTool {
+    /// Discover and validate the executable contract with a file limit that
+    /// admits the largest advertised v1 bundle.
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        let policy = ExecutionPolicy::default()
+            .with_file_limit(revision_impact::MAX_REVISION_IMPACT_CERTIFICATE_BYTES as u64)?;
+        Self::discover_with_policy(executable, policy)
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("btor2-revision-impact-cli-version");
+        let output = run_bounded(OperationKind::DiscoverRevisionImpact, command, policy)?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_revision_impact_capabilities(&stdout).map_err(|error| {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            PredicateOperationError {
+                error: Box::new(error),
+                metrics: metrics.clone(),
+            }
+        })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn executable(&self) -> &Path {
+        &self.executable
+    }
+
+    pub fn capabilities(&self) -> &RevisionImpactCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify(
+        &self,
+        files: &RevisionImpactFiles<'_>,
+        artifact: &Path,
+    ) -> Result<RevisionImpactProcessSummary, PredicateApiError> {
+        self.certify_observed(files, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        files: &RevisionImpactFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<RevisionImpactProcessSummary>, PredicateOperationError> {
+        self.invoke(
+            OperationKind::CertifyRevisionImpact,
+            "check-btor2-revision-impact",
+            "CREATED",
+            files,
+            artifact,
+        )
+    }
+
+    pub fn verify(
+        &self,
+        files: &RevisionImpactFiles<'_>,
+        artifact: &Path,
+    ) -> Result<RevisionImpactProcessSummary, PredicateApiError> {
+        self.verify_observed(files, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        files: &RevisionImpactFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<RevisionImpactProcessSummary>, PredicateOperationError> {
+        self.invoke(
+            OperationKind::VerifyRevisionImpact,
+            "verify-btor2-revision-impact",
+            "VERIFIED",
+            files,
+            artifact,
+        )
+    }
+
+    fn invoke(
+        &self,
+        operation: OperationKind,
+        command_name: &str,
+        expected_status: &str,
+        files: &RevisionImpactFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<RevisionImpactProcessSummary>, PredicateOperationError> {
+        let left_outputs =
+            canonical_node_list(files.left_outputs).map_err(|error| PredicateOperationError {
+                metrics: empty_metrics(
+                    operation,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            })?;
+        let right_outputs =
+            canonical_node_list(files.right_outputs).map_err(|error| PredicateOperationError {
+                metrics: empty_metrics(
+                    operation,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            })?;
+        let mut command = Command::new(&self.executable);
+        command
+            .arg(command_name)
+            .arg(files.left_old)
+            .arg(files.left_new)
+            .arg(left_outputs)
+            .arg(files.right_old)
+            .arg(files.right_new)
+            .arg(right_outputs)
+            .arg(files.interface_old)
+            .arg(files.interface_new)
+            .arg(files.queries)
+            .arg(artifact);
+        let output = run_bounded(operation, command, self.policy)?;
+        parse_revision_impact_summary(output, expected_status, &self.capabilities)
     }
 }
 
@@ -4417,6 +4656,370 @@ fn parse_controller_proof_mtbdd_portfolio_resource_summary(
     }
 }
 
+fn canonical_node_list(nodes: &[u64]) -> Result<String, PredicateApiError> {
+    if nodes.is_empty()
+        || nodes
+            .windows(2)
+            .any(|pair| pair[0] == 0 || pair[0] >= pair[1])
+        || nodes.last() == Some(&0)
+    {
+        return Err(PredicateApiError::InvalidPolicy(
+            "revision impact output nodes must be nonempty, nonzero, unique, and strictly increasing"
+                .to_string(),
+        ));
+    }
+    Ok(nodes
+        .iter()
+        .map(u64::to_string)
+        .collect::<Vec<_>>()
+        .join(","))
+}
+
+fn parse_revision_impact_capabilities(
+    line: &str,
+) -> Result<RevisionImpactCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "revision impact capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "revision_impact_cli_version",
+        "impact_version",
+        "query_manifest_version",
+        "max_query_manifest_bytes",
+        "max_input_bytes",
+        "max_evidence_bytes",
+        "max_bundle_bytes",
+        "max_atoms",
+        "max_combinations",
+        "max_queries",
+        "semantics",
+        "work_schema",
+        "query_schema",
+        "routing",
+        "fallback",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "revision impact capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[10..]
+        != [
+            "exact-counterfactual-v1",
+            "verification-v1",
+            "transition-semantic-set-v1",
+            "none",
+            "none",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "revision impact semantic or fallback contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..3]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[3..10]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 3]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if versions != [2, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "revision impact version tuple is unsupported".to_string(),
+        ));
+    }
+    let expected = [
+        16 * 1024,
+        64 * 1024 * 1024,
+        16 * 1024 * 1024,
+        64 * 1024 * 1024,
+        revision_impact::MAX_IMPACT_ATOMS,
+        revision_impact::MAX_IMPACT_COMBINATIONS,
+        revision_impact::MAX_IMPACT_QUERIES,
+    ];
+    if limits != expected {
+        return Err(PredicateApiError::IncompatibleContract(
+            "revision impact limit tuple is unsupported".to_string(),
+        ));
+    }
+    Ok(RevisionImpactCapabilities {
+        cli_version: versions[0],
+        impact_version: versions[1],
+        query_manifest_version: versions[2],
+        max_query_manifest_bytes: limits[0],
+        max_input_bytes: limits[1],
+        max_evidence_bytes: limits[2],
+        max_bundle_bytes: limits[3],
+        max_atoms: limits[4],
+        max_combinations: limits[5],
+        max_queries: limits[6],
+    })
+}
+
+fn parse_revision_impact_summary(
+    output: ManagedOutput,
+    expected_status: &str,
+    capabilities: &RevisionImpactCapabilities,
+) -> Result<Observed<RevisionImpactProcessSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<RevisionImpactProcessSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "revision impact response is not canonical LF text".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let fields = lines
+            .first()
+            .ok_or_else(|| {
+                PredicateApiError::InvalidResponse("revision impact response is empty".to_string())
+            })?
+            .split(' ')
+            .collect::<Vec<_>>();
+        if fields.len() != 19 || fields.first().copied() != Some("btor2-revision-impact") {
+            return Err(PredicateApiError::InvalidResponse(
+                "revision impact summary shape is invalid".to_string(),
+            ));
+        }
+        let keys = [
+            "status",
+            "impact_version",
+            "atoms",
+            "queries",
+            "combinations",
+            "reusable_observations",
+            "invalidated_observations",
+            "minimal_invalidating_sets",
+            "minimal_semantic_change_sets",
+            "evidence_members",
+            "certificate_bytes",
+            "parsed_evidence_bytes",
+            "semantic_replays",
+            "component_validations",
+            "composed_pair_checks",
+            "final_transition_checks",
+            "result_comparisons",
+            "elapsed_micros",
+        ];
+        let values = fields[1..19]
+            .iter()
+            .zip(keys)
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != expected_status {
+            return Err(PredicateApiError::InvalidResponse(
+                "revision impact status differs from requested operation".to_string(),
+            ));
+        }
+        let impact_version = canonical_u32(values[1], keys[1])?;
+        let numeric = values[2..]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 2]))
+            .collect::<Result<Vec<_>, _>>()?;
+        if impact_version != capabilities.impact_version
+            || numeric[0] == 0
+            || numeric[0] > capabilities.max_atoms
+            || numeric[1] == 0
+            || numeric[1] > capabilities.max_queries
+            || numeric[2] != 1usize << numeric[0]
+            || numeric[2] > capabilities.max_combinations
+            || numeric[3].checked_add(numeric[4]) != Some(numeric[2] * numeric[1])
+            || numeric[7] != numeric[2] * numeric[1]
+            || numeric[8] == 0
+            || numeric[8] > capabilities.max_bundle_bytes
+            || numeric[9] == 0
+            || numeric[9] > capabilities.max_bundle_bytes
+            || numeric[10] != numeric[7]
+            || numeric[11] != numeric[7] * 2
+            || numeric[14] != numeric[7]
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "revision impact summary violates advertised dimensions".to_string(),
+            ));
+        }
+        if lines.len() != numeric[1] + numeric[6] + 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "revision impact query transition count is incomplete".to_string(),
+            ));
+        }
+        let query_keys = [
+            "index",
+            "horizon",
+            "bad_side",
+            "bad_output",
+            "old_result",
+            "new_result",
+        ];
+        let mut transitions = Vec::with_capacity(numeric[1]);
+        let mut previous_key = None;
+        for (index, line) in lines[1..=numeric[1]].iter().enumerate() {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            if fields.len() != 7 || fields.first().copied() != Some("btor2-revision-impact-query") {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query transition shape is invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(query_keys)
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if canonical_usize(values[0], query_keys[0])? != index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query transition index is noncanonical".to_string(),
+                ));
+            }
+            let horizon = canonical_u32(values[1], query_keys[1])?;
+            let (bad_side, side_key) = match values[2] {
+                "left" => (revision_local::ComponentSide::Left, 0_u8),
+                "right" => (revision_local::ComponentSide::Right, 1_u8),
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "revision impact query side is invalid".to_string(),
+                    ));
+                }
+            };
+            let bad_output = canonical_u64(values[3], query_keys[3])?;
+            if bad_output == 0 {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query output is zero".to_string(),
+                ));
+            }
+            let key = (horizon, side_key, bad_output);
+            if previous_key.is_some_and(|previous| previous >= key) {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query transitions are not strictly ordered".to_string(),
+                ));
+            }
+            previous_key = Some(key);
+            let parse_result = |value| match value {
+                "SAFE" => Ok(revision_local::BoundedResult::Safe),
+                "UNSAFE" => Ok(revision_local::BoundedResult::Unsafe),
+                _ => Err(PredicateApiError::InvalidResponse(
+                    "revision impact query result is invalid".to_string(),
+                )),
+            };
+            transitions.push(RevisionImpactQueryTransition {
+                index,
+                horizon,
+                bad_side,
+                bad_output,
+                old_result: parse_result(values[4])?,
+                new_result: parse_result(values[5])?,
+            });
+        }
+        let semantic_keys = [
+            "query_index",
+            "changed_mask",
+            "baseline_result",
+            "changed_result",
+        ];
+        let parse_result = |value| match value {
+            "SAFE" => Ok(revision_local::BoundedResult::Safe),
+            "UNSAFE" => Ok(revision_local::BoundedResult::Unsafe),
+            _ => Err(PredicateApiError::InvalidResponse(
+                "revision impact semantic-set result is invalid".to_string(),
+            )),
+        };
+        let mut semantic_change_sets = Vec::with_capacity(numeric[6]);
+        let mut previous_semantic_key = None;
+        for line in &lines[numeric[1] + 1..] {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            if fields.len() != 5
+                || fields.first().copied() != Some("btor2-revision-impact-semantic-set")
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact semantic-set shape is invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(semantic_keys)
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            let query_index = canonical_usize(values[0], semantic_keys[0])?;
+            let changed_mask_usize = canonical_usize(values[1], semantic_keys[1])?;
+            if query_index >= numeric[1]
+                || changed_mask_usize == 0
+                || changed_mask_usize >= numeric[2]
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact semantic-set index or mask is out of range".to_string(),
+                ));
+            }
+            let key = (query_index, changed_mask_usize);
+            if previous_semantic_key.is_some_and(|previous| previous >= key) {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact semantic sets are not strictly ordered".to_string(),
+                ));
+            }
+            previous_semantic_key = Some(key);
+            let baseline_result = parse_result(values[2])?;
+            let changed_result = parse_result(values[3])?;
+            if baseline_result == changed_result {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact semantic set does not change the result".to_string(),
+                ));
+            }
+            semantic_change_sets.push(RevisionImpactSemanticChangeSet {
+                query_index,
+                changed_mask: u16::try_from(changed_mask_usize).map_err(|_| {
+                    PredicateApiError::InvalidResponse(
+                        "revision impact semantic-set mask exceeds u16".to_string(),
+                    )
+                })?,
+                baseline_result,
+                changed_result,
+            });
+        }
+        Ok(RevisionImpactProcessSummary {
+            impact_version,
+            atoms: numeric[0],
+            queries: numeric[1],
+            combinations: numeric[2],
+            reusable_observations: numeric[3],
+            invalidated_observations: numeric[4],
+            minimal_invalidating_sets: numeric[5],
+            minimal_semantic_change_sets: numeric[6],
+            evidence_members: numeric[7],
+            certificate_bytes: numeric[8],
+            parsed_evidence_bytes: numeric[9],
+            semantic_replays: numeric[10],
+            component_validations: numeric[11],
+            composed_pair_checks: numeric[12],
+            final_transition_checks: numeric[13],
+            result_comparisons: numeric[14],
+            elapsed_micros: numeric[15],
+            transitions,
+            semantic_change_sets,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
 fn parse_controller_plant_portfolio_capabilities(
     line: &str,
 ) -> Result<ControllerPlantPortfolioCapabilities, PredicateApiError> {
@@ -6662,6 +7265,37 @@ mod tests {
         assert!(
             parse_event_contract_capabilities(&canonical.replace(" max_latches=4", "")).is_err()
         );
+    }
+
+    #[test]
+    fn revision_impact_capability_parser_is_strict_and_fail_closed() {
+        let canonical = "revision_impact_cli_version=2 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-semantic-set-v1 routing=none fallback=none unsupported=fail-closed\n";
+        let parsed = parse_revision_impact_capabilities(canonical).unwrap();
+        assert_eq!(parsed.cli_version, 2);
+        assert_eq!(parsed.max_bundle_bytes, 64 * 1024 * 1024);
+        for hostile in [
+            canonical.replace("impact_version=1", "impact_version=2"),
+            canonical.replace("max_atoms=8", "max_atoms=08"),
+            canonical.replace("max_queries=32", "max_queries=33"),
+            canonical.replace("routing=none", "routing=heuristic"),
+            canonical.replace("work_schema=verification-v1", "work_schema=timing-v1"),
+            canonical.replace(
+                "query_schema=transition-semantic-set-v1",
+                "query_schema=summary-v1",
+            ),
+            canonical.replace("fallback=none", "fallback=exact"),
+            canonical.replace("unsupported=fail-closed", "unsupported=ignore"),
+            canonical.replace('\n', "\r\n"),
+            canonical.trim_end().to_string(),
+            format!("{canonical}unexpected=1\n"),
+        ] {
+            assert!(parse_revision_impact_capabilities(&hostile).is_err());
+        }
+        assert!(canonical_node_list(&[]).is_err());
+        assert!(canonical_node_list(&[0]).is_err());
+        assert!(canonical_node_list(&[7, 7]).is_err());
+        assert!(canonical_node_list(&[10, 7]).is_err());
+        assert_eq!(canonical_node_list(&[7, 10]).unwrap(), "7,10");
     }
 
     #[test]

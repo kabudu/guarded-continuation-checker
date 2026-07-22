@@ -185,10 +185,13 @@ validator versions.
 
 Public integration tests under `tests/*_api.rs` compile as external consumers
 of the library target. Every supported release runs them under the minimum
-documented Rust toolchain. Before the first crate publication, release
-automation must also compare the candidate public API with the most recent
-published crate and reject unversioned SemVer breakage.
-
-No crate has been published yet, so a registry-to-candidate SemVer comparison
-cannot currently provide evidence. This remains a first-publication release
-gate rather than being represented as complete.
+documented Rust toolchain. CI and release automation use pinned
+`cargo-semver-checks` 0.49.0 to compare the candidate public API with the most
+recent crate on crates.io and reject changes that exceed the declared version
+transition. GCC 0.29.0 is the first published registry baseline. Before 1.0,
+additive operation telemetry variants are explicitly classified as minor. The
+version-aware gate fetches the latest stable crates.io baseline, rejects a
+version regression, treats an unchanged version as patch-level, and forces
+minor-level checking for pre-1.0 minor transitions. Every other default
+major-change lint therefore remains active instead of treating a pre-1.0 minor
+release as unconstrained.
