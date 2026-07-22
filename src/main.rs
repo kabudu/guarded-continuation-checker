@@ -27746,6 +27746,125 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "check-btor2-revision-retained-left" => {
+            if args.len() != 10 {
+                return Err("usage: guarded-continuation-checker check-btor2-revision-retained-left LEFT.btor2 PREVIOUS.revision-proof RIGHT.btor2 RIGHT_OUTPUTS INTERFACE.txt HORIZON BAD_SIDE BAD_OUTPUT OUTPUT.revision-proof".to_string());
+            }
+            let left = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "retained left BTOR2 input",
+            )?;
+            let previous_bytes = read_bounded_regular_file(
+                Path::new(&args[2]),
+                revision_local::MAX_REVISION_PORTFOLIO_BYTES,
+                "previous revision proof portfolio",
+            )?;
+            let previous = revision_local::decode_revision_portfolio(&previous_bytes)
+                .map_err(|error| error.to_string())?;
+            let previous_local = match &previous.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    certificate
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(_) => {
+                    return Err(
+                        "previous revision proof does not contain reusable local evidence"
+                            .to_string(),
+                    );
+                }
+            };
+            let retained = revision_local::validate_local_artifact(
+                &left,
+                &previous_local.left.evidence,
+                revision_local::EvidenceSection::Left,
+            )
+            .map_err(|error| error.to_string())?;
+            let right = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2::MAX_BTOR2_BYTES,
+                "changed right BTOR2 input",
+            )?;
+            let right_outputs = parse_revision_output_nodes(&args[4], "RIGHT_OUTPUTS")?;
+            let interface = read_bounded_regular_file(
+                Path::new(&args[5]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "word interface contract",
+            )?;
+            let horizon = args[6]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let bad_side = match args[7].as_str() {
+                "left" => revision_local::ComponentSide::Left,
+                "right" => revision_local::ComponentSide::Right,
+                _ => return Err("BAD_SIDE must be left or right".to_string()),
+            };
+            let bad_output = args[8]
+                .parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| "BAD_OUTPUT must be a nonzero node identifier".to_string())?;
+            let query = revision_local::BoundedQuery {
+                horizon,
+                bad_side,
+                bad_output,
+            };
+            let started = Instant::now();
+            let (certificate, produced, production_work) =
+                revision_local::produce_revision_with_retained_left(
+                    &retained,
+                    &right,
+                    &right_outputs,
+                    &interface,
+                    &query,
+                )
+                .map_err(|error| error.to_string())?;
+            let production = revision_local::RevisionPortfolioProduction {
+                certificate: revision_local::RevisionPortfolioCertificate::RevisionLocal(
+                    certificate,
+                ),
+                backend: revision_local::RevisionPortfolioBackend::RevisionLocal,
+                reason: revision_local::RevisionSelectionReason::ExactLocalRelationAdmitted,
+            };
+            let encoded = revision_local::encode_revision_portfolio(&production)
+                .map_err(|error| error.to_string())?;
+            let certificate = match &production.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    certificate
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(_) => unreachable!(),
+            };
+            let (_, verification_work) = revision_local::verify_revision_with_retained_left(
+                &retained,
+                &right,
+                &interface,
+                certificate,
+            )
+            .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[9]), &encoded)?;
+            let result = match produced.answer.result {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = produced
+                .answer
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-revision-retained-left status=CREATED portfolio_version={} backend=revision-local reason=exact-local-relation-admitted result={result} horizon={horizon} bad_frame={bad_frame} produced_local_sections={} production_reused_local_sections={} changed_candidate_valuations={} verified_local_sections={} verification_reused_local_sections={} composed_pair_checks={} final_transition_checks={} certificate_bytes={} elapsed_micros={} output={}",
+                revision_local::REVISION_PORTFOLIO_CERTIFICATE_VERSION,
+                production_work.produced_local_sections,
+                production_work.reused_local_sections,
+                production_work.changed_candidate_valuations,
+                verification_work.semantically_verified_local_sections,
+                verification_work.reused_local_sections,
+                production_work.composed_pair_checks,
+                production_work.final_transition_checks,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                args[9],
+            );
+            Ok(true)
+        }
         "check-btor2-components" => {
             if args.len() != 6 {
                 return Err("usage: guarded-continuation-checker check-btor2-components CONTROLLER.btor2 PLANT.btor2 CONTRACT.txt HORIZON OUTPUT.component-cert".to_string());
@@ -38734,6 +38853,115 @@ mod tests {
         assert_eq!(
             run_artifact_cli(&verify).unwrap_err(),
             "revision proof query does not match CLI query"
+        );
+        fs::remove_dir_all(&scratch).unwrap();
+    }
+
+    #[test]
+    fn revision_retained_cli_produces_only_changed_side_and_remains_ordinarily_verifiable() {
+        let scratch =
+            std::env::temp_dir().join(format!("gcc-revision-retained-cli-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let left = scratch.join("left.btor2");
+        let right_v1 = scratch.join("right-v1.btor2");
+        let right_v2 = scratch.join("right-v2.btor2");
+        let interface = scratch.join("interface.txt");
+        let previous = scratch.join("previous.revision-proof");
+        let next = scratch.join("next.revision-proof");
+        fs::write(
+            &left,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n",
+        )
+        .unwrap();
+        fs::write(
+            &right_v1,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n",
+        )
+        .unwrap();
+        fs::write(
+            &right_v2,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n",
+        )
+        .unwrap();
+        fs::write(
+            &interface,
+            b"word_interface_version=1\nwire_count=1\nwire=left,7,3\nstatus=complete\n",
+        )
+        .unwrap();
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-portfolio".to_string(),
+                left.display().to_string(),
+                "7".to_string(),
+                right_v1.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                previous.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-retained-left".to_string(),
+                left.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-revision-portfolio".to_string(),
+                left.display().to_string(),
+                "7".to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-retained-left".to_string(),
+                right_v1.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                scratch.join("drift.revision-proof").display().to_string(),
+            ])
+            .is_err()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-retained-left".to_string(),
+                left.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .is_err()
         );
         fs::remove_dir_all(&scratch).unwrap();
     }

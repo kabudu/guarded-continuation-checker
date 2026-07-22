@@ -66,6 +66,12 @@ revisions. Source drift, interface-direction drift, certificate truncation,
 and output overwrite each fail closed with exit status two and no success
 output.
 
+The retained-left file command consumes the old revision portfolio, validates
+the unchanged monitor once, produces only the new PLIC section, and emits a
+normal portfolio. Its observations report one produced and one reused section;
+the ordinary from-scratch verifier then accepts the resulting artifact against
+the new sources.
+
 Reproduce after building the release binary and example:
 
 ```sh

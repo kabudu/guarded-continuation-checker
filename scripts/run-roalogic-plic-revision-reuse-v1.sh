@@ -64,6 +64,20 @@ grep -q 'backend=revision-local reason=exact-local-relation-admitted result=UNSA
   2 left 7 "$proof" >"$workdir/verify.log"
 grep -q 'status=VERIFIED.*result=UNSAFE.*bad_frame=2' "$workdir/verify.log"
 
+next_proof=$workdir/new.revision-proof
+"$binary" check-btor2-revision-retained-left \
+  "$cohort/monitor.btor2" "$proof" "$new_model" 13 "$cohort/interface.txt" \
+  2 left 7 "$next_proof" >"$workdir/retained-create.log"
+grep -q 'status=CREATED.*result=UNSAFE.*produced_local_sections=1 production_reused_local_sections=1 changed_candidate_valuations=4096' \
+  "$workdir/retained-create.log"
+grep -q 'verified_local_sections=1 verification_reused_local_sections=1' \
+  "$workdir/retained-create.log"
+"$binary" verify-btor2-revision-portfolio \
+  "$cohort/monitor.btor2" 7,8 "$new_model" 13 "$cohort/interface.txt" \
+  2 left 7 "$next_proof" >"$workdir/retained-ordinary-verify.log"
+grep -q 'status=VERIFIED.*result=UNSAFE.*bad_frame=2' \
+  "$workdir/retained-ordinary-verify.log"
+
 sed 's/wire=right,13,2/wire=left,13,2/' "$cohort/interface.txt" \
   >"$workdir/wrong-direction.txt"
 sed '$d' "$proof" >"$workdir/truncated.revision-proof"
@@ -137,4 +151,4 @@ if ! (set -C; cat "$result" >"$output") 2>/dev/null; then
   echo "refusing to overwrite $output" >&2
   exit 2
 fi
-echo "roalogic_plic_revision_reuse_v1=PASS revisions=2 properties=2 retained_sections=2 hostile=4 oracle=Yosys-Z3 output=$output"
+echo "roalogic_plic_revision_reuse_v1=PASS revisions=2 properties=2 retained_sections=2 self_service=PASS hostile=4 oracle=Yosys-Z3 output=$output"
