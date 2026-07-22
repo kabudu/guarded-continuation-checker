@@ -583,8 +583,17 @@ earliest-frame UNSAFE answers, smallest-section failure attribution, and static
 fail-closed fallback. The complete hostile matrix, equivalent-scope
 closest-system result, hosted resource replication, portable certificate
 identity, and independent expert review remain mandatory. Until they pass, the
-result is strong incremental-verification engineering and no algorithmic
-novelty claim is supportable.
+current result is not a novelty claim.
+
+The eight-property OpenTitan query-service follow-up now supplies the missing
+larger repeated-query measurement. Exact in-process reuse cuts candidate work
+by 87.5006%, but 16 standalone certificates duplicate the shared relations and
+occupy 113,264,568 bytes. The equivalent maintained AIGER, rIC3, and Certifaiger
+route agrees on all answers using 8,892 model-plus-evidence bytes. This rejects
+the present certificate container as the invariant-breaking idea. The narrower
+open hypothesis is whether one independently verifiable, content-addressed
+batch can share complete local relations across heterogeneous queries while
+retaining exact failure attribution and fail-closed standalone extraction.
 
 Strict interface contract v2 closes one integrity ambiguity in that candidate:
 every semantic input must now be classified as wired or external. This prevents

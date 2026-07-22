@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add an eight-property repeated-query workload over the authentic OpenTitan
+  `prim_count` semantic revision. Reusing two validated relations preserves
+  byte-identical artifacts and all 16 answers while reducing local candidate
+  work by 87.5006%; median internal production and verification ratios are
+  0.213828 and 0.071409. An equivalent qualified Yosys, rIC3, and Certifaiger
+  baseline agrees on every answer using 8,892 total model and evidence bytes,
+  versus 113,264,568 embedded GCC certificate bytes. This falsifies a broad
+  artifact advantage and motivates a content-addressed shared-section batch
+  certificate instead of another standalone-certificate optimisation.
 - Add a typed repeated-query API that accepts two previously validated local
   relation artifacts, produces no new local sections, reuses both sections
   byte-for-byte, and regenerates only the query-specific bounded answer. Its

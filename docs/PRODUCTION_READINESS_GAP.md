@@ -551,6 +551,17 @@ final proof. Exact byte identity and substitution rejection pass in unit tests.
 The larger repeated-query product workload and resource comparison remain open,
 so this does not yet change a production-readiness row.
 
+The larger workload is now measured across eight distinct predicates per
+OpenTitan revision. Retained production emits byte-identical certificates,
+preserves all answers, and reduces candidate enumeration by 87.5006%. However,
+the 16 standalone GCC certificates occupy 113,264,568 bytes. Equivalent
+qualified Yosys, rIC3, and Certifaiger models plus independently verified
+evidence occupy 8,892 bytes and agree on every answer. This falsifies an
+artifact advantage for the current repeated-query container. A canonical
+shared-section batch format, hosted reproduction, hostile testing, portability,
+and independent review are required before this mechanism can change a
+production-readiness row.
+
 The remaining gates include hosted Linux resource results, certificate-byte
 agreement across Linux, macOS, and Windows, long-lived multi-revision service
 amortisation, hosted reproduction of the semantic-changing closest-system

@@ -296,6 +296,14 @@ check the new 13-byte UNSAFE trace. GCC retains explicit local evidence, but
 its complete portfolio is about 1.7 MB, so this cohort demonstrates local
 attribution rather than a certificate-size or production-cost advantage.
 
+The follow-up [distinct-property query-service experiment](docs/OPENTITAN_PRIM_COUNT_QUERY_SERVICE_V1.md)
+reuses the validated environment and revision relation across eight different
+properties. It preserves byte-identical standalone certificates and reduces
+internal candidate work by 87.5006%. The maintained rIC3 and Certifaiger route
+agrees on all 16 answers with about 12,738 times less model-plus-evidence data.
+The current container therefore has no artifact advantage. The measured result
+points to a shared-section batch certificate as the next experiment.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual
