@@ -65,13 +65,22 @@ jobs:
       - name: Format
         run: cargo fmt --check
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: |
+          cargo clippy --all-targets
+          cargo clippy --features research-qatq-transport \
+            --test qatq_transport_api -- -D warnings
+          cargo clippy --features research-qatq-transport \
+            --example qatq_transport_qualification -- -D warnings
       - name: Check frozen production support profile
         run: |
           shellcheck -s bash scripts/check-production-support-profile-v1.sh
           cargo clippy --locked --bin guarded-continuation-checker \
             --features production-firmware -- -D warnings
           cargo build --release --locked --features production-firmware
+          if cargo tree --locked --features production-firmware | grep -Eq '(^| )qatq v0\.1\.1'; then
+            echo "production-firmware unexpectedly includes QatQ"
+            exit 1
+          fi
           scripts/check-production-support-profile-v1.sh \
             target/release/guarded-continuation-checker
       - name: Test
@@ -99,6 +108,7 @@ jobs:
             scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
             scripts/opentitan-dual-timer-resource-container-v1.sh \
+            scripts/benchmark-qatq-transport-v1.sh \
             scripts/test-crate-package-v1.sh
           shellcheck -s sh \
             scripts/build-opentitan-aon-dual-timer-aiger.sh \
@@ -327,6 +337,7 @@ jobs:
           cargo test --locked --test opentitan_aon_watchdog_api
           cargo test --locked --lib btor2_predicate_set
           cargo test --locked --test btor2_predicate_set_api
+          cargo test --locked --features research-qatq-transport --test qatq_transport_api portable_fixture_has_frozen_envelope_identity
 
   public-rtl-corpus:
     runs-on: ubuntu-latest
@@ -338,7 +349,7 @@ jobs:
       - name: Install corpus tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes musl-tools yosys z3
+          sudo apt-get install --yes musl-tools yosys z3 zstd
           git init /tmp/sby
           git -C /tmp/sby remote add origin https://github.com/YosysHQ/sby.git
           git -C /tmp/sby fetch --depth 1 origin fea6e467d067b3ea84b6b5ac08cd48beb59f0d42
@@ -399,6 +410,38 @@ jobs:
             /tmp/opentitan-prim-count-revision-v1
           diff -u results/opentitan-prim-count-revision-v1.csv \
             /tmp/opentitan-prim-count-revision-v1.csv
+      - name: Qualify QatQ revision-batch transport resources
+        env:
+          TRIALS: 5
+        run: |
+          cargo build --release --locked --features research-qatq-transport \
+            --example opentitan_prim_count_revision_batch \
+            --example qatq_transport_qualification
+          mkdir /tmp/qatq-transport-v1 /tmp/qatq-transport-v1/benchmark
+          scripts/build-opentitan-prim-count-query-service-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/qatq-transport-v1/environment.btor2 \
+            /tmp/qatq-transport-v1/before.btor2 \
+            /tmp/qatq-transport-v1/after.btor2
+          target/release/examples/opentitan_prim_count_revision_batch \
+            /tmp/qatq-transport-v1/environment.btor2 \
+            /tmp/qatq-transport-v1/before.btor2 \
+            /tmp/qatq-transport-v1/after.btor2 \
+            /tmp/qatq-transport-v1/revision.batch
+          scripts/benchmark-qatq-transport-v1.sh \
+            target/release/examples/qatq_transport_qualification \
+            /tmp/qatq-transport-v1/results.csv \
+            /tmp/qatq-transport-v1/resources.csv \
+            /tmp/qatq-transport-v1/benchmark \
+            revision-batch /tmp/qatq-transport-v1/revision.batch
+          grep -q '^1,revision-batch,linux,x86_64,14164144,82428,82324,' \
+            /tmp/qatq-transport-v1/results.csv
+          grep -q ',cba7640709163f7d9ca5c908d87b2fb843f148dd0d514bfd345b188e640ca9c9,42f30367e3b1003bec6c95395d91b800a88eb76721fed9c46548a27f79dff6ee,true,true,116769,29.409347,measured$' \
+            /tmp/qatq-transport-v1/results.csv
+          awk -F, 'NR == 2 { exit !($2 == "revision-batch" && $5 > 0) }' \
+            /tmp/qatq-transport-v1/resources.csv
+          cat /tmp/qatq-transport-v1/results.csv
+          cat /tmp/qatq-transport-v1/resources.csv
       - name: Prove OpenTitan verbatim-source equivalence
         run: |
           git init /tmp/opentitan-prim-count-verbatim

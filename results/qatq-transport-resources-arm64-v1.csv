@@ -1,0 +1,3 @@
+schema_version,fixture,os,arch,peak_resident_bytes,measurement,status
+1,revision-batch,darwin,arm64,66240512,process-peak-rss,measured
+1,maintained-proof-package,darwin,arm64,3883008,process-peak-rss,measured

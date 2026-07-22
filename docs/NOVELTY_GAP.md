@@ -612,6 +612,13 @@ transport experiment, but compression is established and the output remains
 8.59 times larger than the maintained proof package. It changes neither the
 semantic invariant nor the novelty status.
 
+The bounded GCC envelope retains that storage advantage under explicit
+integrity and resource controls: 82,428 envelope bytes remain 29.41% below the
+strongest retained zstd result. A maintained-proof-package control is 73.23%
+larger than zstd, and the underlying independently verified model plus evidence
+still contains only 8,892 bytes. This strengthens a selective product transport
+case but leaves the semantic invariant and novelty gap unchanged.
+
 Strict interface contract v2 closes one integrity ambiguity in that candidate:
 every semantic input must now be classified as wired or external. This prevents
 an omitted cross-component wire from silently becoming an environment input.
