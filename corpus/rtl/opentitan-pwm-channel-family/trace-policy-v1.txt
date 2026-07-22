@@ -1,0 +1,7 @@
+channel_trace_policy_version=1
+max_queries=42
+max_members=21
+max_evidence_bytes=67108864
+max_artifact_bytes=69206016
+max_projected_work=100000000000
+status=complete

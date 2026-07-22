@@ -14,9 +14,9 @@
 
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
-    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain, btor2_motion,
-    btor2_phase, btor2_predicate_set, btor2_region, btor2_region_equivalence, btor2_region_extract,
-    btor2_region_property, btor2_search, composed_witness, controller_mtbdd,
+    btor2, btor2_bitblast, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain,
+    btor2_motion, btor2_phase, btor2_predicate_set, btor2_region, btor2_region_equivalence,
+    btor2_region_extract, btor2_region_property, btor2_search, composed_witness, controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
@@ -39,6 +39,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
@@ -85,12 +86,25 @@ const BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_VERSION: u32 = 1;
 const BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES: usize = 256 * 1024;
 const BTOR2_CHANNEL_PROPERTY_POLICY_VERSION: u32 = 1;
 const BTOR2_CHANNEL_PROPERTY_POLICY_MAX_BYTES: usize = 4096;
+const BTOR2_CHANNEL_TRACE_CLI_VERSION: u32 = 1;
+const BTOR2_CHANNEL_TRACE_QUERY_MANIFEST_VERSION: u32 = 1;
+const BTOR2_CHANNEL_TRACE_QUERY_MANIFEST_MAX_BYTES: usize = 256 * 1024;
+const BTOR2_CHANNEL_TRACE_POLICY_VERSION: u32 = 1;
+const BTOR2_CHANNEL_TRACE_POLICY_MAX_BYTES: usize = 4096;
+static CERTIFICATE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Btor2ChannelPropertyQueryManifest {
     expected_channels: usize,
     semantic_roots: Vec<btor2::NodeId>,
     queries: Vec<btor2_region_property::Btor2ChannelPropertyQuery>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Btor2ChannelTraceQueryManifest {
+    expected_channels: usize,
+    semantic_roots: Vec<btor2::NodeId>,
+    queries: Vec<btor2_region_property::Btor2ChannelTraceQuery>,
 }
 
 #[derive(Debug)]
@@ -25810,16 +25824,52 @@ fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, Str
 }
 
 fn write_new_certificate(output: &Path, encoded: &[u8]) -> Result<(), String> {
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    options.mode(0o600);
-    let mut file = options
-        .open(output)
-        .map_err(|error| format!("create certificate {}: {error}", output.display()))?;
-    file.write_all(encoded)
-        .and_then(|_| file.sync_all())
-        .map_err(|error| format!("write certificate {}: {error}", output.display()))
+    if fs::symlink_metadata(output).is_ok() {
+        return Err(format!(
+            "create certificate {}: output already exists",
+            output.display()
+        ));
+    }
+    let parent = output.parent().unwrap_or_else(|| Path::new("."));
+    let name = output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "certificate output filename is invalid".to_string())?;
+    let sequence = CERTIFICATE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temporary = parent.join(format!(
+        ".{name}.gcc-certificate-{}-{sequence}.tmp",
+        std::process::id()
+    ));
+    let result = (|| {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut file = options.open(&temporary).map_err(|error| {
+            format!(
+                "create temporary certificate {}: {error}",
+                temporary.display()
+            )
+        })?;
+        file.write_all(encoded)
+            .and_then(|_| file.sync_all())
+            .map_err(|error| {
+                format!(
+                    "write temporary certificate {}: {error}",
+                    temporary.display()
+                )
+            })?;
+        drop(file);
+        fs::hard_link(&temporary, output)
+            .map_err(|error| format!("publish certificate {}: {error}", output.display()))?;
+        #[cfg(unix)]
+        fs::File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| format!("sync certificate directory {}: {error}", parent.display()))?;
+        Ok(())
+    })();
+    let _ = fs::remove_file(&temporary);
+    result
 }
 
 fn parse_btor2_property_set(value: &str) -> Result<Vec<btor2::NodeId>, String> {
@@ -26152,11 +26202,356 @@ fn map_btor2_channel_property_production_error(
     })
 }
 
+fn parse_btor2_channel_trace_query_manifest(
+    path: &Path,
+) -> Result<Btor2ChannelTraceQueryManifest, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        BTOR2_CHANNEL_TRACE_QUERY_MANIFEST_MAX_BYTES,
+        "BTOR2 channel trace query manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "BTOR2 channel trace query manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "BTOR2 channel trace query manifest must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    if lines.next() != Some("gcc-btor2-channel-traces-v1") {
+        return Err("BTOR2 channel trace query manifest has an unsupported header".to_string());
+    }
+    let channels_text = lines
+        .next()
+        .and_then(|line| line.strip_prefix("channels="))
+        .ok_or_else(|| "BTOR2 channel trace query manifest expected channels".to_string())?;
+    let expected_channels = parse_canonical_usize(channels_text, "channel count")?;
+    if !(1..=btor2_region_extract::MAX_REGION_CHANNELS).contains(&expected_channels) {
+        return Err("BTOR2 channel trace channel count is outside policy".to_string());
+    }
+    let roots_text = lines
+        .next()
+        .and_then(|line| line.strip_prefix("semantic_roots="))
+        .ok_or_else(|| "BTOR2 channel trace query manifest expected semantic_roots".to_string())?;
+    let semantic_roots = roots_text
+        .split(',')
+        .map(|value| {
+            parse_canonical_u64(value, "semantic root").and_then(|root| {
+                (root != 0)
+                    .then_some(root)
+                    .ok_or_else(|| "semantic root must be nonzero".to_string())
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if semantic_roots.is_empty()
+        || semantic_roots.len() > btor2_region_property::MAX_CHANNEL_TRACE_QUERIES
+        || semantic_roots.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err("semantic roots must be nonempty, unique, and strictly increasing".to_string());
+    }
+    let mut queries = Vec::new();
+    let mut canonical = format!(
+        "gcc-btor2-channel-traces-v1\nchannels={expected_channels}\nsemantic_roots={roots_text}\n"
+    );
+    for (index, line) in lines.by_ref().enumerate() {
+        if line == "status=complete" {
+            if lines.next().is_some() {
+                return Err("BTOR2 channel trace query manifest has trailing fields".to_string());
+            }
+            canonical.push_str("status=complete\n");
+            break;
+        }
+        let fields = line
+            .strip_prefix("query=")
+            .ok_or_else(|| format!("BTOR2 channel trace query {} is malformed", index + 1))?
+            .split(',')
+            .collect::<Vec<_>>();
+        if fields.len() != 6 || fields.iter().any(|field| field.is_empty()) {
+            return Err(format!(
+                "BTOR2 channel trace query {} must use ID,CHANNEL,LENGTH,MASK,VALUE,HORIZON syntax",
+                index + 1
+            ));
+        }
+        let query_id = u32::try_from(parse_canonical_u64(fields[0], "query identifier")?)
+            .map_err(|_| "query identifier exceeds range".to_string())?;
+        let channel_index = parse_canonical_usize(fields[1], "query channel")?;
+        let length = u8::try_from(parse_canonical_u64(fields[2], "trace length")?)
+            .map_err(|_| "trace length exceeds range".to_string())?;
+        let mask = u8::try_from(parse_canonical_u64(fields[3], "trace mask")?)
+            .map_err(|_| "trace mask exceeds range".to_string())?;
+        let value = u8::try_from(parse_canonical_u64(fields[4], "trace value")?)
+            .map_err(|_| "trace value exceeds range".to_string())?;
+        let horizon = u32::try_from(parse_canonical_u64(fields[5], "query horizon")?)
+            .map_err(|_| "query horizon exceeds range".to_string())?;
+        let pattern = btor2_region_property::Btor2ChannelTracePattern::new(length, mask, value)
+            .map_err(|error| error.to_string())?;
+        if channel_index >= expected_channels
+            || horizon > btor2_bitblast::MAX_BITBLAST_HORIZON
+            || queries.last().is_some_and(
+                |previous: &btor2_region_property::Btor2ChannelTraceQuery| {
+                    previous.query_id >= query_id
+                },
+            )
+        {
+            return Err("BTOR2 channel trace query is outside policy or order".to_string());
+        }
+        queries.push(btor2_region_property::Btor2ChannelTraceQuery {
+            query_id,
+            channel_index,
+            pattern,
+            horizon,
+        });
+        canonical.push_str(line);
+        canonical.push('\n');
+    }
+    if !canonical.ends_with("status=complete\n")
+        || queries.is_empty()
+        || queries.len() > btor2_region_property::MAX_CHANNEL_TRACE_QUERIES
+        || canonical != text
+    {
+        return Err("BTOR2 channel trace query manifest is incomplete or noncanonical".to_string());
+    }
+    Ok(Btor2ChannelTraceQueryManifest {
+        expected_channels,
+        semantic_roots,
+        queries,
+    })
+}
+
+fn parse_btor2_channel_trace_policy(
+    path: &Path,
+) -> Result<btor2_region_property::Btor2ChannelTraceProductionPolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        BTOR2_CHANNEL_TRACE_POLICY_MAX_BYTES,
+        "BTOR2 channel trace policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "BTOR2 channel trace policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err("BTOR2 channel trace policy must be canonical LF text without NUL".to_string());
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("BTOR2 channel trace policy expected {key}"))
+    };
+    let version = take("channel_trace_policy_version")?;
+    if version != BTOR2_CHANNEL_TRACE_POLICY_VERSION.to_string() {
+        return Err("unsupported BTOR2 channel trace policy version".to_string());
+    }
+    let max_queries = take("max_queries")?;
+    let max_members = take("max_members")?;
+    let max_evidence_bytes = take("max_evidence_bytes")?;
+    let max_artifact_bytes = take("max_artifact_bytes")?;
+    let max_projected_work = take("max_projected_work")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err("BTOR2 channel trace policy is incomplete or has trailing fields".to_string());
+    }
+    let canonical = format!(
+        "channel_trace_policy_version={version}\nmax_queries={max_queries}\nmax_members={max_members}\nmax_evidence_bytes={max_evidence_bytes}\nmax_artifact_bytes={max_artifact_bytes}\nmax_projected_work={max_projected_work}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("BTOR2 channel trace policy is not canonical".to_string());
+    }
+    let artifact = btor2_region_property::Btor2ChannelTraceProofPolicy::new(
+        parse_canonical_usize(max_queries, "maximum query count")?,
+        parse_canonical_usize(max_members, "maximum member count")?,
+        parse_canonical_usize(max_evidence_bytes, "maximum evidence bytes")?,
+        parse_canonical_usize(max_artifact_bytes, "maximum artifact bytes")?,
+    )
+    .map_err(|error| error.to_string())?;
+    btor2_region_property::Btor2ChannelTraceProductionPolicy::new(
+        artifact,
+        parse_canonical_u64(max_projected_work, "maximum projected work")?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn map_btor2_channel_trace_production_error(
+    error: btor2_region_extract::Btor2RegionError,
+) -> String {
+    let message = error.to_string();
+    let reason = if message.contains("query count") && message.contains("policy") {
+        Some("query-count")
+    } else if message.contains("member count") && message.contains("policy") {
+        Some("member-count")
+    } else if message.contains("aggregate projected work exceeds policy") {
+        Some("projected-work")
+    } else if message.contains("evidence exceeds policy") {
+        Some("evidence-bytes")
+    } else if message.contains("artifact exceeds byte policy")
+        || message.contains("artifact is outside policy")
+    {
+        Some("artifact-bytes")
+    } else {
+        None
+    };
+    reason.map_or(message, |reason| {
+        format!("btor2-channel-trace-resource refusal={reason} result=none")
+    })
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
     };
     match command {
+        "btor2-channel-trace-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-channel-trace-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "btor2_channel_trace_cli_version={BTOR2_CHANNEL_TRACE_CLI_VERSION} artifact_version={} query_manifest_version={BTOR2_CHANNEL_TRACE_QUERY_MANIFEST_VERSION} policy_version={BTOR2_CHANNEL_TRACE_POLICY_VERSION} max_query_manifest_bytes={BTOR2_CHANNEL_TRACE_QUERY_MANIFEST_MAX_BYTES} max_policy_bytes={BTOR2_CHANNEL_TRACE_POLICY_MAX_BYTES} max_model_bytes={} max_channels={} max_queries={} max_pattern_length={} max_horizon={} max_evidence_bytes={} max_artifact_bytes={} max_projected_work={} refusal_exit=3 routing=static-explicit-or-bitblast fallback=exact result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed verification=source-replay-and-shortest-frame-proof publication=create-new",
+                btor2_region_property::BTOR2_CHANNEL_TRACE_PROOF_VERSION,
+                btor2::MAX_BTOR2_BYTES,
+                btor2_region_extract::MAX_REGION_CHANNELS,
+                btor2_region_property::MAX_CHANNEL_TRACE_QUERIES,
+                btor2_region_property::MAX_CHANNEL_TRACE_PATTERN_LENGTH,
+                btor2_bitblast::MAX_BITBLAST_HORIZON,
+                btor2_region_property::MAX_CHANNEL_TRACE_EVIDENCE_BYTES,
+                btor2_region_property::MAX_CHANNEL_TRACE_ARTIFACT_BYTES,
+                btor2_region_property::MAX_CHANNEL_TRACE_PROJECTED_WORK,
+            );
+            Ok(true)
+        }
+        "certify-btor2-channel-traces" | "verify-btor2-channel-traces" => {
+            let certify = command.starts_with("certify-");
+            if args.len() != 5 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MODEL.btor2 QUERIES.txt POLICY.txt {}",
+                    if certify {
+                        "OUTPUT.channel-traces"
+                    } else {
+                        "INPUT.channel-traces"
+                    }
+                ));
+            }
+            let started = Instant::now();
+            let model = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 channel trace model",
+            )?;
+            let manifest = parse_btor2_channel_trace_query_manifest(Path::new(&args[2]))?;
+            let production_policy = parse_btor2_channel_trace_policy(Path::new(&args[3]))?;
+            let region_policy = btor2_region_extract::Btor2RegionPolicy::default();
+            let (encoded, plan) = if certify {
+                let structural =
+                    btor2_region_equivalence::encode_btor2_region_equivalence_artifact(
+                        &btor2_region_equivalence::produce_btor2_region_equivalence_artifact(
+                            &model,
+                            &manifest.semantic_roots,
+                            manifest.expected_channels,
+                            region_policy,
+                        )
+                        .map_err(|error| error.to_string())?,
+                    )
+                    .map_err(|error| error.to_string())?;
+                let (plan, encoded) =
+                    btor2_region_property::produce_btor2_channel_trace_proof_bytes(
+                        &model,
+                        &structural,
+                        &manifest.queries,
+                        region_policy,
+                        production_policy,
+                    )
+                    .map_err(map_btor2_channel_trace_production_error)?;
+                (encoded, Some(plan))
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[4]),
+                        production_policy.artifact().max_artifact_bytes(),
+                        "BTOR2 channel trace artifact",
+                    )?,
+                    None,
+                )
+            };
+            let artifact = btor2_region_property::decode_btor2_channel_trace_proof_artifact(
+                &encoded,
+                production_policy.artifact(),
+            )
+            .map_err(|error| error.to_string())?;
+            let structural = btor2_region_equivalence::decode_btor2_region_equivalence_artifact(
+                &artifact.structural_admission,
+            )
+            .map_err(|error| error.to_string())?;
+            if structural.expected_channels != manifest.expected_channels
+                || structural.semantic_roots != manifest.semantic_roots
+            {
+                return Err(
+                    "BTOR2 channel trace manifest does not match structural admission".to_string(),
+                );
+            }
+            let summary = btor2_region_property::verify_btor2_channel_trace_proof(
+                &model,
+                &manifest.queries,
+                &artifact,
+                region_policy,
+                production_policy.artifact(),
+            )
+            .map_err(|error| error.to_string())?;
+            if certify {
+                write_new_certificate(Path::new(&args[4]), &encoded)?;
+            }
+            println!(
+                "btor2-channel-traces status={} cli_version={BTOR2_CHANNEL_TRACE_CLI_VERSION} artifact_version={} channels={} logical_queries={} proof_members={} reused_queries={} explicit_members={} bitblast_members={} evidence_bytes={} artifact_bytes={} projected_work={} elapsed_micros={}",
+                if certify { "CREATED" } else { "VERIFIED" },
+                btor2_region_property::BTOR2_CHANNEL_TRACE_PROOF_VERSION,
+                manifest.expected_channels,
+                summary.metrics.logical_queries,
+                summary.metrics.proof_members,
+                summary.metrics.reused_logical_queries,
+                summary.metrics.explicit_state_members,
+                summary.metrics.bitblast_members,
+                summary.metrics.evidence_bytes,
+                encoded.len(),
+                plan.map_or_else(
+                    || "not-applied".to_string(),
+                    |plan| plan.projected_work.to_string()
+                ),
+                started.elapsed().as_micros(),
+            );
+            for (index, result) in summary.results.iter().enumerate() {
+                let answer = match result.result {
+                    btor2_search::SearchResult::Safe => "SAFE",
+                    btor2_search::SearchResult::Unsafe => "UNSAFE",
+                };
+                let backend = match result.backend {
+                    btor2_region_property::Btor2ChannelTraceBackend::RepresentativeClass => {
+                        "representative-class"
+                    }
+                    btor2_region_property::Btor2ChannelTraceBackend::DirectExact => "direct-exact",
+                };
+                let solver = match result.solver {
+                    btor2_region_property::Btor2ChannelTraceSolver::ExplicitState => {
+                        "explicit-state"
+                    }
+                    btor2_region_property::Btor2ChannelTraceSolver::BitblastCnf => "bitblast-cnf",
+                };
+                println!(
+                    "btor2-channel-trace index={index} query_id={} channel={} length={} mask={} value={} horizon={} answer={answer} bad_frame={} backend={backend} solver={solver} representative_channel={} witness_valuations={}",
+                    result.query.query_id,
+                    result.query.channel_index,
+                    result.query.pattern.length(),
+                    result.query.pattern.mask(),
+                    result.query.pattern.value(),
+                    result.query.horizon,
+                    result
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    result.representative_channel,
+                    result.witness_valuations.len(),
+                );
+            }
+            Ok(true)
+        }
         "btor2-channel-property-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -31151,6 +31546,7 @@ fn main() {
                     || error.starts_with("controller-proof-mtbdd-resource refusal=")
                     || error.starts_with("controller-split-resource refusal=")
                     || error.starts_with("btor2-channel-property-resource refusal=")
+                    || error.starts_with("btor2-channel-trace-resource refusal=")
                 {
                     3
                 } else {

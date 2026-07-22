@@ -5,9 +5,10 @@ type, canonical monitor-model construction, in-memory proof composition, and
 canonical wire artifact now pass their first semantic and hostile-boundary
 tests. An eighteen-query both-answer control uses nine exact members, mixed
 static solver routing, aggregate work refusal, and target witness replay. The
-full retained cohort and maintained comparison now pass locally. The file
-workflow, cross-platform consumer evidence, and whole-process resource evidence
-remain open.
+full retained cohort and maintained comparison now pass locally. A bounded
+create-new file workflow is implemented and passes its first hostile checks.
+Injected publication failure, cross-platform consumer evidence, and
+whole-process resource evidence remain open.
 
 ## Product question
 
@@ -102,7 +103,9 @@ the current mechanism fixture, not the still-open authentic retained cohort.
 ## Current gate state
 
 The mechanism currently closes the local portions of gates 1 through 11. Gate
-12 requires the file workflow. Gate 13 requires external
+12 now has a create-new hard-link publication mechanism, collision preservation,
+and temporary-file cleanup, but still requires an injected pre-publication I/O
+failure. Gate 13 requires external
 consumer jobs on Linux, macOS, and Windows. Gate 14 requires retained local and
 hosted Linux whole-process evidence. No experiment pass or production claim is
 made while those gates remain open.
@@ -145,6 +148,40 @@ Pinned Yosys plus Z3 independently agrees on all 84 answers and earliest bad
 frames. The [retained maintained result](../results/opentitan-pwm-trace-maintained-v1.md)
 closes the local maintained-tool gate. It also records the negative proof-size
 result caused by proving that every reported bad frame is globally earliest.
+
+## Self-service file workflow
+
+The versioned manifest records ordered decimal `ID,CHANNEL,LENGTH,MASK,VALUE,HORIZON`
+queries. The separate policy bounds query count, proof-member count, aggregate
+evidence bytes, artifact bytes, and projected production work. All inputs use
+bounded no-follow regular-file reads. Production authenticates and preflights
+the complete batch before solving, verifies the finished artifact before
+publication, and publishes through a same-directory temporary file plus an
+atomic no-clobber hard link.
+
+```console
+target/release/guarded-continuation-checker \
+  certify-btor2-channel-traces \
+  corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2 \
+  corpus/rtl/opentitan-pwm-channel-family/trace-queries-v1.txt \
+  corpus/rtl/opentitan-pwm-channel-family/trace-policy-v1.txt \
+  /new/result.channel-traces
+
+target/release/guarded-continuation-checker \
+  verify-btor2-channel-traces \
+  corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2 \
+  corpus/rtl/opentitan-pwm-channel-family/trace-queries-v1.txt \
+  corpus/rtl/opentitan-pwm-channel-family/trace-policy-v1.txt \
+  /new/result.channel-traces
+```
+
+`btor2-channel-trace-cli-version` reports the complete machine-readable
+contract. The initial integration test covers production, independent
+verification, stable per-query output, exact work refusal with no output,
+query drift, artifact mutation, invalid patterns, oversized manifests,
+symlinked input refusal, collision preservation, and temporary-file cleanup.
+An injected write or sync failure remains required before acceptance gate 12
+is fully closed.
 
 ## Maintained equivalent-scope control
 

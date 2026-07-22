@@ -30,6 +30,12 @@
   UNSAT certificate for the preceding horizon. Pinned Yosys plus Z3 agrees on
   all 84 answers and earliest frames. Report the resulting 2.14 to 4.90 MB
   artifacts as a negative proof-size result.
+  Add the versioned self-service trace manifest and policy, stable capability
+  discovery, create and verify commands, bounded no-follow reads, typed
+  resource refusal, and source-replayed per-query output. Replace direct
+  certificate writes with same-directory temporary files and atomic no-clobber
+  hard-link publication. Retain collision preservation, temporary cleanup,
+  query drift, mutation, invalid-pattern, oversize, and symlink controls.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every

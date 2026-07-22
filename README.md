@@ -441,6 +441,23 @@ through 4.90 MB, so this is a correctness and workflow result with a negative
 proof-size result. File integration, cross-platform identity, process-resource
 evidence, compatibility history, and independent operator acceptance remain
 open. It is not yet part of the production support profile.
+
+The trace candidate now has a bounded self-service file interface:
+
+```console
+cargo build --release --locked
+target/release/guarded-continuation-checker \
+  certify-btor2-channel-traces \
+  corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2 \
+  corpus/rtl/opentitan-pwm-channel-family/trace-queries-v1.txt \
+  corpus/rtl/opentitan-pwm-channel-family/trace-policy-v1.txt \
+  /new/result.channel-traces
+```
+
+Use `verify-btor2-channel-traces` with the same four paths to verify the saved
+artifact. Use `btor2-channel-trace-cli-version` for machine-readable limits and
+semantics. Output publication is create-new and no-clobber; existing files and
+symlinks are never replaced.
 Projected work is a deterministic admission token, not a runtime or memory
 estimate. A strict
 [self-service file CLI](docs/BTOR2_CHANNEL_PROPERTY_CLI_V1.md) now accepts a
