@@ -1,11 +1,16 @@
 use guarded_continuation_checker::btor2_bitblast::{
     produce_btor2_bitblast_certificate, verify_btor2_bitblast_certificate,
 };
+use guarded_continuation_checker::btor2_region_equivalence::{
+    encode_btor2_region_equivalence_artifact, produce_btor2_region_equivalence_artifact,
+};
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 use guarded_continuation_checker::btor2_region_property::{
-    Btor2ChannelProperty, Btor2ChannelTracePattern, Btor2ChannelTraceQuery,
-    MAX_CHANNEL_TRACE_PATTERN_LENGTH, build_btor2_channel_property_model,
-    build_btor2_channel_trace_model,
+    Btor2ChannelProperty, Btor2ChannelTraceBackend, Btor2ChannelTracePattern,
+    Btor2ChannelTraceProductionPolicy, Btor2ChannelTraceProofPolicy, Btor2ChannelTraceQuery,
+    Btor2ChannelTraceSolver, MAX_CHANNEL_TRACE_PATTERN_LENGTH, build_btor2_channel_property_model,
+    build_btor2_channel_trace_model, preflight_btor2_channel_trace_proof,
+    produce_btor2_channel_trace_proof, verify_btor2_channel_trace_proof,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
 
@@ -113,6 +118,162 @@ fn trace_model_rejects_source_and_channel_boundary_violations() {
             6,
             query,
             Btor2RegionPolicy::default()
+        )
+        .is_err()
+    );
+}
+
+fn structural_admission() -> Vec<u8> {
+    encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(MODEL, ROOTS, 6, Btor2RegionPolicy::default())
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+fn composed_queries() -> Vec<Btor2ChannelTraceQuery> {
+    let shapes = [
+        (Btor2ChannelTracePattern::new(1, 1, 1).unwrap(), 1),
+        (Btor2ChannelTracePattern::new(1, 1, 0).unwrap(), 1),
+        (Btor2ChannelTracePattern::new(2, 0b11, 0b01).unwrap(), 2),
+    ];
+    let mut queries = Vec::new();
+    for (pattern, horizon) in shapes {
+        for channel_index in 0..6 {
+            queries.push(Btor2ChannelTraceQuery {
+                query_id: queries.len() as u32,
+                channel_index,
+                pattern,
+                horizon,
+            });
+        }
+    }
+    queries
+}
+
+#[test]
+fn verified_classes_compose_both_answer_trace_proofs() {
+    let structural = structural_admission();
+    let queries = composed_queries();
+    let artifact = produce_btor2_channel_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        Btor2RegionPolicy::default(),
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    let summary = verify_btor2_channel_trace_proof(
+        MODEL,
+        &queries,
+        &artifact,
+        Btor2RegionPolicy::default(),
+        Btor2ChannelTraceProofPolicy::default(),
+    )
+    .unwrap();
+
+    assert_eq!(summary.metrics.logical_queries, 18);
+    assert_eq!(summary.metrics.proof_members, 9);
+    assert_eq!(summary.metrics.representative_members, 6);
+    assert_eq!(summary.metrics.direct_exact_members, 3);
+    assert_eq!(summary.metrics.explicit_state_members, 6);
+    assert_eq!(summary.metrics.bitblast_members, 3);
+    assert_eq!(summary.metrics.reused_logical_queries, 9);
+    for result in &summary.results[..6] {
+        assert_eq!(result.result, SearchResult::Safe);
+        assert_eq!(result.bad_frame, None);
+    }
+    for result in &summary.results[6..12] {
+        assert_eq!(result.result, SearchResult::Unsafe);
+        assert_eq!(result.bad_frame, Some(0));
+    }
+    for result in &summary.results[12..] {
+        assert_eq!(result.result, SearchResult::Unsafe);
+        assert_eq!(result.bad_frame, Some(2));
+    }
+    assert_eq!(
+        summary.results[0].backend,
+        Btor2ChannelTraceBackend::RepresentativeClass
+    );
+    assert_eq!(
+        summary.results[6].solver,
+        Btor2ChannelTraceSolver::ExplicitState
+    );
+    assert_eq!(
+        summary.results[12].solver,
+        Btor2ChannelTraceSolver::BitblastCnf
+    );
+}
+
+#[test]
+fn trace_proof_preflight_and_verifier_fail_closed() {
+    let structural = structural_admission();
+    let queries = composed_queries();
+    let region_policy = Btor2RegionPolicy::default();
+    let plan = preflight_btor2_channel_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(plan.logical_queries, 18);
+    assert_eq!(plan.proof_members, 9);
+    assert!(plan.projected_work > 1);
+    let refused = Btor2ChannelTraceProductionPolicy::new(
+        Btor2ChannelTraceProofPolicy::default(),
+        plan.projected_work - 1,
+    )
+    .unwrap();
+    assert!(
+        produce_btor2_channel_trace_proof(MODEL, &structural, &queries, region_policy, refused)
+            .is_err()
+    );
+
+    let artifact = produce_btor2_channel_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    let mut query_drift = queries.clone();
+    query_drift[0].pattern = Btor2ChannelTracePattern::new(1, 1, 0).unwrap();
+    assert!(
+        verify_btor2_channel_trace_proof(
+            MODEL,
+            &query_drift,
+            &artifact,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default()
+        )
+        .is_err()
+    );
+
+    let mut backend_drift = artifact.clone();
+    backend_drift.members[0].backend = Btor2ChannelTraceBackend::DirectExact;
+    assert!(
+        verify_btor2_channel_trace_proof(
+            MODEL,
+            &queries,
+            &backend_drift,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default()
+        )
+        .is_err()
+    );
+
+    let mut evidence_drift = artifact;
+    evidence_drift.members[0].evidence[0] ^= 1;
+    assert!(
+        verify_btor2_channel_trace_proof(
+            MODEL,
+            &queries,
+            &evidence_drift,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default()
         )
         .is_err()
     );

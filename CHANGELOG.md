@@ -8,7 +8,11 @@
   low probes, a two-frame monitor recovers the known frame-2 PWM transition,
   and invalid patterns, property-bearing sources, out-of-range channels, and
   zero-padded prefix matches fail closed. Portfolio artifacts and maintained
-  comparison remain open.
+  comparison remain open. Add the separate trace proof types, deterministic
+  static preflight, explicit-state or bitblast selection, one exact member per
+  verified class and trace shape, and independent target replay. Eighteen
+  logical both-answer queries use nine proof members; one-unit-under work
+  refusal, query drift, forced backend, and evidence mutation return no answer.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every

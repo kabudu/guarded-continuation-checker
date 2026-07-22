@@ -2,8 +2,10 @@
 
 Status: predeclared before implementation or measurement. The strict pattern
 type and canonical monitor-model construction now pass their first semantic and
-hostile-boundary tests. Certificate composition, the retained cohort, and the
-maintained comparison remain open.
+hostile-boundary tests. In-memory proof composition now passes an eighteen-query
+both-answer control with nine exact members, mixed static solver routing,
+aggregate work refusal, and target witness replay. The canonical wire artifact,
+full retained cohort, and maintained comparison remain open.
 
 ## Product question
 
