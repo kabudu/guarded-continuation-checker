@@ -1,0 +1,2 @@
+schema_version,channels,horizon,logical_queries,proof_members,reused_queries,explicit_members,bitblast_members,direct_evidence_bytes,retained_evidence_bytes,evidence_reduction_pct,high_frame_two,low_frame_zero,verified,status
+1,6,2,12,6,6,0,6,1500,1210,19.333333,true,true,true,accepted

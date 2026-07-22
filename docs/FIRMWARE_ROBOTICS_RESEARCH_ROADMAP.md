@@ -263,6 +263,18 @@ be derived and independently checked from the source-attested monolithic
 model. This avoids treating the reduced behavioural boundary as product
 evidence. Static refusal and exact fallback remain required outcomes.
 
+The authenticated symbolic-class continuation now reaches
+[property portfolio v2](OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V2.md). A
+static source-derived work projection chooses compact explicit-state evidence
+or bounded proof-carrying bitblast evidence before solving. Verification
+recomputes that route, independently checks each retained member, and replays
+derived UNSAFE traces against their target channels. The six-channel horizon-2
+workload closes its earlier refusal and reduces retained evidence plus
+admission by 19.33% against direct witnesses. This remains established
+symmetry and SAT proof engineering. The next product boundary is a canonical
+outer codec with aggregate work preflight, followed by maintained-tool,
+realistic-property, portability, compatibility, and independent-review gates.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest

@@ -1,0 +1,21 @@
+schema_version=1
+scope=opentitan-pwm-symbolic-property-proof-portfolio-v2
+status=static-exact-fallback-mechanism-pass
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=fd590ac
+channel_counts=6
+retained_horizon=2
+selection=all-predeclared-rows
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=governed-not-process-measured
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=cb1f8b5161e2a5df6f2cbb000fe36abac782701450cdbd97b9b8c884a8a67cbe file=src/btor2_region_property.rs
+sha256=0df01f670966c0b894e11317d36d3dc940c890d9b681b349075612cd595b91ed file=src/btor2_bitblast.rs
+sha256=c712c6d7fad0a636724e757864bb044b0b700647b703f5d7acaef11ba24d047e file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=f3c8c6e36be968840e75b1f87f58e413173eb95b1faf8852b8bd41228459414f file=examples/btor2_symbolic_property_portfolio_v2_probe.rs
+sha256=eb095f455f5462f51ca7d878ec962822d23774122c2eea101f9df05083d82f8e file=scripts/run-btor2-symbolic-property-portfolio-v2-probe.sh
+sha256=7c5c53455f27f93ddde269c470cfd67603046cb0a15da63f61afe1c137da607a file=scripts/check-btor2-symbolic-property-portfolio-v2-probe.sh
+sha256=ab1a734302e8e72a43f09d3fc2c6318e9ee695ccac15f9ccd13eb695c23553b8 file=results/opentitan-pwm-symbolic-property-portfolio-arm64-v2.csv

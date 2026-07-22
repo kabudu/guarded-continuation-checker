@@ -59,9 +59,11 @@ raise the guard, return a partial batch, infer a SAFE answer from the horizon-1
 result, or silently replace invalid specialised evidence.
 
 The subsequent proof-carrying bitblast resolves the refused query as UNSAFE at
-frame 2. It is not retroactively part of this v1 portfolio result. Static
-portfolio integration and equivalent-scope maintained-tool comparison remain
-required before the mechanism can support realistic PWM horizons.
+frame 2. It is not retroactively part of this v1 portfolio result. The
+[v2 follow-up](OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V2.md) now integrates
+a static exact route and closes this particular horizon-2 refusal. An outer
+codec and equivalent-scope maintained-tool comparison remain required before
+the mechanism can support realistic PWM verification workflows.
 
 ## Reproduction
 

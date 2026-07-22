@@ -12,8 +12,9 @@ use guarded_continuation_checker::btor2_region_equivalence::{
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 use guarded_continuation_checker::btor2_region_property::{
     Btor2ChannelProperty, Btor2ChannelPropertyBackend, Btor2ChannelPropertyQuery,
-    build_btor2_channel_property_model, produce_btor2_channel_property_evidence,
-    produce_btor2_channel_property_proof, verify_btor2_channel_property_proof,
+    Btor2ChannelPropertySolver, build_btor2_channel_property_model,
+    produce_btor2_channel_property_evidence, produce_btor2_channel_property_proof,
+    verify_btor2_channel_property_proof,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
 
@@ -156,7 +157,7 @@ fn structural_admission_fails_closed_under_hostile_changes() {
     assert!(verify_btor2_region_equivalence_artifact(model, &signature_drift, policy).is_err());
 }
 
-fn symbolic_queries() -> Vec<Btor2ChannelPropertyQuery> {
+fn symbolic_queries(horizon: u32) -> Vec<Btor2ChannelPropertyQuery> {
     let mut queries = Vec::new();
     for property in [
         Btor2ChannelProperty::OutputHigh,
@@ -167,7 +168,7 @@ fn symbolic_queries() -> Vec<Btor2ChannelPropertyQuery> {
                 query_id: queries.len() as u32,
                 channel_index: channel,
                 property,
-                horizon: 1,
+                horizon,
             });
         }
     }
@@ -184,7 +185,7 @@ fn verified_classes_reuse_both_answer_property_proofs_and_recover_inputs() {
         &produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, policy).unwrap(),
     )
     .unwrap();
-    let queries = symbolic_queries();
+    let queries = symbolic_queries(1);
     let artifact =
         produce_btor2_channel_property_proof(model, &structural, &queries, policy).unwrap();
     let summary = verify_btor2_channel_property_proof(model, &queries, &artifact, policy).unwrap();
@@ -193,6 +194,8 @@ fn verified_classes_reuse_both_answer_property_proofs_and_recover_inputs() {
     assert_eq!(summary.metrics.proof_members, 6);
     assert_eq!(summary.metrics.representative_members, 4);
     assert_eq!(summary.metrics.direct_exact_members, 2);
+    assert_eq!(summary.metrics.explicit_state_members, 6);
+    assert_eq!(summary.metrics.bitblast_members, 0);
     assert_eq!(summary.metrics.reused_logical_queries, 6);
     for result in &summary.results[..6] {
         assert_eq!(result.result, SearchResult::Safe);
@@ -201,7 +204,7 @@ fn verified_classes_reuse_both_answer_property_proofs_and_recover_inputs() {
     for result in &summary.results[6..] {
         assert_eq!(result.result, SearchResult::Unsafe);
         assert_eq!(result.bad_frame, Some(0));
-        assert_eq!(result.terminal_valuation, Some(0));
+        assert_eq!(result.witness_valuations, vec![0]);
     }
     assert_eq!(
         summary.results[0].backend,
@@ -234,7 +237,7 @@ fn property_proof_rejects_invalid_admission_query_and_member_drift() {
         &produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, policy).unwrap(),
     )
     .unwrap();
-    let queries = symbolic_queries();
+    let queries = symbolic_queries(1);
     let artifact =
         produce_btor2_channel_property_proof(model, &structural, &queries, policy).unwrap();
 
@@ -258,10 +261,76 @@ fn property_proof_rejects_invalid_admission_query_and_member_drift() {
         verify_btor2_channel_property_proof(model, &queries, &changed_evidence, policy).is_err()
     );
 
+    let mut forced_solver = artifact.clone();
+    forced_solver.members[0].solver = Btor2ChannelPropertySolver::BitblastCnf;
+    assert!(verify_btor2_channel_property_proof(model, &queries, &forced_solver, policy).is_err());
+
     let mut source_drift = model.to_vec();
     source_drift.push(b'\n');
     assert!(
         verify_btor2_channel_property_proof(&source_drift, &queries, &artifact, policy).is_err()
+    );
+}
+
+#[test]
+fn static_portfolio_routes_horizon_two_to_bitblast_without_trial_solving() {
+    let model = include_bytes!(
+        "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+    );
+    let policy = Btor2RegionPolicy::default();
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, policy).unwrap(),
+    )
+    .unwrap();
+    let queries = symbolic_queries(2);
+    let artifact =
+        produce_btor2_channel_property_proof(model, &structural, &queries, policy).unwrap();
+    assert!(
+        artifact
+            .members
+            .iter()
+            .all(|member| member.solver == Btor2ChannelPropertySolver::BitblastCnf)
+    );
+    let summary = verify_btor2_channel_property_proof(model, &queries, &artifact, policy).unwrap();
+    assert_eq!(summary.metrics.logical_queries, 12);
+    assert_eq!(summary.metrics.proof_members, 6);
+    assert_eq!(summary.metrics.reused_logical_queries, 6);
+    assert_eq!(summary.metrics.explicit_state_members, 0);
+    assert_eq!(summary.metrics.bitblast_members, 6);
+    for result in &summary.results[..6] {
+        assert_eq!(result.result, SearchResult::Unsafe);
+        assert_eq!(result.bad_frame, Some(2));
+        assert_eq!(result.witness_valuations.len(), 3);
+    }
+    for result in &summary.results[6..] {
+        assert_eq!(result.result, SearchResult::Unsafe);
+        assert_eq!(result.bad_frame, Some(0));
+        assert_eq!(result.witness_valuations.len(), 1);
+    }
+
+    let mut changed_bitblast_evidence = artifact.clone();
+    changed_bitblast_evidence.members[0].evidence[80] ^= 1;
+    assert!(
+        verify_btor2_channel_property_proof(model, &queries, &changed_bitblast_evidence, policy,)
+            .is_err()
+    );
+
+    let outside_fallback_horizon = (0..6)
+        .map(|channel| Btor2ChannelPropertyQuery {
+            query_id: channel as u32,
+            channel_index: channel,
+            property: Btor2ChannelProperty::OutputHigh,
+            horizon: 65,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        produce_btor2_channel_property_proof(
+            model,
+            &structural,
+            &outside_fallback_horizon,
+            policy,
+        )
+        .is_err()
     );
 }
 

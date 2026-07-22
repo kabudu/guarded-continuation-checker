@@ -30,6 +30,14 @@
   backend admits the workload and resolves the six-channel horizon-2 refusal as
   a real frame-2 UNSAFE result. The horizon-1 SAFE certificate is 215,259 bytes,
   so this backend is a scalable fallback rather than a universal evidence win.
+- Integrate a timing-free explicit-state and bitblast route into the symbolic
+  class property portfolio. The verifier recomputes the route from source,
+  rejects forced solver changes, and replays full-width, constraint-admissible
+  UNSAFE traces on every target channel. At horizon 2, six proof members cover
+  twelve six-channel properties and reduce retained evidence plus admission by
+  19.33% against direct witnesses. Queries outside every backend policy and
+  changed bitblast member evidence fail closed. A canonical outer codec and
+  aggregate production-work preflight remain open.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

@@ -644,12 +644,14 @@ independent implementation review. It therefore closes no production row.
 
 The horizon-1 symbolic property portfolio adds exact SAFE and UNSAFE member
 certificates, direct singleton handling, target-channel UNSAFE input replay,
-and fail-closed query and backend binding. It still has no canonical outer wire
-format, and the six-channel `OutputHigh` workload is refused at horizon 2 by the
-explicit-state search resource guard. The bitblast follow-up resolves it as an
-UNSAFE trace but is not yet integrated into the portfolio. Realistic property horizons,
-cross-platform reproduction, maintained baseline evidence, compatibility, and
-independent review remain open. No production row closes.
+and fail-closed query and backend binding. Portfolio v2 now integrates a static,
+timing-free explicit-state and proof-carrying bitblast route. It closes the
+six-channel horizon-2 refusal with six independently checked members for twelve
+logical properties and rejects forced route or changed bitblast evidence. It
+still has no canonical outer wire format or aggregate production-work
+preflight. Realistic safety properties, cross-platform reproduction, maintained
+baseline evidence, compatibility, and independent review remain open. No
+production row closes.
 
 - Create a visually polished, accessible SVG architecture diagram after the
   first production release passes every applicable gate. It must show GCC's

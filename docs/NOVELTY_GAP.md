@@ -97,9 +97,12 @@ passes a maintained equivalent-scope baseline plus independent review.
 The first symbolic PWM property portfolio stores one bounded proof per admitted
 class and replays UNSAFE inputs against target channels. Its 43.07% six-channel
 evidence reduction is the expected consequence of representative sharing, not
-a new invariant. The horizon-2 resource refusal and absence of an outer codec,
-maintained-tool comparison, and independent review leave this as an engineering
-mechanism only.
+a new invariant. V2 closes the horizon-2 resource refusal through a static
+explicit-state or proof-carrying bitblast route and retains a 19.33% reduction
+against direct UNSAFE witnesses. Static routing, bitblasting, independent proof
+checking, and symmetry representatives are established techniques. The absence
+of an outer codec, maintained-tool comparison, a distinct invariant, and
+independent review leaves this as an engineering mechanism only.
 
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all

@@ -400,6 +400,16 @@ explicit search and carries independently checked Varisat UNSAT evidence. Its
 SAFE certificate is much larger than explicit-state evidence, so a static
 portfolio split is required rather than universal replacement.
 
+That [static split is now integrated](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V2.md).
+Before solving, a deterministic work projection selects explicit state or the
+bounded proof-carrying bitblast route. The verifier independently recomputes
+that choice and rejects forced routing. On the six-channel horizon-2 workload,
+six bitblast members cover twelve logical properties, replay every derived
+target trace, and reduce retained evidence plus admission by 19.33% against
+twelve direct witnesses. A canonical outer portfolio codec, aggregate
+production-work preflight, maintained-tool comparison, cross-platform identity,
+and independent review remain open.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies
