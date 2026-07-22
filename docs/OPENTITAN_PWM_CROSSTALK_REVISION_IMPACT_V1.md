@@ -188,8 +188,18 @@ At this exact scope, GCC is about 53.78 times faster from source through answer
 and uses about 20.0% less producer-path peak RSS, despite transferring an
 artifact about 8.32 times larger. This is a measured orchestration and shared
 component-model advantage over 20 separate maintained jobs, not a universal
-model-checking speed claim. Larger designs, warm services, parallel maintained
-jobs, and independent hardware are still needed to establish product value.
+model-checking speed claim.
+
+The subsequent
+[single-container maintained baseline](OPENTITAN_PWM_SINGLE_CONTAINER_BASELINE_V1.md)
+removes per-job container startup without changing the tools, models, evidence,
+or answer matrix. Across ten predeclared trials, maintained
+source-through-producer medians fall to 0.89 seconds sequentially and 0.82
+seconds with fixed four-way parallelism. GCC's matched 0.09-second result is
+therefore about 9.89 and 9.11 times faster, not 53.78 times. Most of the initial
+ratio was container-launch overhead, while a narrower shared-model advantage
+survives. Larger designs, a true persistent maintained service, and independent
+hardware are still needed to establish product value.
 
 The maintained tools prove each scenario separately. The three minimal
 semantic change sets are then obtained by comparing the complete independently

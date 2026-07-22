@@ -1,6 +1,6 @@
 # OpenTitan PWM single-container maintained baseline v1
 
-Status: predeclared, not yet measured
+Status: qualified locally on arm64, 2026-07-22
 
 ## Question
 
@@ -100,3 +100,50 @@ It must also compare both new modes with the matched GCC result while clearly
 separating synthesis, producer orchestration, independent checking, container
 startup, and proof-artifact size. This experiment can strengthen or weaken a
 product-value claim, but it cannot by itself establish algorithmic novelty.
+
+## Qualified result
+
+All ten predeclared trials passed without a selective rerun. Every trial
+reproduced the frozen 20-answer matrix, the model-set hash, and evidence-set
+SHA-256
+`d38d815128058d44282c2a34b6c9a1e84cf02cb9a337e5e8a7206576a97da90f`.
+
+The five-trial medians are:
+
+| Mode | Source through producer | Producer orchestration | Independent checking |
+| --- | ---: | ---: | ---: |
+| Isolated containers, frozen v1 | 4.84 s | 4.229 s | 4.976 s |
+| Single-container sequential | 0.89 s | 0.339 s | 0.937 s |
+| Single-container parallel-4 | 0.82 s | 0.249 s | 0.750 s |
+| GCC matched aggregate | 0.09 s | 0.01 s | below host timer precision |
+
+Against the controlled maintained-tool modes, GCC's source-through-producer
+result is about 9.89 times faster than sequential orchestration and 9.11 times
+faster than four-way parallel orchestration. The v0.30.0 comparison against
+isolated containers was 53.78 times. The advantage survives, but this result
+shows that most of the earlier ratio was container-launch overhead rather than
+GCC computation.
+
+The maintained package remains 15,479 bytes and the GCC aggregate remains
+128,768 bytes, so GCC still transfers about 8.32 times more data. Median
+source-through-producer peak RSS for the two new modes is about 22.6 MB because
+native synthesis dominates. This is higher than GCC's retained 15.9 MB median.
+Parallel aggregate memory was not measured, so the individual child RSS fields
+must not be used as a total-memory claim.
+
+Retained evidence:
+
+- [`opentitan-pwm-single-container-baseline-arm64-v1.csv`](../results/opentitan-pwm-single-container-baseline-arm64-v1.csv)
+- [`opentitan-pwm-single-container-baseline-arm64-v1.summary.csv`](../results/opentitan-pwm-single-container-baseline-arm64-v1.summary.csv)
+- [`opentitan-pwm-single-container-baseline-arm64-v1.manifest.txt`](../results/opentitan-pwm-single-container-baseline-arm64-v1.manifest.txt)
+
+Reproduce the complete matrix with already qualified local tools:
+
+```console
+mkdir /tmp/gcc-pwm-single-container-matrix
+scripts/run-opentitan-pwm-single-container-matrix-v1.sh \
+  /path/to/pinned/yosys /path/to/ric3-output \
+  /path/to/certifaiger-output \
+  /tmp/trials.csv /tmp/summary.csv /tmp/manifest.txt \
+  /tmp/gcc-pwm-single-container-matrix
+```
