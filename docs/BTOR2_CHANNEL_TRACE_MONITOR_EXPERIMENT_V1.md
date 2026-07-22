@@ -183,6 +183,20 @@ symlinked input refusal, collision preservation, and temporary-file cleanup.
 An injected write or sync failure remains required before acceptance gate 12
 is fully closed.
 
+## Whole-process resource evidence
+
+The first three-trial macOS arm64 run retains byte-identical 4,899,434-byte
+artifacts for every production and verification process. Production takes
+2.23 to 2.70 seconds with 88,113,152 to 92,225,536 bytes peak RSS. Fresh
+verification takes 0.39 to 0.74 seconds with 51,445,760 to 56,492,032 bytes
+peak RSS. The complete rows are retained in
+[`opentitan-pwm-trace-process-resources-macos-arm64-v1.csv`](../results/opentitan-pwm-trace-process-resources-macos-arm64-v1.csv).
+
+The CI workflow now runs the same measurement on hosted Linux and checks the
+artifact size, query count, status, and single deterministic digest. Hosted
+evidence remains pending until that workflow completes. No cross-host speed or
+memory comparison is claimed before then.
+
 ## Maintained equivalent-scope control
 
 A pinned maintained Yosys plus SMT solver workflow must compile the same

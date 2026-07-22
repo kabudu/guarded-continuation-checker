@@ -36,6 +36,10 @@
   certificate writes with same-directory temporary files and atomic no-clobber
   hard-link publication. Retain collision preservation, temporary cleanup,
   query drift, mutation, invalid-pattern, oversize, and symlink controls.
+  Add a portable whole-process resource harness and retain three macOS arm64
+  production and verification trials with one artifact digest. Extend the
+  Linux, macOS, and Windows downstream matrix to exercise the trace CLI and
+  frozen full-cohort artifact identities; hosted results remain pending.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
