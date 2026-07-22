@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add the first channel trace-monitor foundation: a strict public masked-pattern
+  contract and canonical source-bound BTOR2 history monitor with explicit
+  prefix validity. Length-one controls agree exactly with the retained high and
+  low probes, a two-frame monitor recovers the known frame-2 PWM transition,
+  and invalid patterns, property-bearing sources, out-of-range channels, and
+  zero-padded prefix matches fail closed. Portfolio artifacts and maintained
+  comparison remain open.
+
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
   v0.30.0 `BinaryOp` discriminant by appending the new shift operations after

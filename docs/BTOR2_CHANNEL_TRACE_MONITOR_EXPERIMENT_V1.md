@@ -1,6 +1,9 @@
 # BTOR2 channel trace monitor experiment v1
 
-Status: predeclared before implementation or measurement.
+Status: predeclared before implementation or measurement. The strict pattern
+type and canonical monitor-model construction now pass their first semantic and
+hostile-boundary tests. Certificate composition, the retained cohort, and the
+maintained comparison remain open.
 
 ## Product question
 

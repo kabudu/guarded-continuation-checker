@@ -23,6 +23,7 @@ pub const MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES: usize = 66 * 1024 * 1024;
 pub const MAX_CHANNEL_PROPERTY_PROJECTED_WORK: u64 = 100_000_000_000;
 pub const BTOR2_CHANNEL_PROPERTY_PROOF_VERSION: u32 = 1;
+pub const MAX_CHANNEL_TRACE_PATTERN_LENGTH: u8 = 8;
 const CHANNEL_PROPERTY_MAGIC: &[u8; 8] = b"GCCBCP01";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,6 +144,61 @@ pub struct Btor2ChannelPropertyQuery {
     pub horizon: u32,
 }
 
+/// A masked forbidden pattern over one Boolean channel trace.
+///
+/// Bit zero is the newest observation. Bits above `length` must be zero, and
+/// every set value bit must also be selected by `mask`.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Btor2ChannelTracePattern {
+    length: u8,
+    mask: u8,
+    value: u8,
+}
+
+impl Btor2ChannelTracePattern {
+    pub fn new(length: u8, mask: u8, value: u8) -> Result<Self, Btor2RegionError> {
+        if length == 0 || length > MAX_CHANNEL_TRACE_PATTERN_LENGTH {
+            return Err(reject(
+                "BTOR2 channel trace pattern length is outside range",
+            ));
+        }
+        let significant = if length == u8::BITS as u8 {
+            u8::MAX
+        } else {
+            (1u8 << length) - 1
+        };
+        if mask == 0 || mask & !significant != 0 || value & !significant != 0 || value & !mask != 0
+        {
+            return Err(reject("BTOR2 channel trace pattern bits are invalid"));
+        }
+        Ok(Self {
+            length,
+            mask,
+            value,
+        })
+    }
+
+    pub fn length(self) -> u8 {
+        self.length
+    }
+
+    pub fn mask(self) -> u8 {
+        self.mask
+    }
+
+    pub fn value(self) -> u8 {
+        self.value
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelTraceQuery {
+    pub query_id: u32,
+    pub channel_index: usize,
+    pub pattern: Btor2ChannelTracePattern,
+    pub horizon: u32,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelPropertyEvidence {
     pub query: Btor2ChannelPropertyQuery,
@@ -253,16 +309,45 @@ fn maximum_statement_id(model_bytes: &[u8]) -> Result<NodeId, Btor2RegionError> 
         .try_fold(0, |maximum, id| id.map(|id| maximum.max(id)))
 }
 
-/// Reconstructs one canonical bad-property model from a property-free channel
-/// source. This is shared by explicit and bit-blasted exact backends.
-pub fn build_btor2_channel_property_model(
+fn allocate_statement_id(last: &mut NodeId) -> Result<NodeId, Btor2RegionError> {
+    *last = last
+        .checked_add(1)
+        .ok_or_else(|| reject("BTOR2 channel trace identifier overflow"))?;
+    Ok(*last)
+}
+
+fn statement_sort_id(model_bytes: &[u8], node: NodeId) -> Result<NodeId, Btor2RegionError> {
+    let text = std::str::from_utf8(model_bytes)
+        .map_err(|_| reject("BTOR2 channel trace source is not UTF-8"))?;
+    let sort = text.lines().find_map(|line| {
+        let mut fields = line.split_ascii_whitespace();
+        let id = fields.next()?.parse::<NodeId>().ok()?;
+        (id == node).then(|| fields.nth(1)?.parse::<NodeId>().ok())?
+    });
+    let sort = sort.ok_or_else(|| reject("BTOR2 channel trace observation sort is missing"))?;
+    let valid = text.lines().any(|line| {
+        let fields = line.split_ascii_whitespace().collect::<Vec<_>>();
+        fields.len() == 4
+            && fields[0].parse::<NodeId>().ok() == Some(sort)
+            && fields[1] == "sort"
+            && fields[2] == "bitvec"
+            && fields[3] == "1"
+    });
+    if !valid {
+        return Err(reject(
+            "BTOR2 channel trace observation does not use a Boolean sort",
+        ));
+    }
+    Ok(sort)
+}
+
+fn channel_observation(
     model_bytes: &[u8],
     semantic_roots: &[NodeId],
     expected_channels: usize,
     channel_index: usize,
-    property: Btor2ChannelProperty,
     policy: Btor2RegionPolicy,
-) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+) -> Result<(btor2::Btor2Model, NodeId), Btor2RegionError> {
     if channel_index >= expected_channels {
         return Err(reject("BTOR2 channel property index is outside range"));
     }
@@ -286,7 +371,26 @@ pub fn build_btor2_channel_property_model(
             "BTOR2 channel property requires one Boolean channel observation",
         ));
     }
-    let output = outgoing[0];
+    Ok((model, outgoing[0]))
+}
+
+/// Reconstructs one canonical bad-property model from a property-free channel
+/// source. This is shared by explicit and bit-blasted exact backends.
+pub fn build_btor2_channel_property_model(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    channel_index: usize,
+    property: Btor2ChannelProperty,
+    policy: Btor2RegionPolicy,
+) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+    let (_model, output) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        channel_index,
+        policy,
+    )?;
     let maximum = maximum_statement_id(model_bytes)?;
     let expression = maximum
         .checked_add(1)
@@ -319,6 +423,181 @@ pub fn build_btor2_channel_property_model(
             "generated BTOR2 channel property is invalid: {error}"
         ))
     })?;
+    Ok((bytes, bad))
+}
+
+/// Reconstructs a canonical bad-property model for a masked Boolean trace
+/// pattern. History is explicit state, and a separate valid shift register
+/// prevents an incomplete prefix from matching zero-padded history.
+pub fn build_btor2_channel_trace_model(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    query: Btor2ChannelTraceQuery,
+    policy: Btor2RegionPolicy,
+) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+    let (_model, output) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.channel_index,
+        policy,
+    )?;
+    let bool_sort = statement_sort_id(model_bytes, output)?;
+    let mut last = maximum_statement_id(model_bytes)?;
+    let mut bytes = model_bytes.to_vec();
+    if !bytes.ends_with(b"\n") {
+        bytes.push(b'\n');
+    }
+
+    if query.pattern.length == 1 {
+        let bad = if query.pattern.value == 1 {
+            allocate_statement_id(&mut last)?
+        } else {
+            let expression = allocate_statement_id(&mut last)?;
+            bytes.extend_from_slice(format!("{expression} not {bool_sort} {output}\n").as_bytes());
+            allocate_statement_id(&mut last)?
+        };
+        if query.pattern.value == 1 {
+            bytes.extend_from_slice(
+                format!("{bad} bad {output} gcc_channel_trace_pattern\n").as_bytes(),
+            );
+        } else {
+            let expression = bad - 1;
+            bytes.extend_from_slice(
+                format!("{bad} bad {expression} gcc_channel_trace_pattern\n").as_bytes(),
+            );
+        }
+        btor2::parse_bytes(&bytes).map_err(|error| {
+            reject(format!("generated BTOR2 channel trace is invalid: {error}"))
+        })?;
+        return Ok((bytes, bad));
+    }
+
+    let history_width = u32::from(query.pattern.length - 1);
+    let pattern_width = u32::from(query.pattern.length);
+    let history_sort = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{history_sort} sort bitvec {history_width}\n").as_bytes());
+    let history_zero = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!(
+            "{history_zero} const {history_sort} {:0width$b}\n",
+            0,
+            width = history_width as usize
+        )
+        .as_bytes(),
+    );
+    let history = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{history} state {history_sort}\n").as_bytes());
+    let history_init = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{history_init} init {history_sort} {history} {history_zero}\n").as_bytes(),
+    );
+    let valid = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{valid} state {history_sort}\n").as_bytes());
+    let valid_init = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{valid_init} init {history_sort} {valid} {history_zero}\n").as_bytes(),
+    );
+    let history_ones = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!(
+            "{history_ones} const {history_sort} {:0width$b}\n",
+            (1u16 << history_width) - 1,
+            width = history_width as usize
+        )
+        .as_bytes(),
+    );
+    let history_valid = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{history_valid} eq {bool_sort} {valid} {history_ones}\n").as_bytes(),
+    );
+
+    let pattern_sort = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{pattern_sort} sort bitvec {pattern_width}\n").as_bytes());
+    let window = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{window} concat {pattern_sort} {history} {output}\n").as_bytes(),
+    );
+    let mask = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!(
+            "{mask} const {pattern_sort} {:0width$b}\n",
+            query.pattern.mask,
+            width = pattern_width as usize
+        )
+        .as_bytes(),
+    );
+    let masked_window = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{masked_window} and {pattern_sort} {window} {mask}\n").as_bytes(),
+    );
+    let value = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!(
+            "{value} const {pattern_sort} {:0width$b}\n",
+            query.pattern.value,
+            width = pattern_width as usize
+        )
+        .as_bytes(),
+    );
+    let matched = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{matched} eq {bool_sort} {masked_window} {value}\n").as_bytes(),
+    );
+    let violation = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{violation} and {bool_sort} {history_valid} {matched}\n").as_bytes(),
+    );
+    let bad = allocate_statement_id(&mut last)?;
+    bytes
+        .extend_from_slice(format!("{bad} bad {violation} gcc_channel_trace_pattern\n").as_bytes());
+
+    let one = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{one} const {bool_sort} 1\n").as_bytes());
+    let (history_next_value, valid_next_value) = if history_width == 1 {
+        (output, one)
+    } else {
+        let prefix_width = history_width - 1;
+        let prefix_sort = allocate_statement_id(&mut last)?;
+        bytes.extend_from_slice(format!("{prefix_sort} sort bitvec {prefix_width}\n").as_bytes());
+        let history_prefix = allocate_statement_id(&mut last)?;
+        bytes.extend_from_slice(
+            format!(
+                "{history_prefix} slice {prefix_sort} {history} {} 0\n",
+                history_width - 2
+            )
+            .as_bytes(),
+        );
+        let history_shift = allocate_statement_id(&mut last)?;
+        bytes.extend_from_slice(
+            format!("{history_shift} concat {history_sort} {history_prefix} {output}\n").as_bytes(),
+        );
+        let valid_prefix = allocate_statement_id(&mut last)?;
+        bytes.extend_from_slice(
+            format!(
+                "{valid_prefix} slice {prefix_sort} {valid} {} 0\n",
+                history_width - 2
+            )
+            .as_bytes(),
+        );
+        let valid_shift = allocate_statement_id(&mut last)?;
+        bytes.extend_from_slice(
+            format!("{valid_shift} concat {history_sort} {valid_prefix} {one}\n").as_bytes(),
+        );
+        (history_shift, valid_shift)
+    };
+    let history_next = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{history_next} next {history_sort} {history} {history_next_value}\n").as_bytes(),
+    );
+    let valid_next = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{valid_next} next {history_sort} {valid} {valid_next_value}\n").as_bytes(),
+    );
+
+    btor2::parse_bytes(&bytes)
+        .map_err(|error| reject(format!("generated BTOR2 channel trace is invalid: {error}")))?;
     Ok((bytes, bad))
 }
 
