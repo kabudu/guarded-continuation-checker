@@ -327,6 +327,16 @@ storage evidence, but the compressed batch remains 8.59 times larger than the
 maintained proof package. QatQ is therefore a promising later transport layer,
 not a dependency of the first production support profile.
 
+The subsequent [bounded transport qualification](docs/QATQ_TRANSPORT_QUALIFICATION_V1.md)
+adds a research-only GCC envelope with explicit lengths, SHA-256 bindings,
+pre-allocation limits, chunked exact recovery, hostile-input rejection and
+atomic no-clobber file output. Its 82,428-byte envelope remains 29.41% smaller
+than the strongest retained zstd result on the revision batch. The negative
+maintained-proof-package control is 73.23% larger than zstd, so QatQ is not
+admitted universally and remains outside `firmware-rtl-v1` pending hosted
+portability, resource replication, compatibility history and independent
+review.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

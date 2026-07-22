@@ -579,6 +579,15 @@ It is not included in the first production support profile because the current
 mapping treats opaque evidence as f32 words and lacks GCC-specific latency,
 memory, portability and hostile-container qualification.
 
+QatQ transport qualification v1 now supplies a research-only GCC envelope,
+explicit resource policy, pre-allocation framing checks, digest-bound chunked
+recovery, atomic no-clobber output, hostile API tests and local arm64 process
+measurements. Its 82,428-byte revision-batch envelope is 29.41% smaller than the
+retained zstd result. The maintained-proof-package negative control is 73.23%
+larger than zstd. Hosted three-platform identity, hosted Linux resources,
+compatibility history and independent review remain open, so the transport is
+not in `firmware-rtl-v1` and no production-readiness row closes.
+
 The remaining gates include hosted Linux resource results, certificate-byte
 agreement across Linux, macOS, and Windows, long-lived multi-revision service
 amortisation, hosted reproduction of the semantic-changing closest-system

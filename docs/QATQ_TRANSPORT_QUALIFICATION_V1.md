@@ -1,7 +1,9 @@
 # QatQ transport qualification v1
 
-Status: predeclared research experiment. QatQ is not part of the supported
-`firmware-rtl-v1` profile or GCC's normative evidence semantics.
+Status: local implementation and arm64 qualification pass. Hosted
+cross-platform evidence and independent review remain open. QatQ is not part
+of the supported `firmware-rtl-v1` profile or GCC's normative evidence
+semantics.
 
 ## Question
 
@@ -86,3 +88,41 @@ or removal of the floating-point-labelled mapping, compatibility history across
 at least two GCC releases, dependency audit evidence, and independent review.
 Failure of any gate keeps QatQ outside GCC's supported product boundary and the
 negative result remains published.
+
+## Local result
+
+The research-only Rust API now implements the envelope, explicit policy,
+pre-allocation QATC framing checks, QatQ's independent checksum validation,
+chunked recovery with SHA-256, an in-memory convenience path, and atomic
+create-new file publication. Seven hostile and boundary tests cover truncated,
+trailing, mutated, over-limit, non-zero padding, writer-failure, and no-clobber
+behaviour. A frozen 44-byte AIGER fixture has envelope SHA-256
+`9be12addcf5044e300b9c54a00b9fbf476879befa0046262994a7ab87ba8efe0`
+for hosted identity comparison.
+
+On macOS arm64, five measured trials over the independently verified OpenTitan
+revision batch produced an 82,428-byte GCC envelope from 14,164,144 canonical
+bytes. The envelope is 29.409347% smaller than the retained 116,769-byte zstd
+level 22 long-window baseline, passing the predeclared 10% gate. Median encode
+and decode times were 133.008 ms and 39.104 ms, and process peak resident memory
+was 66,240,512 bytes. All three deterministic encodes matched and every decode
+was bit-identical.
+
+The qualified maintained comparison remained much smaller semantically: its 16
+models and independently verified rIC3 or Certifaiger evidence contain 8,892
+bytes. A 104,448-byte local archive carrying those files compressed to a
+4,996-byte QatQ envelope but to 2,884 bytes with zstd. QatQ was therefore
+73.231623% larger on this negative control. The evidence supports an optional
+static artifact-class decision for large regular revision batches, not universal
+QatQ admission and not an algorithmic novelty claim.
+
+Retained measurements:
+
+- `results/qatq-transport-qualification-arm64-v1.csv`;
+- `results/qatq-transport-resources-arm64-v1.csv`; and
+- `results/qatq-revision-batch-compression-arm64-v1.csv` for the earlier raw
+  codec comparison.
+
+The remaining predeclared gates are hosted Linux, macOS, and Windows envelope
+identity, hosted Linux resource replication, dependency auditing, full-suite and
+package-boundary validation, compatibility history, and independent review.

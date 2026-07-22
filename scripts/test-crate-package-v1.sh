@@ -49,6 +49,11 @@ grep -q '^name = "guarded-continuation-checker"$' "$source/Cargo.toml"
 grep -q '^readme = "CRATE_README.md"$' "$source/Cargo.toml"
 grep -q 'evaluation-ready research prototype' "$source/CRATE_README.md"
 
+cargo fetch --manifest-path "$source/Cargo.toml" --locked
+CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$repo/target} \
+  cargo check --manifest-path "$source/Cargo.toml" --locked --offline --lib \
+    --features research-qatq-transport
+
 CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$repo/target} \
   cargo install --path "$source" --root "$scratch/research-root" --locked --offline
 binary="$scratch/research-root/bin/guarded-continuation-checker"

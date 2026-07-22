@@ -8,6 +8,16 @@
   hostile-input rejection, cross-platform identity, realistic resource
   measurements, semantic replay and retained negative compression rows before
   considering integration. QatQ remains outside `firmware-rtl-v1`.
+- Implement the optional `research-qatq-transport` Rust API against exact QatQ
+  0.1.1. Add a canonical length, codec, parameter, canonical-digest and
+  encoded-digest envelope; checked resource policy; pre-allocation per-chunk
+  framing limits; independent QatQ checksum validation; chunked exact recovery;
+  and atomic create-new file publication. Seven boundary and hostile tests pass.
+  On the verified OpenTitan revision batch the 82,428-byte envelope is 29.41%
+  smaller than zstd level 22 long-window, with median 133.008 ms encode, 39.104
+  ms decode and 66,240,512-byte process peak RSS on arm64. Retain the negative
+  maintained-proof-package row, where QatQ is 73.23% larger than zstd, and keep
+  hosted portability and review gates open.
 
 ## 0.29.0 - 2026-07-22
 

@@ -22,12 +22,14 @@ include = [
 [features]
 default = []
 production-firmware = []
+research-qatq-transport = ["dep:qatq"]
 
 [profile.release]
 debug = true
 
 [dependencies]
 libc = "0.2.186"
+qatq = { version = "=0.1.1", optional = true }
 sha2 = "0.11.0"
 varisat = "0.2.2"
 varisat-checker = "0.2.2"

@@ -92,6 +92,13 @@ cargo install guarded-continuation-checker --locked \
 guarded-continuation-checker production-profile-version
 ```
 
+The optional `research-qatq-transport` feature exposes a bounded, exact QatQ
+0.1.1 transport envelope for research evaluation of large canonical evidence
+batches. It is not enabled by default, is not included by
+`production-firmware`, and does not change certificate semantics. Recover the
+canonical bytes and run their existing independent verifier before trusting an
+answer.
+
 To evaluate an unreleased reviewed repository revision instead:
 
 ```sh

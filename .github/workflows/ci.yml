@@ -65,13 +65,22 @@ jobs:
       - name: Format
         run: cargo fmt --check
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: |
+          cargo clippy --all-targets
+          cargo clippy --features research-qatq-transport \
+            --test qatq_transport_api -- -D warnings
+          cargo clippy --features research-qatq-transport \
+            --example qatq_transport_qualification -- -D warnings
       - name: Check frozen production support profile
         run: |
           shellcheck -s bash scripts/check-production-support-profile-v1.sh
           cargo clippy --locked --bin guarded-continuation-checker \
             --features production-firmware -- -D warnings
           cargo build --release --locked --features production-firmware
+          if cargo tree --locked --features production-firmware | grep -Eq '(^| )qatq v0\.1\.1'; then
+            echo "production-firmware unexpectedly includes QatQ"
+            exit 1
+          fi
           scripts/check-production-support-profile-v1.sh \
             target/release/guarded-continuation-checker
       - name: Test
@@ -99,6 +108,7 @@ jobs:
             scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
             scripts/opentitan-dual-timer-resource-container-v1.sh \
+            scripts/benchmark-qatq-transport-v1.sh \
             scripts/test-crate-package-v1.sh
           shellcheck -s sh \
             scripts/build-opentitan-aon-dual-timer-aiger.sh \
@@ -327,6 +337,8 @@ jobs:
           cargo test --locked --test opentitan_aon_watchdog_api
           cargo test --locked --lib btor2_predicate_set
           cargo test --locked --test btor2_predicate_set_api
+          cargo test --locked --features research-qatq-transport \
+            --test qatq_transport_api portable_fixture_has_frozen_envelope_identity
 
   public-rtl-corpus:
     runs-on: ubuntu-latest
