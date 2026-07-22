@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.30.0 - 2026-07-22
 
 - Predeclare revision impact certificate v1 for selective firmware regression.
