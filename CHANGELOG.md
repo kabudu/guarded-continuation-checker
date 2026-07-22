@@ -7,6 +7,14 @@
   channels with disjoint state renaming, composes it with a shared core, and
   compares exact whole-system evidence against monolithic GCC and maintained
   proof-producing baselines without a performance threshold.
+- Reject broad novelty of repeated-instance proof reuse against symmetry
+  reduction, guarded quotient structures, and parameterised model-checking
+  certificates. Add the first bounded structural composer: its public grammar
+  permits channel inputs to reference only declared core inputs or roots,
+  creates disjoint state for every canonical instance, emits deterministic
+  BTOR2, and independently reparses the expanded model. Retained OpenTitan PWM
+  components compose at the predeclared 2, 4, and 6-channel sizes. Certificate
+  encoding, proof replay, exact fallback, and benchmark gates remain open.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
