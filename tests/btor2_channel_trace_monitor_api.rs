@@ -400,3 +400,177 @@ fn trace_wire_artifact_is_canonical_deterministic_and_hostile_safe() {
     trailing.push(0);
     assert!(decode_btor2_channel_trace_proof_artifact(&trailing, proof_policy).is_err());
 }
+
+struct TraceCohortFixture {
+    name: &'static str,
+    model: &'static [u8],
+    roots: &'static [u64],
+    channels: usize,
+    expected_members: usize,
+    expected_reused: usize,
+    expected_safe: usize,
+    expected_bytes: usize,
+    expected_sha256: [u8; 32],
+}
+
+fn retained_trace_shapes() -> [(Btor2ChannelTracePattern, u32); 7] {
+    [
+        (Btor2ChannelTracePattern::new(1, 0b1, 0b1).unwrap(), 1),
+        (Btor2ChannelTracePattern::new(1, 0b1, 0b0).unwrap(), 1),
+        (Btor2ChannelTracePattern::new(2, 0b11, 0b01).unwrap(), 8),
+        (Btor2ChannelTracePattern::new(2, 0b11, 0b10).unwrap(), 8),
+        (Btor2ChannelTracePattern::new(3, 0b111, 0b010).unwrap(), 8),
+        (Btor2ChannelTracePattern::new(3, 0b111, 0b101).unwrap(), 8),
+        (Btor2ChannelTracePattern::new(3, 0b101, 0b001).unwrap(), 8),
+    ]
+}
+
+#[test]
+fn retained_open_titan_trace_cohort_agrees_with_direct_exact_queries() {
+    let fixtures = [
+        TraceCohortFixture {
+            name: "symbolic-class-2",
+            model: include_bytes!(
+                "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2"
+            ),
+            roots: &[9, 20],
+            channels: 2,
+            expected_members: 14,
+            expected_reused: 0,
+            expected_safe: 2,
+            expected_bytes: 4_394,
+            expected_sha256: [
+                152, 20, 42, 48, 146, 186, 221, 5, 129, 182, 115, 52, 225, 191, 119, 119, 12, 89,
+                215, 11, 146, 59, 197, 219, 165, 143, 235, 94, 65, 12, 97, 23,
+            ],
+        },
+        TraceCohortFixture {
+            name: "symbolic-class-4",
+            model: include_bytes!(
+                "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-4.btor2"
+            ),
+            roots: &[9, 29],
+            channels: 4,
+            expected_members: 21,
+            expected_reused: 7,
+            expected_safe: 4,
+            expected_bytes: 6_934,
+            expected_sha256: [
+                202, 37, 83, 75, 149, 52, 166, 135, 17, 151, 221, 89, 248, 20, 241, 243, 176, 69,
+                239, 222, 150, 209, 178, 137, 76, 186, 58, 122, 200, 25, 25, 140,
+            ],
+        },
+        TraceCohortFixture {
+            name: "symbolic-class-6",
+            model: MODEL,
+            roots: ROOTS,
+            channels: 6,
+            expected_members: 21,
+            expected_reused: 21,
+            expected_safe: 6,
+            expected_bytes: 7_532,
+            expected_sha256: [
+                199, 250, 127, 176, 64, 174, 19, 81, 164, 107, 175, 48, 217, 103, 133, 104, 5, 46,
+                243, 71, 227, 119, 97, 118, 232, 254, 225, 33, 201, 182, 132, 193,
+            ],
+        },
+    ];
+    let region_policy = Btor2RegionPolicy::default();
+    let proof_policy = Btor2ChannelTraceProofPolicy::default();
+    for fixture in fixtures {
+        let structural = encode_btor2_region_equivalence_artifact(
+            &produce_btor2_region_equivalence_artifact(
+                fixture.model,
+                fixture.roots,
+                fixture.channels,
+                region_policy,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut queries = Vec::new();
+        for (pattern, horizon) in retained_trace_shapes() {
+            for channel_index in 0..fixture.channels {
+                queries.push(Btor2ChannelTraceQuery {
+                    query_id: queries.len() as u32,
+                    channel_index,
+                    pattern,
+                    horizon,
+                });
+            }
+        }
+        let (_, encoded) = produce_btor2_channel_trace_proof_bytes(
+            fixture.model,
+            &structural,
+            &queries,
+            region_policy,
+            Btor2ChannelTraceProductionPolicy::default(),
+        )
+        .unwrap();
+        let summary = verify_btor2_channel_trace_proof_bytes(
+            fixture.model,
+            &queries,
+            &encoded,
+            region_policy,
+            proof_policy,
+        )
+        .unwrap();
+        for (query, composed) in queries.iter().zip(&summary.results) {
+            let (model, bad) = build_btor2_channel_trace_model(
+                fixture.model,
+                fixture.roots,
+                fixture.channels,
+                *query,
+                region_policy,
+            )
+            .unwrap();
+            let direct = verify_btor2_bitblast_certificate(
+                &model,
+                &produce_btor2_bitblast_certificate(&model, bad, query.horizon).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(composed.result, direct.result);
+            assert_eq!(composed.bad_frame, direct.bad_frame);
+        }
+        let safe = summary
+            .results
+            .iter()
+            .filter(|result| result.result == SearchResult::Safe)
+            .count();
+        let unsafe_count = summary.results.len() - safe;
+        assert_eq!(
+            summary.metrics.logical_queries,
+            fixture.channels * retained_trace_shapes().len(),
+            "{} query count",
+            fixture.name
+        );
+        assert_eq!(
+            summary.metrics.proof_members, fixture.expected_members,
+            "{} member count",
+            fixture.name
+        );
+        assert_eq!(
+            summary.metrics.reused_logical_queries, fixture.expected_reused,
+            "{} reuse count",
+            fixture.name
+        );
+        assert_eq!(safe, fixture.expected_safe, "{} SAFE count", fixture.name);
+        assert!(
+            unsafe_count > 0,
+            "{} must retain UNSAFE answers",
+            fixture.name
+        );
+        assert_eq!(
+            encoded.len(),
+            fixture.expected_bytes,
+            "{} bytes",
+            fixture.name
+        );
+        assert_eq!(
+            <[u8; 32]>::from(Sha256::digest(&encoded)),
+            fixture.expected_sha256,
+            "{} artifact fingerprint",
+            fixture.name
+        );
+    }
+}

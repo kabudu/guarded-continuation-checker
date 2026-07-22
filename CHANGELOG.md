@@ -19,6 +19,11 @@
   a 4,700-byte fingerprint and reject every truncation, every single-byte
   mutation, trailing data, source drift, ordered-query drift, and outer or
   nested byte-budget exhaustion.
+  Retain the complete 2-, 4-, and 6-channel OpenTitan cohort with seven pattern
+  shapes per channel through horizon 8. All 84 composed answers and earliest
+  bad frames agree with separately constructed direct exact bitblast queries.
+  The cohort contains 12 SAFE and 72 UNSAFE answers, and the six-channel
+  artifact uses 21 proof members for 42 logical queries.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every

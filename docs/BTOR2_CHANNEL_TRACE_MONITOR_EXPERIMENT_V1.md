@@ -100,10 +100,9 @@ the current mechanism fixture, not the still-open authentic retained cohort.
 
 ## Current gate state
 
-The mechanism currently closes the local portions of gates 1, 2, 4, 6, 7, 8,
-9, 10, and 11. Gate 3 remains open until the maintained equivalent-scope
-control exists. Gate 5 remains open until the complete authentic cohort is
-retained. Gate 12 requires the file workflow. Gate 13 requires external
+The mechanism currently closes the local portions of gates 1, 2, 4, 5, 6, 7,
+8, 9, 10, and 11. Gate 3 remains open until the maintained equivalent-scope
+control exists. Gate 12 requires the file workflow. Gate 13 requires external
 consumer jobs on Linux, macOS, and Windows. Gate 14 requires retained local and
 hosted Linux whole-process evidence. No experiment pass or production claim is
 made while those gates remain open.
@@ -123,6 +122,26 @@ direct exact query for the same channel and with a separately generated
 maintained-tool model. The retained cohort must contain both SAFE and UNSAFE
 answers; if the authentic source does not produce both, the experiment fails
 rather than adding a synthetic answer case to the product result.
+
+## Retained local cohort result
+
+The complete 2-, 4-, and 6-channel cohort covers seven pattern shapes per
+channel: both length-one controls, both two-frame transitions, `010`, `101`,
+and `length=3, mask=0b101, value=0b001`. The latter ignores the middle frame.
+All longer patterns use horizon 8. Each composed result agrees on answer and
+earliest bad frame with a separately constructed direct per-channel exact
+bitblast query.
+
+| Model | Logical queries | Proof members | Reused queries | SAFE | UNSAFE | Artifact bytes | SHA-256 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| symbolic-class-2 | 14 | 14 | 0 | 2 | 12 | 4,394 | `98142a3092badd0581b67334e1bf77770c59d70b923bc5dba58feb5e410c6117` |
+| symbolic-class-4 | 28 | 21 | 7 | 4 | 24 | 6,934 | `ca25534b9534a6871197dd59f814f1f3b045efde96d1b2894cba3a7ac819198c` |
+| symbolic-class-6 | 42 | 21 | 21 | 6 | 36 | 7,532 | `c7fa7fb040ae1351a46baf30d9678568052ef347e3776176e8fee121c9b684c1` |
+
+The authentic retained cohort therefore contains 84 logical queries, 12 SAFE
+and 72 UNSAFE answers, and exact representative reuse on the four- and
+six-channel models. This closes the local direct-exact and both-answer gates.
+It does not close maintained-tool agreement.
 
 ## Maintained equivalent-scope control
 
