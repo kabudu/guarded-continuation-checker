@@ -23,6 +23,7 @@ pub mod controller_plant_aiger;
 pub mod controller_plant_artifact;
 pub mod controller_transducer;
 pub mod dense_relation;
+pub mod revision_batch;
 pub mod revision_local;
 pub mod source_model_attestation;
 pub mod unsat_proof;

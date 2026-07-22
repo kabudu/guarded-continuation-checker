@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add revision batch certificate v1, a canonical content-addressed format that
+  stores each validated local relation once and binds heterogeneous queries to
+  shared sections. Add typed production, canonical encoding and decoding,
+  independent source replay, exact standalone extraction, strict limits and a
+  hostile mutation matrix. On 16 OpenTitan queries the batch removes
+  99,100,424 duplicated bytes, preserves all answers and extracts every
+  standalone certificate byte-identically. At 14,164,144 bytes it remains
+  about 1,593 times larger than the qualified maintained model-plus-evidence
+  route, so this closes a container defect without establishing novelty.
 - Add an eight-property repeated-query workload over the authentic OpenTitan
   `prim_count` semantic revision. Reusing two validated relations preserves
   byte-identical artifacts and all 16 answers while reducing local candidate

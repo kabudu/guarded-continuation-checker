@@ -96,6 +96,13 @@ or member semantics requires a new major artifact version. The first production
 tag must freeze retained v1, v2, and v3 fingerprints before this API can enter
 the supported window.
 
+Revision batch certificate v1 is an experimental research format. Its public
+Rust types permit downstream evaluation, but they are outside the first
+production support window until hosted byte identity, a retained compatibility
+fingerprint and the production release gate explicitly admit the format. A
+pre-production batch must not be used as durable evidence without retaining the
+extracted standalone certificates.
+
 ## First production-line guarantee
 
 Beginning with the first production tag:

@@ -562,6 +562,16 @@ shared-section batch format, hosted reproduction, hostile testing, portability,
 and independent review are required before this mechanism can change a
 production-readiness row.
 
+Revision batch certificate v1 implements that canonical shared-section format.
+It validates three local relations once, binds 16 heterogeneous queries by
+digest, independently verifies every answer from the exact source set, and
+extracts byte-identical standalone certificates. It removes 99,100,424 bytes,
+or 87.4946%, from the OpenTitan workload. The remaining 14,164,144-byte batch
+is still about 1,593 times larger than the qualified maintained evidence route.
+The format remains experimental pending hosted artifact identity, a broader
+hostile corpus, public file/CLI integration, compatibility history and
+independent review, so no production-readiness row closes.
+
 The remaining gates include hosted Linux resource results, certificate-byte
 agreement across Linux, macOS, and Windows, long-lived multi-revision service
 amortisation, hosted reproduction of the semantic-changing closest-system

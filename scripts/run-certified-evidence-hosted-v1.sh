@@ -71,6 +71,7 @@ cd "$repo_root"
 cargo test --locked --test controller_plant_bounded_aiger_api
 cargo build --release --locked
 cargo build --release --locked --example opentitan_prim_count_query_service
+cargo build --release --locked --example opentitan_prim_count_revision_batch
 mkdir -p /tmp/gcc-output
 cp target/release/guarded-continuation-checker /tmp/gcc-output/
 sha256sum /tmp/gcc-output/guarded-continuation-checker \
@@ -151,6 +152,12 @@ RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   "$output/opentitan-prim-count-query-baseline-amd64-v1.csv" \
   "$output/opentitan-prim-count-query-baseline-amd64-v1.manifest.txt" \
   "$output/opentitan-prim-count-query-baseline-work" 1
+mkdir "$output/opentitan-prim-count-revision-batch-work"
+TRIALS=3 scripts/benchmark-opentitan-prim-count-revision-batch-v1.sh \
+  /tmp/yosys-attestation/build/yosys \
+  target/release/examples/opentitan_prim_count_revision_batch \
+  "$output/opentitan-prim-count-revision-batch-amd64-v1.csv" \
+  "$output/opentitan-prim-count-revision-batch-work"
 cargo run --release --locked --quiet \
   --example changing_plant_controller_evidence_reuse \
   >"$output/changing-plant-controller-evidence-reuse-amd64-v1.csv"

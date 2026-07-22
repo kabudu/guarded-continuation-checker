@@ -1,0 +1,6 @@
+schema_version,trial,revisions,properties_per_revision,total_queries,shared_sections,standalone_bytes,batch_bytes,batch_to_standalone_ratio,bytes_saved,candidate_valuations,produce_nanos,verify_nanos,safe,unsafe,extraction_identical,status
+1,1,2,8,16,3,113264568,14164144,0.125054,99100424,81924,405916500,272157917,12,4,true,measured
+1,2,2,8,16,3,113264568,14164144,0.125054,99100424,81924,409512250,270890000,12,4,true,measured
+1,3,2,8,16,3,113264568,14164144,0.125054,99100424,81924,402872041,269053166,12,4,true,measured
+1,4,2,8,16,3,113264568,14164144,0.125054,99100424,81924,405014458,269633333,12,4,true,measured
+1,5,2,8,16,3,113264568,14164144,0.125054,99100424,81924,411408959,276247250,12,4,true,measured

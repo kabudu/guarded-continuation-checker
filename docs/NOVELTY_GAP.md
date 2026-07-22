@@ -595,6 +595,16 @@ open hypothesis is whether one independently verifiable, content-addressed
 batch can share complete local relations across heterogeneous queries while
 retaining exact failure attribution and fail-closed standalone extraction.
 
+Revision batch certificate v1 tests that narrower hypothesis. It shares three
+validated local relations across 16 heterogeneous OpenTitan queries, removes
+87.4946% of standalone bytes, independently replays every source and answer,
+and extracts the original standalone certificates byte-identically. This is a
+successful container and service result. It does not break the maintained-tool
+invariant: the 14,164,144-byte batch remains about 1,593 times larger than the
+equivalent 8,892-byte AIGER, rIC3 and Certifaiger package. Content addressing,
+deduplication and compositional proof checking are established, so the batch
+does not close a novelty gate.
+
 Strict interface contract v2 closes one integrity ambiguity in that candidate:
 every semantic input must now be classified as wired or external. This prevents
 an omitted cross-component wire from silently becoming an environment input.

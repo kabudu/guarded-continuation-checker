@@ -304,6 +304,15 @@ agrees on all 16 answers with about 12,738 times less model-plus-evidence data.
 The current container therefore has no artifact advantage. The measured result
 points to a shared-section batch certificate as the next experiment.
 
+That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
+implemented as a typed experimental API. It stores the three OpenTitan local
+relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies
+every shared relation and answer from source, and extracts byte-identical
+standalone certificates. The resulting 14,164,144-byte batch is still about
+1,593 times larger than the qualified maintained model-plus-evidence route.
+This is a concrete service and integrity improvement, not a novelty result or
+a production-supported artifact format.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual
