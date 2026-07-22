@@ -226,6 +226,14 @@ bias gate is now closed without claiming a warm service because tool processes
 remain fresh. The next experiment must test a larger connected public subsystem
 and compare against a persistent maintained service if one is available.
 
+The next larger public-subsystem cycle is predeclared as the
+[OpenTitan PWM channel-family certificate v1](OPENTITAN_PWM_CHANNEL_FAMILY_CERTIFICATE_V1.md).
+It tests whether one independently proved channel relation can be instantiated
+across 2, 4, and 6 authentic repeated channels with explicit disjoint state
+renaming, composed with one shared core, and checked against exact monolithic
+and maintained proof-producing routes. This targets reusable repeated-IP
+evidence, not another isolated timing comparison.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
+  verifies one repeated channel relation, instantiates it across 2, 4, and 6
+  channels with disjoint state renaming, composes it with a shared core, and
+  compares exact whole-system evidence against monolithic GCC and maintained
+  proof-producing baselines without a performance threshold.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
