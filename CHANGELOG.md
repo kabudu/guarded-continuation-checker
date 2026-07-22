@@ -44,7 +44,10 @@
   frozen full-cohort artifact identities; hosted results remain pending. Add a
   six-case simulated self-service run covering discovery, full production,
   fresh verification, immutable output, query drift, and resource refusal from
-  clean copies without per-formula calibration.
+  clean copies without per-formula calibration. Hosted Ubuntu, macOS, and
+  Windows reproduce the frozen trace identities. Retain three hosted Linux
+  certification and verification resource trials with the same artifact digest
+  as macOS.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every

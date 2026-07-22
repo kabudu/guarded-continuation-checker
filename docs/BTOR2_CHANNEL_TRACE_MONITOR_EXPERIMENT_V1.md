@@ -5,9 +5,9 @@ type, canonical monitor-model construction, in-memory proof composition,
 canonical wire artifact, complete authentic cohort, maintained comparison,
 bounded create-new file workflow, and injected partial-write failure all pass.
 A six-case simulated self-service run also passes without formula-specific
-calibration. Hosted cross-platform consumer evidence, hosted Linux
-whole-process evidence, compatibility history, and independent acceptance
-remain open.
+calibration. The predeclared experiment gates pass locally and in hosted CI.
+Tagged compatibility history and independent acceptance remain open before any
+production-support promotion.
 
 ## Product question
 
@@ -97,17 +97,20 @@ Independent decoding and canonical re-encoding reproduce those bytes. The
 hostile test rejects every truncation, every single-byte mutation, trailing
 data, source drift, ordered-query drift, an artifact one byte over its declared
 limit, and evidence one byte over its aggregate limit. This fingerprint covers
-the current mechanism fixture, not the still-open authentic retained cohort.
+the compact mechanism fixture; the authentic retained cohort has separate
+fingerprints below.
 
 ## Current gate state
 
-The mechanism currently closes the local portions of gates 1 through 12. Gate
+The mechanism closes the local portions of gates 1 through 12. Gate
 12 has a create-new hard-link publication mechanism, collision preservation,
 temporary-file cleanup, and an injected failure after a partial temporary-file
 write. The failure exposes no destination and leaves no temporary file. Gate 13
 requires external consumer jobs on Linux, macOS, and Windows. Gate 14 requires
-retained local and hosted Linux whole-process evidence. No experiment pass or
-production claim is made while those gates remain open.
+retained local and hosted Linux whole-process evidence. Hosted run
+[29956992935](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29956992935)
+passes both gates on the reviewed commit. All 14 experiment gates therefore
+pass. This is not a production-support or algorithmic-novelty claim.
 
 ## Predeclared cohort
 
@@ -199,10 +202,19 @@ verification takes 0.39 to 0.74 seconds with 51,445,760 to 56,492,032 bytes
 peak RSS. The complete rows are retained in
 [`opentitan-pwm-trace-process-resources-macos-arm64-v1.csv`](../results/opentitan-pwm-trace-process-resources-macos-arm64-v1.csv).
 
-The CI workflow now runs the same measurement on hosted Linux and checks the
-artifact size, query count, status, and single deterministic digest. Hosted
-evidence remains pending until that workflow completes. No cross-host speed or
-memory comparison is claimed before then.
+Hosted Linux x86-64 run
+[29956992935](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29956992935)
+passes the same measurement and the separate six-case acceptance replay. Its
+three certification trials take 3.70 to 3.75 seconds with 51,314,688 to
+51,560,448 bytes peak RSS. Fresh verification takes 0.68 to 0.72 seconds with
+50,495,488 to 51,871,744 bytes peak RSS. Every process reproduces the same
+4,899,434-byte artifact and digest as macOS. The complete hosted rows are
+retained in
+[`opentitan-pwm-trace-process-resources-linux-x86_64-v1.csv`](../results/opentitan-pwm-trace-process-resources-linux-x86_64-v1.csv).
+
+The portability matrix in the same run passes the trace CLI and frozen
+full-cohort identity on Ubuntu, macOS, and Windows. Timing and RSS are host
+observations rather than cross-host performance guarantees.
 
 ## Maintained equivalent-scope control
 

@@ -439,9 +439,12 @@ now couples each first-frame witness with a checked UNSAT certificate for the
 preceding horizon. The stronger evidence grows the retained artifacts to 2.14
 through 4.90 MB, so this is a correctness and workflow result with a negative
 proof-size result. The bounded file integration and atomic partial-write failure
-gate now pass locally. Hosted cross-platform identity, hosted Linux
-process-resource evidence, compatibility history, and independent operator
-acceptance remain open. It is not yet part of the production support profile.
+gate now pass locally. Hosted run
+[29956992935](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29956992935)
+reproduces the trace identity on Ubuntu, macOS, and Windows, and retains three
+Linux production and verification resource trials. Tagged compatibility
+history and independent operator acceptance remain open. It is not yet part of
+the production support profile.
 
 The trace candidate now has a bounded self-service file interface:
 
