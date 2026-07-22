@@ -40,6 +40,13 @@
   noncanonical text. This closes the file-CLI portion of the integration gate;
   the typed process client, capabilities, baselines, public cohort, and
   portability evidence remain open.
+- Add a strict machine-readable capability contract and the public
+  `RevisionImpactTool` process client. Discovery pins the v1 semantic,
+  no-routing, no-fallback, fail-closed contract and every supported resource
+  ceiling. Certify and verify calls are shell-free, deadline/output/file
+  bounded, validate output-node lists before spawning, parse one exact summary
+  schema, and expose success and failure invocation metrics. The client default
+  file limit now matches the advertised 64 MiB bundle ceiling.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

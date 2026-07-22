@@ -15,6 +15,12 @@ aggregate bundle from old/new component sources, old/new interface contracts,
 and a canonical bounded-query manifest. It uses bounded non-symlink reads and
 atomic no-clobber publication. The public OpenTitan cohort and the remaining
 gates are still open.
+
+The public `RevisionImpactTool` adds a shell-free process boundary with runtime
+deadlines, output limits, file-size limits, process-group containment where
+available, strict capability negotiation, exact response parsing, and
+per-invocation success or failure metrics. Its default file limit is 64 MiB so
+the client can admit the complete advertised v1 bundle range.
 This is a falsification experiment, not a novelty claim or
 production-supported interface.
 
@@ -143,6 +149,18 @@ nonzero node identifiers. Production verifies every retained scenario before
 creating the output. Verification binds every supplied source, interface, and
 query again. Existing output, malformed manifests, source drift, query drift,
 and certificate mutation fail closed; no fallback result is emitted.
+
+Capability discovery is a single canonical line:
+
+```console
+guarded-continuation-checker btor2-revision-impact-cli-version
+```
+
+It binds CLI, impact, and query-manifest versions; all source, evidence, bundle,
+atom, combination, and query limits; `exact-counterfactual-v1` semantics; no
+routing; no fallback; and fail-closed handling of unsupported inputs. The typed
+Rust client refuses any missing, reordered, noncanonical, or changed field
+before exposing the executable as compatible.
 
 ## Predeclared gates
 

@@ -5,7 +5,7 @@ use std::process::{Command, Output};
 const BINARY: &str = env!("CARGO_BIN_EXE_guarded-continuation-checker");
 
 fn fixture() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("gcc-revision-impact-cli-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("gcc revision impact cli {}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     fs::write(
@@ -65,6 +65,24 @@ fn invoke(root: &Path, command: &str, queries: &Path, artifact: &Path) -> Output
 
 #[test]
 fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
+    let capabilities = Command::new(BINARY)
+        .arg("btor2-revision-impact-cli-version")
+        .output()
+        .unwrap();
+    assert!(capabilities.status.success());
+    assert_eq!(
+        String::from_utf8(capabilities.stdout).unwrap(),
+        "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 routing=none fallback=none unsupported=fail-closed\n"
+    );
+    assert_eq!(
+        Command::new(BINARY)
+            .args(["btor2-revision-impact-cli-version", "unexpected"])
+            .status()
+            .unwrap()
+            .code(),
+        Some(2)
+    );
+
     let root = fixture();
     let queries = root.join("queries.txt");
     let artifact = root.join("answer.revision-impact");

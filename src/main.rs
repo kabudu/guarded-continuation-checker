@@ -75,6 +75,8 @@ const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION: u32 = 1;
 const SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+const REVISION_IMPACT_CLI_VERSION: u32 = 1;
+const REVISION_IMPACT_QUERY_MANIFEST_VERSION: u32 = 1;
 const REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES: usize = 16 * 1024;
 
 #[derive(Debug)]
@@ -25921,6 +25923,26 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
         return Ok(false);
     };
     match command {
+        "btor2-revision-impact-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-revision-impact-cli-version"
+                        .to_string(),
+                );
+            }
+            let policy = revision_impact::RevisionImpactPolicy::default();
+            println!(
+                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 routing=none fallback=none unsupported=fail-closed",
+                revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
+                policy.max_input_bytes,
+                policy.max_evidence_bytes,
+                policy.max_bundle_bytes,
+                revision_impact::MAX_IMPACT_ATOMS,
+                policy.max_combinations,
+                policy.max_queries,
+            );
+            Ok(true)
+        }
         "composed-witness-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -27942,7 +27964,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "VERIFIED"
             };
             println!(
-                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} evidence_members={} certificate_bytes={} elapsed_micros={}{}",
+                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} evidence_members={} certificate_bytes={} elapsed_micros={}",
                 revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
                 summary.atoms,
                 summary.queries,
@@ -27953,11 +27975,6 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 bundle.revision_evidence.len(),
                 encoded.len(),
                 started.elapsed().as_micros(),
-                if command == "check-btor2-revision-impact" {
-                    format!(" output={}", args[10])
-                } else {
-                    String::new()
-                }
             );
             Ok(true)
         }

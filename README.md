@@ -315,11 +315,12 @@ The newer [revision-impact certificate v1 experiment](docs/REVISION_IMPACT_CERTI
 extends the exact revision-local path across every bounded old/new combination.
 It records which changed component or interface boundaries invalidate reuse,
 derives every inclusion-minimal invalidating set, and binds every observation
-to independently checkable revision-local evidence. A strict research CLI now
-creates and verifies the aggregate file without per-formula calibration. The
-four-transition public cohort, maintained baseline, process client, and
-cross-platform identity gates remain open, so this is not yet part of the
-production support profile.
+to independently checkable revision-local evidence. A strict research CLI and
+typed bounded Rust process client now create and verify the aggregate file
+without per-formula calibration. Machine-readable discovery pins the exact
+semantics, limits, and fail-closed no-fallback contract. The four-transition
+public cohort, maintained baseline, and cross-platform identity gates remain
+open, so this is not yet part of the production support profile.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
