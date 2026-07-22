@@ -270,6 +270,14 @@ valuations to four and emits a byte-identical final artifact. The local
 [retained revision cost report](docs/ROALOGIC_PLIC_REVISION_COST_V1.md), with
 hosted Linux results and the final closest-system comparison still open.
 
+The first [same-scope closest-system comparison](docs/ROALOGIC_PLIC_CLOSEST_BASELINE_V1.md)
+falsifies the novelty hypothesis for this PLIC pair. Although the upstream
+source digests differ, pinned Yosys emits byte-identical SAFE and UNSAFE
+whole-circuit models. Qualified rIC3 and Certifaiger evidence produced for the
+old revision verifies unchanged against the new revision, so the established
+model-level route regenerates zero semantic evidence bytes. A new authentic
+revision pair with changed reachable semantics is required.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

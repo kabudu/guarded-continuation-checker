@@ -229,3 +229,10 @@ stale-proof and hidden-coupling controls, an ordinary full-rebuild baseline,
 and a faithful composed-witness baseline. If unchanged evidence cannot be
 reused without weakening completeness or if the baseline supplies the same
 property, the hypothesis is falsified.
+
+The first same-scope test now triggers that falsification condition for the
+Roa Logic PLIC pair. The two source revisions synthesize to byte-identical
+whole-circuit models, and qualified SAFE and UNSAFE evidence is reusable
+without rebuilding. GCC has no novelty-supporting reuse distinction on this
+pair. A subsequent test must start from a revision-pinned public subsystem
+whose reachable transition semantics actually change.

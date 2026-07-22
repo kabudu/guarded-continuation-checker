@@ -501,6 +501,15 @@ source drift, truncation, reordering, count, and size attacks all fail closed.
 This closes the local hostile-matrix subgate. Hosted reproduction of the
 expanded matrix remains pending.
 
+The first identical-scope closest-system comparison is disconfirming. Both
+authentic PLIC source revisions synthesize to byte-identical whole-circuit
+AIGER models for the SAFE and UNSAFE properties. One qualified rIC3 SAFE
+witness and one UNSAFE trace independently verify against both revisions, so
+the maintained model-level route regenerates zero semantic evidence bytes.
+This falsifies a revision-local advantage for this pair and shows that it does
+not contain the required semantic internal-logic change. A new public revision
+cohort with changed reachable semantics is mandatory.
+
 The component parser now admits property-free BTOR2 using explicit projected
 semantic roots. The authentic PLIC cohort no longer adds a false assertion to
 make the component parseable. Local and exact-fallback paths produce and
@@ -518,7 +527,7 @@ more peak memory. The tradeoff is therefore policy-dependent, not a universal
 performance win.
 
 The remaining gates include hosted Linux resource results, certificate-byte agreement across Linux, macOS, and Windows,
-long-lived multi-revision service amortisation, a faithful equivalent-scope closest-system comparison, tagged
+long-lived multi-revision service amortisation, an equivalent-scope closest-system comparison on a semantic-changing public pair, tagged
 compatibility, and independent review. None of this evidence changes the
 top-level production status.
 

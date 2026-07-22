@@ -601,3 +601,13 @@ The public workflow now closes the predeclared local hostile matrix with ten
 attack classes and one no-clobber control. Each rejection is tied to its
 smallest declared evidence section. This strengthens the candidate's trust
 boundary but does not distinguish it from closest prior systems.
+
+The first identical-scope maintained comparison falsifies the candidate for
+the public PLIC pair. Pinned Yosys produces byte-identical whole-circuit SAFE
+and UNSAFE models from the two source revisions. Qualified rIC3 and
+Certifaiger evidence generated once for the older source verifies unchanged
+against the newer source. The established route therefore retains all semantic
+evidence, which is strictly stronger reuse than GCC demonstrates on this pair.
+These revisions change source syntax but not reachable transition semantics,
+so they cannot support a novelty claim. The candidate remains open only for a
+new authentic revision pair with a semantic internal-logic change.

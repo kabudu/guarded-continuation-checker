@@ -118,6 +118,14 @@ GCC_COMPOSED_WITNESS_PLANTS=actuator-transport-lag \
   /tmp/gcc-output/guarded-continuation-checker \
   /tmp/ric3-output /tmp/certifaiger-output \
   "$output/changing-plant-replacement-composed-witness-amd64-v1.csv"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-roalogic-plic-closest-baseline-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/roalogic-plic-closest-baseline-amd64-v1.csv" \
+  "$output/roalogic-plic-closest-baseline-amd64-v1.manifest.txt"
 cargo run --release --locked --quiet \
   --example changing_plant_controller_evidence_reuse \
   >"$output/changing-plant-controller-evidence-reuse-amd64-v1.csv"

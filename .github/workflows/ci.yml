@@ -33,6 +33,8 @@ jobs:
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
             scripts/opentitan-dual-timer-resource-container-v1.sh \
             scripts/benchmark-changing-plant-composed-witness-v1.sh \
+            scripts/build-roalogic-plic-revision-aiger-v1.sh \
+            scripts/benchmark-roalogic-plic-closest-baseline-v1.sh \
             scripts/test-certified-evidence-hostile-v1.sh
           shellcheck -s sh \
             scripts/build-opentitan-aon-dual-timer-aiger.sh \
@@ -419,6 +421,13 @@ jobs:
             /tmp/roalogic-plic-revision-work
           diff -u results/roalogic-plic-revision-reuse-v1.csv \
             /tmp/roalogic-plic-revision-reuse-v1.csv
+          scripts/build-roalogic-plic-revision-aiger-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/roalogic-plic-revision-aiger-v1
+          grep -q '^a18e30f70df2c716abcecc3e4fab96321bb5b6ea66246389a1df09a169adbce7  old-safe.aag$' \
+            /tmp/roalogic-plic-revision-aiger-v1/SHA256SUMS
+          grep -q '^354fa8eea1402249e520c96b603ca5fa20cd5fa6a2318639a23c2ad3d4b6a8b2  old-unsafe.aag$' \
+            /tmp/roalogic-plic-revision-aiger-v1/SHA256SUMS
           target/release/examples/roalogic_plic_revision_cost \
             /tmp/roalogic-plic-revision-work/plic-new.btor2 \
             corpus/rtl/roalogic-plic-gateway/revision-cohort/monitor.btor2 \

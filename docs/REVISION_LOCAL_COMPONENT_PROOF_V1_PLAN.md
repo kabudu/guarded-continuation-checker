@@ -209,6 +209,11 @@ tool.
    The first controlled local cost run reduces complete local candidate work
    from 4,100 valuations to four while emitting byte-identical artifacts. See
    [Roa Logic PLIC retained revision cost v1](ROALOGIC_PLIC_REVISION_COST_V1.md).
-   Hosted timing, peak memory, process amortisation, and closest-system evidence
-   remain open.
+   Hosted timing, peak memory, process amortisation, and a closest-system test
+   on a semantic-changing pair remain open.
+   The first identical-scope maintained AIGER, rIC3, and Certifaiger comparison
+   now falsifies the hypothesis for the public PLIC pair: both semantic models
+   and both-answer evidence are fully reusable because the source revisions
+   synthesize identically. See
+   [Roa Logic PLIC closest-system baseline v1](ROALOGIC_PLIC_CLOSEST_BASELINE_V1.md).
 8. Reject or retain the candidate strictly from the predeclared gates.
