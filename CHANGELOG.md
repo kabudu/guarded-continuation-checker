@@ -101,6 +101,12 @@
   making GCC's current aggregate about 8.32 times larger. Retain this negative
   result while the matched GCC resource, hostile-drift, exact-patch and hosted
   gates remain open.
+- Add five matched arm64 trials for the OpenTitan PWM cohort. GCC's median
+  source-through-answer time is 0.09 seconds versus 4.84 seconds for 20
+  isolated maintained jobs, about 53.78 times faster, with about 20.0% lower
+  producer-path peak RSS. GCC's artifact remains about 8.32 times larger. Treat
+  this as a scoped shared-model and orchestration advantage, not a universal
+  solver-performance claim.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

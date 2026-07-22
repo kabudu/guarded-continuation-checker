@@ -509,9 +509,13 @@ Yosys, rIC3 and Certifaiger route agrees on all 20 answers and independently
 checks every artifact. Comparing that checked table derives the same three
 minimal semantic change sets, although it does not emit them in one
 source-bound aggregate. Its 15,479-byte model-plus-evidence package is about
-8.32 times smaller than GCC's current aggregate. Matched GCC resource evidence,
-broader subsystem evidence, a tighter closest-system comparison, and
-independent review remain open.
+8.32 times smaller than GCC's current aggregate. Conversely, five matched
+arm64 trials put GCC's median source-through-answer time at 0.09 seconds versus
+4.84 seconds for 20 isolated maintained jobs, with about 20.0% lower
+producer-path peak RSS. This is evidence for a shared-model orchestration
+advantage, not yet a novel algorithm. Broader subsystem evidence, parallel and
+warm-service baselines, a tighter closest-system comparison, and independent
+review remain open.
 
 ## Production-tagged OpenTitan watchdog
 

@@ -540,9 +540,12 @@ and the typed process API distinguish these answer-changing sets from ordinary
 evidence invalidation. Reproducible source extraction and local deterministic
 production pass. The maintained baseline now agrees on all 20 results and
 independently checks every witness and trace. Its complete 15,479-byte package
-is about 8.32 times smaller than GCC's current aggregate. The matched GCC
-resource comparison, hostile-drift matrix, exact upstream patch, hosted release
-build, and independent review remain open.
+is about 8.32 times smaller than GCC's current aggregate. Five matched arm64
+trials nevertheless show a 0.09-second GCC median from source through answer,
+versus 4.84 seconds for 20 isolated maintained jobs, and about 20.0% lower
+producer-path peak RSS. This closes the local matched-resource gate only. The
+hostile-drift matrix, exact upstream patch, hosted release build, parallel and
+warm-service comparisons, and independent review remain open.
 
 The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
 locally. Both cross-revision evidence swaps fail, and the new model needs only

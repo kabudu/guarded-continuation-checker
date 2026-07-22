@@ -5,8 +5,9 @@
 Predeclared before fixture extraction, implementation, or measurement. The
 local two-atom mechanism now passes with a frozen semantic explanation. The
 maintained baseline now agrees on all 20 observations and independently checks
-all evidence. The matched GCC resource comparison, hostile-drift matrix, exact
-upstream patch retention, and hosted release-build gates remain open.
+all evidence. The matched five-trial resource comparison also passes. The
+hostile-drift matrix, exact upstream patch retention, and hosted release-build
+gates remain open.
 
 ## Public revision
 
@@ -166,13 +167,26 @@ model-plus-evidence transfer is therefore 15,479 bytes, while the current GCC
 aggregate is 128,768 bytes, about 8.32 times larger. This is a negative
 artifact-size result for GCC and is retained as such.
 
-On the local arm64 host, the maintained route takes 0.65 seconds for synthesis,
-4.420 seconds for 20 isolated producer launches, and 4.928 seconds for 20
-isolated checker launches. Synthesis plus production is 5.07 seconds. Peak RSS
-is 19,775,488 bytes for synthesis, 8,032,256 bytes for an individual producer,
-and 4,833,280 bytes for an individual checker. These figures are not yet
-compared with GCC because the matched GCC source-to-answer resource run is the
-next gate.
+Across five clean local arm64 trials, the maintained route has median 0.65
+seconds for synthesis, 4.229 seconds for 20 isolated producer launches, 4.84
+seconds from source through production, and 4.976 seconds for 20 isolated
+checker launches. Median source-through-producer peak RSS is 19,873,792 bytes;
+median individual checker peak RSS is 4,833,280 bytes.
+
+The matched GCC route has median 0.08 seconds for four reusable component
+syntheses, 0.01 seconds for aggregate production, and 0.09 seconds from source
+through production. Its median internal aggregate production time is 15,601
+microseconds, and independent verification is 2,181 microseconds. External
+checker time rounds to 0.00 seconds at the host timer's precision, so no
+external checker-time ratio is claimed. Median source-through-producer peak RSS
+is 15,892,480 bytes and median checker peak RSS is 3,883,008 bytes.
+
+At this exact scope, GCC is about 53.78 times faster from source through answer
+and uses about 20.0% less producer-path peak RSS, despite transferring an
+artifact about 8.32 times larger. This is a measured orchestration and shared
+component-model advantage over 20 separate maintained jobs, not a universal
+model-checking speed claim. Larger designs, warm services, parallel maintained
+jobs, and independent hardware are still needed to establish product value.
 
 The maintained tools prove each scenario separately. The three minimal
 semantic change sets are then obtained by comparing the complete independently
@@ -186,6 +200,8 @@ Retained evidence:
 
 - [`opentitan-pwm-crosstalk-impact-baseline-arm64-v1.csv`](../results/opentitan-pwm-crosstalk-impact-baseline-arm64-v1.csv)
 - [`opentitan-pwm-crosstalk-impact-baseline-arm64-v1.manifest.txt`](../results/opentitan-pwm-crosstalk-impact-baseline-arm64-v1.manifest.txt)
+- [`opentitan-pwm-crosstalk-impact-arm64-v1.csv`](../results/opentitan-pwm-crosstalk-impact-arm64-v1.csv)
+- [`opentitan-pwm-crosstalk-impact-arm64-v1.manifest.txt`](../results/opentitan-pwm-crosstalk-impact-arm64-v1.manifest.txt)
 
 Reproduce it with the qualified local tools and network-disabled images:
 
@@ -196,4 +212,13 @@ scripts/benchmark-opentitan-pwm-crosstalk-impact-baseline-v1.sh \
   /path/to/certifaiger-output \
   /tmp/baseline.csv /tmp/baseline.manifest.txt \
   /tmp/gcc-pwm-impact-baseline 1
+```
+
+Reproduce a matched GCC trial:
+
+```console
+mkdir /tmp/gcc-pwm-impact
+scripts/run-opentitan-pwm-crosstalk-impact-v1.sh \
+  /path/to/pinned/yosys /path/to/guarded-continuation-checker \
+  /tmp/gcc.csv /tmp/gcc.manifest.txt /tmp/gcc-pwm-impact 1
 ```

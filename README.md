@@ -338,8 +338,11 @@ atoms change. The explanation comes from complete independently replayed
 counterfactuals, not a learned attribution score. Pinned Yosys, rIC3 and
 Certifaiger agree on all 20 results and validate every separate artifact. Their
 15,479-byte package is about 8.32 times smaller than GCC's current aggregate,
-so artifact efficiency is currently negative. Matched GCC resources,
-hostile-drift, exact-patch, and hosted release-build gates remain open.
+so artifact efficiency is currently negative. In five matched arm64 trials,
+GCC is about 53.78 times faster from source through answer and uses about 20.0%
+less producer-path peak RSS than 20 isolated maintained jobs. This is a scoped
+shared-model orchestration result, not a universal solver claim. Hostile-drift,
+exact-patch, and hosted release-build gates remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
