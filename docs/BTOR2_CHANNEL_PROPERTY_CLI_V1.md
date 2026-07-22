@@ -176,7 +176,7 @@ cargo test --release --locked --test btor2_channel_property_tool_api
 
 ## Remaining gates
 
-- Retain measured whole-process resources separately from internal timings.
+- Reproduce the retained local whole-process resource evidence on hosted Linux.
 - Reproduce the complete workflow and artifact identity on supported hosts.
 - Run realistic independently sourced properties and obtain external operator
   review.

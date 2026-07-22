@@ -284,8 +284,9 @@ additive observed CLI now preserves byte-identical evidence while reporting
 eight internal production and replay phases. The governed typed client now
 strictly discovers and parses the schema, enforces cross-field invariants, and
 preserves typed no-result resource refusal. The next product boundary is
-measured process resources, followed by maintained-tool, realistic-property,
-portability, compatibility, and independent-review gates.
+hosted replication of the retained five-trial arm64 process-resource evidence,
+followed by maintained-tool, realistic-property, portability, compatibility,
+and independent-review gates.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit

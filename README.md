@@ -434,7 +434,10 @@ result, and exposes resource refusal without inventing a logical answer. An
 additive observed CLI now reports eight diagnostic production and replay phases
 without changing artifact bytes or correctness decisions. The governed typed
 client strictly discovers and parses that additive schema, including phase-sum,
-operation, and verification-zero invariants. Measured process resources,
+operation, and verification-zero invariants. A retained five-trial arm64
+[process-resource baseline](docs/BTOR2_CHANNEL_PROPERTY_PROCESS_RESOURCES_V1.md)
+records 18,726,912-byte certification and 8,044,544-byte fresh-verification
+median peak RSS with deterministic evidence. Hosted resource replication,
 maintained comparison and portability evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now

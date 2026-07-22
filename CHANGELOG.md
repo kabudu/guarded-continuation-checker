@@ -12,7 +12,9 @@
   and publication while retaining byte-identical evidence and timing-free
   correctness decisions. Add strict governed Rust discovery and parsing with
   phase-sum, operation, verification-zero, hostile-schema, and typed resource
-  refusal checks.
+  refusal checks. Retain a five-trial macOS arm64 whole-process baseline with
+  deterministic artifacts, exact answer replay, internal-phase reconciliation,
+  and peak-RSS measurements, plus a hosted Linux reproduction job.
 
 - Add an authenticated OpenTitan PWM boundary with six live symbolic firmware
   register bits and explicit even/odd equal-input classes. Retain deterministic
