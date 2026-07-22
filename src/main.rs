@@ -38971,6 +38971,52 @@ mod tests {
     }
 
     #[test]
+    fn revision_portfolio_cli_accepts_strict_property_free_components() {
+        let scratch = std::env::temp_dir().join(format!(
+            "gcc-revision-property-free-cli-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&scratch).unwrap();
+        let left = scratch.join("left.btor2");
+        let right = scratch.join("right.btor2");
+        let interface = scratch.join("interface.txt");
+        let certificate = scratch.join("answer.revision-proof");
+        fs::write(
+            &left,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 redor 1 7\n10 output 7 projected\n11 output 9 property\n",
+        )
+        .unwrap();
+        fs::write(
+            &right,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 output 7 projected\n",
+        )
+        .unwrap();
+        fs::write(
+            &interface,
+            b"word_interface_version=2\nwire_count=1\nwire=left,7,3\nexternal_count=1\nexternal=left,3\nstatus=complete\n",
+        )
+        .unwrap();
+        let arguments = vec![
+            left.display().to_string(),
+            "7,9".to_string(),
+            right.display().to_string(),
+            "7".to_string(),
+            interface.display().to_string(),
+            "1".to_string(),
+            "left".to_string(),
+            "9".to_string(),
+            certificate.display().to_string(),
+        ];
+        let mut check = vec!["check-btor2-revision-portfolio".to_string()];
+        check.extend(arguments.clone());
+        assert!(run_artifact_cli(&check).unwrap());
+        let mut verify = vec!["verify-btor2-revision-portfolio".to_string()];
+        verify.extend(arguments);
+        assert!(run_artifact_cli(&verify).unwrap());
+        fs::remove_dir_all(&scratch).unwrap();
+    }
+
+    #[test]
     fn revision_retained_cli_produces_only_changed_side_and_remains_ordinarily_verifiable() {
         let scratch =
             std::env::temp_dir().join(format!("gcc-revision-retained-cli-{}", std::process::id()));

@@ -249,17 +249,18 @@ changes. Its static portfolio now produces a complete four-section
 revision-local proof when bounded local composition is admitted and otherwise
 uses exact source-separated search without generating a merged BTOR2 model.
 Both routes preserve SAFE and earliest-frame UNSAFE evidence, reject forced
-routing, and are available through the bounded
-[CLI v1 workflow](docs/REVISION_LOCAL_CLI_V1.md). Current results are
-repository-authored experimental evidence. Public revision, maintained-tool,
-performance, and cross-platform gates remain open.
+routing, accept property-free components through explicit projected semantic
+roots, and are available through the bounded
+[CLI v1 workflow](docs/REVISION_LOCAL_CLI_V1.md). Current results remain
+experimental evidence.
 
 The first public revision pair now uses both authentic revisions of the small
-Roa Logic RISC-V PLIC gateway. The retained local result preserves SAFE and
+Roa Logic RISC-V PLIC gateway without injecting a parser-enabling assertion.
+The retained local result preserves SAFE and
 earliest-frame UNSAFE answers, reuses the unchanged monitor relation
 byte-for-byte, and agrees with maintained Yosys/Z3. See the
 [Roa Logic PLIC revision-local result](docs/ROALOGIC_PLIC_REVISION_REUSE_V1.md).
-Hosted, strong-baseline, complete-hostile-matrix, and portable certificate
+Strong-baseline, complete-hostile-matrix, and portable certificate
 evidence remain open.
 
 A separate controlled cost run retains the public PLIC relation while changing
@@ -267,7 +268,7 @@ only a small monitor. It reduces complete local candidate work from 4,100
 valuations to four and emits a byte-identical final artifact. The local
 21-trial medians are recorded in the
 [retained revision cost report](docs/ROALOGIC_PLIC_REVISION_COST_V1.md), with
-hosted and peak-memory evidence still open.
+hosted Linux results and the final closest-system comparison still open.
 
 Validated findings:
 

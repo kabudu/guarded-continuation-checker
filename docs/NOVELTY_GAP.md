@@ -590,3 +590,9 @@ Strict interface contract v2 closes one integrity ambiguity in that candidate:
 every semantic input must now be classified as wired or external. This prevents
 an omitted cross-component wire from silently becoming an environment input.
 It strengthens the experiment but is not itself a novelty claim.
+
+Property-free component ingestion removes experiment-only assertion
+instrumentation from the public PLIC wrapper. Selected component outputs now
+bind semantic-input discovery directly and are independently replayed through
+both local and exact-fallback routes. This improves source fidelity and product
+integration. It is parser and verification engineering, not a novelty claim.

@@ -38,6 +38,14 @@ Callers that need a raw declaration inventory must not infer it from this API.
 The change is covered by external-consumer tests on every hosted platform and
 will become part of the first tagged compatibility baseline.
 
+Property-free BTOR2 component ingestion is additive. The new component parser
+requires caller-selected semantic roots and does not change the retained
+whole-model parser, which still requires a bad property. Revision-local public
+APIs and CLI commands use the component parser with their explicit output
+projections. Existing property-bearing sources remain valid and retain the same
+certificate formats. The first production tag must freeze the component-root
+ordering and semantic-input discovery rules.
+
 Bounded search certificate v2 is additive. State-only bad properties continue
 to produce the original byte-for-byte v1 format. V2 is selected only when the
 bad property depends on the current one-bit semantic input, and records that

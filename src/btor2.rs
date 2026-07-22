@@ -335,7 +335,11 @@ fn expect_end<T: Iterator<Item = String> + ?Sized>(
     }
 }
 
-pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
+fn parse_with_roots(
+    input: &str,
+    additional_semantic_roots: &[NodeId],
+    require_bad_property: bool,
+) -> Result<Btor2Model, ParseError> {
     if input.len() > MAX_BTOR2_BYTES {
         return Err(ParseError::new(0, "input exceeds the 8 MiB limit"));
     }
@@ -473,11 +477,22 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
         nodes.insert(id, node);
     }
 
-    if states.is_empty() || bad.is_empty() {
+    if states.is_empty() {
+        return Err(ParseError::new(0, "model requires at least one state"));
+    }
+    if require_bad_property && bad.is_empty() {
         return Err(ParseError::new(
             0,
             "model requires at least one state and one bad property",
         ));
+    }
+    for root in additional_semantic_roots {
+        if !nodes.contains_key(root) {
+            return Err(ParseError::new(
+                0,
+                format!("unknown component semantic root {root}"),
+            ));
+        }
     }
     for state in &states {
         if !initialisers.contains_key(state) || !next_values.contains_key(state) {
@@ -499,7 +514,8 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
             .values()
             .copied()
             .chain(constraints.iter().map(|(_, expression)| *expression))
-            .chain(bad.iter().map(|(_, expression, _)| *expression)),
+            .chain(bad.iter().map(|(_, expression, _)| *expression))
+            .chain(additional_semantic_roots.iter().copied()),
     );
     inputs.retain(|input| semantic_inputs.contains(input));
     Ok(Btor2Model {
@@ -511,6 +527,20 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
         constraints,
         bad,
     })
+}
+
+pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
+    parse_with_roots(input, &[], true)
+}
+
+pub fn parse_component(input: &str, semantic_roots: &[NodeId]) -> Result<Btor2Model, ParseError> {
+    if semantic_roots.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(ParseError::new(
+            0,
+            "component semantic roots must be unique and strictly ordered",
+        ));
+    }
+    parse_with_roots(input, semantic_roots, false)
 }
 
 fn semantic_input_support(
@@ -588,6 +618,18 @@ pub fn parse_bytes(input: &[u8]) -> Result<Btor2Model, ParseError> {
     let text = std::str::from_utf8(input)
         .map_err(|_| ParseError::new(0, "input must contain valid UTF-8"))?;
     parse(text)
+}
+
+pub fn parse_component_bytes(
+    input: &[u8],
+    semantic_roots: &[NodeId],
+) -> Result<Btor2Model, ParseError> {
+    if input.len() > MAX_BTOR2_BYTES {
+        return Err(ParseError::new(0, "input exceeds the 8 MiB limit"));
+    }
+    let text = std::str::from_utf8(input)
+        .map_err(|_| ParseError::new(0, "input must contain valid UTF-8"))?;
+    parse_component(text, semantic_roots)
 }
 
 #[derive(Clone, Copy)]
@@ -901,6 +943,28 @@ mod tests {
         ] {
             assert!(parse(&hostile).is_err());
         }
+    }
+
+    #[test]
+    fn component_parser_accepts_property_free_sources_and_binds_selected_roots() {
+        let source = "1 sort bitvec 1\n2 input 1 command\n3 state 1 state\n4 zero 1\n5 init 1 3 4\n6 next 1 3 3\n7 xor 1 3 2\n8 output 7 projected\n";
+        assert_eq!(
+            parse(source).unwrap_err().message,
+            "model requires at least one state and one bad property"
+        );
+        let component = parse_component(source, &[7]).unwrap();
+        assert_eq!(component.states(), &[3]);
+        assert_eq!(component.inputs(), &[2]);
+        assert!(component.bad_properties().is_empty());
+
+        assert_eq!(
+            parse_component(source, &[99]).unwrap_err().message,
+            "unknown component semantic root 99"
+        );
+        assert_eq!(
+            parse_component(source, &[7, 7]).unwrap_err().message,
+            "component semantic roots must be unique and strictly ordered"
+        );
     }
 
     #[test]

@@ -22,8 +22,8 @@ module interface remains unchanged. The existing pinned later source and an
 exact reverse patch reconstruct the earlier bytes. The builder verifies both
 digests before synthesis.
 
-The component wrapper, monitor, properties, interface contract, build scripts,
-and assertions are GCC-authored. They are not upstream requirements or
+The component wrapper, monitor, properties, interface contract, and build scripts
+are GCC-authored. They are not upstream requirements or
 evidence that the complete PLIC is safe. `MAX_PENDING_COUNT` is fixed to three.
 
 ## Exact experiment
@@ -99,7 +99,7 @@ maintained semantic-control subgates. It does not yet provide:
 - evidence that the combined invariant is absent from the closest maintained
   systems.
 
-The general parser also still requires each BTOR2 component to contain a bad
-property, even when the revision-local query supplies the final property. The
-component wrapper therefore contains a clearly labelled parser-enabling
-assertion. Property-free component ingestion remains a product gap.
+The component parser now accepts property-free BTOR2 sources when the caller
+supplies canonical projected semantic roots. The public PLIC component wrapper
+therefore contains no parser-enabling assertion. Legacy whole-model parsing
+still requires a bad property, so its established contract is unchanged.

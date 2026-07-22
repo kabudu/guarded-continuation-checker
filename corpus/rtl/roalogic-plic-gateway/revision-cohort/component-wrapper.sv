@@ -19,6 +19,4 @@ module roalogic_plic_gateway_revision_component (
     .complete(complete)
   );
 
-  // Parser-enabling GCC instrumentation, not an upstream requirement.
-  always_comb assert (!pending);
 endmodule

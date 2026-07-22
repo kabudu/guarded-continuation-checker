@@ -1,19 +1,61 @@
 use guarded_continuation_checker::revision_local::{
-    BoundEvidence, BoundedQuery, BoundedResult, ComponentSide, EvidenceSection, InterfaceWire,
-    LocalEvidence, RevisionLocalCertificate, RevisionPortfolioBackend, RevisionSelectionReason,
-    WordInterfaceContract, compose_verified_local_relations, decode_bounded_answer_certificate,
-    decode_direct_answer_certificate, decode_local_relation_certificate,
-    decode_revision_local_certificate, decode_revision_portfolio, decode_word_interface_contract,
-    encode_bounded_answer_certificate, encode_direct_answer_certificate,
-    encode_local_relation_certificate, encode_revision_local_certificate,
-    encode_revision_portfolio, encode_word_interface_contract, produce_bounded_answer,
-    produce_direct_answer, produce_local_relation, produce_revision_local_certificate,
-    produce_revision_portfolio, produce_revision_with_retained_left, source_digest,
-    unchanged_local_evidence, validate_local_artifact, verify_bounded_answer, verify_direct_answer,
-    verify_local_relation, verify_local_relation_for_composition,
-    verify_revision_local_certificate, verify_revision_portfolio,
-    verify_revision_with_retained_left, verify_source_bindings,
+    BoundEvidence, BoundedQuery, BoundedResult, ComponentSide, EvidenceSection, InterfaceInput,
+    InterfaceWire, LocalEvidence, RevisionLocalCertificate, RevisionPortfolioBackend,
+    RevisionSelectionReason, WordInterfaceContract, compose_verified_local_relations,
+    decode_bounded_answer_certificate, decode_direct_answer_certificate,
+    decode_local_relation_certificate, decode_revision_local_certificate,
+    decode_revision_portfolio, decode_word_interface_contract, encode_bounded_answer_certificate,
+    encode_direct_answer_certificate, encode_local_relation_certificate,
+    encode_revision_local_certificate, encode_revision_portfolio, encode_word_interface_contract,
+    produce_bounded_answer, produce_direct_answer, produce_local_relation,
+    produce_revision_local_certificate, produce_revision_portfolio,
+    produce_revision_with_retained_left, source_digest, unchanged_local_evidence,
+    validate_local_artifact, verify_bounded_answer, verify_direct_answer, verify_local_relation,
+    verify_local_relation_for_composition, verify_revision_local_certificate,
+    verify_revision_portfolio, verify_revision_with_retained_left, verify_source_bindings,
 };
+
+#[test]
+fn downstream_client_can_compose_property_free_components() {
+    let left = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 redor 1 7\n10 output 7 projected\n11 output 9 property\n";
+    let right = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 output 7 projected\n";
+    let interface = encode_word_interface_contract(&WordInterfaceContract {
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        }],
+        external_inputs: Some(vec![InterfaceInput {
+            side: ComponentSide::Left,
+            input: 3,
+        }]),
+    })
+    .unwrap();
+    let production = produce_revision_portfolio(
+        left,
+        &[7, 9],
+        right,
+        &[7],
+        interface.as_bytes(),
+        &BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Left,
+            bad_output: 9,
+        },
+    )
+    .unwrap();
+    let summary = verify_revision_portfolio(
+        left,
+        &[7, 9],
+        right,
+        &[7],
+        interface.as_bytes(),
+        &production,
+    )
+    .unwrap();
+    assert_eq!(summary.result, BoundedResult::Unsafe);
+    assert_eq!(summary.bad_frame, Some(0));
+}
 
 #[test]
 fn downstream_client_can_preserve_one_component_across_a_revision() {

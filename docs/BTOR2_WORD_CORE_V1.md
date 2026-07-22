@@ -21,9 +21,16 @@ Version 1 accepts canonical newline-terminated BTOR2 text containing:
 - Boolean constraints; and
 - one or more bad properties.
 
+`parse_component` and `parse_component_bytes` are additive component-boundary
+APIs. They accept a property-free source when the caller supplies a unique,
+strictly ordered list of projected semantic roots. Those roots participate in
+semantic-input discovery alongside next-state expressions and constraints.
+Unknown, duplicate, or unordered roots fail closed. The original `parse` and
+`parse_bytes` whole-model APIs continue to require a bad property.
+
 Optional symbols on ordinary expression nodes are accepted. `Btor2Model::inputs`
 returns only declared inputs that can reach a next-state expression, constraint,
-or bad property. Unused synthesis artifacts such as a clock consumed only by the
+bad property, or selected component root. Unused synthesis artifacts such as a clock consumed only by the
 BTOR transition convention are validated during parsing but omitted from the
 semantic input vector. This support calculation does not remove any live node or
 alter model semantics.

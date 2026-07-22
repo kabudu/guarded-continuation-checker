@@ -494,6 +494,13 @@ The public PLIC cohort passes with strict contracts. Version 1 remains readable
 only for compatibility with prior experimental artifacts and retains its
 implicit external-input interpretation.
 
+The component parser now admits property-free BTOR2 using explicit projected
+semantic roots. The authentic PLIC cohort no longer adds a false assertion to
+make the component parseable. Local and exact-fallback paths produce and
+independently verify the same property-free component semantics, and the file
+CLI has a strict v2 end-to-end regression. This closes the property-free
+ingestion subgate, not the broader public-product or independent-review gates.
+
 A separate controlled cost workload keeps the public PLIC relation unchanged
 while revising a small GCC monitor. Deterministic work falls from 4,100 complete
 local candidate valuations to four, with byte-identical output. Local medians
@@ -505,8 +512,7 @@ performance win.
 
 The remaining gates include the rest of the predeclared hostile matrix, hosted Linux
 resource results, certificate-byte agreement across Linux, macOS, and Windows,
-property-free component ingestion, long-lived multi-revision service
-amortisation, a faithful equivalent-scope closest-system comparison, tagged
+long-lived multi-revision service amortisation, a faithful equivalent-scope closest-system comparison, tagged
 compatibility, and independent review. None of this evidence changes the
 top-level production status.
 

@@ -532,7 +532,7 @@ pub fn produce_local_relation(
     source: &[u8],
     outputs: &[NodeId],
 ) -> Result<LocalRelationCertificate, RevisionLocalError> {
-    let model = btor2::parse_bytes(source)
+    let model = btor2::parse_component_bytes(source, outputs)
         .map_err(|error| reject(EvidenceSection::Envelope, error.to_string()))?;
     let shape = relation_shape(&model, outputs, EvidenceSection::Envelope)?;
     let mut rows = Vec::new();
@@ -572,7 +572,8 @@ pub fn verify_local_relation(
     if source_digest(source) != certificate.source_sha256 {
         return Err(reject(section, "local relation source binding is invalid"));
     }
-    let model = btor2::parse_bytes(source).map_err(|error| reject(section, error.to_string()))?;
+    let model = btor2::parse_component_bytes(source, &certificate.outputs)
+        .map_err(|error| reject(section, error.to_string()))?;
     let shape = relation_shape(&model, &certificate.outputs, section)?;
     if certificate.states != shape.states
         || certificate.state_widths != shape.state_widths
@@ -1928,6 +1929,8 @@ fn direct_context(
     right_source: &[u8],
     contract: &WordInterfaceContract,
     query: &BoundedQuery,
+    left_projected_roots: &[NodeId],
+    right_projected_roots: &[NodeId],
 ) -> Result<DirectContext, RevisionLocalError> {
     if query.horizon > MAX_FINAL_HORIZON {
         return Err(reject(
@@ -1936,9 +1939,31 @@ fn direct_context(
         ));
     }
     encode_word_interface_contract(contract)?;
-    let left = btor2::parse_bytes(left_source)
+    let mut left_roots = contract
+        .wires
+        .iter()
+        .filter(|wire| wire.from == ComponentSide::Left)
+        .map(|wire| wire.output)
+        .chain(left_projected_roots.iter().copied())
+        .collect::<Vec<_>>();
+    let mut right_roots = contract
+        .wires
+        .iter()
+        .filter(|wire| wire.from == ComponentSide::Right)
+        .map(|wire| wire.output)
+        .chain(right_projected_roots.iter().copied())
+        .collect::<Vec<_>>();
+    match query.bad_side {
+        ComponentSide::Left => left_roots.push(query.bad_output),
+        ComponentSide::Right => right_roots.push(query.bad_output),
+    }
+    left_roots.sort_unstable();
+    left_roots.dedup();
+    right_roots.sort_unstable();
+    right_roots.dedup();
+    let left = btor2::parse_component_bytes(left_source, &left_roots)
         .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
-    let right = btor2::parse_bytes(right_source)
+    let right = btor2::parse_component_bytes(right_source, &right_roots)
         .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
     if left.states().is_empty()
         || right.states().is_empty()
@@ -2177,8 +2202,26 @@ pub fn produce_direct_answer(
     interface_source: &[u8],
     query: &BoundedQuery,
 ) -> Result<(DirectAnswerCertificate, DirectAnswerSummary), RevisionLocalError> {
+    produce_direct_answer_with_roots(left_source, &[], right_source, &[], interface_source, query)
+}
+
+fn produce_direct_answer_with_roots(
+    left_source: &[u8],
+    left_projected_roots: &[NodeId],
+    right_source: &[u8],
+    right_projected_roots: &[NodeId],
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<(DirectAnswerCertificate, DirectAnswerSummary), RevisionLocalError> {
     let contract = decode_word_interface_contract(interface_source)?;
-    let context = direct_context(left_source, right_source, &contract, query)?;
+    let context = direct_context(
+        left_source,
+        right_source,
+        &contract,
+        query,
+        left_projected_roots,
+        right_projected_roots,
+    )?;
     let mut current = BTreeSet::from([direct_initial(&context)?]);
     let mut layers = vec![current.iter().cloned().collect::<Vec<_>>()];
     let mut predecessors = Vec::<BTreeMap<CombinedState, (CombinedState, u16)>>::new();
@@ -2280,6 +2323,24 @@ pub fn verify_direct_answer(
     interface_source: &[u8],
     certificate: &DirectAnswerCertificate,
 ) -> Result<DirectAnswerSummary, RevisionLocalError> {
+    verify_direct_answer_with_roots(
+        left_source,
+        &[],
+        right_source,
+        &[],
+        interface_source,
+        certificate,
+    )
+}
+
+fn verify_direct_answer_with_roots(
+    left_source: &[u8],
+    left_projected_roots: &[NodeId],
+    right_source: &[u8],
+    right_projected_roots: &[NodeId],
+    interface_source: &[u8],
+    certificate: &DirectAnswerCertificate,
+) -> Result<DirectAnswerSummary, RevisionLocalError> {
     if certificate.left_sha256 != source_digest(left_source) {
         return Err(reject(
             EvidenceSection::Left,
@@ -2299,7 +2360,14 @@ pub fn verify_direct_answer(
         ));
     }
     let contract = decode_word_interface_contract(interface_source)?;
-    let context = direct_context(left_source, right_source, &contract, &certificate.query)?;
+    let context = direct_context(
+        left_source,
+        right_source,
+        &contract,
+        &certificate.query,
+        left_projected_roots,
+        right_projected_roots,
+    )?;
     let initial = direct_initial(&context)?;
     let mut current = BTreeSet::from([initial.clone()]);
     let mut reachable_states = 1usize;
@@ -2777,9 +2845,9 @@ pub fn assess_revision_portfolio(
         ));
     }
     decode_word_interface_contract(interface_source)?;
-    let left = btor2::parse_bytes(left_source)
+    let left = btor2::parse_component_bytes(left_source, left_outputs)
         .map_err(|error| reject(EvidenceSection::Left, error.to_string()))?;
-    let right = btor2::parse_bytes(right_source)
+    let right = btor2::parse_component_bytes(right_source, right_outputs)
         .map_err(|error| reject(EvidenceSection::Right, error.to_string()))?;
     let (left_reason, left_candidates) = local_side_admission(
         &left,
@@ -2846,8 +2914,14 @@ pub fn produce_revision_portfolio(
             reason,
         })
     } else {
-        let (certificate, _) =
-            produce_direct_answer(left_source, right_source, interface_source, query)?;
+        let (certificate, _) = produce_direct_answer_with_roots(
+            left_source,
+            left_outputs,
+            right_source,
+            right_outputs,
+            interface_source,
+            query,
+        )?;
         Ok(RevisionPortfolioProduction {
             certificate: RevisionPortfolioCertificate::DirectExact(certificate),
             backend: RevisionPortfolioBackend::DirectExact,
@@ -2913,8 +2987,14 @@ pub fn verify_revision_portfolio(
             RevisionPortfolioCertificate::DirectExact(certificate),
             RevisionPortfolioBackend::DirectExact,
         ) => {
-            let summary =
-                verify_direct_answer(left_source, right_source, interface_source, certificate)?;
+            let summary = verify_direct_answer_with_roots(
+                left_source,
+                left_outputs,
+                right_source,
+                right_outputs,
+                interface_source,
+                certificate,
+            )?;
             Ok(RevisionPortfolioSummary {
                 result: summary.result,
                 bad_frame: summary.bad_frame,
@@ -3601,6 +3681,9 @@ mod tests {
 
     const WORD_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 ulte 1 3 9\n11 constraint 10\n12 zero 1\n13 bad 12 never\n";
     const RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    const PROPERTY_FREE_LEFT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 redor 1 7\n10 output 7 projected\n11 output 9 property\n";
+    const PROPERTY_FREE_WIDE_PROJECTION_LEFT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 4\n9 redor 1 7\n10 output 7 projected\n11 output 9 property\n12 zero 2\n13 add 2 7 12\n14 add 2 13 12\n15 add 2 14 12\n16 add 2 15 12\n17 output 13 projected_2\n18 output 14 projected_3\n19 output 15 projected_4\n20 output 16 projected_5\n";
+    const PROPERTY_FREE_RIGHT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 output 7 projected\n";
     const FINAL_RIGHT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     const FINAL_RIGHT_COMPONENT_V2: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     const WIDE_LEFT_COMPONENT: &[u8] = b"1 sort bitvec 1\n2 sort bitvec 2\n3 sort bitvec 9\n4 input 2 command\n5 state 3 wide_state\n6 zero 3\n7 init 3 5 6\n8 uext 3 4 7\n9 next 3 5 8\n10 zero 1\n11 bad 10 never\n";
@@ -3871,6 +3954,71 @@ mod tests {
         for length in 0..encoded.len() {
             assert!(decode_word_interface_contract(&encoded.as_bytes()[..length]).is_err());
         }
+    }
+
+    #[test]
+    fn property_free_components_preserve_exact_composition_and_verification() {
+        let contract = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+            external_inputs: Some(vec![InterfaceInput {
+                side: ComponentSide::Left,
+                input: 3,
+            }]),
+        })
+        .unwrap();
+        let query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Left,
+            bad_output: 9,
+        };
+        let production = produce_revision_portfolio(
+            PROPERTY_FREE_LEFT,
+            &[7, 9],
+            PROPERTY_FREE_RIGHT,
+            &[7],
+            contract.as_bytes(),
+            &query,
+        )
+        .unwrap();
+        assert_eq!(production.backend, RevisionPortfolioBackend::RevisionLocal);
+        let summary = verify_revision_portfolio(
+            PROPERTY_FREE_LEFT,
+            &[7, 9],
+            PROPERTY_FREE_RIGHT,
+            &[7],
+            contract.as_bytes(),
+            &production,
+        )
+        .unwrap();
+        assert_eq!(summary.result, BoundedResult::Unsafe);
+        assert_eq!(summary.bad_frame, Some(0));
+
+        let fallback = produce_revision_portfolio(
+            PROPERTY_FREE_WIDE_PROJECTION_LEFT,
+            &[7, 9, 13, 14, 15, 16],
+            PROPERTY_FREE_RIGHT,
+            &[7],
+            contract.as_bytes(),
+            &query,
+        )
+        .unwrap();
+        assert_eq!(fallback.backend, RevisionPortfolioBackend::DirectExact);
+        assert_eq!(fallback.reason, RevisionSelectionReason::LeftOutputWidth);
+        let fallback_summary = verify_revision_portfolio(
+            PROPERTY_FREE_WIDE_PROJECTION_LEFT,
+            &[7, 9, 13, 14, 15, 16],
+            PROPERTY_FREE_RIGHT,
+            &[7],
+            contract.as_bytes(),
+            &fallback,
+        )
+        .unwrap();
+        assert_eq!(fallback_summary.result, summary.result);
+        assert_eq!(fallback_summary.bad_frame, summary.bad_frame);
     }
 
     #[test]

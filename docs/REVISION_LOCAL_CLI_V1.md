@@ -96,6 +96,12 @@ unknown inputs, and inputs declared as both wired and external fail closed.
 Version 1 remains readable for existing experimental artifacts and retains its
 original implicit-external-input semantics. New evidence should use version 2.
 
+Component sources do not need an artificial `bad` statement. The explicit
+`LEFT_OUTPUTS` and `RIGHT_OUTPUTS` lists are semantic roots for component
+parsing, while `BAD_SIDE` and `BAD_OUTPUT` select the final bounded query.
+Unknown or noncanonical roots fail closed. Whole-model BTOR2 commands retain
+their original requirement for an embedded bad property.
+
 ## Stable observations
 
 Both commands report:

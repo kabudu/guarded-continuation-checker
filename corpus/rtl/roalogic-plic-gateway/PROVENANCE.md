@@ -20,7 +20,9 @@ later path revision `2e8dc667f6ab69befaebdc30de7a9a53e925dbcc`, whose bytes
 match the retained upstream file. An exact reverse patch reconstructs the
 earlier source and the builder verifies both digests before synthesis. Files
 under `revision-cohort/` other than that reconstructed upstream source are GCC
-test infrastructure.
+test infrastructure. The revision component wrapper exposes the public module
+interface without adding a parser-enabling assertion; the bounded properties
+reside in the separate GCC monitor.
 
 `wrapper-predicate-set.sv` is GCC-authored Apache-2.0 verification
 instrumentation. It fixes `MAX_PENDING_COUNT=3`, exposes the five independent

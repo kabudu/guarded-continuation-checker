@@ -425,7 +425,7 @@ jobs:
             corpus/rtl/roalogic-plic-gateway/revision-cohort/monitor-v2.btor2 \
             corpus/rtl/roalogic-plic-gateway/revision-cohort/interface-retained-plic.txt \
             > /tmp/roalogic-plic-revision-cost-v1.csv
-          grep -q '^1,21,525095,4100,4,1,1,.*true,true,measured$' \
+          grep -q '^1,21,525192,4100,4,1,1,.*true,true,measured$' \
             /tmp/roalogic-plic-revision-cost-v1.csv
           mkdir /tmp/roalogic-plic-revision-resources
           scripts/benchmark-roalogic-plic-revision-resources-v1.sh \
