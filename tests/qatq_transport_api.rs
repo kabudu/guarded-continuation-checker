@@ -63,7 +63,7 @@ fn exact_round_trip_is_deterministic_for_boundary_lengths() {
 
 #[test]
 fn portable_fixture_has_frozen_envelope_identity() {
-    let input = include_bytes!("fuzz-corpus/aiger/duplicate-symbol.aag");
+    let input = b"aag 1 0 1 1 0\n2 0 0\n0\nl0 state\nl0 duplicate\n";
     let encoded = envelope(input, 64);
     assert_eq!(
         digest_hex(&encoded),
