@@ -504,9 +504,14 @@ evidence from inclusion-minimal atom combinations that actually change a
 bounded SAFE/UNSAFE answer. Its complete four-combination table identifies
 core-only mask `1`, channel-only mask `2`, and joint mask `3` for three distinct
 properties, with independent replay rather than learned attribution. This is a
-credible mechanism distinction, not yet a novelty conclusion. Closest-system
-comparison, maintained cost, broader subsystem evidence, and independent
-review remain open.
+credible mechanism distinction, not yet a novelty conclusion. The maintained
+Yosys, rIC3 and Certifaiger route agrees on all 20 answers and independently
+checks every artifact. Comparing that checked table derives the same three
+minimal semantic change sets, although it does not emit them in one
+source-bound aggregate. Its 15,479-byte model-plus-evidence package is about
+8.32 times smaller than GCC's current aggregate. Matched GCC resource evidence,
+broader subsystem evidence, a tighter closest-system comparison, and
+independent review remain open.
 
 ## Production-tagged OpenTitan watchdog
 

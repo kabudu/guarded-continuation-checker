@@ -4,8 +4,9 @@
 
 Predeclared before fixture extraction, implementation, or measurement. The
 local two-atom mechanism now passes with a frozen semantic explanation. The
-maintained baseline, resource comparison, hostile-drift matrix, and hosted
-release-build gates remain open.
+maintained baseline now agrees on all 20 observations and independently checks
+all evidence. The matched GCC resource comparison, hostile-drift matrix, exact
+upstream patch retention, and hosted release-build gates remain open.
 
 ## Public revision
 
@@ -150,3 +151,49 @@ the channel's restart before the unrelated write. It consequently produced no
 expected core or joint transition. The corrected source explicitly retains
 that restart in the documented GCC scaffolding boundary; no query identifier
 or horizon was changed after the failed probe.
+
+## Maintained proof-producing baseline
+
+Pinned Yosys generates 20 AIGER models for the identical four source
+combinations and five properties. Three clean model generations are
+byte-identical, total 10,402 bytes, and have the canonical model-set SHA-256
+`1e9c81c03f78b32b266c5d367cf484c1e56deba0808d1c4c59d460cb47d65e0e`.
+
+Pinned rIC3 reproduces the complete GCC result matrix: 9 SAFE and 11 UNSAFE.
+Certifaiger independently validates every SAFE invariant and every UNSAFE
+trace. The 20 maintained evidence artifacts total 5,077 bytes. The complete
+model-plus-evidence transfer is therefore 15,479 bytes, while the current GCC
+aggregate is 128,768 bytes, about 8.32 times larger. This is a negative
+artifact-size result for GCC and is retained as such.
+
+On the local arm64 host, the maintained route takes 0.65 seconds for synthesis,
+4.420 seconds for 20 isolated producer launches, and 4.928 seconds for 20
+isolated checker launches. Synthesis plus production is 5.07 seconds. Peak RSS
+is 19,775,488 bytes for synthesis, 8,032,256 bytes for an individual producer,
+and 4,833,280 bytes for an individual checker. These figures are not yet
+compared with GCC because the matched GCC source-to-answer resource run is the
+next gate.
+
+The maintained tools prove each scenario separately. The three minimal
+semantic change sets are then obtained by comparing the complete independently
+checked result table. This matches GCC's sets exactly, but the baseline does
+not emit one source-bound aggregate that carries the table and its joint-change
+explanation. Whether that packaging distinction is useful enough to support a
+narrow novelty claim remains open pending the full cost comparison and closest
+prior-art review.
+
+Retained evidence:
+
+- [`opentitan-pwm-crosstalk-impact-baseline-arm64-v1.csv`](../results/opentitan-pwm-crosstalk-impact-baseline-arm64-v1.csv)
+- [`opentitan-pwm-crosstalk-impact-baseline-arm64-v1.manifest.txt`](../results/opentitan-pwm-crosstalk-impact-baseline-arm64-v1.manifest.txt)
+
+Reproduce it with the qualified local tools and network-disabled images:
+
+```console
+mkdir /tmp/gcc-pwm-impact-baseline
+scripts/benchmark-opentitan-pwm-crosstalk-impact-baseline-v1.sh \
+  /path/to/pinned/yosys /path/to/ric3-output \
+  /path/to/certifaiger-output \
+  /tmp/baseline.csv /tmp/baseline.manifest.txt \
+  /tmp/gcc-pwm-impact-baseline 1
+```

@@ -94,6 +94,13 @@
   `{channel}` fixes and a joint `{core, channel}` regression while preserving
   unchanged SAFE and UNSAFE controls. Two clean local productions emit the
   same 128,768-byte aggregate; maintained and hosted gates remain open.
+- Qualify the matching OpenTitan PWM maintained baseline across all four source
+  combinations and five properties. Pinned Yosys, rIC3 and Certifaiger agree
+  with GCC on 9 SAFE and 11 UNSAFE observations and independently validate all
+  20 artifacts. The maintained model-plus-evidence package is 15,479 bytes,
+  making GCC's current aggregate about 8.32 times larger. Retain this negative
+  result while the matched GCC resource, hostile-drift, exact-patch and hosted
+  gates remain open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

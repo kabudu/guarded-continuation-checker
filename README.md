@@ -335,8 +335,11 @@ now separates evidence invalidation from actual semantic impact. Across two
 connected authentic source changes, GCC derives a core-only fix, a
 channel-only fix, and a joint regression that becomes SAFE only when both
 atoms change. The explanation comes from complete independently replayed
-counterfactuals, not a learned attribution score. Maintained-tool, resource,
-hostile-drift, and hosted release-build gates remain open.
+counterfactuals, not a learned attribution score. Pinned Yosys, rIC3 and
+Certifaiger agree on all 20 results and validate every separate artifact. Their
+15,479-byte package is about 8.32 times smaller than GCC's current aggregate,
+so artifact efficiency is currently negative. Matched GCC resources,
+hostile-drift, exact-patch, and hosted release-build gates remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
