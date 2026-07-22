@@ -313,6 +313,13 @@ standalone certificates. The resulting 14,164,144-byte batch is still about
 This is a concrete service and integrity improvement, not a novelty result or
 a production-supported artifact format.
 
+A follow-up [QatQ exact compression probe](docs/QATQ_REVISION_BATCH_COMPRESSION_V1.md)
+reduces that canonical batch to 76,385 bytes with bit-identical restoration,
+beating the strongest measured zstd configuration by 34.5845%. This is useful
+storage evidence, but the compressed batch remains 8.59 times larger than the
+maintained proof package. QatQ is therefore a promising later transport layer,
+not a dependency of the first production support profile.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

@@ -605,6 +605,13 @@ equivalent 8,892-byte AIGER, rIC3 and Certifaiger package. Content addressing,
 deduplication and compositional proof checking are established, so the batch
 does not close a novelty gate.
 
+QatQ exact compression materially improves the batch's storage result. A
+bit-identical f32-word mapping reduces it to 76,385 bytes, 34.5845% below the
+strongest measured zstd configuration. The result supports an additive
+transport experiment, but compression is established and the output remains
+8.59 times larger than the maintained proof package. It changes neither the
+semantic invariant nor the novelty status.
+
 Strict interface contract v2 closes one integrity ambiguity in that candidate:
 every semantic input must now be classified as wired or external. This prevents
 an omitted cross-component wire from silently becoming an environment input.

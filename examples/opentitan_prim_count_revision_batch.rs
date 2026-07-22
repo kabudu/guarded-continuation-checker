@@ -7,7 +7,7 @@ use guarded_continuation_checker::revision_local::{
     encode_revision_local_certificate, encode_word_interface_contract,
     produce_revision_local_certificate,
 };
-use std::{env, fs, process, time::Instant};
+use std::{env, fs, io::Write, process, time::Instant};
 
 const PROPERTY_ROOTS: &[u64] = &[1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007];
 const ENVIRONMENT_OUTPUTS: &[u64] = &[2, 3, 4, 9, 12];
@@ -59,9 +59,9 @@ fn interface(property_root: u64) -> Result<Vec<u8>, String> {
 
 fn run() -> Result<(), String> {
     let args = env::args().collect::<Vec<_>>();
-    if args.len() != 4 {
+    if !(4..=5).contains(&args.len()) {
         return Err(format!(
-            "usage: {} ENVIRONMENT.btor2 BEFORE.btor2 AFTER.btor2",
+            "usage: {} ENVIRONMENT.btor2 BEFORE.btor2 AFTER.btor2 [OUTPUT.batch]",
             args[0]
         ));
     }
@@ -129,6 +129,17 @@ fn run() -> Result<(), String> {
         produce_revision_batch(&components, &requests).map_err(|error| error.to_string())?;
     let batch_bytes = encode_revision_batch(&batch).map_err(|error| error.to_string())?;
     let produce_nanos = produce_started.elapsed().as_nanos();
+    if let Some(output) = args.get(4) {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output)
+            .map_err(|error| format!("create batch output: {error}"))?;
+        file.write_all(&batch_bytes)
+            .map_err(|error| format!("write batch output: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("sync batch output: {error}"))?;
+    }
 
     let verify_started = Instant::now();
     let verified = verify_revision_batch(&[&environment, &before, &after], &batch_bytes)

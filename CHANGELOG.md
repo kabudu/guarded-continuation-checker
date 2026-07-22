@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a QatQ exact compression probe over the 14,164,144-byte OpenTitan
+  revision batch. The best exact f32-word mapping produces 76,385 bytes and
+  restores the canonical batch bit-for-bit. It is 34.5845% smaller than the
+  strongest measured zstd configuration, but remains 8.59 times larger than
+  the maintained model-plus-evidence package. Keep QatQ outside the first
+  production support profile pending an opaque-word API, resource evidence,
+  portability and hostile-container testing.
 - Add revision batch certificate v1, a canonical content-addressed format that
   stores each validated local relation once and binds heterogeneous queries to
   shared sections. Add typed production, canonical encoding and decoding,

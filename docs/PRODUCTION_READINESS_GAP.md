@@ -572,6 +572,13 @@ The format remains experimental pending hosted artifact identity, a broader
 hostile corpus, public file/CLI integration, compatibility history and
 independent review, so no production-readiness row closes.
 
+An exact QatQ v0.1.1 probe compresses the canonical 14,164,144-byte batch to
+76,385 bytes and restores it bit-for-bit. It beats the strongest measured zstd
+configuration by 34.5845%, making a later bounded transport envelope credible.
+It is not included in the first production support profile because the current
+mapping treats opaque evidence as f32 words and lacks GCC-specific latency,
+memory, portability and hostile-container qualification.
+
 The remaining gates include hosted Linux resource results, certificate-byte
 agreement across Linux, macOS, and Windows, long-lived multi-revision service
 amortisation, hosted reproduction of the semantic-changing closest-system
