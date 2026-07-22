@@ -202,9 +202,9 @@ tool.
 5. Run repository-authored SAFE and UNSAFE fixtures.
 6. Import the revision-pinned public cohort and maintained-tool controls.
    The first local Roa Logic PLIC pair now passes both-answer, retained-section,
-   hostile-control, and maintained Yosys/Z3 checks as documented in
+   complete eleven-control hostile matrix, and maintained Yosys/Z3 checks as documented in
    [Roa Logic PLIC revision reuse v1](ROALOGIC_PLIC_REVISION_REUSE_V1.md).
-   Hosted and cross-platform evidence remains open.
+   Cross-platform certificate identity remains open.
 7. Run strong baselines and cross-platform packaging.
    The first controlled local cost run reduces complete local candidate work
    from 4,100 valuations to four while emitting byte-identical artifacts. See

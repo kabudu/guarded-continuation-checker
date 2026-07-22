@@ -260,7 +260,7 @@ The retained local result preserves SAFE and
 earliest-frame UNSAFE answers, reuses the unchanged monitor relation
 byte-for-byte, and agrees with maintained Yosys/Z3. See the
 [Roa Logic PLIC revision-local result](docs/ROALOGIC_PLIC_REVISION_REUSE_V1.md).
-Strong-baseline, complete-hostile-matrix, and portable certificate
+Strong-baseline and portable certificate
 evidence remain open.
 
 A separate controlled cost run retains the public PLIC relation while changing

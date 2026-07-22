@@ -596,3 +596,8 @@ instrumentation from the public PLIC wrapper. Selected component outputs now
 bind semantic-input discovery directly and are independently replayed through
 both local and exact-fallback routes. This improves source fidelity and product
 integration. It is parser and verification engineering, not a novelty claim.
+
+The public workflow now closes the predeclared local hostile matrix with ten
+attack classes and one no-clobber control. Each rejection is tied to its
+smallest declared evidence section. This strengthens the candidate's trust
+boundary but does not distinguish it from closest prior systems.

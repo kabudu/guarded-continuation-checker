@@ -62,9 +62,11 @@ records:
 
 Maintained Yosys plus Z3 independently returns FAILED for repeated pending and
 PASSED for the impossible property through frame two on both upstream
-revisions. Source drift, interface-direction drift, certificate truncation,
-and output overwrite each fail closed with exit status two and no success
-output.
+revisions. Eleven public-workflow hostile controls cover stale proof, hidden
+coupling, width drift, direction swap, constraint drift, source drift,
+truncation, reordering, count, size, and output overwrite. Every control fails
+closed with exit status two, no success output, and its predeclared smallest
+section attribution.
 
 The retained-left file command consumes the old revision portfolio, validates
 the unchanged monitor once, produces only the new PLIC section, and emits a
@@ -93,7 +95,6 @@ This closes the first local public-revision, both-answer, exact-reuse, and
 maintained semantic-control subgates. It does not yet provide:
 
 - Linux, macOS, and Windows certificate-byte agreement;
-- the full hostile matrix predeclared for revision-local proof v1;
 - whole-process producer, checker, memory, and full-rebuild baselines;
 - a faithful maintained composed-witness comparison; or
 - evidence that the combined invariant is absent from the closest maintained

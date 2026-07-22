@@ -482,7 +482,7 @@ interface, and query through exact source-separated fallback.
 The first public cohort covers both authentic revisions of the Roa Logic PLIC
 gateway path. It preserves SAFE and earliest-frame UNSAFE results, retains the
 unchanged 272-byte monitor relation exactly, agrees with maintained Yosys/Z3,
-and rejects four initial hostile controls. Hosted run 29879705053 reproduces
+and rejects the initial four hostile controls. Hosted run 29879705053 reproduces
 that result. The retained producer and verifier file workflows then expose one
 produced and one reused section while their output remains acceptable to the
 ordinary from-scratch verifier.
@@ -493,6 +493,13 @@ contradictory, duplicate, and non-semantic declarations before composition.
 The public PLIC cohort passes with strict contracts. Version 1 remains readable
 only for compatibility with prior experimental artifacts and retains its
 implicit external-input interpretation.
+
+The public workflow now exercises all ten predeclared hostile-input classes,
+plus output no-clobber, and checks deterministic smallest-section attribution.
+Stale proof, hidden coupling, width drift, direction swap, constraint drift,
+source drift, truncation, reordering, count, and size attacks all fail closed.
+This closes the local hostile-matrix subgate. Hosted reproduction of the
+expanded matrix remains pending.
 
 The component parser now admits property-free BTOR2 using explicit projected
 semantic roots. The authentic PLIC cohort no longer adds a false assertion to
@@ -510,8 +517,7 @@ whole-process verification time is unresolved at that resolution and also uses
 more peak memory. The tradeoff is therefore policy-dependent, not a universal
 performance win.
 
-The remaining gates include the rest of the predeclared hostile matrix, hosted Linux
-resource results, certificate-byte agreement across Linux, macOS, and Windows,
+The remaining gates include hosted Linux resource results, certificate-byte agreement across Linux, macOS, and Windows,
 long-lived multi-revision service amortisation, a faithful equivalent-scope closest-system comparison, tagged
 compatibility, and independent review. None of this evidence changes the
 top-level production status.
