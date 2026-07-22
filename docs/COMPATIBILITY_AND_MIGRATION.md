@@ -105,6 +105,12 @@ extracted standalone certificates.
 
 ## First production-line guarantee
 
+The first production line is limited to the eight commands in
+`PRODUCTION_SUPPORT_PROFILE_V1.md`. Research-build command or artifact versions
+do not enter the production support window merely because their implementation
+is present in the same repository. The profiled binary rejects those commands
+before research dispatch.
+
 Beginning with the first production tag:
 
 1. released Rust APIs follow SemVer;

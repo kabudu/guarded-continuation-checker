@@ -11,6 +11,10 @@ documentation = "https://docs.rs/guarded-continuation-checker"
 keywords = ["verification", "embedded", "sat", "aiger", "firmware"]
 categories = ["development-tools", "science", "algorithms"]
 
+[features]
+default = []
+production-firmware = []
+
 [profile.release]
 debug = true
 

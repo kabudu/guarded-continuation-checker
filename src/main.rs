@@ -1,3 +1,17 @@
+#![cfg_attr(
+    feature = "production-firmware",
+    allow(
+        clippy::clone_on_copy,
+        clippy::collapsible_if,
+        clippy::manual_is_multiple_of,
+        clippy::needless_range_loop,
+        clippy::ptr_arg,
+        clippy::question_mark,
+        clippy::too_many_arguments,
+        clippy::type_complexity
+    )
+)]
+
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain, btor2_motion,
@@ -23366,6 +23380,24 @@ fn firmware_rtl_config_safety_gate(
 
 fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
     match args.first().map(String::as_str) {
+        Some("production-profile-version") => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker production-profile-version".to_string(),
+                );
+            }
+            #[cfg(feature = "production-firmware")]
+            {
+                println!(
+                    "production_support_profile=firmware-rtl-v1 firmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION} artifact_schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"
+                );
+                Ok(Some(true))
+            }
+            #[cfg(not(feature = "production-firmware"))]
+            {
+                Err("this binary is not a production support-profile build".to_string())
+            }
+        }
         Some("firmware-cli-version") => {
             if args.len() != 1 {
                 return Err("usage: guarded-continuation-checker firmware-cli-version".to_string());
@@ -30430,6 +30462,10 @@ fn main() {
             eprintln!("error: {error}");
             std::process::exit(2);
         }
+    }
+    if cfg!(feature = "production-firmware") {
+        eprintln!("error: command is outside production support profile firmware-rtl-v1");
+        std::process::exit(2);
     }
     match run_artifact_cli(&args[1..]) {
         Ok(true) => return,
@@ -40941,6 +40977,25 @@ mod tests {
             run_firmware_gate_cli(&["firmware-cli-version".to_string(), "unexpected".to_string(),])
                 .unwrap_err()
                 .contains("usage:")
+        );
+        #[cfg(feature = "production-firmware")]
+        assert_eq!(
+            run_firmware_gate_cli(&["production-profile-version".to_string()]).unwrap(),
+            Some(true)
+        );
+        #[cfg(not(feature = "production-firmware"))]
+        assert!(
+            run_firmware_gate_cli(&["production-profile-version".to_string()])
+                .unwrap_err()
+                .contains("not a production support-profile build")
+        );
+        assert!(
+            run_firmware_gate_cli(&[
+                "production-profile-version".to_string(),
+                "unexpected".to_string(),
+            ])
+            .unwrap_err()
+            .contains("usage:")
         );
     }
 

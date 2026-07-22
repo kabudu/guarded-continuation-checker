@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Freeze production support profile v1 around firmware CLI contract v2 and RTL
+  artifact schema v4. Add a build feature and machine-readable capability that
+  make the profiled binary reject every research command before dispatch. Add
+  an executable boundary gate covering all eight supported commands, six named
+  research surfaces, the legacy experiment path, empty invocation and invalid
+  capability arguments. Research builds and later additive releases remain
+  available without expanding the first production compatibility promise.
 - Add a QatQ exact compression probe over the 14,164,144-byte OpenTitan
   revision batch. The best exact f32-word mapping produces 76,385 bytes and
   restores the canonical batch bit-for-bit. It is 34.5845% smaller than the

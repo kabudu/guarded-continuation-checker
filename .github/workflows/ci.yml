@@ -66,6 +66,14 @@ jobs:
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets
+      - name: Check frozen production support profile
+        run: |
+          shellcheck -s bash scripts/check-production-support-profile-v1.sh
+          cargo clippy --locked --bin guarded-continuation-checker \
+            --features production-firmware -- -D warnings
+          cargo build --release --locked --features production-firmware
+          scripts/check-production-support-profile-v1.sh \
+            target/release/guarded-continuation-checker
       - name: Test
         run: cargo test --locked
       - name: Package and install exact crate payload

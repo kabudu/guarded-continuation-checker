@@ -31,6 +31,13 @@ Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
 
+The first release line now has a frozen
+[production support profile](docs/PRODUCTION_SUPPORT_PROFILE_V1.md): firmware
+CLI contract v2 and RTL artifact schema v4 only. A separately profiled build
+rejects all research commands before dispatch, allowing release qualification
+to proceed without freezing or shipping every experimental interface as a
+supported product capability.
+
 The experimental [controller MTBDD plant CLI v1](docs/CONTROLLER_MTBDD_CLI_V1.md)
 provides a self-service producer and independent verifier for one public
 controller composed with an ordered plant-property batch. Its canonical
