@@ -218,3 +218,14 @@ integrity and integration result, not proof compression or algorithmic novelty.
 Boundary-signal equivalence, proof reuse, properties, hidden-coupling synthesis,
 maintained baselines, process resources, portability, and acceptance remain
 open.
+
+The first boundary-equivalence probe deliberately separates two notions. Exact
+structural signatures retain shared-signal identity and therefore place every
+authentic channel in a singleton class: per-channel write frames and channel
+zero's later inversion change make the reset-to-horizon boundary functions
+different. A narrower reachable-trace check accepts only deterministic,
+input-free regions with one observation per channel and independently simulates
+every frame. Through frame 63, the 6-channel model proves classes `[2, 4]` and
+`[3, 5]`; channels 0 and 1 remain singleton. The 2-channel and 4-channel models
+remain entirely singleton. This is a bounded source-specific observation, not
+yet a certificate or permission to reuse proof evidence.

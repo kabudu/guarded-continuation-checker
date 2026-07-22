@@ -1,4 +1,7 @@
 use guarded_continuation_checker::btor2;
+use guarded_continuation_checker::btor2_region_equivalence::{
+    derive_btor2_reachable_region_equivalence, derive_btor2_region_equivalence,
+};
 use guarded_continuation_checker::btor2_region_extract::{
     Btor2RegionPolicy, decode_btor2_complete_region_artifact, decode_btor2_region_artifact,
     encode_btor2_complete_region_artifact, encode_btor2_region_artifact,
@@ -92,6 +95,24 @@ fn pinned_authentic_pwm_models_preserve_expected_channel_state_growth() {
                 .windows(2)
                 .all(|pair| pair[0] < pair[1])
         );
+        let equivalence =
+            derive_btor2_region_equivalence(bytes, semantic_roots, channels, policy).unwrap();
+        assert_eq!(
+            equivalence.classes,
+            (0..channels)
+                .map(|channel| vec![channel])
+                .collect::<Vec<_>>()
+        );
+        let reachable =
+            derive_btor2_reachable_region_equivalence(bytes, semantic_roots, channels, 63, policy)
+                .unwrap();
+        let expected_classes = match channels {
+            2 => vec![vec![0], vec![1]],
+            4 => vec![vec![0], vec![1], vec![2], vec![3]],
+            6 => vec![vec![0], vec![1], vec![2, 4], vec![3, 5]],
+            _ => unreachable!(),
+        };
+        assert_eq!(reachable.classes, expected_classes);
         assert!(
             complete
                 .channel_to_aggregate_edges

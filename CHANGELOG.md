@@ -64,6 +64,11 @@
   supplied model. Authentic 2, 4, and 6-channel artifacts replay exactly and
   deterministically in 4,312, 7,448, and 10,584 bytes. Correct the earlier
   probe's operand-occurrence counts to unique graph-edge counts.
+- Add an exact structural channel-equivalence classifier and a separate bounded
+  reachable-trace classifier for deterministic, input-free, single-observation
+  regions. The authentic 6-channel PWM model retains strict singleton
+  structural classes but proves reachable classes `[2, 4]` and `[3, 5]` through
+  frame 63; channels with distinct startup histories remain separate.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
