@@ -1,6 +1,6 @@
 # OpenTitan PWM channel-family certificate v1
 
-Status: predeclared, not implemented or measured
+Status: predeclared and prior-art bounded, not implemented or measured
 
 ## Question
 
@@ -79,6 +79,23 @@ prove that every state-renaming range is injective and pairwise disjoint, bind
 every port exactly once, reconstruct each instantiated transition relation, and
 independently replay the final queries. It must not trust producer-supplied
 claims of symmetry, independence, or answer equivalence.
+
+## Prior-art boundary
+
+The pre-implementation search rejects the broad novelty hypothesis. Symmetry
+quotients for repeated processes, guarded annotated quotient structures that
+recover original transitions, and independently checked proof certificates for
+systems with an arbitrary number of components are prior art. The detailed
+sources and consequences are recorded in the
+[repeated channel-family reassessment](PRIOR_ART_AUDIT_V1.md#repeated-channel-family-reassessment).
+
+This experiment therefore tests an engineering and product hypothesis, not a
+new-algorithm claim. Its candidate distinction is the combination of a finite
+RTL source boundary, canonical injective instance maps, independent expanded
+model authentication, bounded SAFE and UNSAFE evidence, reconstructable traces,
+hostile wiring controls, and exact monolithic fallback. These differences do
+not become evidence of novelty merely because the implementation or format is
+different.
 
 ## Frozen revision atoms
 
@@ -198,8 +215,10 @@ on every answer and trace.
 
 A practical reuse claim additionally requires the family artifact or verifier
 work to grow more slowly than duplicated per-channel evidence at 2, 4, and 6
-channels. A novelty claim remains prohibited unless the closest published and
-maintained systems lack an equivalent source-bound, proof-carrying family
-instantiation mechanism under the same integrity conditions. Negative size,
-time, memory, or prior-art results are retained with the same prominence as
-positive results.
+channels. A novelty claim remains prohibited. Passing the current gates can
+establish a useful source-bound family artifact, but the audit already
+disconfirms novelty of the broad repeated-instance and parameterised-certificate
+mechanism. Only a subsequent, separately predeclared invariant or capability
+that is absent from the closest systems could reopen that question. Negative
+size, time, memory, or prior-art results are retained with the same prominence
+as positive results.
