@@ -99,8 +99,8 @@ batches. It is not enabled by default, is not included by
 canonical bytes and run their existing independent verifier before trusting an
 answer.
 
-The public `revision_impact` module is an unreleased research interface for
-bounded firmware-regression experiments. It encodes complete old/new
+The public `revision_impact` module is a research interface for bounded
+firmware-regression experiments. It encodes complete old/new
 counterfactual tables, derives inclusion-minimal invalidating sets, binds every
 observation to canonical revision-local evidence, and requires independent
 semantic verification. It is not part of the `firmware-rtl-v1` production

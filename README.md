@@ -327,8 +327,9 @@ about 21,306.5 times smaller. The baseline therefore falsifies current artifact
 efficiency, and its producer/checker jobs also use substantially less peak
 memory. GCC is also about 1.67 times slower from synthesis through production
 on this cohort. A frozen certificate has identical bytes and semantics on
-hosted Linux, macOS, and Windows. Larger multi-atom product evidence remains
-open, so this is not yet part of the production support profile.
+hosted Linux, macOS, and Windows. The multi-atom follow-up below closes the
+next mechanism gate, but revision impact remains outside the production support
+profile.
 
 The larger [OpenTitan PWM crosstalk cohort](docs/OPENTITAN_PWM_CROSSTALK_REVISION_IMPACT_V1.md)
 now separates evidence invalidation from actual semantic impact. Across two
@@ -371,10 +372,10 @@ than the strongest retained zstd result on the revision batch. The negative
 maintained-proof-package control is 73.23% larger than zstd, so QatQ is not
 admitted universally. Hosted Linux, macOS and Windows reproduce the frozen
 envelope identity, and hosted Linux reproduces the resource measurement. QatQ
-0.1.3 now owns the opaque `u32` container framing, bounded inspection and
-chunk-at-a-time decode boundary, while retaining the frozen envelope bytes.
-QatQ remains outside `firmware-rtl-v1` pending compatibility history and
-independent review.
+0.1.4 now owns the exact-byte container framing, bounded inspection and
+chunk-at-a-time byte decode boundary, while retaining the frozen envelope
+bytes. QatQ remains outside `firmware-rtl-v1` pending compatibility history
+and independent review.
 
 Validated findings:
 
