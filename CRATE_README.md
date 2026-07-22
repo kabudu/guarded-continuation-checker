@@ -29,7 +29,8 @@ The package provides:
   with canonical query and policy files, exact explicit-state or proof-carrying
   bitblast routing, aggregate preflight, a no-clobber CLI, and a typed bounded
   process client. An additive observed CLI exposes diagnostic phase timings
-  without making timing part of admission or correctness.
+  without making timing part of admission or correctness, and the typed client
+  strictly parses the observed schema.
 
 ## Status and claim boundary
 

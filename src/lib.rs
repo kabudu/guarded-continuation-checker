@@ -201,6 +201,9 @@ pub enum OperationKind {
     DiscoverBtor2ChannelProperty,
     CertifyBtor2ChannelProperty,
     VerifyBtor2ChannelProperty,
+    DiscoverBtor2ChannelPropertyObservability,
+    CertifyBtor2ChannelPropertyObserved,
+    VerifyBtor2ChannelPropertyObserved,
 }
 
 impl OperationKind {
@@ -276,6 +279,11 @@ impl OperationKind {
             Self::DiscoverBtor2ChannelProperty => "discover_btor2_channel_property",
             Self::CertifyBtor2ChannelProperty => "certify_btor2_channel_property",
             Self::VerifyBtor2ChannelProperty => "verify_btor2_channel_property",
+            Self::DiscoverBtor2ChannelPropertyObservability => {
+                "discover_btor2_channel_property_observability"
+            }
+            Self::CertifyBtor2ChannelPropertyObserved => "certify_btor2_channel_property_observed",
+            Self::VerifyBtor2ChannelPropertyObserved => "verify_btor2_channel_property_observed",
         }
     }
 }
@@ -783,6 +791,39 @@ pub struct Btor2ChannelPropertyProcessSummary {
     pub projected_work: Option<u64>,
     pub elapsed_micros: usize,
     pub results: Vec<Btor2ChannelPropertyProcessResult>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyObservabilityCapabilities {
+    pub cli_version: u32,
+    pub phase_metrics_version: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2ChannelPropertyObservedOperation {
+    Certify,
+    Verify,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyPhaseMetrics {
+    pub version: u32,
+    pub operation: Btor2ChannelPropertyObservedOperation,
+    pub input_micros: u128,
+    pub structural_admission_micros: u128,
+    pub preflight_micros: u128,
+    pub proof_construction_micros: u128,
+    pub encoding_micros: u128,
+    pub artifact_decode_micros: u128,
+    pub source_replay_micros: u128,
+    pub publication_micros: u128,
+    pub total_micros: u128,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyPhaseObservedSummary {
+    pub verification: Btor2ChannelPropertyProcessSummary,
+    pub phases: Btor2ChannelPropertyPhaseMetrics,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1771,6 +1812,45 @@ impl Btor2ChannelPropertyTool {
         self
     }
 
+    pub fn observability(
+        &self,
+    ) -> Result<Btor2ChannelPropertyObservabilityTool, PredicateApiError> {
+        self.observability_observed()
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn observability_observed(
+        &self,
+    ) -> Result<Observed<Btor2ChannelPropertyObservabilityTool>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command.arg("btor2-channel-property-observability-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverBtor2ChannelPropertyObservability,
+            command,
+            self.policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_btor2_channel_property_observability_capabilities(&stdout, &self.capabilities)
+                .map_err(|error| {
+                    metrics.status = InvocationStatus::Failed(error.failure_class());
+                    PredicateOperationError {
+                        error: Box::new(error),
+                        metrics: metrics.clone(),
+                    }
+                })?;
+        Ok(Observed {
+            value: Btor2ChannelPropertyObservabilityTool {
+                executable: self.executable.clone(),
+                base_capabilities: self.capabilities.clone(),
+                capabilities,
+                policy: self.policy,
+            },
+            metrics,
+        })
+    }
+
     pub fn certify(
         &self,
         files: &Btor2ChannelPropertyFiles<'_>,
@@ -1836,6 +1916,106 @@ impl Btor2ChannelPropertyTool {
             .arg(artifact);
         let output = run_bounded(operation, command, self.policy)?;
         parse_btor2_channel_property_summary(output, expected_status, &self.capabilities)
+    }
+}
+
+/// Additive phase-observed client for BTOR2 channel-property CLI v1.
+#[derive(Clone, Debug)]
+pub struct Btor2ChannelPropertyObservabilityTool {
+    executable: PathBuf,
+    base_capabilities: Btor2ChannelPropertyCapabilities,
+    capabilities: Btor2ChannelPropertyObservabilityCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl Btor2ChannelPropertyObservabilityTool {
+    pub fn capabilities(&self) -> &Btor2ChannelPropertyObservabilityCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Btor2ChannelPropertyPhaseObservedSummary, PredicateApiError> {
+        self.certify_observed(files, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<Btor2ChannelPropertyPhaseObservedSummary>, PredicateOperationError> {
+        self.invoke(
+            OperationKind::CertifyBtor2ChannelPropertyObserved,
+            "certify-btor2-channel-properties-observed",
+            "CREATED",
+            Btor2ChannelPropertyObservedOperation::Certify,
+            files,
+            artifact,
+        )
+    }
+
+    pub fn verify(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Btor2ChannelPropertyPhaseObservedSummary, PredicateApiError> {
+        self.verify_observed(files, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<Btor2ChannelPropertyPhaseObservedSummary>, PredicateOperationError> {
+        self.invoke(
+            OperationKind::VerifyBtor2ChannelPropertyObserved,
+            "verify-btor2-channel-properties-observed",
+            "VERIFIED",
+            Btor2ChannelPropertyObservedOperation::Verify,
+            files,
+            artifact,
+        )
+    }
+
+    fn invoke(
+        &self,
+        operation: OperationKind,
+        command_name: &str,
+        expected_status: &str,
+        expected_operation: Btor2ChannelPropertyObservedOperation,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<Btor2ChannelPropertyPhaseObservedSummary>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg(command_name)
+            .arg(files.model)
+            .arg(files.queries)
+            .arg(files.policy)
+            .arg(artifact);
+        let output = run_bounded(operation, command, self.policy)?;
+        parse_btor2_channel_property_phase_observed_summary(
+            output,
+            expected_status,
+            expected_operation,
+            &self.base_capabilities,
+            &self.capabilities,
+        )
     }
 }
 
@@ -5128,6 +5308,210 @@ fn parse_btor2_channel_property_capabilities(
     })
 }
 
+fn parse_btor2_channel_property_observability_capabilities(
+    line: &str,
+    base: &Btor2ChannelPropertyCapabilities,
+) -> Result<Btor2ChannelPropertyObservabilityCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property observability capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "btor2_channel_property_observability_cli_version",
+        "base_cli_version",
+        "phase_metrics_version",
+        "phases",
+        "timing_calibration",
+        "correctness_dependency",
+        "partial_metrics_on_failure",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property observability capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[0], keys[0])?;
+    let base_cli_version = canonical_u32(values[1], keys[1])?;
+    let phase_metrics_version = canonical_u32(values[2], keys[2])?;
+    if cli_version != 1
+        || base_cli_version != base.cli_version
+        || phase_metrics_version != 1
+        || values[3]
+            != "input,structural-admission,preflight,proof-construction,encoding,artifact-decode,source-replay,publication"
+        || values[4..] != ["none", "none", "none", "fail-closed"]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "BTOR2 channel property observability contract is unsupported".to_string(),
+        ));
+    }
+    Ok(Btor2ChannelPropertyObservabilityCapabilities {
+        cli_version,
+        phase_metrics_version,
+    })
+}
+
+fn parse_btor2_channel_property_phase_line(
+    line: &str,
+    expected_operation: Btor2ChannelPropertyObservedOperation,
+    capabilities: &Btor2ChannelPropertyObservabilityCapabilities,
+) -> Result<Btor2ChannelPropertyPhaseMetrics, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property phase row is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "status",
+        "observability_cli_version",
+        "phase_metrics_version",
+        "operation",
+        "input_micros",
+        "structural_admission_micros",
+        "preflight_micros",
+        "proof_construction_micros",
+        "encoding_micros",
+        "artifact_decode_micros",
+        "source_replay_micros",
+        "publication_micros",
+        "total_micros",
+        "timing_calibration",
+        "correctness_dependency",
+    ];
+    if fields.len() != keys.len() + 1
+        || fields.first().copied() != Some("btor2-channel-property-phases")
+    {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property phase row shape is invalid".to_string(),
+        ));
+    }
+    let values = fields[1..]
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[1], keys[1])?;
+    let phase_metrics_version = canonical_u32(values[2], keys[2])?;
+    let operation = match values[3] {
+        "certify" => Btor2ChannelPropertyObservedOperation::Certify,
+        "verify" => Btor2ChannelPropertyObservedOperation::Verify,
+        _ => {
+            return Err(PredicateApiError::InvalidResponse(
+                "unknown BTOR2 channel property observed operation".to_string(),
+            ));
+        }
+    };
+    let timings = values[4..13]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u128(value, keys[index + 4]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let phase_sum = timings[..8]
+        .iter()
+        .try_fold(0u128, |total, value| total.checked_add(*value))
+        .ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "BTOR2 channel property phase total overflows".to_string(),
+            )
+        })?;
+    if values[0] != "MEASURED"
+        || cli_version != capabilities.cli_version
+        || phase_metrics_version != capabilities.phase_metrics_version
+        || operation != expected_operation
+        || phase_sum > timings[8]
+        || values[13..] != ["none", "none"]
+        || (operation == Btor2ChannelPropertyObservedOperation::Verify
+            && [timings[1], timings[2], timings[3], timings[4], timings[7]] != [0; 5])
+    {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property phase row violates the observed contract".to_string(),
+        ));
+    }
+    Ok(Btor2ChannelPropertyPhaseMetrics {
+        version: phase_metrics_version,
+        operation,
+        input_micros: timings[0],
+        structural_admission_micros: timings[1],
+        preflight_micros: timings[2],
+        proof_construction_micros: timings[3],
+        encoding_micros: timings[4],
+        artifact_decode_micros: timings[5],
+        source_replay_micros: timings[6],
+        publication_micros: timings[7],
+        total_micros: timings[8],
+    })
+}
+
+fn parse_btor2_channel_property_phase_observed_summary(
+    mut output: ManagedOutput,
+    expected_status: &str,
+    expected_operation: Btor2ChannelPropertyObservedOperation,
+    base_capabilities: &Btor2ChannelPropertyCapabilities,
+    capabilities: &Btor2ChannelPropertyObservabilityCapabilities,
+) -> Result<Observed<Btor2ChannelPropertyPhaseObservedSummary>, PredicateOperationError> {
+    if !output.status.success() {
+        return match parse_btor2_channel_property_summary(
+            output,
+            expected_status,
+            base_capabilities,
+        ) {
+            Err(error) => Err(error),
+            Ok(observed) => {
+                let error = PredicateApiError::InvalidResponse(
+                    "non-successful observed process produced a successful summary".to_string(),
+                );
+                let mut metrics = observed.metrics;
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                Err(PredicateOperationError {
+                    error: Box::new(error),
+                    metrics,
+                })
+            }
+        };
+    }
+    let phase_start = output.stdout[..output.stdout.len().saturating_sub(1)]
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |index| index + 1);
+    let phase_bytes = output.stdout.split_off(phase_start);
+    let phase_line = String::from_utf8(phase_bytes).map_err(|_| {
+        let error = PredicateApiError::InvalidResponse(
+            "BTOR2 channel property phase row is not UTF-8".to_string(),
+        );
+        output.metrics.status = InvocationStatus::Failed(error.failure_class());
+        PredicateOperationError {
+            error: Box::new(error),
+            metrics: output.metrics.clone(),
+        }
+    })?;
+    let phases =
+        parse_btor2_channel_property_phase_line(&phase_line, expected_operation, capabilities)
+            .map_err(|error| {
+                output.metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: output.metrics.clone(),
+                }
+            })?;
+    let verification =
+        parse_btor2_channel_property_summary(output, expected_status, base_capabilities)?;
+    Ok(Observed {
+        value: Btor2ChannelPropertyPhaseObservedSummary {
+            verification: verification.value,
+            phases,
+        },
+        metrics: verification.metrics,
+    })
+}
+
 fn parse_btor2_channel_property_summary(
     mut output: ManagedOutput,
     expected_status: &str,
@@ -7949,6 +8333,83 @@ mod tests {
         ] {
             assert!(parse_btor2_channel_property_capabilities(&hostile).is_err());
         }
+    }
+
+    #[test]
+    fn btor2_channel_property_phase_parser_is_strict_and_fail_closed() {
+        let base = parse_btor2_channel_property_capabilities("btor2_channel_property_cli_version=1 artifact_version=1 query_manifest_version=1 policy_version=1 max_query_manifest_bytes=262144 max_policy_bytes=4096 max_model_bytes=8388608 max_channels=64 max_queries=4096 max_evidence_bytes=67108864 max_artifact_bytes=69206016 max_projected_work=100000000000 refusal_exit=3 routing=static-explicit-or-bitblast fallback=exact result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed verification=source-replay\n").unwrap();
+        let capability = "btor2_channel_property_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=input,structural-admission,preflight,proof-construction,encoding,artifact-decode,source-replay,publication timing_calibration=none correctness_dependency=none partial_metrics_on_failure=none unsupported=fail-closed\n";
+        let parsed =
+            parse_btor2_channel_property_observability_capabilities(capability, &base).unwrap();
+        for hostile in [
+            capability.replace("phase_metrics_version=1", "phase_metrics_version=2"),
+            capability.replace("proof-construction", "proof-generation"),
+            capability.replace(
+                "correctness_dependency=none",
+                "correctness_dependency=timing",
+            ),
+            capability.replace(
+                "partial_metrics_on_failure=none",
+                "partial_metrics_on_failure=yes",
+            ),
+            capability.replace('\n', "\r\n"),
+            capability.trim_end().to_string(),
+            format!("{capability}unexpected=1\n"),
+        ] {
+            assert!(
+                parse_btor2_channel_property_observability_capabilities(&hostile, &base).is_err()
+            );
+        }
+
+        let canonical = "btor2-channel-property-phases status=MEASURED observability_cli_version=1 phase_metrics_version=1 operation=certify input_micros=1 structural_admission_micros=2 preflight_micros=3 proof_construction_micros=4 encoding_micros=5 artifact_decode_micros=6 source_replay_micros=7 publication_micros=8 total_micros=40 timing_calibration=none correctness_dependency=none\n";
+        let phases = parse_btor2_channel_property_phase_line(
+            canonical,
+            Btor2ChannelPropertyObservedOperation::Certify,
+            &parsed,
+        )
+        .unwrap();
+        assert_eq!(phases.total_micros, 40);
+        for hostile in [
+            canonical.replace("operation=certify", "operation=verify"),
+            canonical.replace("input_micros=1", "input_micros=01"),
+            canonical.replace("total_micros=40", "total_micros=35"),
+            canonical.replace("timing_calibration=none", "timing_calibration=local"),
+            canonical.replace(
+                "correctness_dependency=none",
+                "correctness_dependency=timing",
+            ),
+            canonical.replace("status=MEASURED", "status=PARTIAL"),
+            canonical.replace('\n', "\r\n"),
+            canonical.trim_end().to_string(),
+            format!("{canonical}unexpected=1\n"),
+        ] {
+            assert!(
+                parse_btor2_channel_property_phase_line(
+                    &hostile,
+                    Btor2ChannelPropertyObservedOperation::Certify,
+                    &parsed,
+                )
+                .is_err()
+            );
+        }
+
+        let verify = "btor2-channel-property-phases status=MEASURED observability_cli_version=1 phase_metrics_version=1 operation=verify input_micros=1 structural_admission_micros=0 preflight_micros=0 proof_construction_micros=0 encoding_micros=0 artifact_decode_micros=2 source_replay_micros=3 publication_micros=0 total_micros=6 timing_calibration=none correctness_dependency=none\n";
+        assert!(
+            parse_btor2_channel_property_phase_line(
+                verify,
+                Btor2ChannelPropertyObservedOperation::Verify,
+                &parsed,
+            )
+            .is_ok()
+        );
+        assert!(
+            parse_btor2_channel_property_phase_line(
+                &verify.replace("preflight_micros=0", "preflight_micros=1"),
+                Btor2ChannelPropertyObservedOperation::Verify,
+                &parsed,
+            )
+            .is_err()
+        );
     }
 
     #[test]

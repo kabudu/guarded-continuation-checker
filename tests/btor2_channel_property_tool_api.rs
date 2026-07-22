@@ -1,5 +1,5 @@
 use guarded_continuation_checker::{
-    Btor2ChannelPropertyAnswer, Btor2ChannelPropertyFiles,
+    Btor2ChannelPropertyAnswer, Btor2ChannelPropertyFiles, Btor2ChannelPropertyObservedOperation,
     Btor2ChannelPropertyResourceRefusalReason, Btor2ChannelPropertyTool, FailureClass,
     InvocationStatus, OperationKind, PredicateApiError,
 };
@@ -111,6 +111,75 @@ fn typed_channel_property_tool_governs_and_parses_the_complete_workflow() {
     assert_eq!(verified.value.results, created.value.results);
     assert_eq!(verified.value.artifact_bytes, created.value.artifact_bytes);
 
+    let observability_discovery = tool.observability_observed().unwrap();
+    assert_eq!(
+        observability_discovery.metrics.operation,
+        OperationKind::DiscoverBtor2ChannelPropertyObservability
+    );
+    assert_eq!(observability_discovery.value.capabilities().cli_version, 1);
+    assert_eq!(
+        observability_discovery
+            .value
+            .capabilities()
+            .phase_metrics_version,
+        1
+    );
+    let observed_artifact = root.join("observed.channel-properties");
+    let phase_created = observability_discovery
+        .value
+        .certify_observed(&files, &observed_artifact)
+        .unwrap();
+    assert_eq!(
+        phase_created.metrics.operation,
+        OperationKind::CertifyBtor2ChannelPropertyObserved
+    );
+    assert_eq!(
+        phase_created.value.phases.operation,
+        Btor2ChannelPropertyObservedOperation::Certify
+    );
+    assert_eq!(
+        phase_created.value.verification.results,
+        created.value.results
+    );
+    assert_eq!(
+        fs::read(&observed_artifact).unwrap(),
+        fs::read(&artifact).unwrap()
+    );
+    let phases = phase_created.value.phases;
+    assert!(
+        phases.input_micros
+            + phases.structural_admission_micros
+            + phases.preflight_micros
+            + phases.proof_construction_micros
+            + phases.encoding_micros
+            + phases.artifact_decode_micros
+            + phases.source_replay_micros
+            + phases.publication_micros
+            <= phases.total_micros
+    );
+
+    let phase_verified = observability_discovery
+        .value
+        .verify_observed(&files, &observed_artifact)
+        .unwrap();
+    assert_eq!(
+        phase_verified.metrics.operation,
+        OperationKind::VerifyBtor2ChannelPropertyObserved
+    );
+    assert_eq!(
+        phase_verified.value.phases.operation,
+        Btor2ChannelPropertyObservedOperation::Verify
+    );
+    assert_eq!(phase_verified.value.phases.structural_admission_micros, 0);
+    assert_eq!(phase_verified.value.phases.preflight_micros, 0);
+    assert_eq!(phase_verified.value.phases.proof_construction_micros, 0);
+    assert_eq!(phase_verified.value.phases.encoding_micros, 0);
+    assert_eq!(phase_verified.value.phases.publication_micros, 0);
+    assert_eq!(
+        phase_verified.value.verification.results,
+        phase_created.value.verification.results
+    );
+
     let tight_files = Btor2ChannelPropertyFiles {
         policy: &root.join("tight-policy.txt"),
         ..files.clone()
@@ -130,6 +199,23 @@ fn typed_channel_property_tool_governs_and_parses_the_complete_workflow() {
     );
     assert_eq!(refused.metrics.exit_code, Some(3));
     assert!(!root.join("refused.channel-properties").exists());
+
+    let phase_refused = observability_discovery
+        .value
+        .certify_observed(&tight_files, &root.join("phase-refused.channel-properties"))
+        .unwrap_err();
+    assert!(matches!(
+        phase_refused.error.as_ref(),
+        PredicateApiError::Btor2ChannelPropertyResourceRefused {
+            reason: Btor2ChannelPropertyResourceRefusalReason::ProjectedWork
+        }
+    ));
+    assert_eq!(
+        phase_refused.metrics.status,
+        InvocationStatus::Failed(FailureClass::ResourceRefusal)
+    );
+    assert_eq!(phase_refused.metrics.exit_code, Some(3));
+    assert!(!root.join("phase-refused.channel-properties").exists());
 
     fs::remove_dir_all(root).unwrap();
 }

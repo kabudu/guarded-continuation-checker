@@ -29,6 +29,11 @@ separate discovery command, verification command, typed client, and final row.
 The resource and phase-observability v1 responses remain unchanged.
 The split cache-observability v1 interface follows the same additive pattern
 and leaves every preceding command on its original uncached execution path.
+The BTOR2 channel-property phase-observability v1 interface is likewise
+additive. Its separate discovery and observed commands leave the base v1
+capability, production, verification, aggregate, result, artifact, manifest,
+and policy contracts unchanged. The typed client rejects schema drift rather
+than reinterpreting it.
 
 Before the first production tag, the BTOR2 parser was extended to accept
 standard `output` observations and optional expression symbols.

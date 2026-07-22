@@ -432,9 +432,10 @@ symlinks and drift, and never overwrites an output. The typed shell-free Rust
 client discovers that contract, applies bounded process execution, parses every
 result, and exposes resource refusal without inventing a logical answer. An
 additive observed CLI now reports eight diagnostic production and replay phases
-without changing artifact bytes or correctness decisions. Typed phase parsing,
-measured process resources, maintained comparison and portability evidence
-remain open.
+without changing artifact bytes or correctness decisions. The governed typed
+client strictly discovers and parses that additive schema, including phase-sum,
+operation, and verification-zero invariants. Measured process resources,
+maintained comparison and portability evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

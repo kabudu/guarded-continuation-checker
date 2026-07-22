@@ -151,8 +151,19 @@ let files = Btor2ChannelPropertyFiles {
 let created = tool.certify(&files, Path::new("result.channel-properties"))?;
 let verified = tool.verify(&files, Path::new("result.channel-properties"))?;
 assert_eq!(created.results, verified.results);
+
+let observed = tool.observability()?;
+let phased = observed.verify(&files, Path::new("result.channel-properties"))?;
+assert_eq!(phased.verification.results, verified.results);
 # Ok::<(), guarded_continuation_checker::PredicateApiError>(())
 ```
+
+The additive `Btor2ChannelPropertyObservabilityTool` strictly discovers phase
+schema v1 and invokes only the observed commands. It returns the ordinary
+verified summary together with typed `Btor2ChannelPropertyPhaseMetrics`.
+Unknown, missing, reordered, noncanonical, overflowing, internally
+inconsistent, or operation-inappropriate timing rows fail closed. Resource
+refusal retains exit code 3 and still returns no phase record or logical answer.
 
 Valid resource refusal becomes
 `PredicateApiError::Btor2ChannelPropertyResourceRefused` with a typed reason
@@ -165,8 +176,7 @@ cargo test --release --locked --test btor2_channel_property_tool_api
 
 ## Remaining gates
 
-- Add strict typed-client parsing for phase metrics and retain measured process
-  resources separately.
+- Retain measured whole-process resources separately from internal timings.
 - Reproduce the complete workflow and artifact identity on supported hosts.
 - Run realistic independently sourced properties and obtain external operator
   review.
