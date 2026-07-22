@@ -1,7 +1,7 @@
 # OpenTitan PWM authentic channel extraction v1
 
-Status: authentic ingestion and state-cut extraction gates pass locally;
-complete region extraction is not implemented
+Status: authentic ingestion, complete-region extraction, canonical encoding,
+and independent replay gates pass locally; boundary equivalence remains open
 
 ## Purpose
 
@@ -192,11 +192,29 @@ The retained three-row result is
 [`results/opentitan-pwm-complete-region-probe-arm64-v1.csv`](../results/opentitan-pwm-complete-region-probe-arm64-v1.csv).
 At 2, 4, and 6 channels the checker classifies respectively 155, 198, and 241
 shared nodes; `30:89`, `30:89:27:89`, and `30:89:27:89:27:89` local nodes; and
-1, 3, and 5 observation-only aggregate nodes. It checks 82, 163, and 244
-shared-to-channel boundary edges and exactly one channel-to-aggregate edge per
-channel. No aggregate reaches a transition cone.
+1, 3, and 5 observation-only aggregate nodes. The corrected canonical edge-set
+counts are 81, 161, and 241 shared-to-channel edges and exactly one
+channel-to-aggregate edge per channel. Earlier counts included one repeated
+operand occurrence per additional two-channel increment. No aggregate reaches
+a transition cone.
 
-This closes the local complete dependency-edge classification mechanism. The
-complete graph is not yet encoded in the certificate, and boundary-signal
-equivalence, proof reuse, properties, maintained baselines, process resources,
-portability, and acceptance remain open.
+The complete graph now has a separate checksummed, resource-bounded certificate
+that embeds the state-cut artifact and canonically encodes every shared,
+channel-local, and aggregate node plus both boundary edge sets. Its verifier
+first authenticates and independently replays the embedded state cut, then
+recomputes the complete graph from the separately supplied BTOR2 model. It
+rejects mutation, truncation, trailing bytes, non-canonical or overlapping node
+partitions, duplicate edges, model drift, and policy excess.
+
+The retained certificate result is
+[`results/opentitan-pwm-complete-region-certificate-arm64-v1.csv`](../results/opentitan-pwm-complete-region-certificate-arm64-v1.csv).
+The 2, 4, and 6-channel artifacts are 4,312, 7,448, and 10,584 bytes,
+respectively 26.43%, 27.43%, and 27.82% of the monolithic BTOR2 text. Two clean
+productions are byte-identical, and decoded artifacts replay to the complete
+recomputed partition at every size.
+
+This closes the local complete dependency-edge certificate mechanism. It is an
+integrity and integration result, not proof compression or algorithmic novelty.
+Boundary-signal equivalence, proof reuse, properties, hidden-coupling synthesis,
+maintained baselines, process resources, portability, and acceptance remain
+open.

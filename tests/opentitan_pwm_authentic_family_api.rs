@@ -1,8 +1,10 @@
 use guarded_continuation_checker::btor2;
 use guarded_continuation_checker::btor2_region_extract::{
-    Btor2RegionPolicy, decode_btor2_region_artifact, encode_btor2_region_artifact,
+    Btor2RegionPolicy, decode_btor2_complete_region_artifact, decode_btor2_region_artifact,
+    encode_btor2_complete_region_artifact, encode_btor2_region_artifact,
     extract_btor2_complete_regions, extract_btor2_repeated_state_regions,
-    produce_btor2_region_artifact, verify_btor2_region_artifact,
+    produce_btor2_complete_region_artifact, produce_btor2_region_artifact,
+    verify_btor2_complete_region_artifact, verify_btor2_region_artifact,
 };
 
 #[test]
@@ -84,6 +86,29 @@ fn pinned_authentic_pwm_models_preserve_expected_channel_state_growth() {
         assert!(complete.channel_nodes.iter().all(|nodes| !nodes.is_empty()));
         assert!(!complete.shared_to_channel_edges.is_empty());
         assert!(!complete.channel_to_aggregate_edges.is_empty());
+        assert!(
+            complete
+                .shared_to_channel_edges
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+        );
+        assert!(
+            complete
+                .channel_to_aggregate_edges
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+        );
+        let complete_artifact =
+            produce_btor2_complete_region_artifact(bytes, semantic_roots, channels, policy)
+                .unwrap();
+        let complete_bytes =
+            encode_btor2_complete_region_artifact(&complete_artifact, policy).unwrap();
+        let complete_decoded =
+            decode_btor2_complete_region_artifact(&complete_bytes, policy).unwrap();
+        assert_eq!(
+            verify_btor2_complete_region_artifact(bytes, &complete_decoded, policy).unwrap(),
+            complete
+        );
         let artifact =
             produce_btor2_region_artifact(bytes, semantic_roots, channels, policy).unwrap();
         let encoded = encode_btor2_region_artifact(&artifact, policy).unwrap();

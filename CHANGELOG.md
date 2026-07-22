@@ -58,6 +58,12 @@
   semantic state support. Legal cross-instance common-subexpression merging is
   treated as shared logic, while multi-channel aggregation is restricted to
   declared observation cones and excluded from transitions.
+- Add a distinct canonical complete-region certificate that embeds the
+  source-bound state cut, encodes every classified node and unique boundary
+  edge, and independently recomputes the complete graph from the separately
+  supplied model. Authentic 2, 4, and 6-channel artifacts replay exactly and
+  deterministically in 4,312, 7,448, and 10,584 bytes. Correct the earlier
+  probe's operand-occurrence counts to unique graph-edge counts.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

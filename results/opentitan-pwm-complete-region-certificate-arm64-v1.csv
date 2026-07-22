@@ -1,0 +1,4 @@
+schema_version,channels,model_bytes,total_nodes,boundary_edges,state_artifact_bytes,complete_artifact_bytes,complete_over_model_percent,complete_artifact_sha256,deterministic,replayed,status
+1,2,16314,275,83,372,4312,26.43,7a1e0fa02ded8a10ff9ac7fc54d8c27ddc83391e6d328db8d547da9d15dfb7be,true,true,accepted
+1,4,27150,436,165,572,7448,27.43,df5153ea7b28ab419d2923441618a7623ba94fb2fbc8bc76a096d62db885c135,true,true,accepted
+1,6,38051,597,247,772,10584,27.82,4a0bcaebdf67856d6ebf2c5b2d9a56f2d025517470cafc54cb366ee3c5825eac,true,true,accepted

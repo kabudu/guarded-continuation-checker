@@ -18,6 +18,9 @@ pub const MAX_REGION_STATES: usize = 16_384;
 pub const MAX_REGION_DEPENDENCY_VISITS: usize = 1_000_000;
 pub const MAX_REGION_ARTIFACT_BYTES: usize = 1024 * 1024;
 const ARTIFACT_MAGIC: &[u8; 8] = b"GCCBRX01";
+const COMPLETE_ARTIFACT_MAGIC: &[u8; 8] = b"GCCBRC01";
+const MAX_COMPLETE_REGION_NODES: usize = 100_000;
+const MAX_COMPLETE_REGION_EDGES: usize = 100_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2RegionPolicy {
@@ -87,7 +90,7 @@ pub enum Btor2NodeRegionOwner {
     Aggregate,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Btor2RegionBoundaryEdge {
     pub source: NodeId,
     pub target: NodeId,
@@ -113,6 +116,18 @@ pub struct Btor2RegionArtifact {
     pub semantic_roots: Vec<NodeId>,
     pub expected_channels: usize,
     pub regions: Btor2RepeatedStateRegions,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2CompleteRegionArtifact {
+    pub version: u32,
+    pub state_artifact: Vec<u8>,
+    pub shared_nodes: Vec<NodeId>,
+    pub channel_nodes: Vec<Vec<NodeId>>,
+    pub aggregate_nodes: Vec<NodeId>,
+    pub shared_to_channel_edges: Vec<Btor2RegionBoundaryEdge>,
+    pub channel_to_aggregate_edges: Vec<Btor2RegionBoundaryEdge>,
+    pub dependency_visits: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -453,6 +468,10 @@ pub fn extract_btor2_complete_regions(
             "multi-channel aggregation is not confined to semantic observations",
         ));
     }
+    shared_to_channel_edges.sort_unstable();
+    shared_to_channel_edges.dedup();
+    channel_to_aggregate_edges.sort_unstable();
+    channel_to_aggregate_edges.dedup();
 
     Ok(Btor2CompleteRegionSummary {
         version: BTOR2_REGION_EXTRACTION_VERSION,
@@ -773,6 +792,298 @@ pub fn verify_btor2_region_artifact(
     Ok(recomputed)
 }
 
+fn canonical_ids(ids: &[NodeId]) -> bool {
+    !ids.contains(&0) && !ids.windows(2).any(|pair| pair[0] >= pair[1])
+}
+
+fn validate_complete_artifact(
+    artifact: &Btor2CompleteRegionArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2RegionArtifact, Btor2RegionError> {
+    if artifact.version != BTOR2_REGION_EXTRACTION_VERSION
+        || artifact.state_artifact.is_empty()
+        || artifact.state_artifact.len() > policy.max_artifact_bytes
+        || artifact.dependency_visits > policy.max_dependency_visits
+        || !canonical_ids(&artifact.shared_nodes)
+        || !canonical_ids(&artifact.aggregate_nodes)
+        || artifact
+            .channel_nodes
+            .iter()
+            .any(|nodes| nodes.is_empty() || !canonical_ids(nodes))
+        || artifact
+            .shared_to_channel_edges
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+        || artifact
+            .channel_to_aggregate_edges
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(reject("complete BTOR2 region artifact is outside policy"));
+    }
+    let state = decode_btor2_region_artifact(&artifact.state_artifact, policy)?;
+    if artifact.channel_nodes.len() != state.expected_channels {
+        return Err(reject("complete BTOR2 region channel count mismatch"));
+    }
+    let mut all_nodes = BTreeSet::new();
+    for id in artifact
+        .shared_nodes
+        .iter()
+        .chain(artifact.channel_nodes.iter().flatten())
+        .chain(&artifact.aggregate_nodes)
+    {
+        if !all_nodes.insert(*id) {
+            return Err(reject("complete BTOR2 region node partition overlaps"));
+        }
+    }
+    if all_nodes.len() > MAX_COMPLETE_REGION_NODES {
+        return Err(reject("complete BTOR2 region node count exceeds policy"));
+    }
+    let edge_count = artifact
+        .shared_to_channel_edges
+        .len()
+        .checked_add(artifact.channel_to_aggregate_edges.len())
+        .ok_or_else(|| reject("complete BTOR2 region edge count overflow"))?;
+    if edge_count > MAX_COMPLETE_REGION_EDGES
+        || artifact
+            .shared_to_channel_edges
+            .iter()
+            .chain(&artifact.channel_to_aggregate_edges)
+            .any(|edge| {
+                edge.source == 0
+                    || edge.target == 0
+                    || edge.channel_index >= state.expected_channels
+            })
+    {
+        return Err(reject("complete BTOR2 region edge set exceeds policy"));
+    }
+    Ok(state)
+}
+
+pub fn encode_btor2_complete_region_artifact(
+    artifact: &Btor2CompleteRegionArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Vec<u8>, Btor2RegionError> {
+    let _ = validate_complete_artifact(artifact, policy)?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(COMPLETE_ARTIFACT_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    push_u32(
+        &mut bytes,
+        artifact.state_artifact.len(),
+        "state artifact bytes",
+    )?;
+    bytes.extend_from_slice(&artifact.state_artifact);
+    push_u32(&mut bytes, artifact.shared_nodes.len(), "shared node count")?;
+    for node in &artifact.shared_nodes {
+        bytes.extend_from_slice(&node.to_le_bytes());
+    }
+    push_u32(
+        &mut bytes,
+        artifact.channel_nodes.len(),
+        "channel node groups",
+    )?;
+    for nodes in &artifact.channel_nodes {
+        push_u32(&mut bytes, nodes.len(), "channel node count")?;
+        for node in nodes {
+            bytes.extend_from_slice(&node.to_le_bytes());
+        }
+    }
+    push_u32(
+        &mut bytes,
+        artifact.aggregate_nodes.len(),
+        "aggregate node count",
+    )?;
+    for node in &artifact.aggregate_nodes {
+        bytes.extend_from_slice(&node.to_le_bytes());
+    }
+    for edges in [
+        &artifact.shared_to_channel_edges,
+        &artifact.channel_to_aggregate_edges,
+    ] {
+        push_u32(&mut bytes, edges.len(), "boundary edge count")?;
+        for edge in edges {
+            bytes.extend_from_slice(&edge.source.to_le_bytes());
+            bytes.extend_from_slice(&edge.target.to_le_bytes());
+            push_u32(&mut bytes, edge.channel_index, "boundary channel index")?;
+        }
+    }
+    push_u32(
+        &mut bytes,
+        artifact.dependency_visits,
+        "complete dependency visits",
+    )?;
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    if bytes.len() > policy.max_artifact_bytes {
+        return Err(reject("complete BTOR2 region artifact exceeds byte policy"));
+    }
+    Ok(bytes)
+}
+
+fn decode_ids(
+    cursor: &mut Cursor<'_>,
+    maximum: usize,
+    label: &str,
+) -> Result<Vec<NodeId>, Btor2RegionError> {
+    let count = decode_count(cursor, maximum, label)?;
+    let mut ids = Vec::with_capacity(count);
+    for _ in 0..count {
+        ids.push(cursor.u64()?);
+    }
+    Ok(ids)
+}
+
+fn decode_edges(
+    cursor: &mut Cursor<'_>,
+    maximum: usize,
+    label: &str,
+) -> Result<Vec<Btor2RegionBoundaryEdge>, Btor2RegionError> {
+    let count = decode_count(cursor, maximum, label)?;
+    let mut edges = Vec::with_capacity(count);
+    for _ in 0..count {
+        edges.push(Btor2RegionBoundaryEdge {
+            source: cursor.u64()?,
+            target: cursor.u64()?,
+            channel_index: usize::try_from(cursor.u32()?)
+                .map_err(|_| reject("boundary channel index exceeds range"))?,
+        });
+    }
+    Ok(edges)
+}
+
+pub fn decode_btor2_complete_region_artifact(
+    bytes: &[u8],
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2CompleteRegionArtifact, Btor2RegionError> {
+    if bytes.len() < 8 + 4 * 8 + 32 || bytes.len() > policy.max_artifact_bytes {
+        return Err(reject(
+            "complete BTOR2 region artifact size is outside policy",
+        ));
+    }
+    let payload_end = bytes.len() - 32;
+    let expected: [u8; 32] = bytes[payload_end..].try_into().expect("fixed checksum");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_end])) != expected {
+        return Err(reject("complete BTOR2 region artifact checksum mismatch"));
+    }
+    let mut cursor = Cursor {
+        bytes: &bytes[..payload_end],
+        offset: 0,
+    };
+    if cursor.take(8)? != COMPLETE_ARTIFACT_MAGIC {
+        return Err(reject("complete BTOR2 region artifact magic mismatch"));
+    }
+    let version = cursor.u32()?;
+    let state_length = decode_count(
+        &mut cursor,
+        policy.max_artifact_bytes,
+        "state artifact bytes",
+    )?;
+    if state_length == 0 {
+        return Err(reject("complete BTOR2 region state artifact is empty"));
+    }
+    let state_artifact = cursor.take(state_length)?.to_vec();
+    let shared_nodes = decode_ids(&mut cursor, MAX_COMPLETE_REGION_NODES, "shared node count")?;
+    let channel_count = decode_count(&mut cursor, policy.max_channels, "channel node group count")?;
+    let mut channel_nodes = Vec::with_capacity(channel_count);
+    for _ in 0..channel_count {
+        channel_nodes.push(decode_ids(
+            &mut cursor,
+            MAX_COMPLETE_REGION_NODES,
+            "channel node count",
+        )?);
+    }
+    let aggregate_nodes = decode_ids(
+        &mut cursor,
+        MAX_COMPLETE_REGION_NODES,
+        "aggregate node count",
+    )?;
+    let shared_to_channel_edges = decode_edges(
+        &mut cursor,
+        MAX_COMPLETE_REGION_EDGES,
+        "shared boundary edge count",
+    )?;
+    let channel_to_aggregate_edges = decode_edges(
+        &mut cursor,
+        MAX_COMPLETE_REGION_EDGES,
+        "aggregate boundary edge count",
+    )?;
+    let dependency_visits = decode_count(
+        &mut cursor,
+        policy.max_dependency_visits,
+        "complete dependency visits",
+    )?;
+    if cursor.offset != payload_end {
+        return Err(reject("trailing complete BTOR2 region artifact bytes"));
+    }
+    let artifact = Btor2CompleteRegionArtifact {
+        version,
+        state_artifact,
+        shared_nodes,
+        channel_nodes,
+        aggregate_nodes,
+        shared_to_channel_edges,
+        channel_to_aggregate_edges,
+        dependency_visits,
+    };
+    if encode_btor2_complete_region_artifact(&artifact, policy)? != bytes {
+        return Err(reject("complete BTOR2 region artifact is not canonical"));
+    }
+    Ok(artifact)
+}
+
+pub fn produce_btor2_complete_region_artifact(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2CompleteRegionArtifact, Btor2RegionError> {
+    let complete =
+        extract_btor2_complete_regions(model_bytes, semantic_roots, expected_channels, policy)?;
+    let state =
+        produce_btor2_region_artifact(model_bytes, semantic_roots, expected_channels, policy)?;
+    let artifact = Btor2CompleteRegionArtifact {
+        version: BTOR2_REGION_EXTRACTION_VERSION,
+        state_artifact: encode_btor2_region_artifact(&state, policy)?,
+        shared_nodes: complete.shared_nodes,
+        channel_nodes: complete.channel_nodes,
+        aggregate_nodes: complete.aggregate_nodes,
+        shared_to_channel_edges: complete.shared_to_channel_edges,
+        channel_to_aggregate_edges: complete.channel_to_aggregate_edges,
+        dependency_visits: complete.dependency_visits,
+    };
+    let _ = encode_btor2_complete_region_artifact(&artifact, policy)?;
+    Ok(artifact)
+}
+
+pub fn verify_btor2_complete_region_artifact(
+    model_bytes: &[u8],
+    artifact: &Btor2CompleteRegionArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2CompleteRegionSummary, Btor2RegionError> {
+    let state = validate_complete_artifact(artifact, policy)?;
+    let verified_state = verify_btor2_region_artifact(model_bytes, &state, policy)?;
+    let recomputed = extract_btor2_complete_regions(
+        model_bytes,
+        &state.semantic_roots,
+        state.expected_channels,
+        policy,
+    )?;
+    if recomputed.state_regions != verified_state
+        || recomputed.shared_nodes != artifact.shared_nodes
+        || recomputed.channel_nodes != artifact.channel_nodes
+        || recomputed.aggregate_nodes != artifact.aggregate_nodes
+        || recomputed.shared_to_channel_edges != artifact.shared_to_channel_edges
+        || recomputed.channel_to_aggregate_edges != artifact.channel_to_aggregate_edges
+        || recomputed.dependency_visits != artifact.dependency_visits
+    {
+        return Err(reject(
+            "complete BTOR2 region artifact disagrees with model dependencies",
+        ));
+    }
+    Ok(recomputed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -867,6 +1178,47 @@ mod tests {
             changed[offset] ^= 1;
             assert!(decode_btor2_region_artifact(&changed, policy).is_err());
         }
+    }
+
+    #[test]
+    fn complete_artifact_recomputes_every_node_and_edge() {
+        let policy = Btor2RegionPolicy::default();
+        let artifact = produce_btor2_complete_region_artifact(CLEAN, &[2], 2, policy).unwrap();
+        let bytes = encode_btor2_complete_region_artifact(&artifact, policy).unwrap();
+        let decoded = decode_btor2_complete_region_artifact(&bytes, policy).unwrap();
+        let summary = verify_btor2_complete_region_artifact(CLEAN, &decoded, policy).unwrap();
+        assert_eq!(summary.shared_nodes.len(), 2);
+        assert_eq!(
+            summary
+                .channel_nodes
+                .iter()
+                .map(Vec::len)
+                .collect::<Vec<_>>(),
+            vec![2, 2]
+        );
+        for end in 0..bytes.len() {
+            assert!(decode_btor2_complete_region_artifact(&bytes[..end], policy).is_err());
+        }
+        for offset in 0..bytes.len() {
+            let mut changed = bytes.clone();
+            changed[offset] ^= 1;
+            assert!(decode_btor2_complete_region_artifact(&changed, policy).is_err());
+        }
+        let mut duplicate_edge = decoded.clone();
+        let edge = duplicate_edge.shared_to_channel_edges[0];
+        duplicate_edge.shared_to_channel_edges.insert(0, edge);
+        assert!(encode_btor2_complete_region_artifact(&duplicate_edge, policy).is_err());
+        let mut overlapping_node = decoded.clone();
+        overlapping_node.channel_nodes[0].push(overlapping_node.shared_nodes[0]);
+        overlapping_node.channel_nodes[0].sort_unstable();
+        assert!(encode_btor2_complete_region_artifact(&overlapping_node, policy).is_err());
+        let mut drifted = decoded;
+        drifted.channel_nodes[0].swap(0, 1);
+        assert!(verify_btor2_complete_region_artifact(CLEAN, &drifted, policy).is_err());
+        assert!(
+            verify_btor2_complete_region_artifact(&CLEAN[..CLEAN.len() - 1], &artifact, policy)
+                .is_err()
+        );
     }
 
     trait ReplaceBytes {
