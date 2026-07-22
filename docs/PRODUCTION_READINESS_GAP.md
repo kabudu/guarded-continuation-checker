@@ -9,6 +9,7 @@ sufficient.
 |---|---|---|---|
 | Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; canonical candidate v2 checks relation/terminal proofs, phase powers and traces without exhaustive input enumeration across the three-product and multiphase cohort | Preserve both formats across compatibility changes; close v2 reliability and cost gates before portfolio replacement | Closed for bounded v1 and candidate-v2 semantics |
 | Portfolio integration | Counterfactual portfolio v1 uses the versioned static rule; its strict consumer rechecks certificates or CDCL answers; forced resource exhaustion and both answer directions are covered across the three-product compatibility cohort | Preserve the contract and coverage across future API changes | Closed for bounded v1 |
+| Revision-local proof reuse | Canonical four-section BTOR2 portfolios, exact source-separated fallback, retained production and verification APIs and file commands, both answers, deterministic work observations, and two authentic Roa Logic PLIC source revisions pass locally. Hosted run 29879705053 reproduces the public revision cohort and maintained Yosys/Z3 control. A controlled workload reduces complete local candidate work from 4,100 valuations to four with byte-identical output, but local process measurements show a retained-memory premium. | Complete the hostile matrix, hosted resource replication, portable certificate identity, closest-system comparison at equivalent scope, compatibility history, and independent operator review | In progress; public revision and self-service mechanism subgates closed |
 | Resource governance | Static dimensions; Rust API applies deadlines, stream/file caps, Unix process groups and non-macOS Unix address-space limits; macOS group regression and a Rust 1.97 Linux container pass; [hosted run 29661860245](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29661860245) passes the Ubuntu limit regression, public RTL corpus and dependency audit; metrics record enforced controls and stable failure classes | Retain these regressions across supported releases; macOS remains development-only for hard memory evidence | Closed for predicate API v1 on supported Linux; macOS limitation explicit |
 | Input reliability | Strict certificate/transcript sizes and syntax; v2 reliability boundary; structural native-proof preflight; 5,000 deterministic parser transformations; invalid-UTF8, sparse-oversize and oversized-proof tests; 128 proof transformations; canonical no-clobber DIMACS export plus 40 individual and four aggregate proofs accepted by pinned CaDiCaL/DRAT-trim under Linux process limits | Add continuous robustness coverage; extend checker diversity from completeness obligations to the whole certificate | Closed for bounded v2 parsing and external completeness checking; whole-certificate diversity open |
 | Stable interface | Predicate CLI v1 freezes discovery, commands and exit meanings; typed Rust API v1 validates capabilities and exposes shell-free v1/v2 production/verification; a separate integration-test crate proves discovery, production and checking against the real binary | Preserve API compatibility across a tagged release; add an in-process verifier only if deployment evidence shows the process boundary is unsuitable | Closed for candidate CLI/Rust API v1; release evidence open |
@@ -468,6 +469,39 @@ architecture-specific producer and consumer binary hashes. This closes the
 canonical cross-platform model-serialization subgate for the OpenTitan
 experiment; it does not close independent review or the broader production
 release gates.
+
+## Revision-local component proof boundary
+
+The revision-local portfolio is an experimental interface, not a
+production-supported capability. Its local relation certificates enumerate
+complete constrained word-level behavior under strict state, input, output,
+composition, horizon, and transition limits. A static selector uses the local
+route only inside those limits and otherwise preserves the original sources,
+interface, and query through exact source-separated fallback.
+
+The first public cohort covers both authentic revisions of the Roa Logic PLIC
+gateway path. It preserves SAFE and earliest-frame UNSAFE results, retains the
+unchanged 272-byte monitor relation exactly, agrees with maintained Yosys/Z3,
+and rejects four initial hostile controls. Hosted run 29879705053 reproduces
+that result. The retained producer and verifier file workflows then expose one
+produced and one reused section while their output remains acceptable to the
+ordinary from-scratch verifier.
+
+A separate controlled cost workload keeps the public PLIC relation unchanged
+while revising a small GCC monitor. Deterministic work falls from 4,100 complete
+local candidate valuations to four, with byte-identical output. Local medians
+favour retained production and verification in-process. Whole-process retained
+creation is faster at the available timer resolution but uses more peak memory;
+whole-process verification time is unresolved at that resolution and also uses
+more peak memory. The tradeoff is therefore policy-dependent, not a universal
+performance win.
+
+The remaining gates include the full predeclared hostile matrix, hosted Linux
+resource results, certificate-byte agreement across Linux, macOS, and Windows,
+property-free component ingestion, long-lived multi-revision service
+amortisation, a faithful equivalent-scope closest-system comparison, tagged
+compatibility, and independent review. None of this evidence changes the
+top-level production status.
 
 ## Post-production-release deliverables
 

@@ -555,3 +555,33 @@ confirms local product interoperability and maintained-tool agreement. It does
 not change that prior-art assessment or close any novelty row. Hosted amd64 run
 29874337371 reproduces the complete result and reinforces only the engineering
 claim.
+
+## Revision-local word-relation evidence
+
+The first revision-local result narrows the candidate without closing it. Two
+authentic revisions of the public Roa Logic PLIC gateway preserve both bounded
+answers and the earliest UNSAFE frame. The unchanged monitor relation remains
+byte-identical, and revised production and verification each report one changed
+section plus one reused validated section. A controlled monitor-revision
+workload retains the larger public PLIC relation, reduces complete local
+candidate work from 4,100 valuations to four, and emits the same final bytes as
+a full rebuild.
+
+This is useful evidence for an exact invalidation boundary, but it is not yet a
+novelty result. Proof caching, content-addressed reuse, incremental
+verification, assume-guarantee reasoning, and compositional certificates are
+established. The repository's faithful FM 2026-style baseline already shows
+that composed witnesses share checking obligations and can provide smaller
+initial evidence. On the earlier changing-plant family, GCC recovers its larger
+initial package only after 58 replacements. The new BTOR2 experiment has not
+yet shown that a maintained closest system cannot retain equivalent local
+semantics at the same source, answer, and evidence scope.
+
+The candidate distinction remains the conjunction of complete word-level local
+relations, byte-stable independently valid sections, exact constrained SAFE and
+earliest-frame UNSAFE answers, smallest-section failure attribution, and static
+fail-closed fallback. The complete hostile matrix, equivalent-scope
+closest-system result, hosted resource replication, portable certificate
+identity, and independent expert review remain mandatory. Until they pass, the
+result is strong incremental-verification engineering and no algorithmic
+novelty claim is supportable.
