@@ -65,7 +65,9 @@ cargo test --release --locked --test opentitan_pwm_symbolic_class_api bitblast
 - The static, calibration-free explicit/bitblast route is now integrated into
   [property portfolio v2](OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V2.md),
   including target replay and fail-closed route verification.
-- Add a canonical outer portfolio format and frozen compatibility fixture.
+- The canonical outer portfolio format and frozen compatibility fingerprint
+  are now implemented by
+  [property codec v1](OPENTITAN_PWM_SYMBOLIC_PROPERTY_CODEC_V1.md).
 - Cross-check a larger horizon and operator corpus against maintained solvers.
 - Reproduce certificate identity on hosted Linux, macOS, and Windows.
 - Measure generation, checking, peak memory, and packaging costs.

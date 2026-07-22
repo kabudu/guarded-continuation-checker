@@ -271,9 +271,12 @@ recomputes that route, independently checks each retained member, and replays
 derived UNSAFE traces against their target channels. The six-channel horizon-2
 workload closes its earlier refusal and reduces retained evidence plus
 admission by 19.33% against direct witnesses. This remains established
-symmetry and SAT proof engineering. The next product boundary is a canonical
-outer codec with aggregate work preflight, followed by maintained-tool,
-realistic-property, portability, compatibility, and independent-review gates.
+symmetry and SAT proof engineering. Its canonical outer codec now supplies
+bounded exchange, nested preflight and a frozen compatibility fingerprint. The
+complete artifact is 4.53% larger than raw direct witnesses. The next product
+boundary is aggregate production-work preflight plus a strict file and process
+API, followed by maintained-tool, realistic-property, portability,
+compatibility, and independent-review gates.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit

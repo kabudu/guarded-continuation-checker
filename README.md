@@ -406,9 +406,20 @@ bounded proof-carrying bitblast route. The verifier independently recomputes
 that choice and rejects forced routing. On the six-channel horizon-2 workload,
 six bitblast members cover twelve logical properties, replay every derived
 target trace, and reduce retained evidence plus admission by 19.33% against
-twelve direct witnesses. A canonical outer portfolio codec, aggregate
-production-work preflight, maintained-tool comparison, cross-platform identity,
-and independent review remain open.
+twelve direct witnesses. Aggregate production-work preflight,
+maintained-tool comparison, cross-platform identity, and independent review
+remain open.
+
+The complete portfolio now has a
+[canonical v1 wire format](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_CODEC_V1.md)
+with caller-selected byte, query, member and evidence limits, nested
+certificate preflight, canonical re-encoding and a frozen compatibility
+fingerprint. Every retained truncation and single-byte mutation fails closed.
+The 1,568-byte complete artifact is 4.53% larger than the twelve raw direct
+witnesses, even though its structural admission plus member evidence is 19.33%
+smaller. This negative control separates portable integrity from payload
+reduction. A file CLI, aggregate production-work preflight, observability,
+maintained comparison and portability evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

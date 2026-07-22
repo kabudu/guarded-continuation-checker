@@ -39,8 +39,10 @@ All six `OutputHigh` properties are UNSAFE first at frame 2. All six
 `OutputLow` properties are UNSAFE first at frame 0. Every target replay agrees.
 The retained count includes the 460-byte structural admission and 750 bytes of
 member evidence. The direct count contains twelve independently produced
-125-byte bitblast witnesses. Neither count includes an outer property-portfolio
-wire format because that format does not exist yet.
+125-byte bitblast witnesses. Neither count includes the subsequent
+[outer property-portfolio codec](OPENTITAN_PWM_SYMBOLIC_PROPERTY_CODEC_V1.md).
+Its complete 1,568-byte artifact is 4.53% larger than the twelve raw direct
+witnesses after query metadata and the envelope checksum are included.
 
 The earlier horizon-1 negative control remains binding. Bitblast SAFE proofs
 are much larger than explicit-state evidence, and the two-channel structural
@@ -67,8 +69,8 @@ cargo test --release --locked --test opentitan_pwm_symbolic_class_api
 
 ## Remaining gates
 
-- Add a canonical, preflighted outer portfolio codec and freeze a compatibility
-  fixture before presenting this as a stable public artifact API.
+- The canonical, preflighted outer portfolio codec and frozen v1 compatibility
+  fingerprint are now implemented.
 - Govern aggregate production work before launching a large member batch, not
   only its retained evidence bytes.
 - Measure generation, checking, peak memory, and package size on realistic

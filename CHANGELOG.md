@@ -36,8 +36,16 @@
   UNSAFE traces on every target channel. At horizon 2, six proof members cover
   twelve six-channel properties and reduce retained evidence plus admission by
   19.33% against direct witnesses. Queries outside every backend policy and
-  changed bitblast member evidence fail closed. A canonical outer codec and
-  aggregate production-work preflight remain open.
+  changed bitblast member evidence fail closed. Aggregate production-work
+  preflight remains open.
+- Add the canonical `GCCBCP01` outer property-portfolio codec with symmetric
+  caller limits, nested structural and certificate preflight, checksum,
+  canonical re-encoding, complete byte producer and verifier APIs, and a frozen
+  1,568-byte compatibility fingerprint. Every retained truncation and
+  single-byte mutation fails closed. The complete artifact is 4.53% larger than
+  twelve raw direct witnesses, so this closes an exchange-integrity mechanism
+  rather than an end-to-end size win. File CLI, aggregate production-work
+  governance, observability and portability remain open.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

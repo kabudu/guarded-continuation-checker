@@ -11,12 +11,16 @@ use guarded_continuation_checker::btor2_region_equivalence::{
 };
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 use guarded_continuation_checker::btor2_region_property::{
-    Btor2ChannelProperty, Btor2ChannelPropertyBackend, Btor2ChannelPropertyQuery,
-    Btor2ChannelPropertySolver, build_btor2_channel_property_model,
-    produce_btor2_channel_property_evidence, produce_btor2_channel_property_proof,
-    verify_btor2_channel_property_proof,
+    Btor2ChannelProperty, Btor2ChannelPropertyBackend, Btor2ChannelPropertyProofPolicy,
+    Btor2ChannelPropertyQuery, Btor2ChannelPropertySolver, MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+    MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES, MAX_CHANNEL_PROPERTY_QUERIES,
+    build_btor2_channel_property_model, decode_btor2_channel_property_proof_artifact,
+    encode_btor2_channel_property_proof_artifact, produce_btor2_channel_property_evidence,
+    produce_btor2_channel_property_proof, produce_btor2_channel_property_proof_bytes,
+    verify_btor2_channel_property_proof, verify_btor2_channel_property_proof_bytes,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
+use sha2::{Digest, Sha256};
 
 struct Fixture {
     bytes: &'static [u8],
@@ -329,6 +333,236 @@ fn static_portfolio_routes_horizon_two_to_bitblast_without_trial_solving() {
             &structural,
             &outside_fallback_horizon,
             policy,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn outer_property_portfolio_codec_is_canonical_bounded_and_fail_closed() {
+    let model = include_bytes!(
+        "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+    );
+    let region_policy = Btor2RegionPolicy::default();
+    let artifact_policy = Btor2ChannelPropertyProofPolicy::default();
+    for limits in [
+        (
+            0,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES + 1,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            0,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES + 1,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            0,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES + 1,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            0,
+        ),
+        (
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES + 1,
+        ),
+    ] {
+        assert!(
+            Btor2ChannelPropertyProofPolicy::new(limits.0, limits.1, limits.2, limits.3).is_err()
+        );
+    }
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, region_policy).unwrap(),
+    )
+    .unwrap();
+    let queries = symbolic_queries(2);
+    let artifact =
+        produce_btor2_channel_property_proof(model, &structural, &queries, region_policy).unwrap();
+    let encoded = encode_btor2_channel_property_proof_artifact(&artifact, artifact_policy).unwrap();
+    assert_eq!(encoded.len(), 1568);
+    assert_eq!(
+        <[u8; 32]>::from(Sha256::digest(&encoded)),
+        [
+            0x31, 0xdb, 0x59, 0x02, 0x5d, 0x13, 0x87, 0x29, 0x59, 0xc1, 0x17, 0x83, 0xd6, 0xf1,
+            0x88, 0x7f, 0xd9, 0x8f, 0x3b, 0xac, 0x9e, 0x02, 0x34, 0xf3, 0xda, 0x7f, 0xb8, 0x8e,
+            0xd5, 0x2e, 0x34, 0x86,
+        ]
+    );
+
+    assert_eq!(
+        encoded,
+        produce_btor2_channel_property_proof_bytes(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            artifact_policy,
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        decode_btor2_channel_property_proof_artifact(&encoded, artifact_policy).unwrap(),
+        artifact
+    );
+    let summary = verify_btor2_channel_property_proof_bytes(
+        model,
+        &queries,
+        &encoded,
+        region_policy,
+        artifact_policy,
+    )
+    .unwrap();
+    assert_eq!(summary.metrics.logical_queries, 12);
+    assert_eq!(summary.metrics.proof_members, 6);
+    assert_eq!(summary.metrics.bitblast_members, 6);
+
+    for end in 0..encoded.len() {
+        assert!(
+            decode_btor2_channel_property_proof_artifact(&encoded[..end], artifact_policy).is_err()
+        );
+    }
+    for offset in 0..encoded.len() {
+        let mut changed = encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_channel_property_proof_artifact(&changed, artifact_policy).is_err());
+    }
+    let mut trailing = encoded.clone();
+    trailing.push(0);
+    assert!(decode_btor2_channel_property_proof_artifact(&trailing, artifact_policy).is_err());
+
+    let refresh_checksum = |bytes: &mut Vec<u8>| {
+        let payload_end = bytes.len() - 32;
+        let checksum = Sha256::digest(&bytes[..payload_end]);
+        bytes[payload_end..].copy_from_slice(&checksum);
+    };
+    let query_count_offset = 8 + 4 + 32 + 4 + structural.len();
+    let member_count_offset = query_count_offset + 4 + queries.len() * (4 + 4 + 1 + 4);
+    let first_member_offset = member_count_offset + 4;
+    for (offset, replacement) in [
+        (8, 2u32.to_le_bytes().to_vec()),
+        (
+            8 + 4 + 32,
+            ((MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES as u32) + 1)
+                .to_le_bytes()
+                .to_vec(),
+        ),
+        (
+            query_count_offset,
+            ((MAX_CHANNEL_PROPERTY_QUERIES as u32) + 1)
+                .to_le_bytes()
+                .to_vec(),
+        ),
+        (member_count_offset, 7u32.to_le_bytes().to_vec()),
+        (first_member_offset, 5u32.to_le_bytes().to_vec()),
+        (first_member_offset + 14, vec![2]),
+        (
+            first_member_offset + 15,
+            ((guarded_continuation_checker::btor2_bitblast::MAX_BITBLAST_CERTIFICATE_BYTES as u32)
+                + 1)
+            .to_le_bytes()
+            .to_vec(),
+        ),
+    ] {
+        let mut changed = encoded.clone();
+        changed[offset..offset + replacement.len()].copy_from_slice(&replacement);
+        refresh_checksum(&mut changed);
+        assert!(decode_btor2_channel_property_proof_artifact(&changed, artifact_policy).is_err());
+    }
+    let mut nested_structural_drift = encoded.clone();
+    nested_structural_drift[48] ^= 1;
+    refresh_checksum(&mut nested_structural_drift);
+    assert!(
+        decode_btor2_channel_property_proof_artifact(&nested_structural_drift, artifact_policy)
+            .is_err()
+    );
+
+    for policy in [
+        Btor2ChannelPropertyProofPolicy::new(
+            queries.len() - 1,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        )
+        .unwrap(),
+        Btor2ChannelPropertyProofPolicy::new(
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            artifact.members.len() - 1,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        )
+        .unwrap(),
+        Btor2ChannelPropertyProofPolicy::new(
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            artifact
+                .members
+                .iter()
+                .map(|member| member.evidence.len())
+                .sum::<usize>()
+                - 1,
+            MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        )
+        .unwrap(),
+        Btor2ChannelPropertyProofPolicy::new(
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_QUERIES,
+            MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+            encoded.len() - 1,
+        )
+        .unwrap(),
+    ] {
+        assert!(decode_btor2_channel_property_proof_artifact(&encoded, policy).is_err());
+    }
+
+    let mut source_drift = model.to_vec();
+    source_drift.push(b'\n');
+    assert!(
+        verify_btor2_channel_property_proof_bytes(
+            &source_drift,
+            &queries,
+            &encoded,
+            region_policy,
+            artifact_policy,
+        )
+        .is_err()
+    );
+    let mut query_drift = queries.clone();
+    query_drift[0].horizon = 1;
+    assert!(
+        verify_btor2_channel_property_proof_bytes(
+            model,
+            &query_drift,
+            &encoded,
+            region_policy,
+            artifact_policy,
         )
         .is_err()
     );

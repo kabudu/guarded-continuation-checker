@@ -648,10 +648,12 @@ and fail-closed query and backend binding. Portfolio v2 now integrates a static,
 timing-free explicit-state and proof-carrying bitblast route. It closes the
 six-channel horizon-2 refusal with six independently checked members for twelve
 logical properties and rejects forced route or changed bitblast evidence. It
-still has no canonical outer wire format or aggregate production-work
-preflight. Realistic safety properties, cross-platform reproduction, maintained
-baseline evidence, compatibility, and independent review remain open. No
-production row closes.
+now has a canonical, resource-bounded outer wire format and frozen v1
+compatibility fingerprint. The complete artifact is 4.53% larger than raw
+direct witnesses, and it still has no file CLI, aggregate production-work
+preflight or process observability. Realistic safety properties,
+cross-platform reproduction, maintained baseline evidence, compatibility, and
+independent review remain open. No production row closes.
 
 - Create a visually polished, accessible SVG architecture diagram after the
   first production release passes every applicable gate. It must show GCC's

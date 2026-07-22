@@ -100,9 +100,11 @@ evidence reduction is the expected consequence of representative sharing, not
 a new invariant. V2 closes the horizon-2 resource refusal through a static
 explicit-state or proof-carrying bitblast route and retains a 19.33% reduction
 against direct UNSAFE witnesses. Static routing, bitblasting, independent proof
-checking, and symmetry representatives are established techniques. The absence
-of an outer codec, maintained-tool comparison, a distinct invariant, and
-independent review leaves this as an engineering mechanism only.
+checking, symmetry representatives, and canonical artifact codecs are
+established techniques. Codec v1 adds a frozen portable boundary but makes the
+complete retained artifact 4.53% larger than raw direct witnesses. The absence
+of a maintained-tool comparison, a distinct invariant, and independent review
+leaves this as an engineering mechanism only.
 
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
