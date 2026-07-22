@@ -89,6 +89,13 @@ query to equal the command-line query, recomputes the static route, rejects a
 forced or mismatched backend, and independently checks the selected nested
 certificate against both original sources and the supplied interface.
 
+Interface contract version 2 is the strict form used by the public revision
+cohort. It lists every semantic input exactly once, either as a wire destination
+or as an explicit external input. Missing inputs, duplicate declarations,
+unknown inputs, and inputs declared as both wired and external fail closed.
+Version 1 remains readable for existing experimental artifacts and retains its
+original implicit-external-input semantics. New evidence should use version 2.
+
 ## Stable observations
 
 Both commands report:

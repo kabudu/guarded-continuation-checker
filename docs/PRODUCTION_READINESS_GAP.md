@@ -487,6 +487,13 @@ that result. The retained producer and verifier file workflows then expose one
 produced and one reused section while their output remains acceptable to the
 ordinary from-scratch verifier.
 
+Strict interface contract v2 now requires every semantic input to be declared
+as either a wire destination or an external input. It rejects omitted,
+contradictory, duplicate, and non-semantic declarations before composition.
+The public PLIC cohort passes with strict contracts. Version 1 remains readable
+only for compatibility with prior experimental artifacts and retains its
+implicit external-input interpretation.
+
 A separate controlled cost workload keeps the public PLIC relation unchanged
 while revising a small GCC monitor. Deterministic work falls from 4,100 complete
 local candidate valuations to four, with byte-identical output. Local medians
@@ -496,7 +503,7 @@ whole-process verification time is unresolved at that resolution and also uses
 more peak memory. The tradeoff is therefore policy-dependent, not a universal
 performance win.
 
-The remaining gates include the full predeclared hostile matrix, hosted Linux
+The remaining gates include the rest of the predeclared hostile matrix, hosted Linux
 resource results, certificate-byte agreement across Linux, macOS, and Windows,
 property-free component ingestion, long-lived multi-revision service
 amortisation, a faithful equivalent-scope closest-system comparison, tagged

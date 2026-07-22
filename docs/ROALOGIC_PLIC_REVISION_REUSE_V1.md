@@ -40,7 +40,7 @@ previous frame. It supplies two bounded properties through horizon two:
 - `impossible` is SAFE.
 
 The monitor is the unchanged left component. The PLIC revision is the changed
-right component. A one-bit interface contract wires the PLIC `pending` output
+right component. A strict v2 one-bit interface contract wires the PLIC `pending` output
 to the monitor input. The revision-local verifier validates the retained
 monitor relation once, then verifies the changed PLIC relation, composition,
 and final answer without decoding or semantically rechecking the monitor.

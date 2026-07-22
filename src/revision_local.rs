@@ -19,9 +19,11 @@ pub const MAX_LOCAL_NODE_STEPS: usize = 30_000_000;
 pub const LOCAL_RELATION_CERTIFICATE_VERSION: u32 = 1;
 pub const MAX_LOCAL_CONSTRAINTS: usize = 4096;
 pub const MAX_INTERFACE_WIRES: usize = 8;
+pub const MAX_INTERFACE_EXTERNAL_INPUTS: usize = 16;
 pub const MAX_COMPOSED_PAIR_CHECKS: usize = 4_000_000;
 pub const MAX_COMPOSED_PAIRS: usize = 65_536;
-pub const WORD_INTERFACE_CONTRACT_VERSION: u32 = 1;
+pub const WORD_INTERFACE_CONTRACT_VERSION: u32 = 2;
+pub const RETAINED_WORD_INTERFACE_CONTRACT_VERSION: u32 = 1;
 pub const MAX_WORD_INTERFACE_CONTRACT_BYTES: usize = 4096;
 pub const MAX_FINAL_HORIZON: u32 = 32;
 pub const MAX_FINAL_STATES_PER_LAYER: usize = 65_536;
@@ -114,9 +116,16 @@ pub struct InterfaceWire {
     pub to_input: NodeId,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct InterfaceInput {
+    pub side: ComponentSide,
+    pub input: NodeId,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WordInterfaceContract {
     pub wires: Vec<InterfaceWire>,
+    pub external_inputs: Option<Vec<InterfaceInput>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -689,6 +698,55 @@ fn validate_interface(
             },
         });
     }
+    if let Some(external_inputs) = &contract.external_inputs {
+        if external_inputs.len() > MAX_INTERFACE_EXTERNAL_INPUTS
+            || !external_inputs.windows(2).all(|pair| pair[0] < pair[1])
+        {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "external inputs must be unique, strictly ordered, and bounded",
+            ));
+        }
+        let mut classified = destinations;
+        for external in external_inputs {
+            let component = match external.side {
+                ComponentSide::Left => left,
+                ComponentSide::Right => right,
+            };
+            if component.inputs.binary_search(&external.input).is_err() {
+                return Err(reject(
+                    EvidenceSection::Interface,
+                    "declared external input is not semantic",
+                ));
+            }
+            let key = (external.side, external.input);
+            if classified.contains(&key) {
+                return Err(reject(
+                    EvidenceSection::Interface,
+                    "input is both wired and external",
+                ));
+            }
+            classified.push(key);
+        }
+        classified.sort_unstable();
+        let expected = left
+            .inputs
+            .iter()
+            .map(|input| (ComponentSide::Left, *input))
+            .chain(
+                right
+                    .inputs
+                    .iter()
+                    .map(|input| (ComponentSide::Right, *input)),
+            )
+            .collect::<Vec<_>>();
+        if classified != expected {
+            return Err(reject(
+                EvidenceSection::Interface,
+                "strict interface does not classify every semantic input",
+            ));
+        }
+    }
     Ok(result)
 }
 
@@ -724,8 +782,22 @@ pub fn encode_word_interface_contract(
             "interface wires must be unique and strictly ordered",
         ));
     }
+    if let Some(external_inputs) = &contract.external_inputs
+        && (external_inputs.len() > MAX_INTERFACE_EXTERNAL_INPUTS
+            || !external_inputs.windows(2).all(|pair| pair[0] < pair[1]))
+    {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "external inputs must be unique, strictly ordered, and bounded",
+        ));
+    }
+    let version = if contract.external_inputs.is_some() {
+        WORD_INTERFACE_CONTRACT_VERSION
+    } else {
+        RETAINED_WORD_INTERFACE_CONTRACT_VERSION
+    };
     let mut text = format!(
-        "word_interface_version={WORD_INTERFACE_CONTRACT_VERSION}\nwire_count={}\n",
+        "word_interface_version={version}\nwire_count={}\n",
         contract.wires.len()
     );
     for wire in &contract.wires {
@@ -734,6 +806,16 @@ pub fn encode_word_interface_contract(
             ComponentSide::Right => "right",
         };
         text.push_str(&format!("wire={side},{},{}\n", wire.output, wire.to_input));
+    }
+    if let Some(external_inputs) = &contract.external_inputs {
+        text.push_str(&format!("external_count={}\n", external_inputs.len()));
+        for external in external_inputs {
+            let side = match external.side {
+                ComponentSide::Left => "left",
+                ComponentSide::Right => "right",
+            };
+            text.push_str(&format!("external={side},{}\n", external.input));
+        }
     }
     text.push_str("status=complete\n");
     if text.len() > MAX_WORD_INTERFACE_CONTRACT_BYTES {
@@ -770,7 +852,10 @@ pub fn decode_word_interface_contract(
         .and_then(|line| line.strip_prefix("word_interface_version="))
         .and_then(|value| value.parse::<u32>().ok())
         .ok_or_else(|| reject(EvidenceSection::Interface, "invalid interface version"))?;
-    if version != WORD_INTERFACE_CONTRACT_VERSION {
+    if !matches!(
+        version,
+        RETAINED_WORD_INTERFACE_CONTRACT_VERSION | WORD_INTERFACE_CONTRACT_VERSION
+    ) {
         return Err(reject(
             EvidenceSection::Interface,
             "unsupported interface version",
@@ -816,13 +901,57 @@ pub fn decode_word_interface_contract(
             to_input,
         });
     }
+    let external_inputs = if version == WORD_INTERFACE_CONTRACT_VERSION {
+        let count = lines
+            .next()
+            .and_then(|line| line.strip_prefix("external_count="))
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|count| *count <= MAX_INTERFACE_EXTERNAL_INPUTS)
+            .ok_or_else(|| reject(EvidenceSection::Interface, "invalid external input count"))?;
+        let mut external_inputs = Vec::with_capacity(count);
+        for _ in 0..count {
+            let value = lines
+                .next()
+                .and_then(|line| line.strip_prefix("external="))
+                .ok_or_else(|| reject(EvidenceSection::Interface, "missing external input"))?;
+            let mut fields = value.split(',');
+            let side = match fields.next() {
+                Some("left") => ComponentSide::Left,
+                Some("right") => ComponentSide::Right,
+                _ => {
+                    return Err(reject(
+                        EvidenceSection::Interface,
+                        "invalid external input side",
+                    ));
+                }
+            };
+            let input = fields
+                .next()
+                .and_then(|field| field.parse::<NodeId>().ok())
+                .filter(|id| *id != 0)
+                .ok_or_else(|| reject(EvidenceSection::Interface, "invalid external input"))?;
+            if fields.next().is_some() {
+                return Err(reject(
+                    EvidenceSection::Interface,
+                    "external input has trailing fields",
+                ));
+            }
+            external_inputs.push(InterfaceInput { side, input });
+        }
+        Some(external_inputs)
+    } else {
+        None
+    };
     if lines.next() != Some("status=complete") || lines.next().is_some() {
         return Err(reject(
             EvidenceSection::Interface,
             "interface contract is incomplete or has trailing fields",
         ));
     }
-    let contract = WordInterfaceContract { wires };
+    let contract = WordInterfaceContract {
+        wires,
+        external_inputs,
+    };
     if encode_word_interface_contract(&contract)? != text {
         return Err(reject(
             EvidenceSection::Interface,
@@ -3625,6 +3754,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         };
         let encoded = encode_word_interface_contract(&contract).unwrap();
         assert_eq!(
@@ -3662,6 +3792,88 @@ mod tests {
     }
 
     #[test]
+    fn strict_word_interface_classifies_every_semantic_input() {
+        let left = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
+        let right = produce_local_relation(RIGHT_COMPONENT, &[7]).unwrap();
+        let wire = InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        };
+        let contract = WordInterfaceContract {
+            wires: vec![wire.clone()],
+            external_inputs: Some(vec![InterfaceInput {
+                side: ComponentSide::Left,
+                input: 3,
+            }]),
+        };
+        let encoded = encode_word_interface_contract(&contract).unwrap();
+        assert!(encoded.starts_with("word_interface_version=2\n"));
+        assert_eq!(
+            decode_word_interface_contract(encoded.as_bytes()).unwrap(),
+            contract
+        );
+        assert_eq!(
+            compose_local_relations(WORD_COMPONENT, &left, RIGHT_COMPONENT, &right, &contract)
+                .unwrap()
+                .pairs
+                .len(),
+            48
+        );
+
+        let omitted = WordInterfaceContract {
+            wires: vec![wire.clone()],
+            external_inputs: Some(vec![]),
+        };
+        let error =
+            compose_local_relations(WORD_COMPONENT, &left, RIGHT_COMPONENT, &right, &omitted)
+                .unwrap_err();
+        assert_eq!(
+            error.message,
+            "strict interface does not classify every semantic input"
+        );
+
+        let contradictory = WordInterfaceContract {
+            wires: vec![wire.clone()],
+            external_inputs: Some(vec![
+                InterfaceInput {
+                    side: ComponentSide::Left,
+                    input: 3,
+                },
+                InterfaceInput {
+                    side: ComponentSide::Right,
+                    input: 3,
+                },
+            ]),
+        };
+        let error = compose_local_relations(
+            WORD_COMPONENT,
+            &left,
+            RIGHT_COMPONENT,
+            &right,
+            &contradictory,
+        )
+        .unwrap_err();
+        assert_eq!(error.message, "input is both wired and external");
+
+        let unknown = WordInterfaceContract {
+            wires: vec![wire],
+            external_inputs: Some(vec![InterfaceInput {
+                side: ComponentSide::Left,
+                input: 99,
+            }]),
+        };
+        let error =
+            compose_local_relations(WORD_COMPONENT, &left, RIGHT_COMPONENT, &right, &unknown)
+                .unwrap_err();
+        assert_eq!(error.message, "declared external input is not semantic");
+
+        for length in 0..encoded.len() {
+            assert!(decode_word_interface_contract(&encoded.as_bytes()[..length]).is_err());
+        }
+    }
+
+    #[test]
     fn interface_width_and_hidden_drive_mutations_fail_closed() {
         let left = produce_local_relation(WORD_COMPONENT, &[7]).unwrap();
         let narrow_source = b"1 sort bitvec 1\n2 input 1 sensed\n3 state 1 state\n4 zero 1\n5 init 1 3 4\n6 next 1 3 2\n7 xor 1 3 2\n8 bad 4 never\n";
@@ -3672,6 +3884,7 @@ mod tests {
                 output: 7,
                 to_input: 2,
             }],
+            external_inputs: None,
         };
         let error =
             compose_local_relations(WORD_COMPONENT, &left, narrow_source, &narrow, &contract)
@@ -3692,6 +3905,7 @@ mod tests {
                     to_input: 3,
                 },
             ],
+            external_inputs: None,
         };
         assert!(encode_word_interface_contract(&duplicate).is_err());
 
@@ -3704,6 +3918,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         };
         let error = compose_local_relations(
             WORD_COMPONENT,
@@ -3736,6 +3951,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         };
         let safe_query = BoundedQuery {
             horizon: 0,
@@ -3804,6 +4020,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         };
         let query = BoundedQuery {
             horizon: 1,
@@ -3827,6 +4044,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let mut produced = Vec::new();
@@ -3886,6 +4104,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let query = BoundedQuery {
@@ -3958,6 +4177,7 @@ mod tests {
                 output: 4,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         for (horizon, expected, bad_frame) in [
@@ -4017,6 +4237,7 @@ mod tests {
                 output: 4,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let query = BoundedQuery {
@@ -4061,6 +4282,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let local_query = BoundedQuery {
@@ -4105,6 +4327,7 @@ mod tests {
                 output: 4,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let fallback = produce_revision_portfolio(
@@ -4145,6 +4368,7 @@ mod tests {
                 output: 7,
                 to_input: 3,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let query = BoundedQuery {
@@ -4185,6 +4409,7 @@ mod tests {
                 output: 7,
                 to_input: 999,
             }],
+            external_inputs: None,
         })
         .unwrap();
         let error = produce_revision_portfolio(

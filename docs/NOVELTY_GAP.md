@@ -585,3 +585,8 @@ closest-system result, hosted resource replication, portable certificate
 identity, and independent expert review remain mandatory. Until they pass, the
 result is strong incremental-verification engineering and no algorithmic
 novelty claim is supportable.
+
+Strict interface contract v2 closes one integrity ambiguity in that candidate:
+every semantic input must now be classified as wired or external. This prevents
+an omitted cross-component wire from silently becoming an environment input.
+It strengthens the experiment but is not itself a novelty claim.

@@ -66,6 +66,7 @@ fn downstream_client_can_reuse_validated_evidence_for_word_interface_composition
     let left = produce_local_relation(left_source, &[7]).unwrap();
     let right = produce_local_relation(right_source, &[7]).unwrap();
     let contract = WordInterfaceContract {
+        external_inputs: None,
         wires: vec![InterfaceWire {
             from: ComponentSide::Left,
             output: 7,
@@ -96,6 +97,7 @@ fn downstream_client_can_verify_both_composed_bounded_answers() {
     let right = verify_local_relation_for_composition(right_source, &right, EvidenceSection::Right)
         .unwrap();
     let contract = WordInterfaceContract {
+        external_inputs: None,
         wires: vec![InterfaceWire {
             from: ComponentSide::Left,
             output: 7,
@@ -125,6 +127,7 @@ fn downstream_client_can_exchange_a_complete_revision_local_envelope() {
     let left_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
     let right_source = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     let interface = encode_word_interface_contract(&WordInterfaceContract {
+        external_inputs: None,
         wires: vec![InterfaceWire {
             from: ComponentSide::Left,
             output: 7,
@@ -166,6 +169,7 @@ fn downstream_client_can_measure_retained_left_revision_work() {
     let right_v1 = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     let right_v2 = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     let interface = encode_word_interface_contract(&WordInterfaceContract {
+        external_inputs: None,
         wires: vec![InterfaceWire {
             from: ComponentSide::Left,
             output: 7,
@@ -213,6 +217,7 @@ fn downstream_client_can_produce_a_revision_without_rebuilding_retained_left() {
     let right_v1 = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     let right_v2 = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     let interface = encode_word_interface_contract(&WordInterfaceContract {
+        external_inputs: None,
         wires: vec![InterfaceWire {
             from: ComponentSide::Left,
             output: 7,
@@ -259,6 +264,7 @@ fn downstream_client_gets_exact_fallback_beyond_local_state_bounds() {
     let right = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
     assert!(produce_local_relation(wide_left, &[4]).is_err());
     let interface = encode_word_interface_contract(&WordInterfaceContract {
+        external_inputs: None,
         wires: vec![InterfaceWire {
             from: ComponentSide::Left,
             output: 4,

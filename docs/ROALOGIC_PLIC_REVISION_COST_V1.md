@@ -43,9 +43,9 @@ records one 21-trial run with Rust 1.97.0:
 - full production covers 4,100 complete local candidate valuations;
 - retained production covers four changed-side valuations, produces one local
   section, and reuses one validated section;
-- both paths emit the same 525,095-byte artifact;
-- retained median production is 7.12% of full production; and
-- retained median verification is 13.45% of from-scratch verification.
+- both paths emit the same 525,192-byte artifact;
+- retained median production is 7.24% of full production; and
+- retained median verification is 13.60% of from-scratch verification.
 
 Timing is observational and machine-dependent. Backend selection never uses
 these values. The deterministic evidence is the 4,100-to-4 work reduction,
@@ -72,7 +72,7 @@ run measures the two file producers and two file verifiers with macOS
 - both verification paths round to 0.01 seconds at this timer resolution;
 - full verification uses about 7.60 MB peak RSS, while retained verification
   uses about 9.38 MB; and
-- every operation returns the same UNSAFE frame and 525,113-byte outer
+- every operation returns the same UNSAFE frame and 525,210-byte outer
   portfolio artifact.
 
 The retained path therefore removes local proof work and improves creation
