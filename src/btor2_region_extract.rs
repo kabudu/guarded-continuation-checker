@@ -80,6 +80,32 @@ pub struct Btor2RepeatedStateRegions {
     pub dependency_visits: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2NodeRegionOwner {
+    Shared,
+    Channel(usize),
+    Aggregate,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2RegionBoundaryEdge {
+    pub source: NodeId,
+    pub target: NodeId,
+    pub channel_index: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2CompleteRegionSummary {
+    pub version: u32,
+    pub state_regions: Btor2RepeatedStateRegions,
+    pub shared_nodes: Vec<NodeId>,
+    pub channel_nodes: Vec<Vec<NodeId>>,
+    pub aggregate_nodes: Vec<NodeId>,
+    pub shared_to_channel_edges: Vec<Btor2RegionBoundaryEdge>,
+    pub channel_to_aggregate_edges: Vec<Btor2RegionBoundaryEdge>,
+    pub dependency_visits: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Btor2RegionArtifact {
     pub version: u32,
@@ -105,13 +131,19 @@ fn reject(message: impl Into<String>) -> Btor2RegionError {
 }
 
 fn channel_from_symbol(symbol: &str) -> Result<Option<usize>, Btor2RegionError> {
-    const MARKER: &str = "\\gen_chan_insts[";
+    const MARKER: &str = "gen_chan_insts[";
     let Some(start) = symbol.find(MARKER) else {
         if symbol.contains("gen_chan_insts") {
             return Err(reject("malformed Yosys channel hierarchy symbol"));
         }
         return Ok(None);
     };
+    if start == 0
+        || !matches!(symbol.as_bytes()[start - 1], b'.' | b'\\')
+        || symbol[start + MARKER.len()..].contains(MARKER)
+    {
+        return Err(reject("ambiguous Yosys channel hierarchy symbol"));
+    }
     let digits = &symbol[start + MARKER.len()..];
     let end = digits
         .find(']')
@@ -121,7 +153,7 @@ fn channel_from_symbol(symbol: &str) -> Result<Option<usize>, Btor2RegionError> 
         return Err(reject("invalid Yosys channel hierarchy index"));
     }
     let suffix = &digits[end + 1..];
-    if !suffix.starts_with(".u_chan.") || suffix.contains(MARKER) {
+    if !suffix.starts_with(".u_chan.") {
         return Err(reject("ambiguous Yosys channel hierarchy symbol"));
     }
     index_text
@@ -177,6 +209,48 @@ fn state_support(
         }
     }
     Ok(states)
+}
+
+fn dependencies(kind: &NodeKind) -> ([NodeId; 3], usize) {
+    match *kind {
+        NodeKind::Input | NodeKind::State | NodeKind::Constant(_) => ([0; 3], 0),
+        NodeKind::Unary(_, value)
+        | NodeKind::Slice { value, .. }
+        | NodeKind::Uext { value, .. } => ([value, 0, 0], 1),
+        NodeKind::Binary(_, left, right) => ([left, right, 0], 2),
+        NodeKind::Ite(condition, then_value, else_value) => {
+            ([condition, then_value, else_value], 3)
+        }
+        NodeKind::Concat { high, low } => ([high, low, 0], 2),
+    }
+}
+
+fn reachable_nodes(
+    model: &btor2::Btor2Model,
+    roots: impl IntoIterator<Item = NodeId>,
+    visits: &mut usize,
+    policy: Btor2RegionPolicy,
+) -> Result<BTreeSet<NodeId>, Btor2RegionError> {
+    let mut stack = roots.into_iter().collect::<Vec<_>>();
+    let mut reached = BTreeSet::new();
+    while let Some(id) = stack.pop() {
+        if !reached.insert(id) {
+            continue;
+        }
+        *visits = visits
+            .checked_add(1)
+            .ok_or_else(|| reject("BTOR2 complete-region work overflow"))?;
+        if *visits > policy.max_dependency_visits {
+            return Err(reject("BTOR2 complete-region work exceeds policy"));
+        }
+        let node = model
+            .nodes()
+            .get(&id)
+            .ok_or_else(|| reject("BTOR2 complete region references an unknown node"))?;
+        let (sources, count) = dependencies(&node.kind);
+        stack.extend_from_slice(&sources[..count]);
+    }
+    Ok(reached)
 }
 
 /// Extract and verify state ownership for repeated `gen_chan_insts` regions.
@@ -257,6 +331,137 @@ pub fn extract_btor2_repeated_state_regions(
         total_states: model.states().len(),
         shared_states,
         channels,
+        dependency_visits: visits,
+    })
+}
+
+/// Classify every semantic node and verify the complete dependency-edge cut.
+///
+/// Multi-channel nodes are admitted only as top-level aggregation reachable
+/// from declared semantic roots and absent from every next-state cone.
+pub fn extract_btor2_complete_regions(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2CompleteRegionSummary, Btor2RegionError> {
+    let state_regions = extract_btor2_repeated_state_regions(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        policy,
+    )?;
+    let model = btor2::parse_component_bytes(model_bytes, semantic_roots)
+        .map_err(|error| reject(format!("invalid BTOR2 complete-region model: {error}")))?;
+    let mut state_owners = BTreeMap::new();
+    for state in &state_regions.shared_states {
+        state_owners.insert(*state, Btor2NodeRegionOwner::Shared);
+    }
+    for channel in &state_regions.channels {
+        for state in &channel.states {
+            state_owners.insert(*state, Btor2NodeRegionOwner::Channel(channel.channel_index));
+        }
+    }
+
+    let mut visits = state_regions.dependency_visits;
+    let transition_roots = model
+        .states()
+        .iter()
+        .map(|state| {
+            model
+                .next_value(*state)
+                .expect("parsed states have next values")
+        })
+        .collect::<Vec<_>>();
+    let transition_nodes = reachable_nodes(&model, transition_roots, &mut visits, policy)?;
+    let observation_nodes =
+        reachable_nodes(&model, semantic_roots.iter().copied(), &mut visits, policy)?;
+
+    let mut owners = BTreeMap::<NodeId, Btor2NodeRegionOwner>::new();
+    let mut shared_nodes = Vec::new();
+    let mut channel_nodes = vec![Vec::new(); expected_channels];
+    let mut aggregate_nodes = Vec::new();
+    for &id in model.nodes().keys() {
+        let owner = if let Some(owner) = state_owners.get(&id) {
+            *owner
+        } else {
+            let support = state_support(&model, id, &mut visits, policy)?;
+            let local_owners = support
+                .iter()
+                .filter_map(|state| match state_owners[state] {
+                    Btor2NodeRegionOwner::Channel(index) => Some(index),
+                    Btor2NodeRegionOwner::Shared => None,
+                    Btor2NodeRegionOwner::Aggregate => unreachable!("states cannot aggregate"),
+                })
+                .collect::<BTreeSet<_>>();
+            match local_owners.len() {
+                0 => Btor2NodeRegionOwner::Shared,
+                1 => Btor2NodeRegionOwner::Channel(*local_owners.first().expect("one owner")),
+                _ => Btor2NodeRegionOwner::Aggregate,
+            }
+        };
+        match owner {
+            Btor2NodeRegionOwner::Shared => shared_nodes.push(id),
+            Btor2NodeRegionOwner::Channel(index) => channel_nodes[index].push(id),
+            Btor2NodeRegionOwner::Aggregate => aggregate_nodes.push(id),
+        }
+        owners.insert(id, owner);
+    }
+
+    let mut shared_to_channel_edges = Vec::new();
+    let mut channel_to_aggregate_edges = Vec::new();
+    for (&target, node) in model.nodes() {
+        let target_owner = owners[&target];
+        let (sources, count) = dependencies(&node.kind);
+        for source in &sources[..count] {
+            let source_owner = owners[source];
+            match (target_owner, source_owner) {
+                (Btor2NodeRegionOwner::Shared, Btor2NodeRegionOwner::Shared) => {}
+                (
+                    Btor2NodeRegionOwner::Channel(target_channel),
+                    Btor2NodeRegionOwner::Channel(source_channel),
+                ) if target_channel == source_channel => {}
+                (Btor2NodeRegionOwner::Channel(channel_index), Btor2NodeRegionOwner::Shared) => {
+                    shared_to_channel_edges.push(Btor2RegionBoundaryEdge {
+                        source: *source,
+                        target,
+                        channel_index,
+                    });
+                }
+                (Btor2NodeRegionOwner::Aggregate, Btor2NodeRegionOwner::Channel(channel_index)) => {
+                    channel_to_aggregate_edges.push(Btor2RegionBoundaryEdge {
+                        source: *source,
+                        target,
+                        channel_index,
+                    });
+                }
+                (Btor2NodeRegionOwner::Aggregate, Btor2NodeRegionOwner::Shared)
+                | (Btor2NodeRegionOwner::Aggregate, Btor2NodeRegionOwner::Aggregate) => {}
+                _ => {
+                    return Err(reject(format!(
+                        "BTOR2 dependency edge {source}->{target} crosses invalid owners {source_owner:?}->{target_owner:?}"
+                    )));
+                }
+            }
+        }
+    }
+    if aggregate_nodes
+        .iter()
+        .any(|node| transition_nodes.contains(node) || !observation_nodes.contains(node))
+    {
+        return Err(reject(
+            "multi-channel aggregation is not confined to semantic observations",
+        ));
+    }
+
+    Ok(Btor2CompleteRegionSummary {
+        version: BTOR2_REGION_EXTRACTION_VERSION,
+        state_regions,
+        shared_nodes,
+        channel_nodes,
+        aggregate_nodes,
+        shared_to_channel_edges,
+        channel_to_aggregate_edges,
         dependency_visits: visits,
     })
 }

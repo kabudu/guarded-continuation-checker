@@ -54,6 +54,10 @@
   verifier recomputes hierarchy ownership and every next-state dependency,
   rejects shared-to-local feedback and cross-channel edges, and accepts the
   authentic 2, 4, and 6-channel OpenTitan models deterministically.
+- Classify every authentic PWM combinational node and dependency edge from
+  semantic state support. Legal cross-instance common-subexpression merging is
+  treated as shared logic, while multi-channel aggregation is restricted to
+  declared observation cones and excluded from transitions.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

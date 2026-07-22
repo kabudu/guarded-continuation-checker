@@ -179,3 +179,24 @@ all sizes. This proves a state cut only. Complete combinational node and edge
 coverage, boundary-signal equivalence, properties, hidden-coupling synthesis
 fixture, mixed-orbit evidence, baselines, and resource measurements remain
 open.
+
+The next complete-graph probe classifies combinational nodes from semantic
+state support, not source labels. This matters because Yosys legally merges
+identical expressions from different instances and may retain only one source
+label. Shared nodes may feed channel-local nodes. Channel nodes may feed only
+their own region or a declared top-level aggregate. Multi-channel aggregates
+must be reachable from the supplied semantic observations and absent from every
+next-state cone.
+
+The retained three-row result is
+[`results/opentitan-pwm-complete-region-probe-arm64-v1.csv`](../results/opentitan-pwm-complete-region-probe-arm64-v1.csv).
+At 2, 4, and 6 channels the checker classifies respectively 155, 198, and 241
+shared nodes; `30:89`, `30:89:27:89`, and `30:89:27:89:27:89` local nodes; and
+1, 3, and 5 observation-only aggregate nodes. It checks 82, 163, and 244
+shared-to-channel boundary edges and exactly one channel-to-aggregate edge per
+channel. No aggregate reaches a transition cone.
+
+This closes the local complete dependency-edge classification mechanism. The
+complete graph is not yet encoded in the certificate, and boundary-signal
+equivalence, proof reuse, properties, maintained baselines, process resources,
+portability, and acceptance remain open.

@@ -1,0 +1,4 @@
+schema_version,channels,total_states,shared_states,local_states_pattern,shared_nodes,local_nodes_pattern,aggregate_nodes,shared_to_channel_edges,channel_to_aggregate_edges,state_artifact_bytes,state_artifact_sha256,deterministic,status
+1,2,16,8,2:6,155,30:89,1,82,2,372,8beb780b2e183650dc0ccb7c054561477e0052462d43cc75ae84c82d98bc7f63,true,accepted
+1,4,26,10,2:6:2:6,198,30:89:27:89,3,163,4,572,5dabf7a97fa3895ddcad79af8af3ec99d8a0e47d00843cf0833ed6e74673446b,true,accepted
+1,6,36,12,2:6:2:6:2:6,241,30:89:27:89:27:89,5,244,6,772,09fe42e30f79833c0935907d540590aed2205d188b602154bdf3a4d631cc5133,true,accepted

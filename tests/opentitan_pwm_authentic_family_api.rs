@@ -1,8 +1,8 @@
 use guarded_continuation_checker::btor2;
 use guarded_continuation_checker::btor2_region_extract::{
     Btor2RegionPolicy, decode_btor2_region_artifact, encode_btor2_region_artifact,
-    extract_btor2_repeated_state_regions, produce_btor2_region_artifact,
-    verify_btor2_region_artifact,
+    extract_btor2_complete_regions, extract_btor2_repeated_state_regions,
+    produce_btor2_region_artifact, verify_btor2_region_artifact,
 };
 
 #[test]
@@ -56,6 +56,7 @@ fn pinned_authentic_pwm_models_preserve_expected_channel_state_growth() {
         assert_eq!(model.states().len(), expected_states);
         assert!(model.bad_properties().is_empty());
         assert!(model.constraints().is_empty());
+        let policy = Btor2RegionPolicy::default();
         let regions = extract_btor2_repeated_state_regions(
             bytes,
             semantic_roots,
@@ -76,7 +77,13 @@ fn pinned_authentic_pwm_models_preserve_expected_channel_state_growth() {
             regions.shared_states.len(),
             expected_states - expected_local_states.iter().sum::<usize>()
         );
-        let policy = Btor2RegionPolicy::default();
+        let complete =
+            extract_btor2_complete_regions(bytes, semantic_roots, channels, policy).unwrap();
+        assert_eq!(complete.state_regions, regions);
+        assert_eq!(complete.channel_nodes.len(), channels);
+        assert!(complete.channel_nodes.iter().all(|nodes| !nodes.is_empty()));
+        assert!(!complete.shared_to_channel_edges.is_empty());
+        assert!(!complete.channel_to_aggregate_edges.is_empty());
         let artifact =
             produce_btor2_region_artifact(bytes, semantic_roots, channels, policy).unwrap();
         let encoded = encode_btor2_region_artifact(&artifact, policy).unwrap();
