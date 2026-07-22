@@ -198,6 +198,9 @@ pub enum OperationKind {
     DiscoverRevisionImpact,
     CertifyRevisionImpact,
     VerifyRevisionImpact,
+    DiscoverBtor2ChannelProperty,
+    CertifyBtor2ChannelProperty,
+    VerifyBtor2ChannelProperty,
 }
 
 impl OperationKind {
@@ -270,6 +273,9 @@ impl OperationKind {
             Self::DiscoverRevisionImpact => "discover_revision_impact",
             Self::CertifyRevisionImpact => "certify_revision_impact",
             Self::VerifyRevisionImpact => "verify_revision_impact",
+            Self::DiscoverBtor2ChannelProperty => "discover_btor2_channel_property",
+            Self::CertifyBtor2ChannelProperty => "certify_btor2_channel_property",
+            Self::VerifyBtor2ChannelProperty => "verify_btor2_channel_property",
         }
     }
 }
@@ -698,6 +704,106 @@ pub struct RevisionImpactSemanticChangeSet {
     pub changed_mask: u16,
     pub baseline_result: revision_local::BoundedResult,
     pub changed_result: revision_local::BoundedResult,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyCapabilities {
+    pub cli_version: u32,
+    pub artifact_version: u32,
+    pub query_manifest_version: u32,
+    pub policy_version: u32,
+    pub max_query_manifest_bytes: usize,
+    pub max_policy_bytes: usize,
+    pub max_model_bytes: usize,
+    pub max_channels: usize,
+    pub max_queries: usize,
+    pub max_evidence_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_projected_work: u64,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug)]
+pub struct Btor2ChannelPropertyFiles<'a> {
+    pub model: &'a Path,
+    pub queries: &'a Path,
+    pub policy: &'a Path,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2ChannelPropertyAnswer {
+    Safe,
+    Unsafe,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2ChannelPropertyKind {
+    OutputHigh,
+    OutputLow,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2ChannelPropertyProcessBackend {
+    RepresentativeClass,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2ChannelPropertyProcessSolver {
+    ExplicitState,
+    BitblastCnf,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyProcessResult {
+    pub index: usize,
+    pub query_id: u32,
+    pub channel: usize,
+    pub property: Btor2ChannelPropertyKind,
+    pub horizon: u32,
+    pub answer: Btor2ChannelPropertyAnswer,
+    pub bad_frame: Option<u32>,
+    pub backend: Btor2ChannelPropertyProcessBackend,
+    pub solver: Btor2ChannelPropertyProcessSolver,
+    pub representative_channel: usize,
+    pub witness_valuations: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyProcessSummary {
+    pub artifact_version: u32,
+    pub channels: usize,
+    pub logical_queries: usize,
+    pub proof_members: usize,
+    pub reused_queries: usize,
+    pub explicit_members: usize,
+    pub bitblast_members: usize,
+    pub evidence_bytes: usize,
+    pub artifact_bytes: usize,
+    pub projected_work: Option<u64>,
+    pub elapsed_micros: usize,
+    pub results: Vec<Btor2ChannelPropertyProcessResult>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2ChannelPropertyResourceRefusalReason {
+    QueryCount,
+    MemberCount,
+    ProjectedWork,
+    EvidenceBytes,
+    ArtifactBytes,
+}
+
+impl Btor2ChannelPropertyResourceRefusalReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::QueryCount => "query-count",
+            Self::MemberCount => "member-count",
+            Self::ProjectedWork => "projected-work",
+            Self::EvidenceBytes => "evidence-bytes",
+            Self::ArtifactBytes => "artifact-bytes",
+        }
+    }
 }
 
 /// Machine-discovered limits for proof-carrying controller MTBDD CLI v1.
@@ -1194,6 +1300,9 @@ pub enum PredicateApiError {
     ResourceRefused {
         reason: ControllerPlantResourceRefusalReason,
     },
+    Btor2ChannelPropertyResourceRefused {
+        reason: Btor2ChannelPropertyResourceRefusalReason,
+    },
     IncompatibleContract(String),
     InvalidResponse(String),
 }
@@ -1206,7 +1315,9 @@ impl PredicateApiError {
             Self::TimedOut { .. } => FailureClass::Timeout,
             Self::OutputLimitExceeded { .. } => FailureClass::OutputLimit,
             Self::CommandFailed { .. } => FailureClass::ExitStatus,
-            Self::ResourceRefused { .. } => FailureClass::ResourceRefusal,
+            Self::ResourceRefused { .. } | Self::Btor2ChannelPropertyResourceRefused { .. } => {
+                FailureClass::ResourceRefusal
+            }
             Self::IncompatibleContract(_) => FailureClass::Compatibility,
             Self::InvalidResponse(_) => FailureClass::Response,
         }
@@ -1259,6 +1370,11 @@ impl fmt::Display for PredicateApiError {
             Self::ResourceRefused { reason } => write!(
                 formatter,
                 "controller plant verification refused by resource policy: {}",
+                reason.as_str()
+            ),
+            Self::Btor2ChannelPropertyResourceRefused { reason } => write!(
+                formatter,
+                "BTOR2 channel property production refused by resource policy: {}",
                 reason.as_str()
             ),
             Self::IncompatibleContract(message) => {
@@ -1589,6 +1705,137 @@ impl RevisionImpactTool {
             .arg(artifact);
         let output = run_bounded(operation, command, self.policy)?;
         parse_revision_impact_summary(output, expected_status, &self.capabilities)
+    }
+}
+
+/// Typed, shell-free client for BTOR2 channel-property CLI v1.
+#[derive(Clone, Debug)]
+pub struct Btor2ChannelPropertyTool {
+    executable: PathBuf,
+    capabilities: Btor2ChannelPropertyCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl Btor2ChannelPropertyTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        let policy = ExecutionPolicy::default()
+            .with_file_limit(btor2_region_property::MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES as u64)?;
+        Self::discover_with_policy(executable, policy)
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("btor2-channel-property-cli-version");
+        let output = run_bounded(OperationKind::DiscoverBtor2ChannelProperty, command, policy)?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_btor2_channel_property_capabilities(&stdout).map_err(|error| {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            PredicateOperationError {
+                error: Box::new(error),
+                metrics: metrics.clone(),
+            }
+        })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &Btor2ChannelPropertyCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Btor2ChannelPropertyProcessSummary, PredicateApiError> {
+        self.certify_observed(files, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_observed(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<Btor2ChannelPropertyProcessSummary>, PredicateOperationError> {
+        self.invoke(
+            OperationKind::CertifyBtor2ChannelProperty,
+            "certify-btor2-channel-properties",
+            "CREATED",
+            files,
+            artifact,
+        )
+    }
+
+    pub fn verify(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Btor2ChannelPropertyProcessSummary, PredicateApiError> {
+        self.verify_observed(files, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<Btor2ChannelPropertyProcessSummary>, PredicateOperationError> {
+        self.invoke(
+            OperationKind::VerifyBtor2ChannelProperty,
+            "verify-btor2-channel-properties",
+            "VERIFIED",
+            files,
+            artifact,
+        )
+    }
+
+    fn invoke(
+        &self,
+        operation: OperationKind,
+        command_name: &str,
+        expected_status: &str,
+        files: &Btor2ChannelPropertyFiles<'_>,
+        artifact: &Path,
+    ) -> Result<Observed<Btor2ChannelPropertyProcessSummary>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg(command_name)
+            .arg(files.model)
+            .arg(files.queries)
+            .arg(files.policy)
+            .arg(artifact);
+        let output = run_bounded(operation, command, self.policy)?;
+        parse_btor2_channel_property_summary(output, expected_status, &self.capabilities)
     }
 }
 
@@ -4776,6 +5023,383 @@ fn parse_revision_impact_capabilities(
     })
 }
 
+fn parse_btor2_channel_property_capabilities(
+    line: &str,
+) -> Result<Btor2ChannelPropertyCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "btor2_channel_property_cli_version",
+        "artifact_version",
+        "query_manifest_version",
+        "policy_version",
+        "max_query_manifest_bytes",
+        "max_policy_bytes",
+        "max_model_bytes",
+        "max_channels",
+        "max_queries",
+        "max_evidence_bytes",
+        "max_artifact_bytes",
+        "max_projected_work",
+        "refusal_exit",
+        "routing",
+        "fallback",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+        "verification",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "BTOR2 channel property capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[13..]
+        != [
+            "static-explicit-or-bitblast",
+            "exact",
+            "none",
+            "reason-v1",
+            "fail-closed",
+            "source-replay",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "BTOR2 channel property route or refusal contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..4]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if versions != [1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "BTOR2 channel property version tuple is unsupported".to_string(),
+        ));
+    }
+    let limits = values[4..11]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 4]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let max_projected_work = canonical_u64(values[11], keys[11])?;
+    let refusal_exit = canonical_usize(values[12], keys[12])?;
+    let expected = [
+        256 * 1024,
+        4096,
+        btor2::MAX_BTOR2_BYTES,
+        btor2_region_extract::MAX_REGION_CHANNELS,
+        btor2_region_property::MAX_CHANNEL_PROPERTY_QUERIES,
+        btor2_region_property::MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+        btor2_region_property::MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+    ];
+    if limits != expected
+        || max_projected_work != btor2_region_property::MAX_CHANNEL_PROPERTY_PROJECTED_WORK
+        || refusal_exit != 3
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "BTOR2 channel property limit tuple is unsupported".to_string(),
+        ));
+    }
+    Ok(Btor2ChannelPropertyCapabilities {
+        cli_version: versions[0],
+        artifact_version: versions[1],
+        query_manifest_version: versions[2],
+        policy_version: versions[3],
+        max_query_manifest_bytes: limits[0],
+        max_policy_bytes: limits[1],
+        max_model_bytes: limits[2],
+        max_channels: limits[3],
+        max_queries: limits[4],
+        max_evidence_bytes: limits[5],
+        max_artifact_bytes: limits[6],
+        max_projected_work,
+        refusal_exit_code: 3,
+    })
+}
+
+fn parse_btor2_channel_property_summary(
+    mut output: ManagedOutput,
+    expected_status: &str,
+    capabilities: &Btor2ChannelPropertyCapabilities,
+) -> Result<Observed<Btor2ChannelPropertyProcessSummary>, PredicateOperationError> {
+    if output.status.code() == Some(capabilities.refusal_exit_code) {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let reason = stderr
+            .strip_prefix("error: btor2-channel-property-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none\n"))
+            .and_then(|value| match value {
+                "query-count" => Some(Btor2ChannelPropertyResourceRefusalReason::QueryCount),
+                "member-count" => Some(Btor2ChannelPropertyResourceRefusalReason::MemberCount),
+                "projected-work" => Some(Btor2ChannelPropertyResourceRefusalReason::ProjectedWork),
+                "evidence-bytes" => Some(Btor2ChannelPropertyResourceRefusalReason::EvidenceBytes),
+                "artifact-bytes" => Some(Btor2ChannelPropertyResourceRefusalReason::ArtifactBytes),
+                _ => None,
+            });
+        if !output.stdout.is_empty() {
+            let error = PredicateApiError::InvalidResponse(
+                "BTOR2 channel property refusal emitted stdout".to_string(),
+            );
+            output.metrics.status = InvocationStatus::Failed(error.failure_class());
+            return Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: output.metrics,
+            });
+        }
+        let Some(reason) = reason else {
+            let error = PredicateApiError::InvalidResponse(
+                "BTOR2 channel property refusal is malformed".to_string(),
+            );
+            output.metrics.status = InvocationStatus::Failed(error.failure_class());
+            return Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: output.metrics,
+            });
+        };
+        let error = PredicateApiError::Btor2ChannelPropertyResourceRefused { reason };
+        output.metrics.status = InvocationStatus::Failed(error.failure_class());
+        return Err(PredicateOperationError {
+            error: Box::new(error),
+            metrics: output.metrics,
+        });
+    }
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<Btor2ChannelPropertyProcessSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "BTOR2 channel property response is not canonical LF text".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let fields = lines
+            .first()
+            .ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "BTOR2 channel property response is empty".to_string(),
+                )
+            })?
+            .split(' ')
+            .collect::<Vec<_>>();
+        let keys = [
+            "status",
+            "cli_version",
+            "artifact_version",
+            "channels",
+            "logical_queries",
+            "proof_members",
+            "reused_queries",
+            "explicit_members",
+            "bitblast_members",
+            "evidence_bytes",
+            "artifact_bytes",
+            "projected_work",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len() + 1
+            || fields.first().copied() != Some("btor2-channel-properties")
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "BTOR2 channel property summary shape is invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(keys)
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != expected_status {
+            return Err(PredicateApiError::InvalidResponse(
+                "BTOR2 channel property status differs from requested operation".to_string(),
+            ));
+        }
+        let cli_version = canonical_u32(values[1], keys[1])?;
+        let artifact_version = canonical_u32(values[2], keys[2])?;
+        let numeric = values[3..11]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 3]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let projected_work = match values[11] {
+            "not-applied" if expected_status == "VERIFIED" => None,
+            value if expected_status == "CREATED" => Some(canonical_u64(value, keys[11])?),
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "BTOR2 channel property projected work differs from operation".to_string(),
+                ));
+            }
+        };
+        let elapsed_micros = canonical_usize(values[12], keys[12])?;
+        if cli_version != capabilities.cli_version
+            || artifact_version != capabilities.artifact_version
+            || numeric[0] == 0
+            || numeric[0] > capabilities.max_channels
+            || numeric[1] == 0
+            || numeric[1] > capabilities.max_queries
+            || numeric[2] == 0
+            || numeric[2] > numeric[1]
+            || numeric[3].checked_add(numeric[2]) != Some(numeric[1])
+            || numeric[4].checked_add(numeric[5]) != Some(numeric[2])
+            || numeric[6] == 0
+            || numeric[6] > capabilities.max_evidence_bytes
+            || numeric[7] == 0
+            || numeric[7] > capabilities.max_artifact_bytes
+            || projected_work
+                .is_some_and(|work| work == 0 || work > capabilities.max_projected_work)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "BTOR2 channel property summary violates advertised dimensions".to_string(),
+            ));
+        }
+        if lines.len() != numeric[1] + 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "BTOR2 channel property result count is inconsistent".to_string(),
+            ));
+        }
+        let mut results = Vec::with_capacity(numeric[1]);
+        for (expected_index, line) in lines[1..].iter().enumerate() {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let result_keys = [
+                "index",
+                "query_id",
+                "channel",
+                "property",
+                "horizon",
+                "answer",
+                "bad_frame",
+                "backend",
+                "solver",
+                "representative_channel",
+                "witness_valuations",
+            ];
+            if fields.len() != result_keys.len() + 1
+                || fields.first().copied() != Some("btor2-channel-property")
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "BTOR2 channel property result shape is invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(result_keys)
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            let index = canonical_usize(values[0], result_keys[0])?;
+            let query_id = canonical_u32(values[1], result_keys[1])?;
+            let channel = canonical_usize(values[2], result_keys[2])?;
+            let property = match values[3] {
+                "output-high" => Btor2ChannelPropertyKind::OutputHigh,
+                "output-low" => Btor2ChannelPropertyKind::OutputLow,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "unknown BTOR2 channel property kind".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_u32(values[4], result_keys[4])?;
+            let answer = match values[5] {
+                "SAFE" => Btor2ChannelPropertyAnswer::Safe,
+                "UNSAFE" => Btor2ChannelPropertyAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "unknown BTOR2 channel property answer".to_string(),
+                    ));
+                }
+            };
+            let bad_frame = if values[6] == "none" {
+                None
+            } else {
+                Some(canonical_u32(values[6], result_keys[6])?)
+            };
+            let backend = match values[7] {
+                "representative-class" => Btor2ChannelPropertyProcessBackend::RepresentativeClass,
+                "direct-exact" => Btor2ChannelPropertyProcessBackend::DirectExact,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "unknown BTOR2 channel property backend".to_string(),
+                    ));
+                }
+            };
+            let solver = match values[8] {
+                "explicit-state" => Btor2ChannelPropertyProcessSolver::ExplicitState,
+                "bitblast-cnf" => Btor2ChannelPropertyProcessSolver::BitblastCnf,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "unknown BTOR2 channel property solver".to_string(),
+                    ));
+                }
+            };
+            let representative_channel = canonical_usize(values[9], result_keys[9])?;
+            let witness_valuations = canonical_usize(values[10], result_keys[10])?;
+            if index != expected_index
+                || channel >= numeric[0]
+                || representative_channel >= numeric[0]
+                || results
+                    .last()
+                    .is_some_and(|previous: &Btor2ChannelPropertyProcessResult| {
+                        previous.query_id >= query_id
+                    })
+                || (answer == Btor2ChannelPropertyAnswer::Safe
+                    && (bad_frame.is_some() || witness_valuations != 0))
+                || (answer == Btor2ChannelPropertyAnswer::Unsafe
+                    && (bad_frame.is_none()
+                        || bad_frame > Some(horizon)
+                        || witness_valuations == 0))
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "BTOR2 channel property result violates semantic invariants".to_string(),
+                ));
+            }
+            results.push(Btor2ChannelPropertyProcessResult {
+                index,
+                query_id,
+                channel,
+                property,
+                horizon,
+                answer,
+                bad_frame,
+                backend,
+                solver,
+                representative_channel,
+                witness_valuations,
+            });
+        }
+        Ok(Btor2ChannelPropertyProcessSummary {
+            artifact_version,
+            channels: numeric[0],
+            logical_queries: numeric[1],
+            proof_members: numeric[2],
+            reused_queries: numeric[3],
+            explicit_members: numeric[4],
+            bitblast_members: numeric[5],
+            evidence_bytes: numeric[6],
+            artifact_bytes: numeric[7],
+            projected_work,
+            elapsed_micros,
+            results,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
 fn parse_revision_impact_summary(
     output: ManagedOutput,
     expected_status: &str,
@@ -7303,6 +7927,28 @@ mod tests {
         assert!(canonical_node_list(&[7, 7]).is_err());
         assert!(canonical_node_list(&[10, 7]).is_err());
         assert_eq!(canonical_node_list(&[7, 10]).unwrap(), "7,10");
+    }
+
+    #[test]
+    fn btor2_channel_property_capability_parser_is_strict_and_fail_closed() {
+        let canonical = "btor2_channel_property_cli_version=1 artifact_version=1 query_manifest_version=1 policy_version=1 max_query_manifest_bytes=262144 max_policy_bytes=4096 max_model_bytes=8388608 max_channels=64 max_queries=4096 max_evidence_bytes=67108864 max_artifact_bytes=69206016 max_projected_work=100000000000 refusal_exit=3 routing=static-explicit-or-bitblast fallback=exact result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed verification=source-replay\n";
+        let parsed = parse_btor2_channel_property_capabilities(canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.max_artifact_bytes, 66 * 1024 * 1024);
+        for hostile in [
+            canonical.replace("artifact_version=1", "artifact_version=2"),
+            canonical.replace("max_channels=64", "max_channels=064"),
+            canonical.replace("max_queries=4096", "max_queries=4095"),
+            canonical.replace("refusal_exit=3", "refusal_exit=2"),
+            canonical.replace("fallback=exact", "fallback=partial"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=SAFE"),
+            canonical.replace("verification=source-replay", "verification=trusted"),
+            canonical.replace('\n', "\r\n"),
+            canonical.trim_end().to_string(),
+            format!("{canonical}unexpected=1\n"),
+        ] {
+            assert!(parse_btor2_channel_property_capabilities(&hostile).is_err());
+        }
     }
 
     #[test]

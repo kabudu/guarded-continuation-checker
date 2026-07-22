@@ -26163,7 +26163,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 );
             }
             println!(
-                "btor2_channel_property_cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} query_manifest_version={BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_VERSION} policy_version={BTOR2_CHANNEL_PROPERTY_POLICY_VERSION} max_query_manifest_bytes={BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES} max_policy_bytes={BTOR2_CHANNEL_PROPERTY_POLICY_MAX_BYTES} max_model_bytes={} max_channels={} max_queries={} max_evidence_bytes={} max_artifact_bytes={} max_projected_work={} routing=static-explicit-or-bitblast fallback=exact unsupported=fail-closed verification=source-replay",
+                "btor2_channel_property_cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} query_manifest_version={BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_VERSION} policy_version={BTOR2_CHANNEL_PROPERTY_POLICY_VERSION} max_query_manifest_bytes={BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES} max_policy_bytes={BTOR2_CHANNEL_PROPERTY_POLICY_MAX_BYTES} max_model_bytes={} max_channels={} max_queries={} max_evidence_bytes={} max_artifact_bytes={} max_projected_work={} refusal_exit=3 routing=static-explicit-or-bitblast fallback=exact result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed verification=source-replay",
                 btor2_region_property::BTOR2_CHANNEL_PROPERTY_PROOF_VERSION,
                 btor2::MAX_BTOR2_BYTES,
                 btor2_region_extract::MAX_REGION_CHANNELS,
@@ -26257,7 +26257,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "VERIFIED"
             };
             println!(
-                "btor2-channel-properties status={status} cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} channels={} logical_queries={} proof_members={} reused_queries={} explicit_members={} bitblast_members={} evidence_bytes={} artifact_bytes={} projected_work={} elapsed_micros={}{}",
+                "btor2-channel-properties status={status} cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} channels={} logical_queries={} proof_members={} reused_queries={} explicit_members={} bitblast_members={} evidence_bytes={} artifact_bytes={} projected_work={} elapsed_micros={}",
                 btor2_region_property::BTOR2_CHANNEL_PROPERTY_PROOF_VERSION,
                 manifest.expected_channels,
                 summary.metrics.logical_queries,
@@ -26272,11 +26272,6 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     |plan| plan.projected_work.to_string()
                 ),
                 started.elapsed().as_micros(),
-                if command == "certify-btor2-channel-properties" {
-                    format!(" output={}", args[4])
-                } else {
-                    String::new()
-                }
             );
             for (index, result) in summary.results.iter().enumerate() {
                 let property = match result.query.property {

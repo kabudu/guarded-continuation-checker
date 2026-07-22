@@ -428,9 +428,11 @@ estimate. A strict
 [self-service file CLI](docs/BTOR2_CHANNEL_PROPERTY_CLI_V1.md) now accepts a
 canonical property manifest and caller resource policy, derives the structural
 admission, produces and independently verifies the complete portfolio, rejects
-symlinks and drift, and never overwrites an output. A typed process client,
-process containment, observability, maintained comparison and portability
-evidence remain open.
+symlinks and drift, and never overwrites an output. The typed shell-free Rust
+client discovers that contract, applies bounded process execution, parses every
+result, and exposes resource refusal without inventing a logical answer.
+Measured process resources, phase observability, maintained comparison and
+portability evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

@@ -102,11 +102,46 @@ CRLF and noncanonical manifests, and symlink substitution. This is simulated
 self-service evidence from the repository authorship boundary, not independent
 operator acceptance.
 
+## Typed Rust process client
+
+`Btor2ChannelPropertyTool` discovers the executable contract and invokes the
+same producer and verifier without a shell. `ExecutionPolicy` applies a
+deadline, stdout and stderr caps, an artifact file limit, Unix process-group
+containment, and a non-macOS Unix address-space limit when configured. Every
+successful aggregate and result field is parsed into
+`Btor2ChannelPropertyProcessSummary`; unknown, missing, reordered,
+noncanonical, or dimensionally inconsistent output fails closed.
+
+```rust,no_run
+use guarded_continuation_checker::{
+    Btor2ChannelPropertyFiles, Btor2ChannelPropertyTool,
+};
+use std::path::Path;
+
+let tool = Btor2ChannelPropertyTool::discover("guarded-continuation-checker")?;
+let files = Btor2ChannelPropertyFiles {
+    model: Path::new("model.btor2"),
+    queries: Path::new("queries.txt"),
+    policy: Path::new("policy.txt"),
+};
+let created = tool.certify(&files, Path::new("result.channel-properties"))?;
+let verified = tool.verify(&files, Path::new("result.channel-properties"))?;
+assert_eq!(created.results, verified.results);
+# Ok::<(), guarded_continuation_checker::PredicateApiError>(())
+```
+
+Valid resource refusal becomes
+`PredicateApiError::Btor2ChannelPropertyResourceRefused` with a typed reason
+and `FailureClass::ResourceRefusal`. It never becomes a SAFE or UNSAFE result.
+The executable typed-client acceptance is:
+
+```console
+cargo test --release --locked --test btor2_channel_property_tool_api
+```
+
 ## Remaining gates
 
-- Add a typed shell-free process client with deadline, output, file, memory,
-  and process-tree controls.
-- Retain per-phase timings and process resource measurements.
+- Retain per-phase timings and measured process resources for the typed client.
 - Reproduce the complete workflow and artifact identity on supported hosts.
 - Run realistic independently sourced properties and obtain external operator
   review.

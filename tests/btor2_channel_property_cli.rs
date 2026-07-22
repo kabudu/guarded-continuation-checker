@@ -68,7 +68,7 @@ fn channel_property_cli_is_versioned_self_service_and_fail_closed() {
     assert!(capabilities.status.success());
     assert_eq!(
         String::from_utf8(capabilities.stdout).unwrap(),
-        "btor2_channel_property_cli_version=1 artifact_version=1 query_manifest_version=1 policy_version=1 max_query_manifest_bytes=262144 max_policy_bytes=4096 max_model_bytes=8388608 max_channels=64 max_queries=4096 max_evidence_bytes=67108864 max_artifact_bytes=69206016 max_projected_work=100000000000 routing=static-explicit-or-bitblast fallback=exact unsupported=fail-closed verification=source-replay\n"
+        "btor2_channel_property_cli_version=1 artifact_version=1 query_manifest_version=1 policy_version=1 max_query_manifest_bytes=262144 max_policy_bytes=4096 max_model_bytes=8388608 max_channels=64 max_queries=4096 max_evidence_bytes=67108864 max_artifact_bytes=69206016 max_projected_work=100000000000 refusal_exit=3 routing=static-explicit-or-bitblast fallback=exact result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed verification=source-replay\n"
     );
 
     let root = fixture();

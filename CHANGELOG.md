@@ -59,7 +59,10 @@
   no-clobber publication, and typed resource refusal. The executable acceptance
   test covers source and query drift, artifact mutation, CRLF and noncanonical
   manifests, symlink substitution, one-unit work refusal, and output collision.
-  A typed bounded process client and process-resource evidence remain open.
+  Add a typed shell-free process client with strict capability and result
+  parsing, deadlines, output and file caps, process-group containment, optional
+  address-space enforcement, invocation metrics, and typed resource refusal.
+  Measured process-resource and portability evidence remain open.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6
