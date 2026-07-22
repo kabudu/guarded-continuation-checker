@@ -520,6 +520,15 @@ specialisation sequentially equivalent. The hosted, closest-system, portable,
 compatibility, and independent-review gates remain open. The top-level
 production status therefore does not change yet.
 
+The revision-impact follow-up now places unchanged UNSAFE, UNSAFE-to-SAFE,
+unchanged SAFE, and SAFE-to-UNSAFE queries into one exact OpenTitan aggregate.
+Two clean productions are byte-identical, and the independent verifier repeats
+all eight scenario results plus deterministic parsing, validation, composition,
+transition, and comparison work. This closes the local four-transition
+mechanism prerequisite. It does not close production readiness: the
+identical-scope maintained baseline, hosted three-platform identity,
+release-build acceptance, and independent review remain open.
+
 The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
 locally. Both cross-revision evidence swaps fail, and the new model needs only
 a 13-byte regenerated trace. GCC's roughly 1.7 MB retained portfolio therefore

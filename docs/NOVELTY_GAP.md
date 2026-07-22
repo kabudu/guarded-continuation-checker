@@ -488,7 +488,11 @@ candidate is the narrower
 [revision impact certificate](REVISION_IMPACT_CERTIFICATE_V1.md): a portable,
 source-bound artifact whose independent checker exhaustively proves complete
 inclusion-minimal invalidating change sets, both-answer replay, and exact
-fail-closed fallback. Its claim remains open and unproven.
+fail-closed fallback. The first public OpenTitan aggregate now preserves all
+four old/new answer classes with byte-identical repeated production and exact
+independent replay. This strengthens the mechanism evidence but does not close
+a novelty row. The same-scope maintained baseline, broader prior-art
+comparison, portability, and independent review remain open.
 
 ## Production-tagged OpenTitan watchdog
 

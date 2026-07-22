@@ -14,7 +14,9 @@ artifact. The first strict file CLI now produces and independently verifies the
 aggregate bundle from old/new component sources, old/new interface contracts,
 and a canonical bounded-query manifest. It uses bounded non-symlink reads and
 atomic no-clobber publication. The public OpenTitan cohort and the remaining
-gates are still open.
+gates are still open. The first public OpenTitan cohort now covers all four old
+and new answer transitions in one deterministic aggregate; its maintained
+same-scope baseline and hosted portability evidence remain open.
 
 The public `RevisionImpactTool` adds a shell-free process boundary with runtime
 deadlines, output limits, file-size limits, process-group containment where
@@ -176,6 +178,11 @@ handling of unsupported inputs. The typed
 Rust client refuses any missing, reordered, noncanonical, or changed field
 before exposing the executable as compatible.
 
+Each successful operation then emits exactly one `transition-v1` line per
+canonical query. The line binds its index, horizon, side, bad-output node, old
+result, and new result. The typed client rejects missing, additional,
+reordered, malformed, or noncanonical transition lines.
+
 ## Predeclared gates
 
 1. **Exactness:** every old, new, and counterfactual result agrees with the
@@ -185,6 +192,8 @@ before exposing the executable as compatible.
    result, and minimal invalidating sets without calling producer logic.
 3. **Both answers:** retained cohorts contain SAFE-to-UNSAFE,
    UNSAFE-to-SAFE, unchanged SAFE, and unchanged UNSAFE queries.
+   The [OpenTitan four-transition cohort](OPENTITAN_PRIM_COUNT_REVISION_IMPACT_V1.md)
+   now passes this local mechanism gate in one aggregate.
 4. **No stale reuse:** changed source, relation, interface, property, ordering,
    or hidden coupling can never be classified as reusable.
 5. **Minimality:** exhaustive bounded enumeration proves every reported

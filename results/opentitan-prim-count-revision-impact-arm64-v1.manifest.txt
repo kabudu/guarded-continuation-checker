@@ -1,0 +1,11 @@
+schema_version=1
+yosys_version=Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159, Release, AppleClang clang++ 21.0.0.21000099)
+gcc_capabilities=revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed
+sha256=b460c1c4d6a4fa7e7df5b441e0a7c57467cfcc7647b76159f7ea0df27fbb9faa file=environment.btor2
+sha256=0619c299fcc7c4621e14eaa0b1a5414114a81cf5c695f22951db77863ac499b0 file=before.btor2
+sha256=cde155337d7013fd0b4ff956631e8389f731990d6995cc257905d85c91257c31 file=after.btor2
+sha256=e72d602914c0aed1aeef7e39dd65059c9716e205cfc071ec9ba342a445f2f094 file=interface.txt
+sha256=5707f8985e4300e3164d2cc0103e4579a45b87246e29b9b259fa9e0aa65fbb6c file=queries.txt
+sha256=8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76 file=first.revision-impact
+sha256=8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76 file=second.revision-impact
+status=complete

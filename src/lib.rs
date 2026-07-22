@@ -670,6 +670,17 @@ pub struct RevisionImpactProcessSummary {
     pub final_transition_checks: usize,
     pub result_comparisons: usize,
     pub elapsed_micros: usize,
+    pub transitions: Vec<RevisionImpactQueryTransition>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionImpactQueryTransition {
+    pub index: usize,
+    pub horizon: u32,
+    pub bad_side: revision_local::ComponentSide,
+    pub bad_output: u64,
+    pub old_result: revision_local::BoundedResult,
+    pub new_result: revision_local::BoundedResult,
 }
 
 /// Machine-discovered limits for proof-carrying controller MTBDD CLI v1.
@@ -4676,6 +4687,7 @@ fn parse_revision_impact_capabilities(
         "max_queries",
         "semantics",
         "work_schema",
+        "query_schema",
         "routing",
         "fallback",
         "unsupported",
@@ -4694,6 +4706,7 @@ fn parse_revision_impact_capabilities(
         != [
             "exact-counterfactual-v1",
             "verification-v1",
+            "transition-v1",
             "none",
             "none",
             "fail-closed",
@@ -4753,12 +4766,19 @@ fn parse_revision_impact_summary(
 ) -> Result<Observed<RevisionImpactProcessSummary>, PredicateOperationError> {
     let (stdout, mut metrics) = successful_stdout(output)?;
     let parsed = (|| -> Result<RevisionImpactProcessSummary, PredicateApiError> {
-        if stdout.contains('\r') || !stdout.ends_with('\n') || stdout.lines().count() != 1 {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
             return Err(PredicateApiError::InvalidResponse(
-                "revision impact summary line is not canonical".to_string(),
+                "revision impact response is not canonical LF text".to_string(),
             ));
         }
-        let fields = stdout.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let fields = lines
+            .first()
+            .ok_or_else(|| {
+                PredicateApiError::InvalidResponse("revision impact response is empty".to_string())
+            })?
+            .split(' ')
+            .collect::<Vec<_>>();
         if fields.len() != 18 || fields.first().copied() != Some("btor2-revision-impact") {
             return Err(PredicateApiError::InvalidResponse(
                 "revision impact summary shape is invalid".to_string(),
@@ -4820,6 +4840,77 @@ fn parse_revision_impact_summary(
                 "revision impact summary violates advertised dimensions".to_string(),
             ));
         }
+        if lines.len() != numeric[1] + 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "revision impact query transition count is incomplete".to_string(),
+            ));
+        }
+        let query_keys = [
+            "index",
+            "horizon",
+            "bad_side",
+            "bad_output",
+            "old_result",
+            "new_result",
+        ];
+        let mut transitions = Vec::with_capacity(numeric[1]);
+        let mut previous_key = None;
+        for (index, line) in lines[1..].iter().enumerate() {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            if fields.len() != 7 || fields.first().copied() != Some("btor2-revision-impact-query") {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query transition shape is invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(query_keys)
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if canonical_usize(values[0], query_keys[0])? != index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query transition index is noncanonical".to_string(),
+                ));
+            }
+            let horizon = canonical_u32(values[1], query_keys[1])?;
+            let (bad_side, side_key) = match values[2] {
+                "left" => (revision_local::ComponentSide::Left, 0_u8),
+                "right" => (revision_local::ComponentSide::Right, 1_u8),
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "revision impact query side is invalid".to_string(),
+                    ));
+                }
+            };
+            let bad_output = canonical_u64(values[3], query_keys[3])?;
+            if bad_output == 0 {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query output is zero".to_string(),
+                ));
+            }
+            let key = (horizon, side_key, bad_output);
+            if previous_key.is_some_and(|previous| previous >= key) {
+                return Err(PredicateApiError::InvalidResponse(
+                    "revision impact query transitions are not strictly ordered".to_string(),
+                ));
+            }
+            previous_key = Some(key);
+            let parse_result = |value| match value {
+                "SAFE" => Ok(revision_local::BoundedResult::Safe),
+                "UNSAFE" => Ok(revision_local::BoundedResult::Unsafe),
+                _ => Err(PredicateApiError::InvalidResponse(
+                    "revision impact query result is invalid".to_string(),
+                )),
+            };
+            transitions.push(RevisionImpactQueryTransition {
+                index,
+                horizon,
+                bad_side,
+                bad_output,
+                old_result: parse_result(values[4])?,
+                new_result: parse_result(values[5])?,
+            });
+        }
         Ok(RevisionImpactProcessSummary {
             impact_version,
             atoms: numeric[0],
@@ -4837,6 +4928,7 @@ fn parse_revision_impact_summary(
             final_transition_checks: numeric[12],
             result_comparisons: numeric[13],
             elapsed_micros: numeric[14],
+            transitions,
         })
     })();
     match parsed {
@@ -7100,7 +7192,7 @@ mod tests {
 
     #[test]
     fn revision_impact_capability_parser_is_strict_and_fail_closed() {
-        let canonical = "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 routing=none fallback=none unsupported=fail-closed\n";
+        let canonical = "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed\n";
         let parsed = parse_revision_impact_capabilities(canonical).unwrap();
         assert_eq!(parsed.cli_version, 1);
         assert_eq!(parsed.max_bundle_bytes, 64 * 1024 * 1024);
@@ -7110,6 +7202,7 @@ mod tests {
             canonical.replace("max_queries=32", "max_queries=33"),
             canonical.replace("routing=none", "routing=heuristic"),
             canonical.replace("work_schema=verification-v1", "work_schema=timing-v1"),
+            canonical.replace("query_schema=transition-v1", "query_schema=summary-v1"),
             canonical.replace("fallback=none", "fallback=exact"),
             canonical.replace("unsupported=fail-closed", "unsupported=ignore"),
             canonical.replace('\n', "\r\n"),

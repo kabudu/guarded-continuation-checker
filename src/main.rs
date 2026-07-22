@@ -25932,7 +25932,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let policy = revision_impact::RevisionImpactPolicy::default();
             println!(
-                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 work_schema=verification-v1 routing=none fallback=none unsupported=fail-closed",
+                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed",
                 revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
                 policy.max_input_bytes,
                 policy.max_evidence_bytes,
@@ -27983,6 +27983,26 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 work.result_comparisons,
                 started.elapsed().as_micros(),
             );
+            let new_mask = summary.combinations - 1;
+            for (index, query) in queries.iter().enumerate() {
+                let old = bundle.impact.observations[index];
+                let new = bundle.impact.observations[new_mask * summary.queries + index];
+                let side = match query.bad_side {
+                    revision_local::ComponentSide::Left => "left",
+                    revision_local::ComponentSide::Right => "right",
+                };
+                let result = |value| match value {
+                    revision_local::BoundedResult::Safe => "SAFE",
+                    revision_local::BoundedResult::Unsafe => "UNSAFE",
+                };
+                println!(
+                    "btor2-revision-impact-query index={index} horizon={} bad_side={side} bad_output={} old_result={} new_result={}",
+                    query.horizon,
+                    query.bad_output,
+                    result(old.result),
+                    result(new.result),
+                );
+            }
             Ok(true)
         }
         "check-btor2-revision-retained-left" => {

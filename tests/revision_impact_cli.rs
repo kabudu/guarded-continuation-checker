@@ -78,7 +78,7 @@ fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
     assert!(capabilities.status.success());
     assert_eq!(
         String::from_utf8(capabilities.stdout).unwrap(),
-        "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 routing=none fallback=none unsupported=fail-closed\n"
+        "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed\n"
     );
     assert_eq!(
         Command::new(BINARY)
@@ -99,6 +99,17 @@ fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
     assert!(stdout.starts_with("btor2-revision-impact status=CREATED impact_version=1 "));
     assert!(stdout.contains("atoms=3 queries=2 combinations=8"));
     assert!(stdout.contains("evidence_members=16 certificate_bytes="));
+    let transitions = stdout
+        .lines()
+        .filter(|line| line.starts_with("btor2-revision-impact-query "))
+        .collect::<Vec<_>>();
+    assert_eq!(transitions.len(), 2);
+    assert!(transitions[0].starts_with(
+        "btor2-revision-impact-query index=0 horizon=0 bad_side=right bad_output=10 "
+    ));
+    assert!(transitions[1].starts_with(
+        "btor2-revision-impact-query index=1 horizon=1 bad_side=right bad_output=10 "
+    ));
     assert!(fs::read(&artifact).unwrap().starts_with(b"GCCRIB01"));
 
     let verified = invoke(&root, "verify-btor2-revision-impact", &queries, &artifact);
@@ -230,6 +241,13 @@ fn revision_impact_cli_admits_the_query_limit_and_refuses_one_beyond_it() {
     assert!(boundary_stdout.contains("atoms=1 queries=32 combinations=2"));
     assert!(boundary_stdout.contains("evidence_members=64"));
     assert!(boundary_stdout.contains("semantic_replays=64 component_validations=128"));
+    assert_eq!(
+        boundary_stdout
+            .lines()
+            .filter(|line| line.starts_with("btor2-revision-impact-query "))
+            .count(),
+        32
+    );
 
     fs::write(root.join("queries-33.txt"), manifest(33)).unwrap();
     let refused_artifact = root.join("refused.revision-impact");

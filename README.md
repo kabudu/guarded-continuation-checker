@@ -318,9 +318,12 @@ derives every inclusion-minimal invalidating set, and binds every observation
 to independently checkable revision-local evidence. A strict research CLI and
 typed bounded Rust process client now create and verify the aggregate file
 without per-formula calibration. Machine-readable discovery pins the exact
-semantics, limits, and fail-closed no-fallback contract. The four-transition
-public cohort, maintained baseline, and cross-platform identity gates remain
-open, so this is not yet part of the production support profile.
+semantics, limits, fail-closed no-fallback contract, and typed old/new query
+transitions. The [public OpenTitan four-transition cohort](docs/OPENTITAN_PRIM_COUNT_REVISION_IMPACT_V1.md)
+now preserves unchanged UNSAFE, UNSAFE-to-SAFE, unchanged SAFE, and
+SAFE-to-UNSAFE in one byte-identical exact bundle. The maintained baseline and
+cross-platform identity gates remain open, so this is not yet part of the
+production support profile.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

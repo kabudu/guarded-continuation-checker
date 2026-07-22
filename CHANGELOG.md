@@ -55,6 +55,13 @@
   these counters describe logical work and never substitute wall time. File-CLI
   tests admit the inclusive 32-query boundary and refuse query 33, oversized
   manifests, noncanonical text, and manifest symlinks without partial output.
+- Add strict per-query `transition-v1` output and typed parsing for old and new
+  SAFE or UNSAFE results. Retain the first public OpenTitan `prim_count`
+  revision-impact cohort spanning unchanged UNSAFE, UNSAFE-to-SAFE, unchanged
+  SAFE, and SAFE-to-UNSAFE in one exact bundle. Two clean productions emit the
+  same 56,632,691-byte certificate and SHA-256, and independent verification
+  repeats all eight semantic results and deterministic work counters. The
+  identical-scope maintained-tool and portable-host gates remain open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,
