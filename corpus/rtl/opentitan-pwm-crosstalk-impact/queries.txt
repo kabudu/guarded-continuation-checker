@@ -1,0 +1,6 @@
+gcc-btor2-revision-impact-queries-v1
+0,right,1004
+4,right,1000
+4,right,1001
+4,right,1002
+4,right,1003

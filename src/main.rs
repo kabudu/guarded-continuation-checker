@@ -75,7 +75,7 @@ const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION: u32 = 1;
 const SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES: usize = 64 * 1024;
-const REVISION_IMPACT_CLI_VERSION: u32 = 1;
+const REVISION_IMPACT_CLI_VERSION: u32 = 2;
 const REVISION_IMPACT_QUERY_MANIFEST_VERSION: u32 = 1;
 const REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES: usize = 16 * 1024;
 
@@ -25932,7 +25932,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let policy = revision_impact::RevisionImpactPolicy::default();
             println!(
-                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed",
+                "revision_impact_cli_version={REVISION_IMPACT_CLI_VERSION} impact_version={} query_manifest_version={REVISION_IMPACT_QUERY_MANIFEST_VERSION} max_query_manifest_bytes={REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES} max_input_bytes={} max_evidence_bytes={} max_bundle_bytes={} max_atoms={} max_combinations={} max_queries={} semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-semantic-set-v1 routing=none fallback=none unsupported=fail-closed",
                 revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
                 policy.max_input_bytes,
                 policy.max_evidence_bytes,
@@ -27956,6 +27956,12 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     &input, &bundle, policy,
                 )
                 .map_err(|error| error.to_string())?;
+            let semantic_sets =
+                revision_impact::derive_minimal_semantic_change_sets(&bundle.impact)
+                    .map_err(|error| error.to_string())?;
+            if semantic_sets.len() != summary.minimal_semantic_change_sets {
+                return Err("revision impact semantic-change count mismatch".to_string());
+            }
             if command == "check-btor2-revision-impact" {
                 write_new_certificate(Path::new(&args[10]), &encoded)?;
             }
@@ -27965,7 +27971,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "VERIFIED"
             };
             println!(
-                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} evidence_members={} certificate_bytes={} parsed_evidence_bytes={} semantic_replays={} component_validations={} composed_pair_checks={} final_transition_checks={} result_comparisons={} elapsed_micros={}",
+                "btor2-revision-impact status={status} impact_version={} atoms={} queries={} combinations={} reusable_observations={} invalidated_observations={} minimal_invalidating_sets={} minimal_semantic_change_sets={} evidence_members={} certificate_bytes={} parsed_evidence_bytes={} semantic_replays={} component_validations={} composed_pair_checks={} final_transition_checks={} result_comparisons={} elapsed_micros={}",
                 revision_impact::REVISION_IMPACT_CERTIFICATE_VERSION,
                 summary.atoms,
                 summary.queries,
@@ -27973,6 +27979,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 summary.reusable_observations,
                 summary.invalidated_observations,
                 summary.minimal_invalidating_sets,
+                summary.minimal_semantic_change_sets,
                 bundle.revision_evidence.len(),
                 encoded.len(),
                 work.parsed_evidence_bytes,
@@ -27984,6 +27991,10 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 started.elapsed().as_micros(),
             );
             let new_mask = summary.combinations - 1;
+            let result = |value| match value {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
             for (index, query) in queries.iter().enumerate() {
                 let old = bundle.impact.observations[index];
                 let new = bundle.impact.observations[new_mask * summary.queries + index];
@@ -27991,16 +28002,21 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     revision_local::ComponentSide::Left => "left",
                     revision_local::ComponentSide::Right => "right",
                 };
-                let result = |value| match value {
-                    revision_local::BoundedResult::Safe => "SAFE",
-                    revision_local::BoundedResult::Unsafe => "UNSAFE",
-                };
                 println!(
                     "btor2-revision-impact-query index={index} horizon={} bad_side={side} bad_output={} old_result={} new_result={}",
                     query.horizon,
                     query.bad_output,
                     result(old.result),
                     result(new.result),
+                );
+            }
+            for set in semantic_sets {
+                println!(
+                    "btor2-revision-impact-semantic-set query_index={} changed_mask={} baseline_result={} changed_result={}",
+                    set.query_index,
+                    set.changed_mask,
+                    result(set.baseline_result),
+                    result(set.changed_result),
                 );
             }
             Ok(true)

@@ -78,7 +78,7 @@ fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
     assert!(capabilities.status.success());
     assert_eq!(
         String::from_utf8(capabilities.stdout).unwrap(),
-        "revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed\n"
+        "revision_impact_cli_version=2 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-semantic-set-v1 routing=none fallback=none unsupported=fail-closed\n"
     );
     assert_eq!(
         Command::new(BINARY)
@@ -104,6 +104,7 @@ fn revision_impact_cli_is_self_service_exact_and_fail_closed() {
         .filter(|line| line.starts_with("btor2-revision-impact-query "))
         .collect::<Vec<_>>();
     assert_eq!(transitions.len(), 2);
+    assert!(stdout.contains("minimal_semantic_change_sets="));
     assert!(transitions[0].starts_with(
         "btor2-revision-impact-query index=0 horizon=0 bad_side=right bad_output=10 "
     ));
@@ -248,6 +249,7 @@ fn revision_impact_cli_admits_the_query_limit_and_refuses_one_beyond_it() {
             .count(),
         32
     );
+    assert!(boundary_stdout.contains("minimal_semantic_change_sets="));
 
     fs::write(root.join("queries-33.txt"), manifest(33)).unwrap();
     let refused_artifact = root.join("refused.revision-impact");

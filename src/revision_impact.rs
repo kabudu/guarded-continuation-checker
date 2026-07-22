@@ -84,6 +84,16 @@ pub struct MinimalInvalidatingSet {
     pub changed_mask: u16,
 }
 
+/// Inclusion-minimal changed-atom set whose bounded answer differs from the
+/// unchanged baseline answer for one query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MinimalSemanticChangeSet {
+    pub query_index: u8,
+    pub changed_mask: u16,
+    pub baseline_result: BoundedResult,
+    pub changed_result: BoundedResult,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RevisionImpactCertificate {
     pub atoms: Vec<ImpactAtom>,
@@ -101,6 +111,7 @@ pub struct RevisionImpactSummary {
     pub reusable_observations: usize,
     pub invalidated_observations: usize,
     pub minimal_invalidating_sets: usize,
+    pub minimal_semantic_change_sets: usize,
 }
 
 /// Deterministic work independently observed while checking an aggregate
@@ -197,6 +208,17 @@ where
         }
     }
     Ok(summary(certificate))
+}
+
+/// Derive the smallest atom combinations that actually change each query's
+/// bounded answer. This is deliberately distinct from evidence invalidation:
+/// a source change can make cached evidence non-reusable without changing the
+/// query result.
+pub fn derive_minimal_semantic_change_sets(
+    certificate: &RevisionImpactCertificate,
+) -> Result<Vec<MinimalSemanticChangeSet>, RevisionImpactError> {
+    validate_certificate(certificate)?;
+    Ok(derive_semantic_change_sets(certificate))
 }
 
 /// Produce every admitted old/new combination through the existing exact
@@ -851,6 +873,37 @@ fn derive_minimal_sets(
     Ok(sets)
 }
 
+fn derive_semantic_change_sets(
+    certificate: &RevisionImpactCertificate,
+) -> Vec<MinimalSemanticChangeSet> {
+    let combinations = 1usize << certificate.atoms.len();
+    let query_count = certificate.queries.len();
+    let mut sets = Vec::new();
+    for query_index in 0..query_count {
+        let baseline_result = certificate.observations[query_index].result;
+        for mask in 1..combinations {
+            let changed_result = certificate.observations[mask * query_count + query_index].result;
+            if changed_result == baseline_result {
+                continue;
+            }
+            let has_changing_proper_subset = (1..mask).any(|candidate| {
+                candidate & mask == candidate
+                    && certificate.observations[candidate * query_count + query_index].result
+                        != baseline_result
+            });
+            if !has_changing_proper_subset {
+                sets.push(MinimalSemanticChangeSet {
+                    query_index: query_index as u8,
+                    changed_mask: mask as u16,
+                    baseline_result,
+                    changed_result,
+                });
+            }
+        }
+    }
+    sets
+}
+
 fn support_closure(atoms: &[ImpactAtom], support: &[u8]) -> usize {
     let mut closure = 0usize;
     for index in support {
@@ -1019,6 +1072,7 @@ fn summary(certificate: &RevisionImpactCertificate) -> RevisionImpactSummary {
         reusable_observations,
         invalidated_observations: certificate.observations.len() - reusable_observations,
         minimal_invalidating_sets: certificate.minimal_invalidating_sets.len(),
+        minimal_semantic_change_sets: derive_semantic_change_sets(certificate).len(),
     }
 }
 

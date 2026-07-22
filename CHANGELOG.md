@@ -67,7 +67,7 @@
   independently validate every witness or trace. Their complete 2,658-byte
   model-plus-evidence package is about 21,306.5 times smaller than GCC's
   56,632,691-byte aggregate. GCC source-through-production and checker peak RSS
-  are about 17.7 and 57.3 times larger. GCC also takes 2.95 seconds from
+  are about 17.7 and 57.3 times larger. GCC also takes 3.03 seconds from
   synthesis through production versus 1.81 seconds for the maintained route.
   This closes the local semantic, transfer, evidence-checking, peak-memory, and
   total producer-time slices with a strong negative result. The apparent GCC
@@ -86,6 +86,14 @@
   deterministic production, independent replay, hostile drift, maintained
   proof-producing baseline, resource, and hosted release-build gates before
   extracting or measuring the fixture.
+- Implement the OpenTitan PWM two-atom cohort from specialised, source-digested
+  SystemVerilog and reproducible pinned-Yosys BTOR2. Add an exact public API
+  distinction between minimal evidence-invalidating sets and minimal semantic
+  answer-changing sets, plus machine-readable CLI v2 output and strict typed
+  process parsing. The four-combination matrix proves separate `{core}` and
+  `{channel}` fixes and a joint `{core, channel}` regression while preserving
+  unchanged SAFE and UNSAFE controls. Two clean local productions emit the
+  same 128,768-byte aggregate; maintained and hosted gates remain open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

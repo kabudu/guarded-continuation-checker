@@ -493,10 +493,20 @@ four old/new answer classes with byte-identical repeated production and exact
 independent replay. The same-scope rIC3 and Certifaiger baseline agrees on every
 answer but is about 21,306.5 times smaller in model-plus-evidence bytes and uses
 far less peak memory. This strengthens the integrity mechanism while further
-weakening any product-efficiency distinction. GCC is also about 1.63 times
+weakening any product-efficiency distinction. GCC is also about 1.67 times
 slower from synthesis through certificate production. Broader prior-art
 comparison and independent review remain open. Three-platform identity passes
 for the frozen certificate fixture, but no novelty row closes.
+
+The larger OpenTitan PWM crosstalk cohort adds a narrower, materially different
+capability: GCC now separates source changes that merely invalidate cached
+evidence from inclusion-minimal atom combinations that actually change a
+bounded SAFE/UNSAFE answer. Its complete four-combination table identifies
+core-only mask `1`, channel-only mask `2`, and joint mask `3` for three distinct
+properties, with independent replay rather than learned attribution. This is a
+credible mechanism distinction, not yet a novelty conclusion. Closest-system
+comparison, maintained cost, broader subsystem evidence, and independent
+review remain open.
 
 ## Production-tagged OpenTitan watchdog
 

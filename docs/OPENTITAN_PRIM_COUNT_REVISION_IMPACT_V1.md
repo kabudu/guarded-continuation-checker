@@ -56,7 +56,8 @@ and work fields. Independent verification reports:
 - eight result comparisons.
 
 No route or fallback is available for this command. Every query transition is
-reported through the strict `transition-v1` response schema and parsed by the
+reported through the strict `transition-semantic-set-v1` response schema and
+parsed by the
 typed `RevisionImpactTool` client.
 
 ## Reproduction
@@ -90,14 +91,14 @@ transition classes agree with GCC.
 The eight selected models total 1,748 bytes and their evidence totals 910 bytes. The
 complete maintained package is therefore 2,658 bytes. GCC's 56,632,691-byte
 aggregate is about 21,306.5 times larger. GCC's source-through-production path
-peaks at 324,829,184 bytes and independent checking at 270,598,144 bytes. The
+peaks at 324,780,032 bytes and independent checking at 270,581,760 bytes. The
 maintained route's source-through-production path peaks at 18,317,312 bytes,
 and its largest Certifaiger checker job at 4,722,688 bytes. The current GCC
 peaks are therefore about 17.7 and 57.3 times larger.
 
-Pinned Yosys synthesis plus GCC certificate production takes 2.95 seconds. The
-same exact-scope maintained route takes 1.81 seconds, making GCC about 1.63
-times slower on this small cohort. GCC verification takes 0.77 seconds and the
+Pinned Yosys synthesis plus GCC certificate production takes 3.03 seconds. The
+same exact-scope maintained route takes 1.81 seconds, making GCC about 1.67
+times slower on this small cohort. GCC verification takes 0.79 seconds and the
 maintained evidence checks take 1.943 seconds, but the maintained observation
 includes eight separate network-disabled Docker launches. The checker process
 boundaries differ, so the apparent GCC checker advantage is not used for a

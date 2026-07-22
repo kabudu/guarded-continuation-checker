@@ -2,8 +2,10 @@
 
 ## Status
 
-Predeclared before fixture extraction, implementation, or measurement. No
-result is accepted yet.
+Predeclared before fixture extraction, implementation, or measurement. The
+local two-atom mechanism now passes with a frozen semantic explanation. The
+maintained baseline, resource comparison, hostile-drift matrix, and hosted
+release-build gates remain open.
 
 ## Public revision
 
@@ -111,3 +113,40 @@ advances a narrower research distinction only if the joint property truly
 requires both authentic atoms and the closest maintained route does not already
 provide an equivalent source-bound joint-change explanation at lower total
 cost. The experiment is retained if it is negative.
+
+## First local mechanism result
+
+Pinned Yosys commit `b8e7da6f40ae8f552c116bf6c359b07c6533e159`
+generates byte-identical models from two clean scratch directories. GCC creates
+a byte-identical 128,768-byte aggregate with SHA-256
+`e788c497b514472db64fd79fd5fa319f03abf257a3cd656c96a2eb73a44678b3`.
+Independent verification replays all 20 observations across two atoms, four
+combinations, and five queries.
+
+The complete result matrix, in mask-major order, is:
+
+| Mask | Impossible control | Core-only | Channel-only | Joint | Reset control |
+| --- | --- | --- | --- | --- | --- |
+| `0` old/old | UNSAFE | UNSAFE | UNSAFE | UNSAFE | SAFE |
+| `1` new core | UNSAFE | SAFE | UNSAFE | UNSAFE | SAFE |
+| `2` new channel | UNSAFE | UNSAFE | SAFE | UNSAFE | SAFE |
+| `3` both new | UNSAFE | SAFE | SAFE | SAFE | SAFE |
+
+The proof-carried minimal semantic-change sets are exactly:
+
+- query 1: mask `1`, `core-clear` only;
+- query 2: mask `2`, `channel-output` only;
+- query 3: mask `3`, both connected atoms.
+
+This revealed and corrected an important API ambiguity. Evidence invalidation
+and semantic answer change are not the same. CLI v2 and the public Rust API now
+report `minimal_invalidating_sets` for stale evidence separately from
+`minimal_semantic_change_sets` for actual SAFE/UNSAFE transitions. The latter
+is derived from the complete independently replayed table rather than a
+heuristic attribution model.
+
+An earlier extraction probe retained the legitimate initial clear but omitted
+the channel's restart before the unrelated write. It consequently produced no
+expected core or joint transition. The corrected source explicitly retains
+that restart in the documented GCC scaffolding boundary; no query identifier
+or horizon was changed after the failed probe.

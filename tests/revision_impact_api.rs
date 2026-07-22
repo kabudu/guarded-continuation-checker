@@ -2,10 +2,11 @@ use guarded_continuation_checker::revision_impact::{
     ImpactAtom, ImpactAtomKind, ImpactObservation, ImpactQuery, MinimalInvalidatingSet,
     RevisionImpactError, RevisionImpactPolicy, TwoComponentRevisionImpactInput,
     decode_revision_impact_certificate, decode_two_component_revision_impact_bundle,
-    encode_revision_impact_certificate, encode_two_component_revision_impact_bundle,
-    produce_revision_impact_certificate, produce_two_component_revision_impact,
-    produce_two_component_revision_impact_with_policy, verify_revision_impact_with,
-    verify_two_component_revision_impact, verify_two_component_revision_impact_observed,
+    derive_minimal_semantic_change_sets, encode_revision_impact_certificate,
+    encode_two_component_revision_impact_bundle, produce_revision_impact_certificate,
+    produce_two_component_revision_impact, produce_two_component_revision_impact_with_policy,
+    verify_revision_impact_with, verify_two_component_revision_impact,
+    verify_two_component_revision_impact_observed,
     verify_two_component_revision_impact_with_policy,
 };
 use guarded_continuation_checker::revision_local::{
@@ -136,6 +137,16 @@ fn downstream_client_can_produce_encode_decode_and_independently_verify() {
     assert_eq!(summary.queries, 2);
     assert_eq!(summary.combinations, 8);
     assert_eq!(summary.minimal_invalidating_sets, 3);
+    let semantic_sets = derive_minimal_semantic_change_sets(&decoded).unwrap();
+    assert_eq!(semantic_sets.len(), 2);
+    assert_eq!(
+        (semantic_sets[0].query_index, semantic_sets[0].changed_mask),
+        (0, 1)
+    );
+    assert_eq!(
+        (semantic_sets[1].query_index, semantic_sets[1].changed_mask),
+        (1, 4)
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 schema_version=2
 yosys_version=Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159, Release, AppleClang clang++ 21.0.0.21000099)
-gcc_capabilities=revision_impact_cli_version=1 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-v1 routing=none fallback=none unsupported=fail-closed
+gcc_capabilities=revision_impact_cli_version=2 impact_version=1 query_manifest_version=1 max_query_manifest_bytes=16384 max_input_bytes=67108864 max_evidence_bytes=16777216 max_bundle_bytes=67108864 max_atoms=8 max_combinations=256 max_queries=32 semantics=exact-counterfactual-v1 work_schema=verification-v1 query_schema=transition-semantic-set-v1 routing=none fallback=none unsupported=fail-closed
 timing_scope=source-synthesis-plus-certificate-production
 memory_scope=max-native-synthesis-or-certificate-process
 sha256=b460c1c4d6a4fa7e7df5b441e0a7c57467cfcc7647b76159f7ea0df27fbb9faa file=environment.btor2

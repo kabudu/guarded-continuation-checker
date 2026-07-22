@@ -325,10 +325,18 @@ SAFE-to-UNSAFE in one byte-identical exact bundle. Qualified rIC3 and
 Certifaiger agree on all eight scenario answers, but their complete package is
 about 21,306.5 times smaller. The baseline therefore falsifies current artifact
 efficiency, and its producer/checker jobs also use substantially less peak
-memory. GCC is also about 1.63 times slower from synthesis through production
+memory. GCC is also about 1.67 times slower from synthesis through production
 on this cohort. A frozen certificate has identical bytes and semantics on
 hosted Linux, macOS, and Windows. Larger multi-atom product evidence remains
 open, so this is not yet part of the production support profile.
+
+The larger [OpenTitan PWM crosstalk cohort](docs/OPENTITAN_PWM_CROSSTALK_REVISION_IMPACT_V1.md)
+now separates evidence invalidation from actual semantic impact. Across two
+connected authentic source changes, GCC derives a core-only fix, a
+channel-only fix, and a joint regression that becomes SAFE only when both
+atoms change. The explanation comes from complete independently replayed
+counterfactuals, not a learned attribution score. Maintained-tool, resource,
+hostile-drift, and hosted release-build gates remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

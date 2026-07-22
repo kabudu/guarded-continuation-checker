@@ -181,10 +181,12 @@ handling of unsupported inputs. The typed
 Rust client refuses any missing, reordered, noncanonical, or changed field
 before exposing the executable as compatible.
 
-Each successful operation then emits exactly one `transition-v1` line per
-canonical query. The line binds its index, horizon, side, bad-output node, old
-result, and new result. The typed client rejects missing, additional,
-reordered, malformed, or noncanonical transition lines.
+Each successful operation then emits exactly one transition line per canonical
+query and one semantic-set line per minimal answer-changing atom set. A
+transition binds its index, horizon, side, bad-output node, old result, and new
+result. A semantic set binds its query index, changed mask, baseline result,
+and changed result. The typed client rejects missing, additional, reordered,
+malformed, or noncanonical lines.
 
 ## Predeclared gates
 
