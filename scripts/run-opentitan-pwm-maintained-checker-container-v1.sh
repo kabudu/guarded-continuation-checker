@@ -68,4 +68,3 @@ done
 if (( ${#pids[@]} > 0 )); then
   wait_batch
 fi
-

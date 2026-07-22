@@ -513,8 +513,8 @@ source-bound aggregate. Its 15,479-byte model-plus-evidence package is about
 arm64 trials put GCC's median source-through-answer time at 0.09 seconds versus
 4.84 seconds for 20 isolated maintained jobs. A predeclared ten-trial control
 then removes per-job container startup. The maintained route falls to 0.89
-seconds sequentially and 0.82 seconds at fixed four-way parallelism, preserving
-GCC advantages of about 9.89 and 9.11 times but showing that most of the earlier
+seconds sequentially and 0.81 seconds at fixed four-way parallelism, preserving
+GCC advantages of about 9.89 and 9.00 times but showing that most of the earlier
 ratio was infrastructure overhead. This is evidence for a narrower shared-model
 orchestration advantage, not a novel algorithm. A true persistent-service
 baseline, broader subsystem evidence, a tighter closest-system comparison, and

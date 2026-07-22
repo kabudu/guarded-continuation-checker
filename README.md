@@ -342,7 +342,7 @@ Certifaiger agree on all 20 results and validate every separate artifact. Their
 so artifact efficiency is currently negative. Against 20 isolated maintained
 jobs, GCC is about 53.78 times faster from source through answer. A controlled
 follow-up removes per-job container startup: GCC remains about 9.89 times
-faster than single-container sequential orchestration and 9.11 times faster
+faster than single-container sequential orchestration and 9.00 times faster
 than fixed four-way parallel orchestration. All ten follow-up trials preserve
 the exact model, evidence, and answer sets. Most of the original ratio was
 therefore container-launch overhead, while a narrower shared-model

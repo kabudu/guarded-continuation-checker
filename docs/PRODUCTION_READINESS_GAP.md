@@ -545,8 +545,8 @@ trials nevertheless show a 0.09-second GCC median from source through answer,
 versus 4.84 seconds for 20 isolated maintained jobs. The predeclared
 single-container follow-up passes all ten trials with identical models,
 evidence, and answers. Its sequential and fixed four-way parallel medians are
-0.89 and 0.82 seconds respectively, leaving narrower GCC advantages of about
-9.89 and 9.11 times. Most of the original ratio was container-launch overhead.
+0.89 and 0.81 seconds respectively, leaving narrower GCC advantages of about
+9.89 and 9.00 times. Most of the original ratio was container-launch overhead.
 The new synthesis-dominated producer-path peak is about 22.6 MB versus GCC's
 retained 15.9 MB, while aggregate parallel memory remains unmeasured. The exact
 upstream patch and nine-case hostile-drift matrix pass. Hosted Linux

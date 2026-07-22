@@ -11,8 +11,8 @@
   checking, exact cohort hashes, and a threshold-free reporting rule.
 - Qualify all ten predeclared single-container trials without selective reruns.
   Sequential and four-way parallel source-through-producer medians are 0.89
-  and 0.82 seconds versus GCC's matched 0.09 seconds, reducing the comparison
-  from 53.78 times against isolated containers to about 9.89 and 9.11 times.
+  and 0.81 seconds versus GCC's matched 0.09 seconds, reducing the comparison
+  from 53.78 times against isolated containers to about 9.89 and 9.00 times.
   Retain the identical model and evidence hashes and disclose that most of the
   earlier ratio was container-launch overhead.
 

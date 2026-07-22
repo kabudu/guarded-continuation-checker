@@ -93,6 +93,8 @@ median_for() {
   printf 'trials_sha256=%s\n' "$(sha256_file "$workdir/trials.csv")"
   printf 'summary_sha256=%s\n' "$(sha256_file "$workdir/summary.csv")"
   printf 'harness_sha256=%s\n' "$(sha256_file "$repo/scripts/benchmark-opentitan-pwm-single-container-baseline-v1.sh")"
+  printf 'producer_runner_sha256=%s\n' "$(sha256_file "$repo/scripts/run-opentitan-pwm-maintained-producer-container-v1.sh")"
+  printf 'checker_runner_sha256=%s\n' "$(sha256_file "$repo/scripts/run-opentitan-pwm-maintained-checker-container-v1.sh")"
   printf 'matrix_runner_sha256=%s\n' "$(sha256_file "$repo/scripts/run-opentitan-pwm-single-container-matrix-v1.sh")"
   printf 'status=qualified-maintained-single-container-matrix\n'
 } >"$workdir/manifest.txt"

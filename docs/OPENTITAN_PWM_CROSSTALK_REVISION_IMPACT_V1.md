@@ -194,9 +194,9 @@ The subsequent
 [single-container maintained baseline](OPENTITAN_PWM_SINGLE_CONTAINER_BASELINE_V1.md)
 removes per-job container startup without changing the tools, models, evidence,
 or answer matrix. Across ten predeclared trials, maintained
-source-through-producer medians fall to 0.89 seconds sequentially and 0.82
+source-through-producer medians fall to 0.89 seconds sequentially and 0.81
 seconds with fixed four-way parallelism. GCC's matched 0.09-second result is
-therefore about 9.89 and 9.11 times faster, not 53.78 times. Most of the initial
+therefore about 9.89 and 9.00 times faster, not 53.78 times. Most of the initial
 ratio was container-launch overhead, while a narrower shared-model advantage
 survives. Larger designs, a true persistent maintained service, and independent
 hardware are still needed to establish product value.

@@ -216,7 +216,7 @@ inclusion-minimal semantic change sets across firmware revisions. A pinned
 full-rebuild proof-producing baseline agrees on all 20 answers and independently
 checks every artifact. GCC is faster at the matched shared-model orchestration
 scope but produces a larger artifact. The controlled single-container baseline
-removes per-job container startup and preserves a roughly 9.11 times advantage
+removes per-job container startup and preserves a roughly 9.00 times advantage
 against fixed four-way maintained orchestration, down from 53.78 times against
 isolated containers. Prior work already establishes
 incremental IC3 proof reuse, abstraction-precision reuse, mutation-impact

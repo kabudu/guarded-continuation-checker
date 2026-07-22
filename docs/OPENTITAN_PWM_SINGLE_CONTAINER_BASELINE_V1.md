@@ -103,6 +103,12 @@ product-value claim, but it cannot by itself establish algorithmic novelty.
 
 ## Qualified result
 
+An initial complete execution exposed a provenance omission in the aggregate
+manifest: the two in-container runner hashes were present only in per-trial
+manifests. The aggregate manifest was hardened and the entire ten-trial matrix
+was rerun. No individual timing was selected or retained from the superseded
+execution.
+
 All ten predeclared trials passed without a selective rerun. Every trial
 reproduced the frozen 20-answer matrix, the model-set hash, and evidence-set
 SHA-256
@@ -113,12 +119,12 @@ The five-trial medians are:
 | Mode | Source through producer | Producer orchestration | Independent checking |
 | --- | ---: | ---: | ---: |
 | Isolated containers, frozen v1 | 4.84 s | 4.229 s | 4.976 s |
-| Single-container sequential | 0.89 s | 0.339 s | 0.937 s |
-| Single-container parallel-4 | 0.82 s | 0.249 s | 0.750 s |
+| Single-container sequential | 0.89 s | 0.335 s | 0.905 s |
+| Single-container parallel-4 | 0.81 s | 0.251 s | 0.761 s |
 | GCC matched aggregate | 0.09 s | 0.01 s | below host timer precision |
 
 Against the controlled maintained-tool modes, GCC's source-through-producer
-result is about 9.89 times faster than sequential orchestration and 9.11 times
+result is about 9.89 times faster than sequential orchestration and 9.00 times
 faster than four-way parallel orchestration. The v0.30.0 comparison against
 isolated containers was 53.78 times. The advantage survives, but this result
 shows that most of the earlier ratio was container-launch overhead rather than
