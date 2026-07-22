@@ -1,12 +1,13 @@
 # QatQ transport qualification v1
 
-Status: local and hosted qualification gates pass. Compatibility history and
-independent review remain open. QatQ is not part of the supported
+Status: local and hosted qualification gates pass, and the upstream opaque-word
+API gate is closed. Compatibility history and independent review remain open.
+QatQ is not part of the supported
 `firmware-rtl-v1` profile or GCC's normative evidence semantics.
 
 ## Question
 
-Can a GCC-owned, fail-closed transport envelope use the exact QatQ 0.1.1
+Can a GCC-owned, fail-closed transport envelope use the exact QatQ 0.1.3
 container to reduce storage and transfer cost for large proof-carrying revision
 batches without weakening byte identity, independent semantic verification, or
 resource governance?
@@ -18,12 +19,12 @@ UNSAFE answer and cannot establish an algorithmic novelty claim.
 
 ## Frozen implementation boundary
 
-- QatQ crate version: exactly `0.1.1`.
-- QatQ source revision used for comparison: commit
-  `87be0cc327a1e6a2ac94c13e584d7f4eae821c5d`.
+- QatQ crate version: exactly `0.1.3`.
+- QatQ source revision: release tag `v0.1.3`, commit
+  `8ad5369327cd9472e356fa00bfadb161108ae0bd`.
 - GCC feature: additive research-only `research-qatq-transport`.
-- Opaque mapping: ordered little-endian 32-bit words through QatQ's exact f32
-  bit representation. Zero padding is permitted only in the final word and the
+- Opaque mapping: ordered little-endian 32-bit words through QatQ's public exact
+  `u32` container API. Zero padding is permitted only in the final word and the
   canonical byte length is authenticated by the GCC envelope.
 - Normative format: the existing uncompressed certificate bytes. The envelope
   is never accepted by an existing semantic certificate decoder.
@@ -91,7 +92,7 @@ negative result remains published.
 ## Local result
 
 The research-only Rust API now implements the envelope, explicit policy,
-pre-allocation QATC framing checks, QatQ's independent checksum validation,
+QatQ-owned pre-allocation QATC framing checks and checksum validation,
 chunked recovery with SHA-256, an in-memory convenience path, and atomic
 create-new file publication. Eight hostile and boundary tests cover truncated,
 trailing, mutated, over-limit, non-zero padding, writer-failure, and no-clobber
@@ -135,6 +136,7 @@ produced the same 82,428-byte envelope and both frozen hashes, with median
 encode and decode times of 456.823 ms and 79.591 ms and process peak resident
 memory of 68,968,448 bytes.
 
-All ten predeclared experiment gates pass. The remaining promotion gates are
-compatibility history across at least two GCC releases, an opaque-byte QatQ API
-or removal of the floating-point-labelled mapping, and independent review.
+All ten predeclared experiment gates pass. QatQ 0.1.3 closes the opaque-byte API
+gate through upstream PRs 9 and 12 without changing the frozen GCC envelope
+bytes. The remaining promotion gates are compatibility history across at least
+two GCC releases and independent review.

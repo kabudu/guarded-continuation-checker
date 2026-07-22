@@ -33,13 +33,13 @@
   bundle truncation. Resource refusal occurs before retaining or decoding an
   over-limit artifact.
 - Predeclare QatQ transport qualification v1 as an additive research-only
-  experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
+  experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,
   hostile-input rejection, cross-platform identity, realistic resource
   measurements, semantic replay and retained negative compression rows before
   considering integration. QatQ remains outside `firmware-rtl-v1`.
-- Implement the optional `research-qatq-transport` Rust API against exact QatQ
-  0.1.1. Add a canonical length, codec, parameter, canonical-digest and
+- Implement the optional `research-qatq-transport` Rust API against exact QatQ.
+  Add a canonical length, codec, parameter, canonical-digest and
   encoded-digest envelope; checked resource policy; pre-allocation per-chunk
   framing limits; independent QatQ checksum validation; chunked exact recovery;
   and atomic create-new file publication. Eight boundary and hostile tests pass.
@@ -49,8 +49,13 @@
   maintained-proof-package row, where QatQ is 73.23% larger than zstd. Hosted
   run 29893368169 reproduces the frozen envelope on Linux, macOS and Windows;
   Linux records 456.823 ms median encode, 79.591 ms median decode and
-  68,968,448-byte peak RSS. Keep compatibility, opaque-byte API and independent
-  review promotion gates open.
+  68,968,448-byte peak RSS.
+- Upstream and adopt QatQ 0.1.3's opaque exact `u32` container and bounded chunk
+  visitor APIs. Remove GCC's private QATC/QATQ framing parser and public
+  floating-point-labelled mapping without changing a frozen envelope byte.
+  Preserve chunk-bounded recovery, callback-before-validation exclusion,
+  resource policy, hostile rejection and the prior exact hash. Compatibility
+  history and independent review remain open promotion gates.
 
 ## 0.29.0 - 2026-07-22
 

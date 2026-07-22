@@ -580,15 +580,16 @@ mapping treats opaque evidence as f32 words and lacks GCC-specific latency,
 memory, portability and hostile-container qualification.
 
 QatQ transport qualification v1 now supplies a research-only GCC envelope,
-explicit resource policy, pre-allocation framing checks, digest-bound chunked
+explicit resource policy, QatQ-owned pre-allocation framing checks, digest-bound chunked
 recovery, atomic no-clobber output, hostile API tests and local arm64 process
 measurements. Its 82,428-byte revision-batch envelope is 29.41% smaller than the
 retained zstd result. The maintained-proof-package negative control is 73.23%
 larger than zstd. Hosted run 29893368169 reproduces the exact envelope identity
 on Linux, macOS, and Windows and the Linux resource result with 68,968,448-byte
-peak RSS. Compatibility history, an opaque-byte API boundary, and independent
-review remain open, so the transport is not in `firmware-rtl-v1` and no
-production-readiness row closes.
+peak RSS. QatQ 0.1.3 closes the opaque-byte API boundary with exact `u32`
+containers and a bounded chunk visitor while preserving the frozen envelope.
+Compatibility history and independent review remain open, so the transport is
+not in `firmware-rtl-v1` and no production-readiness row closes.
 
 The remaining gates include long-lived multi-revision service amortisation,
 hosted reproduction of the semantic-changing closest-system comparison, tagged

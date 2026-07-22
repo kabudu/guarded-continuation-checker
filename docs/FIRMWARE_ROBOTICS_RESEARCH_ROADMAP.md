@@ -177,13 +177,15 @@ constrained workflow and external suitability assessment remain open.
 
 The next data-delivery cycle is predeclared as
 [QatQ transport qualification v1](QATQ_TRANSPORT_QUALIFICATION_V1.md). It proves
-whether exact QatQ 0.1.1 compression can sit behind a GCC-owned, fail-closed
+whether exact QatQ compression can sit behind a GCC-owned, fail-closed
 transport envelope for large proof-carrying revision batches. The experiment
 passes hostile-input rejection, explicit resource limits, cross-platform byte
 identity, Linux and macOS process resource measurements, semantic replay and a
-retained zstd baseline. Compatibility history, an opaque-byte dependency
-boundary and independent review remain open. It cannot change certificate
-semantics, novelty status, or the `firmware-rtl-v1` support boundary.
+retained zstd baseline. QatQ 0.1.3 now owns the opaque-word and bounded chunk
+boundary, closing that promotion gate without changing the frozen envelope.
+Compatibility history and independent review remain open. It cannot change
+certificate semantics, novelty status, or the `firmware-rtl-v1` support
+boundary.
 
 The next proof-delivery cycle now has a first
 [governed proof-carrying MTBDD API](GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md).

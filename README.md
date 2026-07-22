@@ -335,8 +335,10 @@ than the strongest retained zstd result on the revision batch. The negative
 maintained-proof-package control is 73.23% larger than zstd, so QatQ is not
 admitted universally. Hosted Linux, macOS and Windows reproduce the frozen
 envelope identity, and hosted Linux reproduces the resource measurement. QatQ
-remains outside `firmware-rtl-v1` pending compatibility history, an opaque-byte
-dependency boundary and independent review.
+0.1.3 now owns the opaque `u32` container framing, bounded inspection and
+chunk-at-a-time decode boundary, while retaining the frozen envelope bytes.
+QatQ remains outside `firmware-rtl-v1` pending compatibility history and
+independent review.
 
 Validated findings:
 
