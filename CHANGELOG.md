@@ -12,12 +12,15 @@
   0.1.1. Add a canonical length, codec, parameter, canonical-digest and
   encoded-digest envelope; checked resource policy; pre-allocation per-chunk
   framing limits; independent QatQ checksum validation; chunked exact recovery;
-  and atomic create-new file publication. Seven boundary and hostile tests pass.
+  and atomic create-new file publication. Eight boundary and hostile tests pass.
   On the verified OpenTitan revision batch the 82,428-byte envelope is 29.41%
   smaller than zstd level 22 long-window, with median 133.008 ms encode, 39.104
   ms decode and 66,240,512-byte process peak RSS on arm64. Retain the negative
-  maintained-proof-package row, where QatQ is 73.23% larger than zstd, and keep
-  hosted portability and review gates open.
+  maintained-proof-package row, where QatQ is 73.23% larger than zstd. Hosted
+  run 29893368169 reproduces the frozen envelope on Linux, macOS and Windows;
+  Linux records 456.823 ms median encode, 79.591 ms median decode and
+  68,968,448-byte peak RSS. Keep compatibility, opaque-byte API and independent
+  review promotion gates open.
 
 ## 0.29.0 - 2026-07-22
 

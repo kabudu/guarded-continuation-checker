@@ -584,15 +584,16 @@ explicit resource policy, pre-allocation framing checks, digest-bound chunked
 recovery, atomic no-clobber output, hostile API tests and local arm64 process
 measurements. Its 82,428-byte revision-batch envelope is 29.41% smaller than the
 retained zstd result. The maintained-proof-package negative control is 73.23%
-larger than zstd. Hosted three-platform identity, hosted Linux resources,
-compatibility history and independent review remain open, so the transport is
-not in `firmware-rtl-v1` and no production-readiness row closes.
+larger than zstd. Hosted run 29893368169 reproduces the exact envelope identity
+on Linux, macOS, and Windows and the Linux resource result with 68,968,448-byte
+peak RSS. Compatibility history, an opaque-byte API boundary, and independent
+review remain open, so the transport is not in `firmware-rtl-v1` and no
+production-readiness row closes.
 
-The remaining gates include hosted Linux resource results, certificate-byte
-agreement across Linux, macOS, and Windows, long-lived multi-revision service
-amortisation, hosted reproduction of the semantic-changing closest-system
-comparison, tagged compatibility, and independent review. None of this
-evidence changes the top-level production status.
+The remaining gates include long-lived multi-revision service amortisation,
+hosted reproduction of the semantic-changing closest-system comparison, tagged
+compatibility, and independent review. None of this evidence changes the
+top-level production status.
 
 ## Post-production-release deliverables
 

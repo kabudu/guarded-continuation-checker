@@ -1,0 +1,14 @@
+schema_version=1
+repository=kabudu/guarded-continuation-checker
+source_commit=e82a223663aaee85add2d91bb305f71ac722f9cf
+workflow_run=29893368169
+workflow_job=88838185189
+runner_os=linux
+runner_arch=x86_64
+rustc=1.97.0 (2d8144b78 2026-07-07)
+qatq_crate=0.1.1
+canonical_sha256=cba7640709163f7d9ca5c908d87b2fb843f148dd0d514bfd345b188e640ca9c9
+envelope_sha256=42f30367e3b1003bec6c95395d91b800a88eb76721fed9c46548a27f79dff6ee
+qualification_csv=results/qatq-transport-qualification-amd64-v1.csv
+resources_csv=results/qatq-transport-resources-amd64-v1.csv
+outcome=pass

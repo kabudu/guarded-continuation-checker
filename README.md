@@ -333,9 +333,10 @@ pre-allocation limits, chunked exact recovery, hostile-input rejection and
 atomic no-clobber file output. Its 82,428-byte envelope remains 29.41% smaller
 than the strongest retained zstd result on the revision batch. The negative
 maintained-proof-package control is 73.23% larger than zstd, so QatQ is not
-admitted universally and remains outside `firmware-rtl-v1` pending hosted
-portability, resource replication, compatibility history and independent
-review.
+admitted universally. Hosted Linux, macOS and Windows reproduce the frozen
+envelope identity, and hosted Linux reproduces the resource measurement. QatQ
+remains outside `firmware-rtl-v1` pending compatibility history, an opaque-byte
+dependency boundary and independent review.
 
 Validated findings:
 

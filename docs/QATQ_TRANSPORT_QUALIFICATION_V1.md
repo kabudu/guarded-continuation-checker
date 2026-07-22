@@ -1,9 +1,8 @@
 # QatQ transport qualification v1
 
-Status: local implementation and arm64 qualification pass. Hosted
-cross-platform evidence and independent review remain open. QatQ is not part
-of the supported `firmware-rtl-v1` profile or GCC's normative evidence
-semantics.
+Status: local and hosted qualification gates pass. Compatibility history and
+independent review remain open. QatQ is not part of the supported
+`firmware-rtl-v1` profile or GCC's normative evidence semantics.
 
 ## Question
 
@@ -94,7 +93,7 @@ negative result remains published.
 The research-only Rust API now implements the envelope, explicit policy,
 pre-allocation QATC framing checks, QatQ's independent checksum validation,
 chunked recovery with SHA-256, an in-memory convenience path, and atomic
-create-new file publication. Seven hostile and boundary tests cover truncated,
+create-new file publication. Eight hostile and boundary tests cover truncated,
 trailing, mutated, over-limit, non-zero padding, writer-failure, and no-clobber
 behaviour. A frozen 44-byte AIGER fixture has envelope SHA-256
 `9be12addcf5044e300b9c54a00b9fbf476879befa0046262994a7ab87ba8efe0`
@@ -119,10 +118,23 @@ QatQ admission and not an algorithmic novelty claim.
 Retained measurements:
 
 - `results/qatq-transport-qualification-arm64-v1.csv`;
-- `results/qatq-transport-resources-arm64-v1.csv`; and
+- `results/qatq-transport-resources-arm64-v1.csv`;
+- `results/qatq-transport-qualification-amd64-v1.csv`;
+- `results/qatq-transport-resources-amd64-v1.csv`;
+- `results/qatq-transport-hosted-amd64-v1.provenance.txt`; and
 - `results/qatq-revision-batch-compression-arm64-v1.csv` for the earlier raw
   codec comparison.
 
-The remaining predeclared gates are hosted Linux, macOS, and Windows envelope
-identity, hosted Linux resource replication, dependency auditing, full-suite and
-package-boundary validation, compatibility history, and independent review.
+Hosted run
+[`29893368169`](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29893368169)
+passes the full suite, dependency audit, exact crate package, public RTL corpus,
+and frozen envelope identity on Linux amd64, macOS arm64, and Windows amd64.
+Public RTL job `88838185189` independently regenerated and verified the
+14,164,144-byte batch before reproducing the Linux result. Five Linux trials
+produced the same 82,428-byte envelope and both frozen hashes, with median
+encode and decode times of 456.823 ms and 79.591 ms and process peak resident
+memory of 68,968,448 bytes.
+
+All ten predeclared experiment gates pass. The remaining promotion gates are
+compatibility history across at least two GCC releases, an opaque-byte QatQ API
+or removal of the floating-point-labelled mapping, and independent review.
