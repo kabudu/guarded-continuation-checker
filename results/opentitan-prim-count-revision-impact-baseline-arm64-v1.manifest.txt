@@ -1,4 +1,4 @@
-schema_version=1
+schema_version=2
 baseline=maintained-aiger-ric3-certifaiger
 scope=opentitan-prim-count-revision-impact-four-transition
 yosys_version=Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159, Release, AppleClang clang++ 21.0.0.21000099)
@@ -12,4 +12,6 @@ certifaiger_check_sha256=5025dc68cc22a1d8d898757bd59603403e2e89de6d35d2350e618c3
 certifaiger_aigsim_sha256=795ea40298c75a882d58f49f274e537695b820dc6a985d3e681383dcc1599fb9
 model_set_sha256=c14afad65716f3ffc3233d8b7e2da5e585fc76199257568478d524476e87cd4d
 evidence_set_sha256=f80f0b07d67823bf07c2a7cd507191f126e6aff4c8dce0105f542e43342b4f10
+synthesis_scope=selected-properties-0,1,3-plus-environment
+memory_scope=max-native-synthesis-or-individual-container-child-process
 status=qualified-maintained-baseline

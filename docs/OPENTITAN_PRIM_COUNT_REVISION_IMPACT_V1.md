@@ -86,19 +86,21 @@ produces four SAFE witnesses and four UNSAFE traces. Qualified Certifaiger
 checks every witness or trace independently. All answers and all four
 transition classes agree with GCC.
 
-The eight models total 1,748 bytes and their evidence totals 910 bytes. The
+The eight selected models total 1,748 bytes and their evidence totals 910 bytes. The
 complete maintained package is therefore 2,658 bytes. GCC's 56,632,691-byte
-aggregate is about 21,306.5 times larger. GCC production peaks at 290,603,008
-bytes and independent checking at 273,956,864 bytes. The largest rIC3 producer
-job peaks at 7,806,976 bytes and the largest Certifaiger checker job at
-4,620,288 bytes, making the current GCC peaks about 37.2 and 59.3 times larger.
+aggregate is about 21,306.5 times larger. GCC's source-through-production path
+peaks at 324,829,184 bytes and independent checking at 270,598,144 bytes. The
+maintained route's source-through-production path peaks at 18,317,312 bytes,
+and its largest Certifaiger checker job at 4,722,688 bytes. The current GCC
+peaks are therefore about 17.7 and 57.3 times larger.
 
-The recorded one-second maintained producer and two-second checker observations
-include separate network-disabled Docker launches. GCC records 46.27 seconds
-for production and 12.40 seconds for verification in native arm64 processes.
-Neither timing includes pinned Yosys synthesis, and the process boundaries
-differ, so these values do not close the predeclared total source-to-answer
-timing slice and are not used for a speed claim.
+Pinned Yosys synthesis plus GCC certificate production takes 2.95 seconds. The
+same exact-scope maintained route takes 1.81 seconds, making GCC about 1.63
+times slower on this small cohort. GCC verification takes 0.77 seconds and the
+maintained evidence checks take 1.943 seconds, but the maintained observation
+includes eight separate network-disabled Docker launches. The checker process
+boundaries differ, so the apparent GCC checker advantage is not used for a
+speed claim.
 
 Retained baseline evidence:
 
@@ -119,12 +121,13 @@ scripts/benchmark-opentitan-prim-count-revision-impact-baseline-v1.sh \
 ## Claim boundary
 
 This closes the four-transition public-product gate and the local maintained
-semantic, transfer-size, evidence-checking, and peak-RSS baseline slices. It
+semantic, transfer-size, evidence-checking, source-to-answer timing, and
+peak-RSS baseline slices. It
 does not show
 that exhaustive bounded counterfactuals, proof reuse, change impact, or minimal
 invalidating sets are novel individually. It also does not show a performance
 or artifact-size advantage. The baseline strongly falsifies artifact
 efficiency for the current duplicated-evidence container. A larger multi-atom
 public revision with nontrivial minimal invalidating sets, shared-section
-storage, total source-to-answer timing, hosted identity, and independent review
-remain necessary before any narrower distinction can advance.
+storage, hosted identity, and independent review remain necessary before any
+narrower distinction can advance.

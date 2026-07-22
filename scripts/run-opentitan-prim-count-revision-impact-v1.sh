@@ -73,8 +73,12 @@ queries=$workdir/queries.txt
 first=$workdir/first.revision-impact
 second=$workdir/second.revision-impact
 
-"$repo/scripts/build-opentitan-prim-count-query-service-v1.sh" \
-  "$yosys" "$environment" "$before" "$after" >"$workdir/build.log"
+run_timed "$workdir/build.log" "$workdir/build.time" \
+  "$repo/scripts/build-opentitan-prim-count-query-service-v1.sh" \
+  "$yosys" "$environment" "$before" "$after"
+read_timing "$workdir/build.time"
+synthesis_elapsed_seconds=$timing_elapsed
+synthesis_peak_rss_bytes=$timing_peak_bytes
 
 printf '%s\n' \
   'word_interface_version=2' \
@@ -152,19 +156,27 @@ producer_peak_rss_bytes=$timing_peak_bytes
 read_timing "$workdir/verify.time"
 checker_elapsed_seconds=$timing_elapsed
 checker_peak_rss_bytes=$timing_peak_bytes
+total_producer_elapsed_seconds=$(awk -v synthesis="$synthesis_elapsed_seconds" -v producer="$producer_elapsed_seconds" 'BEGIN { printf "%.2f", synthesis + producer }')
+if (( synthesis_peak_rss_bytes > producer_peak_rss_bytes )); then
+  total_producer_peak_rss_bytes=$synthesis_peak_rss_bytes
+else
+  total_producer_peak_rss_bytes=$producer_peak_rss_bytes
+fi
 
 {
-  printf '%s\n' 'schema_version,query_index,horizon,bad_side,bad_output,old_result,new_result,transition_class,certificate_bytes,parsed_evidence_bytes,semantic_replays,component_validations,composed_pair_checks,final_transition_checks,result_comparisons,producer_elapsed_seconds,checker_elapsed_seconds,producer_peak_rss_bytes,checker_peak_rss_bytes,time_backend,certificate_sha256,deterministic,status'
-  printf '1,0,0,left,2,UNSAFE,UNSAFE,unchanged-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
-  printf '1,1,0,right,1000,UNSAFE,SAFE,unsafe-to-safe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
-  printf '1,2,0,right,1001,SAFE,SAFE,unchanged-safe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
-  printf '1,3,0,right,1003,SAFE,UNSAFE,safe-to-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '%s\n' 'schema_version,query_index,horizon,bad_side,bad_output,old_result,new_result,transition_class,certificate_bytes,parsed_evidence_bytes,semantic_replays,component_validations,composed_pair_checks,final_transition_checks,result_comparisons,synthesis_elapsed_seconds,producer_elapsed_seconds,total_producer_elapsed_seconds,checker_elapsed_seconds,synthesis_peak_rss_bytes,producer_peak_rss_bytes,total_producer_peak_rss_bytes,checker_peak_rss_bytes,time_backend,certificate_sha256,deterministic,status'
+  printf '2,0,0,left,2,UNSAFE,UNSAFE,unchanged-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$synthesis_elapsed_seconds" "$producer_elapsed_seconds" "$total_producer_elapsed_seconds" "$checker_elapsed_seconds" "$synthesis_peak_rss_bytes" "$producer_peak_rss_bytes" "$total_producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '2,1,0,right,1000,UNSAFE,SAFE,unsafe-to-safe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$synthesis_elapsed_seconds" "$producer_elapsed_seconds" "$total_producer_elapsed_seconds" "$checker_elapsed_seconds" "$synthesis_peak_rss_bytes" "$producer_peak_rss_bytes" "$total_producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '2,2,0,right,1001,SAFE,SAFE,unchanged-safe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$synthesis_elapsed_seconds" "$producer_elapsed_seconds" "$total_producer_elapsed_seconds" "$checker_elapsed_seconds" "$synthesis_peak_rss_bytes" "$producer_peak_rss_bytes" "$total_producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '2,3,0,right,1003,SAFE,UNSAFE,safe-to-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$synthesis_elapsed_seconds" "$producer_elapsed_seconds" "$total_producer_elapsed_seconds" "$checker_elapsed_seconds" "$synthesis_peak_rss_bytes" "$producer_peak_rss_bytes" "$total_producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
 } >"$workdir/result.csv"
 
 {
-  printf 'schema_version=1\n'
+  printf 'schema_version=2\n'
   printf 'yosys_version=%s\n' "$("$yosys" -V)"
   printf 'gcc_capabilities=%s\n' "$("$binary" btor2-revision-impact-cli-version)"
+  printf 'timing_scope=source-synthesis-plus-certificate-production\n'
+  printf 'memory_scope=max-native-synthesis-or-certificate-process\n'
   for path in "$environment" "$before" "$after" "$interface" "$queries" "$first" "$second"; do
     printf 'sha256=%s file=%s\n' "$(sha256_file "$path")" "$(basename "$path")"
   done

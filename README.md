@@ -325,9 +325,9 @@ SAFE-to-UNSAFE in one byte-identical exact bundle. Qualified rIC3 and
 Certifaiger agree on all eight scenario answers, but their complete package is
 about 21,306.5 times smaller. The baseline therefore falsifies current artifact
 efficiency, and its producer/checker jobs also use substantially less peak
-memory. Synthesis-inclusive timing, cross-platform identity, and larger
-multi-atom product evidence remain open, so this is not yet part of the
-production support profile.
+memory. GCC is also about 1.63 times slower from synthesis through production
+on this cohort. Cross-platform identity and larger multi-atom product evidence
+remain open, so this is not yet part of the production support profile.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
