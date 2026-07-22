@@ -11,13 +11,16 @@ use guarded_continuation_checker::btor2_region_equivalence::{
 };
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 use guarded_continuation_checker::btor2_region_property::{
-    Btor2ChannelProperty, Btor2ChannelPropertyBackend, Btor2ChannelPropertyProofPolicy,
-    Btor2ChannelPropertyQuery, Btor2ChannelPropertySolver, MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
-    MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES, MAX_CHANNEL_PROPERTY_QUERIES,
+    Btor2ChannelProperty, Btor2ChannelPropertyBackend, Btor2ChannelPropertyProductionPolicy,
+    Btor2ChannelPropertyProofPolicy, Btor2ChannelPropertyQuery, Btor2ChannelPropertySolver,
+    MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES, MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+    MAX_CHANNEL_PROPERTY_PROJECTED_WORK, MAX_CHANNEL_PROPERTY_QUERIES,
     build_btor2_channel_property_model, decode_btor2_channel_property_proof_artifact,
-    encode_btor2_channel_property_proof_artifact, produce_btor2_channel_property_evidence,
-    produce_btor2_channel_property_proof, produce_btor2_channel_property_proof_bytes,
-    verify_btor2_channel_property_proof, verify_btor2_channel_property_proof_bytes,
+    encode_btor2_channel_property_proof_artifact, preflight_btor2_channel_property_proof,
+    produce_btor2_channel_property_evidence, produce_btor2_channel_property_proof,
+    produce_btor2_channel_property_proof_bytes,
+    produce_btor2_channel_property_proof_bytes_with_policy, verify_btor2_channel_property_proof,
+    verify_btor2_channel_property_proof_bytes,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
 use sha2::{Digest, Sha256};
@@ -333,6 +336,102 @@ fn static_portfolio_routes_horizon_two_to_bitblast_without_trial_solving() {
             &structural,
             &outside_fallback_horizon,
             policy,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn aggregate_production_preflight_refuses_the_complete_batch_before_solving() {
+    let model = include_bytes!(
+        "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+    );
+    let region_policy = Btor2RegionPolicy::default();
+    let artifact_policy = Btor2ChannelPropertyProofPolicy::default();
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, region_policy).unwrap(),
+    )
+    .unwrap();
+    let queries = symbolic_queries(2);
+    let plan = preflight_btor2_channel_property_proof(
+        model,
+        &structural,
+        &queries,
+        region_policy,
+        Btor2ChannelPropertyProductionPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(plan.logical_queries, 12);
+    assert_eq!(plan.proof_members, 6);
+    assert_eq!(plan.explicit_state_members, 0);
+    assert_eq!(plan.bitblast_members, 6);
+    assert!(plan.projected_work > 1);
+
+    let query_limited = Btor2ChannelPropertyProofPolicy::new(
+        11,
+        MAX_CHANNEL_PROPERTY_QUERIES,
+        MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+        MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+    )
+    .unwrap();
+    assert!(
+        preflight_btor2_channel_property_proof(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            Btor2ChannelPropertyProductionPolicy::new(query_limited, plan.projected_work).unwrap(),
+        )
+        .is_err()
+    );
+    let member_limited = Btor2ChannelPropertyProofPolicy::new(
+        MAX_CHANNEL_PROPERTY_QUERIES,
+        5,
+        MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+        MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+    )
+    .unwrap();
+    assert!(
+        preflight_btor2_channel_property_proof(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            Btor2ChannelPropertyProductionPolicy::new(member_limited, plan.projected_work).unwrap(),
+        )
+        .is_err()
+    );
+
+    let refused =
+        Btor2ChannelPropertyProductionPolicy::new(artifact_policy, plan.projected_work - 1)
+            .unwrap();
+    assert!(
+        produce_btor2_channel_property_proof_bytes_with_policy(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            refused,
+        )
+        .is_err()
+    );
+    let admitted =
+        Btor2ChannelPropertyProductionPolicy::new(artifact_policy, plan.projected_work).unwrap();
+    assert!(
+        produce_btor2_channel_property_proof_bytes_with_policy(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            admitted,
+        )
+        .is_ok()
+    );
+    assert!(Btor2ChannelPropertyProductionPolicy::new(artifact_policy, 0).is_err());
+    assert!(
+        Btor2ChannelPropertyProductionPolicy::new(
+            artifact_policy,
+            MAX_CHANNEL_PROPERTY_PROJECTED_WORK + 1,
         )
         .is_err()
     );

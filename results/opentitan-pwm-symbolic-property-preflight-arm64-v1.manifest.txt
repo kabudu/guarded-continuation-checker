@@ -1,0 +1,23 @@
+schema_version=1
+scope=opentitan-pwm-symbolic-property-preflight-v1
+status=aggregate-preflight-pass
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=7feca677c21775367525624a644b203a7c1afe9f
+channel_counts=2,4,6
+horizons=1,2
+selection=all-predeclared-rows
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=not-measured
+projection_scope=deterministic-admission-token-not-runtime-estimate
+sha256=ddf8746f51d521f17fadaab0a474c9faa59a50ecb0d4e914a027cf3175f03737 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2
+sha256=671136023f99b6bf9e21f140f267d770b42151738148d23f7f06162a2ebb86d1 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-4.btor2
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=06cefc6bb6bd74aedb42a834d119d233be23165ac94c1b6afdbf64fe857efde0 file=src/btor2_region_property.rs
+sha256=91793a7931e7af480dee9f0c0ac06a1957d5b729f10f5be9a94749471fcfea55 file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=fbe4ea0454b2c33fad070cd1324da91ec71c225d4d2cc412fd49cdf0322bfc6e file=examples/btor2_symbolic_property_preflight_probe.rs
+sha256=f0f7e4dff5b334cce8cae99424582a1f8df85ab736d2985300a4cd5bef95065c file=scripts/run-btor2-symbolic-property-preflight-probe-v1.sh
+sha256=377888ba81dfccc3639ac53c91b5dfe236d4faef11b4959ff42db6e64cb6c431 file=scripts/check-btor2-symbolic-property-preflight-probe-v1.sh
+sha256=950a182bb2e2a7830b4d9f0d5e2fd1b006246da6f54dcd46cbcf1a17ee883d93 file=results/opentitan-pwm-symbolic-property-preflight-arm64-v1.csv

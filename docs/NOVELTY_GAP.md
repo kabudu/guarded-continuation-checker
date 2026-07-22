@@ -106,6 +106,12 @@ complete retained artifact 4.53% larger than raw direct witnesses. The absence
 of a maintained-tool comparison, a distinct invariant, and independent review
 leaves this as an engineering mechanism only.
 
+Aggregate production preflight adds deterministic whole-batch admission before
+solving and closes one resource-governance gap. Static cost models, solver
+portfolios, and admission limits are established engineering. The retained
+threshold behavior therefore adds no novelty evidence and does not alter any
+claim gate.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

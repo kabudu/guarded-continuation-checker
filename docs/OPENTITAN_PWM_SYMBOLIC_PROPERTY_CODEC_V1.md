@@ -69,7 +69,9 @@ cargo test --release --locked --test opentitan_pwm_symbolic_class_api outer_prop
 
 - Add a strict, no-clobber file CLI and typed process client around the byte
   APIs for self-service embedded build integration.
-- Preflight aggregate production work before any solver member starts.
+- Preserve the linked
+  [aggregate production preflight](OPENTITAN_PWM_SYMBOLIC_PROPERTY_PREFLIGHT_V1.md)
+  across the file and process boundaries.
 - Add generation and verification observability, deadline and process resource
   enforcement, and measured peak memory.
 - Cross-check realistic safety properties and a broader operator corpus against

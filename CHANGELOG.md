@@ -46,6 +46,13 @@
   twelve raw direct witnesses, so this closes an exchange-integrity mechanism
   rather than an end-to-end size win. File CLI, aggregate production-work
   governance, observability and portability remain open.
+- Add caller-governed aggregate production preflight for the symbolic channel
+  portfolio. It authenticates and plans every member and exact backend before
+  solving, returns deterministic route and work counts, admits an inclusive
+  ceiling, and refuses the complete batch one unit below it without partial
+  evidence. Retained 2, 4, and 6-channel rows cover both explicit-state and
+  bitblast routes. The projection is a static admission token, not elapsed time
+  or peak-memory evidence. File and process integration remains open.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 pub const MAX_CHANNEL_PROPERTY_QUERIES: usize = 4096;
 pub const MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES: usize = 66 * 1024 * 1024;
+pub const MAX_CHANNEL_PROPERTY_PROJECTED_WORK: u64 = 100_000_000_000;
 pub const BTOR2_CHANNEL_PROPERTY_PROOF_VERSION: u32 = 1;
 const CHANNEL_PROPERTY_MAGIC: &[u8; 8] = b"GCCBCP01";
 
@@ -83,6 +84,46 @@ impl Default for Btor2ChannelPropertyProofPolicy {
             max_members: MAX_CHANNEL_PROPERTY_QUERIES,
             max_evidence_bytes: MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
             max_artifact_bytes: MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyProductionPolicy {
+    artifact: Btor2ChannelPropertyProofPolicy,
+    max_projected_work: u64,
+}
+
+impl Btor2ChannelPropertyProductionPolicy {
+    pub fn new(
+        artifact: Btor2ChannelPropertyProofPolicy,
+        max_projected_work: u64,
+    ) -> Result<Self, Btor2RegionError> {
+        if max_projected_work == 0 || max_projected_work > MAX_CHANNEL_PROPERTY_PROJECTED_WORK {
+            return Err(reject(
+                "BTOR2 channel property production policy is outside static limits",
+            ));
+        }
+        Ok(Self {
+            artifact,
+            max_projected_work,
+        })
+    }
+
+    pub fn artifact(self) -> Btor2ChannelPropertyProofPolicy {
+        self.artifact
+    }
+
+    pub fn max_projected_work(self) -> u64 {
+        self.max_projected_work
+    }
+}
+
+impl Default for Btor2ChannelPropertyProductionPolicy {
+    fn default() -> Self {
+        Self {
+            artifact: Btor2ChannelPropertyProofPolicy::default(),
+            max_projected_work: MAX_CHANNEL_PROPERTY_PROJECTED_WORK,
         }
     }
 }
@@ -168,6 +209,15 @@ pub struct Btor2ChannelPropertyMetrics {
 pub struct Btor2ChannelPropertyProofSummary {
     pub results: Vec<Btor2ChannelPropertyResult>,
     pub metrics: Btor2ChannelPropertyMetrics,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyProductionPlan {
+    pub logical_queries: usize,
+    pub proof_members: usize,
+    pub explicit_state_members: usize,
+    pub bitblast_members: usize,
+    pub projected_work: u64,
 }
 
 fn reject(message: impl Into<String>) -> Btor2RegionError {
@@ -342,6 +392,12 @@ struct VerifiedMember {
     witness_valuations: Vec<u64>,
 }
 
+#[derive(Clone, Copy)]
+struct SolverProjection {
+    solver: Btor2ChannelPropertySolver,
+    work: u64,
+}
+
 fn class_lookup(classes: &[Vec<usize>]) -> Result<Vec<usize>, Btor2RegionError> {
     let channels = classes.iter().map(Vec::len).sum::<usize>();
     let mut lookup = vec![usize::MAX; channels];
@@ -385,7 +441,7 @@ fn expected_member_keys(
 fn select_solver(
     property_model: &[u8],
     horizon: u32,
-) -> Result<Btor2ChannelPropertySolver, Btor2RegionError> {
+) -> Result<SolverProjection, Btor2RegionError> {
     let model = btor2::parse_bytes(property_model)
         .map_err(|error| reject(format!("invalid BTOR2 channel property model: {error}")))?;
     let input_bits = model
@@ -405,7 +461,20 @@ fn select_solver(
                 "BTOR2 channel property input width exceeds every exact backend policy",
             ));
         }
-        Ok(Btor2ChannelPropertySolver::BitblastCnf)
+        let frame_work = model.nodes().values().try_fold(0u64, |total, node| {
+            let width = u64::from(node.width);
+            width
+                .checked_mul(width)
+                .and_then(|value| value.checked_mul(16))
+                .and_then(|value| total.checked_add(value.max(1)))
+        });
+        let work = frame_work
+            .and_then(|value| value.checked_mul(u64::from(horizon) + 1))
+            .ok_or_else(|| reject("BTOR2 channel property bitblast work projection overflow"))?;
+        Ok(SolverProjection {
+            solver: Btor2ChannelPropertySolver::BitblastCnf,
+            work,
+        })
     };
     if horizon > btor2_search::MAX_SEARCH_HORIZON
         || input_bits > btor2_search::MAX_SEARCH_INPUT_BITS
@@ -436,7 +505,10 @@ fn select_solver(
             .saturating_mul(valuations)
             .min(btor2_search::MAX_STATES_PER_LAYER as u64);
     }
-    Ok(Btor2ChannelPropertySolver::ExplicitState)
+    Ok(SolverProjection {
+        solver: Btor2ChannelPropertySolver::ExplicitState,
+        work: work.max(per_state),
+    })
 }
 
 fn unpack_valuation(
@@ -514,10 +586,90 @@ fn replay_unsafe_assignment(
     ))
 }
 
+/// Plans every member and enforces the aggregate static work ceiling before a
+/// property solver starts. Structural admission is replayed from source during
+/// planning; an invalid admission is an error rather than a fallback signal.
+pub fn preflight_btor2_channel_property_proof(
+    model_bytes: &[u8],
+    structural_admission: &[u8],
+    queries: &[Btor2ChannelPropertyQuery],
+    region_policy: Btor2RegionPolicy,
+    production_policy: Btor2ChannelPropertyProductionPolicy,
+) -> Result<Btor2ChannelPropertyProductionPlan, Btor2RegionError> {
+    let decoded = decode_btor2_region_equivalence_artifact(structural_admission)?;
+    let admission = admit_btor2_region_equivalence_artifact(model_bytes, &decoded, region_policy)?;
+    validate_queries(queries, decoded.expected_channels)?;
+    if queries.len() > production_policy.artifact.max_queries {
+        return Err(reject(
+            "BTOR2 channel property production query count exceeds policy",
+        ));
+    }
+    let lookup = class_lookup(admission.classes())?;
+    let groups = expected_member_keys(queries, &lookup);
+    if groups.len() > production_policy.artifact.max_members {
+        return Err(reject(
+            "BTOR2 channel property production member count exceeds policy",
+        ));
+    }
+    let mut explicit_state_members = 0usize;
+    let mut bitblast_members = 0usize;
+    let mut projected_work = 0u64;
+    for key in groups.keys() {
+        let representative_channel = admission.classes()[key.class_index][0];
+        let (property_model, _) = build_btor2_channel_property_model(
+            model_bytes,
+            &decoded.semantic_roots,
+            decoded.expected_channels,
+            representative_channel,
+            key.property,
+            region_policy,
+        )?;
+        let projection = select_solver(&property_model, key.horizon)?;
+        match projection.solver {
+            Btor2ChannelPropertySolver::ExplicitState => explicit_state_members += 1,
+            Btor2ChannelPropertySolver::BitblastCnf => bitblast_members += 1,
+        }
+        projected_work = projected_work
+            .checked_add(projection.work)
+            .filter(|value| *value <= production_policy.max_projected_work)
+            .ok_or_else(|| {
+                reject("BTOR2 channel property aggregate projected work exceeds policy")
+            })?;
+    }
+    Ok(Btor2ChannelPropertyProductionPlan {
+        logical_queries: queries.len(),
+        proof_members: groups.len(),
+        explicit_state_members,
+        bitblast_members,
+        projected_work,
+    })
+}
+
 /// Produces one exact property certificate per verified class and query shape.
 /// Singleton classes remain direct exact members. Invalid admission evidence
 /// propagates and is never converted into a fallback result.
 pub fn produce_btor2_channel_property_proof(
+    model_bytes: &[u8],
+    structural_admission: &[u8],
+    queries: &[Btor2ChannelPropertyQuery],
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2ChannelPropertyProofArtifact, Btor2RegionError> {
+    let _ = preflight_btor2_channel_property_proof(
+        model_bytes,
+        structural_admission,
+        queries,
+        policy,
+        Btor2ChannelPropertyProductionPolicy::default(),
+    )?;
+    produce_btor2_channel_property_proof_after_preflight(
+        model_bytes,
+        structural_admission,
+        queries,
+        policy,
+    )
+}
+
+fn produce_btor2_channel_property_proof_after_preflight(
     model_bytes: &[u8],
     structural_admission: &[u8],
     queries: &[Btor2ChannelPropertyQuery],
@@ -547,7 +699,7 @@ pub fn produce_btor2_channel_property_proof(
             key.property,
             policy,
         )?;
-        let solver = select_solver(&property_model, key.horizon)?;
+        let solver = select_solver(&property_model, key.horizon)?.solver;
         let evidence = match solver {
             Btor2ChannelPropertySolver::ExplicitState => {
                 let property_evidence = produce_btor2_channel_property_evidence(
@@ -635,7 +787,7 @@ pub fn verify_btor2_channel_property_proof(
             member.property,
             policy,
         )?;
-        let expected_solver = select_solver(&property_model, member.horizon)?;
+        let expected_solver = select_solver(&property_model, member.horizon)?.solver;
         if member.class_index != expected_key.class_index
             || member.representative_channel != class[0]
             || member.property != expected_key.property
@@ -1197,13 +1349,40 @@ pub fn produce_btor2_channel_property_proof_bytes(
     region_policy: Btor2RegionPolicy,
     artifact_policy: Btor2ChannelPropertyProofPolicy,
 ) -> Result<Vec<u8>, Btor2RegionError> {
-    let artifact = produce_btor2_channel_property_proof(
+    produce_btor2_channel_property_proof_bytes_with_policy(
+        model_bytes,
+        structural_admission,
+        queries,
+        region_policy,
+        Btor2ChannelPropertyProductionPolicy::new(
+            artifact_policy,
+            MAX_CHANNEL_PROPERTY_PROJECTED_WORK,
+        )?,
+    )
+}
+
+/// Produces a canonical portfolio only after caller-governed aggregate preflight.
+pub fn produce_btor2_channel_property_proof_bytes_with_policy(
+    model_bytes: &[u8],
+    structural_admission: &[u8],
+    queries: &[Btor2ChannelPropertyQuery],
+    region_policy: Btor2RegionPolicy,
+    production_policy: Btor2ChannelPropertyProductionPolicy,
+) -> Result<Vec<u8>, Btor2RegionError> {
+    let _ = preflight_btor2_channel_property_proof(
+        model_bytes,
+        structural_admission,
+        queries,
+        region_policy,
+        production_policy,
+    )?;
+    let artifact = produce_btor2_channel_property_proof_after_preflight(
         model_bytes,
         structural_admission,
         queries,
         region_policy,
     )?;
-    encode_btor2_channel_property_proof_artifact(&artifact, artifact_policy)
+    encode_btor2_channel_property_proof_artifact(&artifact, production_policy.artifact)
 }
 
 /// Decodes and independently verifies a complete source-bound property portfolio.

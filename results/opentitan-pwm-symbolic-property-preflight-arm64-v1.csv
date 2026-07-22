@@ -1,0 +1,7 @@
+schema_version,channels,horizon,logical_queries,proof_members,explicit_members,bitblast_members,projected_work,tighter_limit_refused,exact_limit_admitted,status
+1,2,1,4,4,4,0,1251200,true,true,accepted
+1,2,2,4,4,0,4,1918560,true,true,accepted
+1,4,1,8,6,6,0,4008000,true,true,accepted
+1,4,2,8,6,0,6,4515984,true,true,accepted
+1,6,1,12,6,6,0,6937920,true,true,accepted
+1,6,2,12,6,0,6,6189840,true,true,accepted

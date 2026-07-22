@@ -418,8 +418,14 @@ fingerprint. Every retained truncation and single-byte mutation fails closed.
 The 1,568-byte complete artifact is 4.53% larger than the twelve raw direct
 witnesses, even though its structural admission plus member evidence is 19.33%
 smaller. This negative control separates portable integrity from payload
-reduction. A file CLI, aggregate production-work preflight, observability,
-maintained comparison and portability evidence remain open.
+reduction. A timing-free
+[aggregate production preflight](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_PREFLIGHT_V1.md)
+now authenticates and plans every representative model and exact backend before
+any property solver starts. Its inclusive caller ceiling refuses the complete
+batch one work unit below the retained plan without emitting partial evidence.
+Projected work is a deterministic admission token, not a runtime or memory
+estimate. A file CLI, process containment, observability, maintained comparison
+and portability evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
