@@ -20,7 +20,10 @@
   second canonical artifact layer with exact bounded SAFE and UNSAFE evidence
   for ordered family properties. Its checker independently reconstructs the
   model and replays every certificate under total query, evidence, and artifact
-  limits. Exact fallback and benchmark gates remain open.
+  limits. Add an explicit portfolio route for exact whole-model evidence when
+  static discovery refuses family structure. Invalid family evidence and
+  resource errors fail closed instead of silently selecting that route.
+  Benchmark gates remain open.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

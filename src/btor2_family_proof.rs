@@ -20,6 +20,9 @@ pub const MAX_FAMILY_PROOF_QUERIES: usize = 256;
 pub const MAX_FAMILY_PROOF_EVIDENCE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_FAMILY_PROOF_ARTIFACT_BYTES: usize = 65 * 1024 * 1024;
 const MAGIC: &[u8; 8] = b"GCCBFP01";
+pub const BTOR2_FAMILY_PROOF_PORTFOLIO_VERSION: u32 = 1;
+const DIRECT_MAGIC: &[u8; 8] = b"GCCBDP01";
+const PORTFOLIO_MAGIC: &[u8; 8] = b"GCCBPO01";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2FamilyQuery {
@@ -36,6 +39,41 @@ pub struct Btor2FamilyProofInput<'a> {
     pub parameter_bytes: &'a [u8],
     pub instances: &'a [Btor2FamilyInstance],
     pub queries: &'a [Btor2FamilyQuery],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2DirectQuery {
+    pub bad_property: u64,
+    pub horizon: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Btor2FamilyProofRoute<'a> {
+    Family(Btor2FamilyProofInput<'a>),
+    ExactFallback {
+        model_bytes: &'a [u8],
+        queries: &'a [Btor2DirectQuery],
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2FamilyProofPortfolioBackend {
+    Family,
+    DirectExact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2FamilyProofPortfolioReason {
+    FamilyAdmitted,
+    StaticStructureRefused,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2FamilyProofPortfolioArtifact {
+    pub version: u32,
+    pub backend: Btor2FamilyProofPortfolioBackend,
+    pub reason: Btor2FamilyProofPortfolioReason,
+    pub payload: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -121,6 +159,32 @@ pub struct Btor2FamilyProofSummary {
     pub unsafe_count: usize,
     pub evidence_bytes: usize,
     pub members: Vec<SearchSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2FamilyProofPortfolioSummary {
+    pub version: u32,
+    pub backend: Btor2FamilyProofPortfolioBackend,
+    pub reason: Btor2FamilyProofPortfolioReason,
+    pub source_sha256: [u8; 32],
+    pub queries: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub evidence_bytes: usize,
+    pub members: Vec<SearchSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DirectProofMember {
+    bad_property: u64,
+    horizon: u32,
+    evidence: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DirectProofArtifact {
+    source_sha256: [u8; 32],
+    members: Vec<DirectProofMember>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -465,6 +529,404 @@ pub fn decode_btor2_family_proof(
     Ok(artifact)
 }
 
+fn validate_direct_queries(
+    queries: &[Btor2DirectQuery],
+    policy: Btor2FamilyProofPolicy,
+) -> Result<(), Btor2FamilyProofError> {
+    if queries.is_empty()
+        || queries.len() > policy.max_queries
+        || queries
+            .iter()
+            .any(|query| query.horizon > MAX_SEARCH_HORIZON)
+        || queries
+            .windows(2)
+            .any(|pair| pair[0].bad_property >= pair[1].bad_property)
+    {
+        return Err(reject(
+            "direct proof queries must be valid and strictly property ordered",
+        ));
+    }
+    Ok(())
+}
+
+fn produce_direct_proof(
+    model_bytes: &[u8],
+    queries: &[Btor2DirectQuery],
+    policy: Btor2FamilyProofPolicy,
+) -> Result<DirectProofArtifact, Btor2FamilyProofError> {
+    validate_direct_queries(queries, policy)?;
+    let model = btor2::parse_bytes(model_bytes)
+        .map_err(|error| reject(format!("invalid direct exact model: {error}")))?;
+    let properties = model
+        .bad_properties()
+        .iter()
+        .map(|(identifier, _, _)| *identifier)
+        .collect::<std::collections::BTreeSet<_>>();
+    if queries
+        .iter()
+        .any(|query| !properties.contains(&query.bad_property))
+    {
+        return Err(reject("direct proof query names an unknown bad property"));
+    }
+    let mut members = Vec::with_capacity(queries.len());
+    for query in queries {
+        let certificate = btor2_search::produce(model_bytes, query.bad_property, query.horizon)
+            .map_err(|error| reject(format!("direct proof production failed: {error}")))?;
+        let evidence = btor2_search::encode(&certificate)
+            .map_err(|error| reject(format!("direct proof encoding failed: {error}")))?
+            .into_bytes();
+        members.push(DirectProofMember {
+            bad_property: query.bad_property,
+            horizon: query.horizon,
+            evidence,
+        });
+    }
+    let artifact = DirectProofArtifact {
+        source_sha256: Sha256::digest(model_bytes).into(),
+        members,
+    };
+    let _ = encode_direct_proof(&artifact, policy)?;
+    Ok(artifact)
+}
+
+fn direct_evidence_bytes(
+    members: &[DirectProofMember],
+    policy: Btor2FamilyProofPolicy,
+) -> Result<usize, Btor2FamilyProofError> {
+    members.iter().try_fold(0usize, |total, member| {
+        if member.evidence.is_empty()
+            || member.evidence.len() > MAX_SEARCH_CERTIFICATE_BYTES
+            || member.horizon > MAX_SEARCH_HORIZON
+        {
+            return Err(reject("direct proof member is outside static limits"));
+        }
+        total
+            .checked_add(member.evidence.len())
+            .filter(|value| *value <= policy.max_evidence_bytes)
+            .ok_or_else(|| reject("direct proof evidence exceeds policy"))
+    })
+}
+
+fn encode_direct_proof(
+    artifact: &DirectProofArtifact,
+    policy: Btor2FamilyProofPolicy,
+) -> Result<Vec<u8>, Btor2FamilyProofError> {
+    let queries = artifact
+        .members
+        .iter()
+        .map(|member| Btor2DirectQuery {
+            bad_property: member.bad_property,
+            horizon: member.horizon,
+        })
+        .collect::<Vec<_>>();
+    validate_direct_queries(&queries, policy)?;
+    direct_evidence_bytes(&artifact.members, policy)?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(DIRECT_MAGIC);
+    bytes.extend_from_slice(&artifact.source_sha256);
+    push_u32(&mut bytes, artifact.members.len(), "direct member count")?;
+    for member in &artifact.members {
+        bytes.extend_from_slice(&member.bad_property.to_le_bytes());
+        bytes.extend_from_slice(&member.horizon.to_le_bytes());
+        push_u32(&mut bytes, member.evidence.len(), "direct evidence length")?;
+        bytes.extend_from_slice(&member.evidence);
+    }
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    if bytes.len() > policy.max_artifact_bytes {
+        return Err(reject("direct proof exceeds artifact byte policy"));
+    }
+    Ok(bytes)
+}
+
+fn decode_direct_proof(
+    bytes: &[u8],
+    policy: Btor2FamilyProofPolicy,
+) -> Result<DirectProofArtifact, Btor2FamilyProofError> {
+    if bytes.len() < 8 + 32 + 4 + 32 || bytes.len() > policy.max_artifact_bytes {
+        return Err(reject("direct proof size is outside policy"));
+    }
+    let payload_len = bytes.len() - 32;
+    let expected: [u8; 32] = bytes[payload_len..].try_into().expect("fixed suffix");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_len])) != expected {
+        return Err(reject("direct proof checksum mismatch"));
+    }
+    let mut cursor = Cursor {
+        bytes: &bytes[..payload_len],
+        offset: 0,
+    };
+    if cursor.take(8)? != DIRECT_MAGIC {
+        return Err(reject("direct proof magic mismatch"));
+    }
+    let source_sha256: [u8; 32] = cursor.take(32)?.try_into().expect("fixed length");
+    let member_count = count(cursor.u32()?, policy.max_queries, "direct member count")?;
+    let mut members = Vec::with_capacity(member_count);
+    let mut evidence_bytes = 0usize;
+    for _ in 0..member_count {
+        let bad_property = u64::from_le_bytes(cursor.take(8)?.try_into().expect("fixed length"));
+        let horizon = cursor.u32()?;
+        if horizon > MAX_SEARCH_HORIZON {
+            return Err(reject("direct proof horizon exceeds limit"));
+        }
+        let evidence_len = count(
+            cursor.u32()?,
+            MAX_SEARCH_CERTIFICATE_BYTES,
+            "direct evidence length",
+        )?;
+        evidence_bytes = evidence_bytes
+            .checked_add(evidence_len)
+            .filter(|value| *value <= policy.max_evidence_bytes)
+            .ok_or_else(|| reject("direct proof evidence exceeds policy"))?;
+        members.push(DirectProofMember {
+            bad_property,
+            horizon,
+            evidence: cursor.take(evidence_len)?.to_vec(),
+        });
+    }
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject("trailing direct proof bytes"));
+    }
+    let artifact = DirectProofArtifact {
+        source_sha256,
+        members,
+    };
+    if encode_direct_proof(&artifact, policy)? != bytes {
+        return Err(reject("direct proof is not canonically encoded"));
+    }
+    Ok(artifact)
+}
+
+fn verify_direct_proof(
+    model_bytes: &[u8],
+    artifact: &DirectProofArtifact,
+    policy: Btor2FamilyProofPolicy,
+) -> Result<Btor2FamilyProofPortfolioSummary, Btor2FamilyProofError> {
+    let evidence_bytes = direct_evidence_bytes(&artifact.members, policy)?;
+    if <[u8; 32]>::from(Sha256::digest(model_bytes)) != artifact.source_sha256 {
+        return Err(reject("direct proof source digest mismatch"));
+    }
+    let queries = artifact
+        .members
+        .iter()
+        .map(|member| Btor2DirectQuery {
+            bad_property: member.bad_property,
+            horizon: member.horizon,
+        })
+        .collect::<Vec<_>>();
+    validate_direct_queries(&queries, policy)?;
+    let mut summaries = Vec::with_capacity(artifact.members.len());
+    for member in &artifact.members {
+        let certificate = btor2_search::decode(&member.evidence)
+            .map_err(|error| reject(format!("invalid direct proof member: {error}")))?;
+        if certificate.bad_property != member.bad_property
+            || certificate.query_horizon != member.horizon
+        {
+            return Err(reject("direct proof query binding mismatch"));
+        }
+        summaries.push(
+            btor2_search::verify(model_bytes, &certificate)
+                .map_err(|error| reject(format!("direct proof verification failed: {error}")))?,
+        );
+    }
+    let safe = summaries
+        .iter()
+        .filter(|summary| summary.result == SearchResult::Safe)
+        .count();
+    Ok(Btor2FamilyProofPortfolioSummary {
+        version: BTOR2_FAMILY_PROOF_PORTFOLIO_VERSION,
+        backend: Btor2FamilyProofPortfolioBackend::DirectExact,
+        reason: Btor2FamilyProofPortfolioReason::StaticStructureRefused,
+        source_sha256: artifact.source_sha256,
+        queries: summaries.len(),
+        safe,
+        unsafe_count: summaries.len() - safe,
+        evidence_bytes,
+        members: summaries,
+    })
+}
+
+pub fn produce_btor2_family_proof_portfolio(
+    route: Btor2FamilyProofRoute<'_>,
+    policy: Btor2FamilyProofPolicy,
+) -> Result<Btor2FamilyProofPortfolioArtifact, Btor2FamilyProofError> {
+    let (backend, reason, payload) = match route {
+        Btor2FamilyProofRoute::Family(input) => {
+            let (artifact, _) = produce_btor2_family_proof(input, policy)?;
+            (
+                Btor2FamilyProofPortfolioBackend::Family,
+                Btor2FamilyProofPortfolioReason::FamilyAdmitted,
+                encode_btor2_family_proof(&artifact, policy)?,
+            )
+        }
+        Btor2FamilyProofRoute::ExactFallback {
+            model_bytes,
+            queries,
+        } => {
+            let artifact = produce_direct_proof(model_bytes, queries, policy)?;
+            (
+                Btor2FamilyProofPortfolioBackend::DirectExact,
+                Btor2FamilyProofPortfolioReason::StaticStructureRefused,
+                encode_direct_proof(&artifact, policy)?,
+            )
+        }
+    };
+    let artifact = Btor2FamilyProofPortfolioArtifact {
+        version: BTOR2_FAMILY_PROOF_PORTFOLIO_VERSION,
+        backend,
+        reason,
+        payload,
+    };
+    let _ = encode_btor2_family_proof_portfolio(&artifact, policy)?;
+    Ok(artifact)
+}
+
+pub fn verify_btor2_family_proof_portfolio(
+    core_bytes: &[u8],
+    channel_bytes: &[u8],
+    parameter_bytes: &[u8],
+    monolithic_bytes: &[u8],
+    artifact: &Btor2FamilyProofPortfolioArtifact,
+    policy: Btor2FamilyProofPolicy,
+) -> Result<Btor2FamilyProofPortfolioSummary, Btor2FamilyProofError> {
+    let _ = encode_btor2_family_proof_portfolio(artifact, policy)?;
+    match (artifact.backend, artifact.reason) {
+        (
+            Btor2FamilyProofPortfolioBackend::Family,
+            Btor2FamilyProofPortfolioReason::FamilyAdmitted,
+        ) => {
+            let family = decode_btor2_family_proof(&artifact.payload, policy)?;
+            let summary = verify_btor2_family_proof(
+                core_bytes,
+                channel_bytes,
+                parameter_bytes,
+                &family,
+                policy,
+            )?;
+            Ok(Btor2FamilyProofPortfolioSummary {
+                version: BTOR2_FAMILY_PROOF_PORTFOLIO_VERSION,
+                backend: artifact.backend,
+                reason: artifact.reason,
+                source_sha256: summary.expanded_sha256,
+                queries: summary.queries,
+                safe: summary.safe,
+                unsafe_count: summary.unsafe_count,
+                evidence_bytes: summary.evidence_bytes,
+                members: summary.members,
+            })
+        }
+        (
+            Btor2FamilyProofPortfolioBackend::DirectExact,
+            Btor2FamilyProofPortfolioReason::StaticStructureRefused,
+        ) => {
+            let direct = decode_direct_proof(&artifact.payload, policy)?;
+            verify_direct_proof(monolithic_bytes, &direct, policy)
+        }
+        _ => Err(reject(
+            "BTOR2 family proof portfolio route is non-canonical",
+        )),
+    }
+}
+
+pub fn encode_btor2_family_proof_portfolio(
+    artifact: &Btor2FamilyProofPortfolioArtifact,
+    policy: Btor2FamilyProofPolicy,
+) -> Result<Vec<u8>, Btor2FamilyProofError> {
+    if artifact.version != BTOR2_FAMILY_PROOF_PORTFOLIO_VERSION
+        || artifact.payload.is_empty()
+        || artifact.payload.len() > policy.max_artifact_bytes
+        || !matches!(
+            (artifact.backend, artifact.reason),
+            (
+                Btor2FamilyProofPortfolioBackend::Family,
+                Btor2FamilyProofPortfolioReason::FamilyAdmitted
+            ) | (
+                Btor2FamilyProofPortfolioBackend::DirectExact,
+                Btor2FamilyProofPortfolioReason::StaticStructureRefused
+            )
+        )
+    {
+        return Err(reject("BTOR2 family proof portfolio is non-canonical"));
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(PORTFOLIO_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.push(match artifact.backend {
+        Btor2FamilyProofPortfolioBackend::Family => 0,
+        Btor2FamilyProofPortfolioBackend::DirectExact => 1,
+    });
+    bytes.push(match artifact.reason {
+        Btor2FamilyProofPortfolioReason::FamilyAdmitted => 0,
+        Btor2FamilyProofPortfolioReason::StaticStructureRefused => 1,
+    });
+    push_u32(
+        &mut bytes,
+        artifact.payload.len(),
+        "portfolio payload length",
+    )?;
+    bytes.extend_from_slice(&artifact.payload);
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    if bytes.len() > policy.max_artifact_bytes {
+        return Err(reject("BTOR2 family proof portfolio exceeds byte policy"));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_btor2_family_proof_portfolio(
+    bytes: &[u8],
+    policy: Btor2FamilyProofPolicy,
+) -> Result<Btor2FamilyProofPortfolioArtifact, Btor2FamilyProofError> {
+    if bytes.len() < 8 + 4 + 1 + 1 + 4 + 32 || bytes.len() > policy.max_artifact_bytes {
+        return Err(reject(
+            "BTOR2 family proof portfolio size is outside policy",
+        ));
+    }
+    let payload_end = bytes.len() - 32;
+    let checksum: [u8; 32] = bytes[payload_end..].try_into().expect("fixed suffix");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_end])) != checksum {
+        return Err(reject("BTOR2 family proof portfolio checksum mismatch"));
+    }
+    let mut cursor = Cursor {
+        bytes: &bytes[..payload_end],
+        offset: 0,
+    };
+    if cursor.take(8)? != PORTFOLIO_MAGIC {
+        return Err(reject("BTOR2 family proof portfolio magic mismatch"));
+    }
+    let version = cursor.u32()?;
+    let backend = match cursor.take(1)?[0] {
+        0 => Btor2FamilyProofPortfolioBackend::Family,
+        1 => Btor2FamilyProofPortfolioBackend::DirectExact,
+        _ => return Err(reject("unknown BTOR2 family proof portfolio backend")),
+    };
+    let reason = match cursor.take(1)?[0] {
+        0 => Btor2FamilyProofPortfolioReason::FamilyAdmitted,
+        1 => Btor2FamilyProofPortfolioReason::StaticStructureRefused,
+        _ => return Err(reject("unknown BTOR2 family proof portfolio reason")),
+    };
+    let payload_len = count(
+        cursor.u32()?,
+        policy.max_artifact_bytes,
+        "portfolio payload length",
+    )?;
+    let payload = cursor.take(payload_len)?.to_vec();
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject("trailing BTOR2 family proof portfolio bytes"));
+    }
+    let artifact = Btor2FamilyProofPortfolioArtifact {
+        version,
+        backend,
+        reason,
+        payload,
+    };
+    if encode_btor2_family_proof_portfolio(&artifact, policy)? != bytes {
+        return Err(reject(
+            "BTOR2 family proof portfolio is not canonically encoded",
+        ));
+    }
+    Ok(artifact)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,6 +955,15 @@ mod tests {
 12 output 10 match
 "#;
     const PARAMETERS: &[u8] = b"width=1\n";
+    const MONOLITHIC: &[u8] = br#"1 sort bitvec 1
+2 input 1 enable
+3 state 1 state
+4 zero 1
+5 init 1 3 4
+6 next 1 3 2
+7 bad 4 always_safe
+8 bad 3 reached
+"#;
 
     fn instances() -> Vec<Btor2FamilyInstance> {
         ["channel0", "channel1"]
@@ -648,6 +1119,118 @@ mod tests {
             .unwrap();
             assert_eq!(summary.queries, count * 5);
             assert_eq!(summary.safe + summary.unsafe_count, count * 5);
+        }
+    }
+
+    #[test]
+    fn explicit_exact_fallback_preserves_both_answers() {
+        let policy = Btor2FamilyProofPolicy::default();
+        let artifact = produce_btor2_family_proof_portfolio(
+            Btor2FamilyProofRoute::ExactFallback {
+                model_bytes: MONOLITHIC,
+                queries: &[
+                    Btor2DirectQuery {
+                        bad_property: 7,
+                        horizon: 2,
+                    },
+                    Btor2DirectQuery {
+                        bad_property: 8,
+                        horizon: 2,
+                    },
+                ],
+            },
+            policy,
+        )
+        .unwrap();
+        let bytes = encode_btor2_family_proof_portfolio(&artifact, policy).unwrap();
+        let decoded = decode_btor2_family_proof_portfolio(&bytes, policy).unwrap();
+        let summary = verify_btor2_family_proof_portfolio(
+            CORE, CHANNEL, PARAMETERS, MONOLITHIC, &decoded, policy,
+        )
+        .unwrap();
+        assert_eq!(
+            summary.backend,
+            Btor2FamilyProofPortfolioBackend::DirectExact
+        );
+        assert_eq!(
+            summary.reason,
+            Btor2FamilyProofPortfolioReason::StaticStructureRefused
+        );
+        assert_eq!(summary.safe, 1);
+        assert_eq!(summary.unsafe_count, 1);
+    }
+
+    #[test]
+    fn family_portfolio_is_canonical_and_invalid_family_does_not_fallback() {
+        let policy = Btor2FamilyProofPolicy::default();
+        let queries = [Btor2FamilyQuery {
+            property_index: 0,
+            horizon: 2,
+        }];
+        let instances = instances();
+        let input = Btor2FamilyProofInput {
+            core_bytes: CORE,
+            core_roots: &[3],
+            channel_bytes: CHANNEL,
+            channel_roots: &[5, 9],
+            parameter_bytes: PARAMETERS,
+            instances: &instances,
+            queries: &queries,
+        };
+        let artifact =
+            produce_btor2_family_proof_portfolio(Btor2FamilyProofRoute::Family(input), policy)
+                .unwrap();
+        let summary = verify_btor2_family_proof_portfolio(
+            CORE, CHANNEL, PARAMETERS, MONOLITHIC, &artifact, policy,
+        )
+        .unwrap();
+        assert_eq!(summary.backend, Btor2FamilyProofPortfolioBackend::Family);
+
+        let mut invalid_instances = instances.clone();
+        invalid_instances[0].parameter_sha256 = [0; 32];
+        let invalid = Btor2FamilyProofInput {
+            instances: &invalid_instances,
+            ..input
+        };
+        assert!(
+            produce_btor2_family_proof_portfolio(Btor2FamilyProofRoute::Family(invalid), policy,)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn portfolio_route_source_and_bytes_fail_closed() {
+        let policy = Btor2FamilyProofPolicy::default();
+        let artifact = produce_btor2_family_proof_portfolio(
+            Btor2FamilyProofRoute::ExactFallback {
+                model_bytes: MONOLITHIC,
+                queries: &[Btor2DirectQuery {
+                    bad_property: 7,
+                    horizon: 2,
+                }],
+            },
+            policy,
+        )
+        .unwrap();
+        assert!(
+            verify_btor2_family_proof_portfolio(
+                CORE, CHANNEL, PARAMETERS, b"changed", &artifact, policy,
+            )
+            .is_err()
+        );
+
+        let mut forced = artifact.clone();
+        forced.backend = Btor2FamilyProofPortfolioBackend::Family;
+        assert!(encode_btor2_family_proof_portfolio(&forced, policy).is_err());
+
+        let bytes = encode_btor2_family_proof_portfolio(&artifact, policy).unwrap();
+        for end in 0..bytes.len() {
+            assert!(decode_btor2_family_proof_portfolio(&bytes[..end], policy).is_err());
+        }
+        for offset in 0..bytes.len() {
+            let mut changed = bytes.clone();
+            changed[offset] ^= 1;
+            assert!(decode_btor2_family_proof_portfolio(&changed, policy).is_err());
         }
     }
 }
