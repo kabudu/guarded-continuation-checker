@@ -23,7 +23,11 @@
   limits. Add an explicit portfolio route for exact whole-model evidence when
   static discovery refuses family structure. Invalid family evidence and
   resource errors fail closed instead of silently selecting that route.
-  Benchmark gates remain open.
+  Retain a five-trial 2, 4, and 6-channel preliminary negative control: the
+  compact family map is 77.69% to 84.18% smaller than the expanded model, but
+  exact proof evidence is identical and the complete family portfolio remains
+  292 to 476 bytes larger than direct exact evidence. Full authentic-subsystem
+  and maintained-baseline gates remain open.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

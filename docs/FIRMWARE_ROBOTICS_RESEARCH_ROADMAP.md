@@ -234,6 +234,16 @@ renaming, composed with one shared core, and checked against exact monolithic
 and maintained proof-producing routes. This targets reusable repeated-IP
 evidence, not another isolated timing comparison.
 
+The first [preliminary channel-family probe](OPENTITAN_PWM_CHANNEL_FAMILY_PROBE_V1.md)
+closes only the structural mechanism slice. Canonical source, parameter, root,
+instance-map, proof, and exact-fallback artifacts now fail closed under explicit
+resource limits and preserve both answers at 2, 4, and 6 instances. The compact
+map is 77.69% to 84.18% smaller than its expanded relation, but the exact proof
+members are unchanged and the complete family portfolio is larger than direct
+exact evidence. This is a retained negative control. The authentic independent
+channel fixture, representative-proof experiment, maintained baseline, process
+resource evidence, portability, and self-service acceptance gates remain open.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest

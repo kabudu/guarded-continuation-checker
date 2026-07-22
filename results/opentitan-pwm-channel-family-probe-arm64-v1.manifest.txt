@@ -1,0 +1,24 @@
+schema_version=1
+scope=opentitan-pwm-identical-binding-channel-family-preliminary-probe
+status=complete-negative-control
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=68613bbcef95190d9ba64a72e00fecdd6156677b
+trials_per_channel_count=5
+channel_counts=2,4,6
+process_scope=single-process-release
+timing_scope=in-process-production-or-verification
+memory_scope=not-measured
+selection=none
+discarded_trials=0
+sha256=9b164951bfcc0d6fa592b2735b91f3ac43905c13b8bffb7c4d4737532806a080 file=generated/core-after.btor2
+sha256=73e059ffe900313fe3b6e80ffcb53d5232ed8c80cdc8ce00f65b41d27df90534 file=generated/channel-after.btor2
+sha256=46be18e3540694fd2579df9a2d31f620629a75f1f56078770fb6308a540ba45e file=family-parameters-v1.txt
+sha256=1e8e57852f0c8ffec26f5245095a35e4dc47b1e7dafd93cd7792b08af06acd14 file=src/btor2_family.rs
+sha256=662d1aa981827fce0d9407723dc3bf07a27314a87467306ae12d3c10b8597813 file=src/btor2_family_proof.rs
+sha256=44afbe49ea5e10a890cc5fde221558c3b03bc9102a9f3d907597cd95cba0ebdd file=examples/btor2_family_probe.rs
+sha256=0ef92a437ebda3b6e95973bf90517038c876db36220b76bc48d8b5af9c9e4756 file=scripts/run-btor2-family-probe-v1.sh
+sha256=97b07013fd95bb9b3ee32fa5b9c9e84a7af8b2be5eb472d8804e442c8b951fa2 file=scripts/check-btor2-family-probe-v1.sh
+sha256=6b2937a4372e257c52d1124cf4d6e7a4e7701c444b232eb21299a8028f7fac48 file=Cargo.lock
+sha256=02168b21c803e1f2143059401023b7b7f2e7b1a19817a168c27b54651d9e056a file=results/opentitan-pwm-channel-family-probe-arm64-v1.csv
