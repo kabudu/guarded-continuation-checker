@@ -514,9 +514,9 @@ The OpenTitan `prim_count` cohort now closes that semantic-change prerequisite.
 An authentic stable-interface revision changes the bounded answer from SAFE to
 UNSAFE at reset, while GCC reuses and reverifies the unchanged environment
 section and recomputes the counter relation. A separate Yosys plus Z3 oracle
-agrees, and local regeneration is byte-identical. The fixture is currently an
-auditable parameter specialisation rather than a machine-checked translation
-of verbatim upstream SystemVerilog, and the hosted, closest-system, portable,
+agrees, and local regeneration is byte-identical. Pinned Slang-enabled Yosys
+compiles both untouched Git revisions and proves each selected-configuration
+specialisation sequentially equivalent. The hosted, closest-system, portable,
 compatibility, and independent-review gates remain open. The top-level
 production status therefore does not change yet.
 

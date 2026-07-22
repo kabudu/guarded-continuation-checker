@@ -620,8 +620,9 @@ recomputes the changed component exactly. A separate Yosys plus Z3 assertion
 oracle agrees, and two clean runs reproduce byte-identical models,
 certificates, result CSV, and manifest.
 
-This revives the closest-system experiment, not the novelty claim. The current
-fixture is a reviewable parameter specialisation because pinned Yosys cannot
-parse the complete upstream package-based SystemVerilog directly. Verbatim
-source frontend equivalence, an identical-scope maintained-system comparison,
-portable certificate identity, and independent review remain mandatory.
+This revives the closest-system experiment, not the novelty claim. Pinned
+Slang-enabled Yosys now compiles the untouched package-based SystemVerilog and
+proves both selected-configuration specialisations sequentially equivalent.
+That gate caught and corrected an enum-encoding error in the first fixture.
+An identical-scope maintained-system comparison, portable certificate
+identity, and independent review remain mandatory.

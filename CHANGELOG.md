@@ -7,9 +7,11 @@
   across commit `369cffc8`; GCC reuses and reverifies the unchanged environment
   relation while recomputing the changed counter relation. Add deterministic
   model and certificate manifests, a separate Yosys plus Z3 oracle, strict
-  source provenance, and hosted reproduction. The current parameter
-  specialisation remains subject to verbatim-source frontend equivalence and a
-  maintained equivalent-scope baseline before supporting a novelty claim.
+  source provenance, and hosted reproduction. Add a pinned Slang-enabled Yosys
+  gate that compiles both untouched upstream revisions and proves each selected
+  specialisation sequentially equivalent. This gate exposed and corrected the
+  initial fixture's collapsed comparison-valid enum. A maintained
+  equivalent-scope baseline remains required before supporting a novelty claim.
 - Add bounded search certificate v5 for one through eight word-valued semantic
   inputs with at most eight total bits. Bind source input widths, reconstruct
   fields in input-node and least-significant-bit order, preserve optional exact

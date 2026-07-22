@@ -283,9 +283,10 @@ now supplies that required precondition. Authentic stable-interface commit
 `369cffc8` changes a pinned cross-counter configuration from SAFE to UNSAFE at
 reset. GCC retains and reverifies the unchanged environment evidence while
 recomputing the changed counter relation, and a separate Yosys plus Z3 oracle
-agrees. Verbatim-source frontend equivalence and the same-scope maintained-tool
-comparison remain open, so this is a qualified research result rather than a
-novelty or production-readiness claim.
+agrees. Pinned Slang-enabled Yosys proves the selected specialisations
+sequentially equivalent to both untouched upstream revisions. The same-scope
+maintained-tool comparison remains open, so this is a qualified research
+result rather than a novelty or production-readiness claim.
 
 Validated findings:
 

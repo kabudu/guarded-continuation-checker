@@ -362,8 +362,7 @@ jobs:
           cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
             -DCMAKE_BUILD_TYPE=Release \
             -DYOSYS_CHECKOUT_INFO=b8e7da6f40ae8f552c116bf6c359b07c6533e159 \
-            -DYOSYS_WITHOUT_ABC=ON \
-            -DYOSYS_WITHOUT_SLANG=ON
+            -DYOSYS_WITHOUT_ABC=ON
           cmake --build /tmp/yosys-attestation/build --parallel 2 --target yosys
       - name: Reproduce public source-to-model attestation
         run: |
@@ -392,6 +391,26 @@ jobs:
             /tmp/opentitan-prim-count-revision-v1
           diff -u results/opentitan-prim-count-revision-v1.csv \
             /tmp/opentitan-prim-count-revision-v1.csv
+      - name: Prove OpenTitan verbatim-source equivalence
+        run: |
+          git init /tmp/opentitan-prim-count-verbatim
+          git -C /tmp/opentitan-prim-count-verbatim remote add origin \
+            https://github.com/lowRISC/opentitan.git
+          git -C /tmp/opentitan-prim-count-verbatim fetch --depth 1 origin \
+            34157c7afb84a7be7b1b1250d673f9fa8a3c18ce \
+            369cffc85db0e6d5a667676a6f89987b94210e70
+          git -C /tmp/opentitan-prim-count-verbatim worktree add --detach \
+            /tmp/opentitan-prim-before 34157c7afb84a7be7b1b1250d673f9fa8a3c18ce
+          git -C /tmp/opentitan-prim-count-verbatim worktree add --detach \
+            /tmp/opentitan-prim-after 369cffc85db0e6d5a667676a6f89987b94210e70
+          mkdir /tmp/opentitan-prim-count-equivalence-v1
+          scripts/test-opentitan-prim-count-verbatim-equivalence-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-prim-before /tmp/opentitan-prim-after \
+            /tmp/opentitan-prim-count-verbatim-equivalence-v1.csv \
+            /tmp/opentitan-prim-count-equivalence-v1
+          diff -u results/opentitan-prim-count-verbatim-equivalence-v1.csv \
+            /tmp/opentitan-prim-count-verbatim-equivalence-v1.csv
       - name: Reproduce Caliptra and Roa Logic PLIC search acceptance
         run: |
           cargo build --release --locked \

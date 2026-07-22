@@ -39,7 +39,7 @@ check_digest() {
   }
 }
 
-check_digest 64a34c84f3562b558684fd668bb10109be26455acfea9365367415c99606c5c1 \
+check_digest 09111e515699f50816f7571bb8bb62b86f55bb70bdce34600a2008b16d71a061 \
   "$fixture/prim-count-before-specialized.sv"
 check_digest 5ce24a22bfe53ed6d1c99104e568d1bd8071114502b81ba357c350e73dbfda87 \
   "$fixture/prim-count-after-specialized.sv"
@@ -111,7 +111,7 @@ if ! (set -C; cp "$scratch/environment.btor2" "$environment_output") 2>/dev/null
   exit 2
 fi
 
-build_component before prim-count-before-specialized.sv 35 "$before_output"
+build_component before prim-count-before-specialized.sv 41 "$before_output"
 build_component after prim-count-after-specialized.sv 30 "$after_output"
 
 printf 'opentitan_prim_count_revision_v1=CREATED upstream_before=%s upstream_after=%s yosys_revision=%s\n' \

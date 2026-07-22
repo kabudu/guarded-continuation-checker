@@ -16,7 +16,7 @@ module opentitan_prim_count_before (
   logic [1:0] up_cnt_q;
   logic [1:0] max_val;
   logic [1:0] down_cnt;
-  logic       cmp_valid;
+  logic [1:0] cmp_valid;
   logic [1:0] sum;
   logic       msb;
 
@@ -25,7 +25,7 @@ module opentitan_prim_count_before (
       up_cnt_q <= 2'b00;
       max_val <= 2'b11;
       down_cnt <= 2'b00;
-      cmp_valid <= 1'b0;
+      cmp_valid <= 2'b01;
     end else begin
       if (clr_i || set_i) begin
         up_cnt_q <= 2'b00;
@@ -43,14 +43,15 @@ module opentitan_prim_count_before (
         down_cnt <= down_cnt - step_i;
       end
       if (clr_i) begin
-        cmp_valid <= 1'b0;
-      end else if (!cmp_valid && set_i) begin
-        cmp_valid <= 1'b1;
+        cmp_valid <= 2'b01;
+      end else if ((cmp_valid == 2'b01) && set_i) begin
+        cmp_valid <= 2'b10;
       end
     end
   end
 
   assign {msb, sum} = down_cnt + up_cnt_q;
   assign cnt_o = down_cnt;
-  assign err_o = cmp_valid ? ((max_val != sum) | msb) : 1'b0;
+  assign err_o = (cmp_valid == 2'b10) ? ((max_val != sum) | msb) :
+                 (cmp_valid == 2'b01) ? 1'b0 : 1'b1;
 endmodule

@@ -34,13 +34,19 @@ manifest. The retained files are:
 
 - [`opentitan-prim-count-revision-v1.csv`](../results/opentitan-prim-count-revision-v1.csv)
 - [`opentitan-prim-count-revision-arm64-v1.manifest.txt`](../results/opentitan-prim-count-revision-arm64-v1.manifest.txt)
+- [`opentitan-prim-count-verbatim-equivalence-v1.csv`](../results/opentitan-prim-count-verbatim-equivalence-v1.csv)
+
+Pinned Slang-enabled Yosys also compiles the untouched package and RTL from
+both Git revisions. Sequential equivalence proves the pre-revision and
+post-revision specialisations match their corresponding upstream modules for
+the selected configuration. This check exposed and corrected an earlier
+one-bit simplification of the upstream two-bit comparison-valid enum before
+the cohort was accepted.
 
 ## Claim boundary
 
 This result passes the first functional gate that the PLIC pair falsified: the
 two revisions have different reachable semantics and different bounded
-answers. It does not yet establish scholarly novelty. The current fixture is a
-reviewable parameter specialisation of the pinned upstream sources. A frontend
-capable of compiling the verbatim package-based SystemVerilog, followed by
-model equivalence against each specialisation, remains required. A maintained
-closest-system comparison at the same revision-local scope is also open.
+answers. It also closes the verbatim-source translation gate for the selected
+configuration. It does not yet establish scholarly novelty. A maintained
+closest-system comparison at the same revision-local scope remains open.

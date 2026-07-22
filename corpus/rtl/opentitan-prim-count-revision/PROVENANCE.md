@@ -14,10 +14,11 @@ The two specialisations remove package types, unused duplicate-counter mode,
 assertion macros, and generic array structure after fixing the parameters to
 `Width=2`, `OutSelDnCnt=1`, and `CntStyle=CrossCnt`. They retain the upstream
 reset, clear, set, enable, maximum, up-counter, down-counter, output, and error
-assignments for that configuration. The independently generated Yosys plus Z3
-oracle checks the resulting old SAFE and new UNSAFE behaviour.
+assignments for that configuration. Pinned Slang-enabled Yosys compiles the
+untouched sources from both Git commits and proves each specialisation
+sequentially equivalent. The independently generated Yosys plus Z3 oracle also
+checks the resulting old SAFE and new UNSAFE behaviour.
 
-This is currently a reviewable semantic specialisation, not a machine-checked
-translation of the complete upstream SystemVerilog. A verbatim-source frontend
-comparison remains a qualification gate before using this cohort as scholarly
-novelty evidence.
+This closes the specialisation translation gate for the pinned configuration.
+It does not prove equivalence for other parameter values or establish a
+scholarly novelty claim.

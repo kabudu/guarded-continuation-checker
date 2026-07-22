@@ -25,5 +25,6 @@ scripts/run-opentitan-prim-count-revision-v1.sh \
 
 The gate checks both GCC certificates, retained environment evidence,
 deterministic regeneration, and a separate Yosys plus Z3 assertion oracle.
-The specialised files are auditable derived fixtures, not verbatim upstream
-files. Their exact scope and provenance are recorded in `PROVENANCE.md`.
+The companion verbatim-source gate compiles both untouched Git revisions with
+pinned Slang-enabled Yosys and proves the specialised modules sequentially
+equivalent. Their exact scope and provenance are recorded in `PROVENANCE.md`.
