@@ -1,0 +1,22 @@
+schema_version=1
+scope=opentitan-pwm-authentic-reachable-equivalence-certificate
+status=complete-admission-mechanism-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=d6512874f7b3d2e7bf804eac685f105a9dbb89a6
+channel_counts=2,4,6
+horizon=63
+selection=none
+discarded_rows=0
+timing_scope=single-observation-not-admission-threshold
+memory_scope=not-measured
+sha256=57961a02fd4800063edcab72e66c525a345fdb69d1cf08891e70f58f8cc090ba file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-2.btor2
+sha256=c0c07ccb74753cfeaed4fb333d4c4d8169b5b448676bb336cc9ee2b1923a6316 file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-4.btor2
+sha256=1a902e884d8c71ebfedd99cc6161c207278909c83c54bd327815c8743c17062e file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-6.btor2
+sha256=f13ee37a76f537e3e94e953537afbc1b9b2db4f2ca712338397e8801c0610876 file=src/btor2_region_equivalence.rs
+sha256=ffd2a6f6f4ae0c8e95d094bdc18668e536fac56e49e65d641a1aed355f8edd37 file=examples/btor2_reachable_equivalence_certificate_probe.rs
+sha256=7e2439b7138f75d2b6e38084b6b7ed08c1e78c81d2cfa84bfca9656393e60118 file=scripts/run-btor2-reachable-equivalence-certificate-probe-v1.sh
+sha256=a2c6eceaff3ef46001d5e783b99557ecf3d04e87a89f3fbfc924d543b7b0bec9 file=scripts/check-btor2-reachable-equivalence-certificate-probe-v1.sh
+sha256=6b2937a4372e257c52d1124cf4d6e7a4e7701c444b232eb21299a8028f7fac48 file=Cargo.lock
+sha256=ca816c5eddd2fc3c8bd6e51f6905cf776aa164f3da76a0992d128b4a318226ed file=results/opentitan-pwm-reachable-equivalence-certificate-arm64-v1.csv

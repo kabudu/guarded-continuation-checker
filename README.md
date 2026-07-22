@@ -351,6 +351,18 @@ hostile-drift matrix are retained. Hosted Linux release-build run 29910725650
 reproduces the frozen bytes and semantics. Broader production and novelty gates
 remain open.
 
+The separate
+[authentic PWM reachable-equivalence certificate](docs/OPENTITAN_PWM_REACHABLE_EQUIVALENCE_CERTIFICATE_V1.md)
+retains a canonical source-bound partition of complete local-state and
+observation traces. Its verifier independently re-extracts region boundaries
+and replays every frame. Exact trace vectors, rather than SHA-256 equality,
+decide class membership. At horizon 63, the six-channel model has four classes
+and admits channels `[2, 4]` and `[3, 5]` for possible representative reuse;
+the two smaller models correctly admit none. The 220- to 420-byte artifacts
+close an integrity mechanism, not a novelty or performance gate. Property
+reuse with exact fallback and equivalent-scope baseline measurement remains
+the next experiment.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies

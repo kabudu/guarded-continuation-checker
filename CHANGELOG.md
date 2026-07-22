@@ -69,6 +69,13 @@
   regions. The authentic 6-channel PWM model retains strict singleton
   structural classes but proves reachable classes `[2, 4]` and `[3, 5]` through
   frame 63; channels with distinct startup histories remain separate.
+- Turn reachable-trace classification into a canonical source-bound artifact.
+  Class membership is decided from complete trace vectors rather than digest
+  equality; the independent verifier reparses and replays the supplied source.
+  Static count, horizon and byte limits plus checksum, truncation, mutation,
+  source-drift and semantic-drift tests fail closed. At horizon 63, authentic
+  2-, 4- and 6-channel artifacts occupy 220, 324 and 420 bytes; only the
+  6-channel source admits two channels for future representative reuse.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

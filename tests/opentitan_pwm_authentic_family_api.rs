@@ -1,6 +1,9 @@
 use guarded_continuation_checker::btor2;
 use guarded_continuation_checker::btor2_region_equivalence::{
-    derive_btor2_reachable_region_equivalence, derive_btor2_region_equivalence,
+    decode_btor2_reachable_region_equivalence_artifact, derive_btor2_reachable_region_equivalence,
+    derive_btor2_region_equivalence, encode_btor2_reachable_region_equivalence_artifact,
+    produce_btor2_reachable_region_equivalence_artifact,
+    verify_btor2_reachable_region_equivalence_artifact,
 };
 use guarded_continuation_checker::btor2_region_extract::{
     Btor2RegionPolicy, decode_btor2_complete_region_artifact, decode_btor2_region_artifact,
@@ -113,6 +116,37 @@ fn pinned_authentic_pwm_models_preserve_expected_channel_state_growth() {
             _ => unreachable!(),
         };
         assert_eq!(reachable.classes, expected_classes);
+        let reachable_artifact = produce_btor2_reachable_region_equivalence_artifact(
+            bytes,
+            semantic_roots,
+            channels,
+            63,
+            policy,
+        )
+        .unwrap();
+        let reachable_bytes =
+            encode_btor2_reachable_region_equivalence_artifact(&reachable_artifact).unwrap();
+        let reachable_decoded =
+            decode_btor2_reachable_region_equivalence_artifact(&reachable_bytes).unwrap();
+        assert_eq!(
+            verify_btor2_reachable_region_equivalence_artifact(bytes, &reachable_decoded, policy,)
+                .unwrap(),
+            reachable
+        );
+        assert_eq!(
+            reachable_bytes,
+            encode_btor2_reachable_region_equivalence_artifact(
+                &produce_btor2_reachable_region_equivalence_artifact(
+                    bytes,
+                    semantic_roots,
+                    channels,
+                    63,
+                    policy,
+                )
+                .unwrap(),
+            )
+            .unwrap()
+        );
         assert!(
             complete
                 .channel_to_aggregate_edges
@@ -147,4 +181,41 @@ fn pinned_authentic_pwm_models_preserve_expected_channel_state_growth() {
             .unwrap()
         );
     }
+}
+
+#[test]
+fn reachable_equivalence_artifact_fails_closed_under_hostile_changes() {
+    let bytes =
+        include_bytes!("../corpus/rtl/opentitan-pwm-channel-family/generated/authentic-6.btor2");
+    let policy = Btor2RegionPolicy::default();
+    let artifact =
+        produce_btor2_reachable_region_equivalence_artifact(bytes, &[5, 36], 6, 63, policy)
+            .unwrap();
+    let encoded = encode_btor2_reachable_region_equivalence_artifact(&artifact).unwrap();
+
+    for end in 0..encoded.len() {
+        assert!(decode_btor2_reachable_region_equivalence_artifact(&encoded[..end]).is_err());
+    }
+    for offset in 0..encoded.len() {
+        let mut changed = encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_reachable_region_equivalence_artifact(&changed).is_err());
+    }
+
+    let mut source_drift = bytes.to_vec();
+    source_drift.push(b'\n');
+    assert!(
+        verify_btor2_reachable_region_equivalence_artifact(&source_drift, &artifact, policy)
+            .is_err()
+    );
+    let mut class_drift = artifact.clone();
+    class_drift.summary.classes = (0..6).map(|channel| vec![channel]).collect();
+    assert!(
+        verify_btor2_reachable_region_equivalence_artifact(bytes, &class_drift, policy).is_err()
+    );
+    let mut digest_drift = artifact.clone();
+    digest_drift.summary.signatures[0].sha256[0] ^= 1;
+    assert!(
+        verify_btor2_reachable_region_equivalence_artifact(bytes, &digest_drift, policy).is_err()
+    );
 }

@@ -710,3 +710,20 @@ but its complete retained portfolio is about 1.7 MB. This establishes a local
 proof-structure distinction while falsifying a certificate-byte advantage on
 this cohort. A larger repeated-revision workload must show an end-to-end
 construction or checking benefit before the candidate can support novelty.
+
+## Authentic PWM reachable equivalence
+
+The bounded reachable-equivalence artifact closes a narrower integrity gap for
+the authentic PWM region experiment. Its producer compares complete trace
+vectors exactly, while its checker independently replays the exact source and
+requires a canonical, complete channel partition. The six-channel model admits
+two non-singleton pairs at horizon 63; the two- and four-channel sources admit
+none. This is a falsifiable static gate rather than a universal symmetry claim.
+
+Bounded trace equivalence, symmetry reduction, canonical serialization and
+source digests are established. The current checker also repeats all channel
+work, so it demonstrates neither proof-checking reduction nor novel
+composition. The candidate remains open only if one verified admission can be
+amortised across several explicitly bound predicates, using one representative
+per class, unchanged exact evaluation for singletons and refused inputs, and a
+complete-batch advantage over direct exact and maintained-tool baselines.

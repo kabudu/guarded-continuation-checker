@@ -1,0 +1,4 @@
+schema_version,channels,horizon,classes,representatives,reused_channels,artifact_bytes,artifact_sha256,produce_micros,verify_micros,deterministic,replayed,status
+1,2,63,2,2,0,220,30e20c2120dbe065f5609da94daf83162f7c322d67d70071ebfd08e2b6655613,4467,3463,true,true,accepted
+1,4,63,4,4,0,324,bffecaf978cd0cd17bfcfaef94594ba99ded337514db42904ab3f16f2339d1b3,3621,2664,true,true,accepted
+1,6,63,4,4,2,420,3db19ca2f188c4a58f4916b7bd2001b3633cc8105c300b24825205c8430d17be,4305,3897,true,true,accepted
