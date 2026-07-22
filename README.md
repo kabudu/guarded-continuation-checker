@@ -341,8 +341,9 @@ Certifaiger agree on all 20 results and validate every separate artifact. Their
 so artifact efficiency is currently negative. In five matched arm64 trials,
 GCC is about 53.78 times faster from source through answer and uses about 20.0%
 less producer-path peak RSS than 20 isolated maintained jobs. This is a scoped
-shared-model orchestration result, not a universal solver claim. Hostile-drift,
-exact-patch, and hosted release-build gates remain open.
+shared-model orchestration result, not a universal solver claim. The exact
+upstream patch and nine-case hostile-drift matrix are retained; hosted
+release-build acceptance remains open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

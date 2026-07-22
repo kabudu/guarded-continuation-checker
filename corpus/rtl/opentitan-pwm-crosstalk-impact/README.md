@@ -24,7 +24,8 @@ scripts/build-opentitan-pwm-crosstalk-impact-v1.sh \
   /tmp/gcc-pwm-impact/channel-after.btor2
 ```
 
-The specialised SystemVerilog, generated BTOR2, interface, queries, source
-digests, and derivation boundary are retained. The aggregate certificate is not
-committed; its accepted local identity is recorded in the experiment document.
-This corpus is mechanism evidence, not complete OpenTitan PWM assurance.
+The exact upstream patch, specialised SystemVerilog, generated BTOR2,
+interface, queries, source digests, and derivation boundary are retained. The
+aggregate certificate is not committed; its accepted local identity is
+recorded in the experiment document. This corpus is mechanism evidence, not
+complete OpenTitan PWM assurance.

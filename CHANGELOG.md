@@ -107,6 +107,11 @@
   producer-path peak RSS. GCC's artifact remains about 8.32 times larger. Treat
   this as a scoped shared-model and orchestration advantage, not a universal
   solver-performance claim.
+- Retain the exact 3,810-byte upstream OpenTitan PWM commit patch and bind its
+  authoritative SHA-256 into both source-generation routes. Add a public-cohort
+  hostile matrix proving fail-closed rejection of source, interface, query,
+  revision-direction, atom-order, evidence, digest, result and minimal-set
+  drift.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

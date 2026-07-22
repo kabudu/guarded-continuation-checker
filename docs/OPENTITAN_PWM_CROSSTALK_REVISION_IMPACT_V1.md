@@ -6,8 +6,8 @@ Predeclared before fixture extraction, implementation, or measurement. The
 local two-atom mechanism now passes with a frozen semantic explanation. The
 maintained baseline now agrees on all 20 observations and independently checks
 all evidence. The matched five-trial resource comparison also passes. The
-hostile-drift matrix, exact upstream patch retention, and hosted release-build
-gates remain open.
+exact upstream patch and nine-case hostile-drift matrix now pass. The hosted
+release-build gate remains open.
 
 ## Public revision
 
@@ -34,6 +34,8 @@ The parent and child source SHA-256 values are frozen before specialisation:
 
 The upstream licence SHA-256 is
 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`.
+The exact 3,810-byte upstream mail patch is retained at SHA-256
+`b5650d6c28465875f3e5c21d93c85b0cd228b4f233047baf85f8ade29ea421c2`.
 
 ## Question
 
@@ -222,3 +224,25 @@ scripts/run-opentitan-pwm-crosstalk-impact-v1.sh \
   /path/to/pinned/yosys /path/to/guarded-continuation-checker \
   /tmp/gcc.csv /tmp/gcc.manifest.txt /tmp/gcc-pwm-impact 1
 ```
+
+## Hostile drift matrix
+
+The authentic public cohort now rejects nine independently constructed drift
+classes:
+
+| Drift | Expected result |
+| --- | --- |
+| Parent source bytes | Reject |
+| Interface mapping | Reject |
+| Query horizon | Reject |
+| Revision direction | Reject |
+| Atom ordering | Reject |
+| Embedded evidence bytes | Reject |
+| Evidence digest | Reject |
+| Observation result | Reject |
+| Minimal invalidating set | Reject |
+
+`authentic_connected_change_bundle_fails_closed_on_bound_drift` constructs a
+valid bundle first, changes one bound dimension at a time, and requires the
+independent verifier to reject every case. This closes the local hostile-drift
+gate without treating parser rejection as semantic verification.

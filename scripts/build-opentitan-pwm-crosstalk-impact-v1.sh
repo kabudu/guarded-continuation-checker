@@ -45,6 +45,7 @@ check_digest 519596e56c11ef7023356ddfdb75ec97c16fcc61b4f2983bd52a7eb17e0b73c7 "$
 check_digest b122a48144d587f185610d36e811edd5ec0b9f7608d5b8e806eb80b5be46bddb "$fixture/core-after-specialized.sv"
 check_digest bfd38560962bcc16d70e7a91e6a3252eec478807cde38a30979c03accc69a05b "$fixture/channel-before-specialized.sv"
 check_digest 4683a1a74086ceba2b6dc27bdee057ed32937489f74fc0bbdbffb4fa62777f78 "$fixture/channel-after-specialized.sv"
+check_digest b5650d6c28465875f3e5c21d93c85b0cd228b4f233047baf85f8ade29ea421c2 "$fixture/upstream-86db289.patch"
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-opentitan-pwm-impact.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM

@@ -10,6 +10,11 @@ The behavioural boundary is derived from the Apache-2.0 OpenTitan repository:
 - upstream licence SHA-256:
   `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
 
+The exact upstream mail-formatted commit patch is retained as
+`upstream-86db289.patch`. Its SHA-256 is
+`b5650d6c28465875f3e5c21d93c85b0cd228b4f233047baf85f8ade29ea421c2`,
+matching the bytes served by the authoritative OpenTitan commit URL.
+
 Frozen full-source SHA-256 values:
 
 | Source | Parent | Child |
