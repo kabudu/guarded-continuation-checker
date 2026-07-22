@@ -626,3 +626,12 @@ proves both selected-configuration specialisations sequentially equivalent.
 That gate caught and corrected an enum-encoding error in the first fixture.
 An identical-scope maintained-system comparison, portable certificate
 identity, and independent review remain mandatory.
+
+The identical-scope rIC3 and Certifaiger comparison is now complete locally.
+Unlike the PLIC pair, the old SAFE witness fails against the new model and the
+new UNSAFE trace fails against the old model. The maintained route regenerates
+only the 13-byte new trace. GCC retains and reverifies the environment section,
+but its complete retained portfolio is about 1.7 MB. This establishes a local
+proof-structure distinction while falsifying a certificate-byte advantage on
+this cohort. A larger repeated-revision workload must show an end-to-end
+construction or checking benefit before the candidate can support novelty.

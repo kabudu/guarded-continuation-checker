@@ -285,8 +285,16 @@ reset. GCC retains and reverifies the unchanged environment evidence while
 recomputing the changed counter relation, and a separate Yosys plus Z3 oracle
 agrees. Pinned Slang-enabled Yosys proves the selected specialisations
 sequentially equivalent to both untouched upstream revisions. The same-scope
-maintained-tool comparison remains open, so this is a qualified research
-result rather than a novelty or production-readiness claim.
+maintained-tool comparison below qualifies the distinction without showing a
+cost win, so this remains a research result rather than a novelty or
+production-readiness claim.
+
+The [equivalent-scope maintained baseline](docs/OPENTITAN_PRIM_COUNT_CLOSEST_BASELINE_V1.md)
+shows that the semantic change invalidates both directions of cross-revision
+evidence reuse. Qualified rIC3 and Certifaiger regenerate and independently
+check the new 13-byte UNSAFE trace. GCC retains explicit local evidence, but
+its complete portfolio is about 1.7 MB, so this cohort demonstrates local
+attribution rather than a certificate-size or production-cost advantage.
 
 Validated findings:
 

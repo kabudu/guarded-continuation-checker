@@ -520,6 +520,13 @@ specialisation sequentially equivalent. The hosted, closest-system, portable,
 compatibility, and independent-review gates remain open. The top-level
 production status therefore does not change yet.
 
+The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
+locally. Both cross-revision evidence swaps fail, and the new model needs only
+a 13-byte regenerated trace. GCC's roughly 1.7 MB retained portfolio therefore
+has no artifact-size advantage on this pair. Hosted reproduction and a larger
+representative revision service workload remain required before revision-local
+reuse can change a production-readiness row.
+
 The component parser now admits property-free BTOR2 using explicit projected
 semantic roots. The authentic PLIC cohort no longer adds a false assertion to
 make the component parseable. Local and exact-fallback paths produce and

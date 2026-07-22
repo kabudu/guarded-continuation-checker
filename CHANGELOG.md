@@ -11,7 +11,10 @@
   gate that compiles both untouched upstream revisions and proves each selected
   specialisation sequentially equivalent. This gate exposed and corrected the
   initial fixture's collapsed comparison-valid enum. A maintained
-  equivalent-scope baseline remains required before supporting a novelty claim.
+  equivalent-scope rIC3 and Certifaiger baseline proves the old SAFE witness and
+  new UNSAFE trace, rejects both cross-revision evidence swaps, and regenerates
+  only a 13-byte trace. This qualifies the functional distinction but
+  falsifies a GCC certificate-byte advantage on the tiny cohort.
 - Add bounded search certificate v5 for one through eight word-valued semantic
   inputs with at most eight total bits. Bind source input widths, reconstruct
   fields in input-node and least-significant-bit order, preserve optional exact

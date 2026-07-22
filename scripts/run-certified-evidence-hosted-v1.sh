@@ -126,6 +126,15 @@ RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   /tmp/ric3-output /tmp/certifaiger-output \
   "$output/roalogic-plic-closest-baseline-amd64-v1.csv" \
   "$output/roalogic-plic-closest-baseline-amd64-v1.manifest.txt"
+mkdir "$output/opentitan-prim-count-closest-work"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-opentitan-prim-count-closest-baseline-v1.sh \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/opentitan-prim-count-closest-baseline-amd64-v1.csv" \
+  "$output/opentitan-prim-count-closest-baseline-amd64-v1.manifest.txt" \
+  "$output/opentitan-prim-count-closest-work"
 cargo run --release --locked --quiet \
   --example changing_plant_controller_evidence_reuse \
   >"$output/changing-plant-controller-evidence-reuse-amd64-v1.csv"
