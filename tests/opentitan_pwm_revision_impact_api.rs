@@ -1,8 +1,10 @@
 use guarded_continuation_checker::revision_impact::{
-    MinimalSemanticChangeSet, TwoComponentRevisionImpactInput, derive_minimal_semantic_change_sets,
+    MinimalSemanticChangeSet, RevisionImpactPolicy, TwoComponentRevisionImpactInput,
+    derive_minimal_semantic_change_sets, encode_two_component_revision_impact_bundle,
     produce_two_component_revision_impact, verify_two_component_revision_impact,
 };
 use guarded_continuation_checker::revision_local::{BoundedQuery, BoundedResult, ComponentSide};
+use sha2::{Digest, Sha256};
 
 const CORE_BEFORE: &[u8] =
     include_bytes!("../corpus/rtl/opentitan-pwm-crosstalk-impact/generated/core-before.btor2");
@@ -80,6 +82,19 @@ fn authentic_connected_changes_have_distinct_and_joint_semantic_sets() {
         queries: &queries,
     };
     let bundle = produce_two_component_revision_impact(&input).unwrap();
+    let encoded =
+        encode_two_component_revision_impact_bundle(&bundle, RevisionImpactPolicy::default())
+            .unwrap();
+    assert_eq!(encoded.len(), 128_768);
+    let digest: [u8; 32] = Sha256::digest(&encoded).into();
+    assert_eq!(
+        digest,
+        [
+            0xe7, 0x88, 0xc4, 0x97, 0xb5, 0x14, 0x47, 0x2d, 0xb6, 0x4f, 0xd7, 0x9f, 0xd5, 0xfa,
+            0x31, 0x9f, 0x03, 0xab, 0xf2, 0x57, 0xa3, 0xcd, 0x65, 0x6c, 0x96, 0xa2, 0xeb, 0x73,
+            0xa4, 0x46, 0x78, 0xb3,
+        ]
+    );
     let summary = verify_two_component_revision_impact(&input, &bundle).unwrap();
     assert_eq!(
         (summary.atoms, summary.queries, summary.combinations),
