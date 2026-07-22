@@ -1,0 +1,2 @@
+schema_version,channels,horizon,logical_queries,proof_members,structural_bytes,evidence_bytes,artifact_bytes,direct_evidence_bytes,artifact_vs_direct_pct,artifact_sha256,roundtrip,verified,status
+1,6,2,12,6,460,750,1568,1500,4.533333,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,true,true,accepted

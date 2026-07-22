@@ -29,6 +29,11 @@ separate discovery command, verification command, typed client, and final row.
 The resource and phase-observability v1 responses remain unchanged.
 The split cache-observability v1 interface follows the same additive pattern
 and leaves every preceding command on its original uncached execution path.
+The BTOR2 channel-property phase-observability v1 interface is likewise
+additive. Its separate discovery and observed commands leave the base v1
+capability, production, verification, aggregate, result, artifact, manifest,
+and policy contracts unchanged. The typed client rejects schema drift rather
+than reinterpreting it.
 
 Before the first production tag, the BTOR2 parser was extended to accept
 standard `output` observations and optional expression symbols.
@@ -37,6 +42,14 @@ constraints, or bad properties rather than unused declared synthesis inputs.
 Callers that need a raw declaration inventory must not infer it from this API.
 The change is covered by external-consumer tests on every hosted platform and
 will become part of the first tagged compatibility baseline.
+
+The 0.31.0 research candidate adds channel-property operations, typed resource
+refusal, and BTOR2 shift operations to the public `OperationKind`,
+`PredicateApiError`, and `BinaryOp` enums. Downstream exhaustive matches must
+add the new cases when moving from 0.30.0. Existing `BinaryOp` variants keep
+their 0.30.0 implicit discriminants; `Sll` and `Srl` are appended after them.
+This is an intentional pre-1.0 minor API transition, not a patch-compatible
+change. Artifact and CLI contract versions are unaffected.
 
 Property-free BTOR2 component ingestion is additive. The new component parser
 requires caller-selected semantic roots and does not change the retained

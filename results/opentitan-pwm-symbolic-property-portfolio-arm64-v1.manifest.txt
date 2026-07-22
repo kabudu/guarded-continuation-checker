@@ -1,0 +1,24 @@
+schema_version=1
+scope=opentitan-pwm-symbolic-property-proof-portfolio
+status=bounded-mechanism-pass-realistic-horizon-fail
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=eb695f2
+channel_counts=2,4,6
+retained_horizon=1
+refused_horizon=2
+selection=none
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=governed-not-process-measured
+sha256=ddf8746f51d521f17fadaab0a474c9faa59a50ecb0d4e914a027cf3175f03737 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2
+sha256=671136023f99b6bf9e21f140f267d770b42151738148d23f7f06162a2ebb86d1 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-4.btor2
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=90b2a7e8d1912658e944bf9c8f18ca92f9391845d4705d2241fc73f586ed804b file=src/lib.rs
+sha256=c194cdb1bfd94ee7a315bb44378ba130592712056673648120bb30eb925e728e file=src/btor2_region_property.rs
+sha256=6956615db8a1cd221e1d53083ab8f89a9c43b426b4b9a90e0d7bd9106e767799 file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=60f537846b328d37a307afa0ceb5394e7c43b14c4ded825f79a9b36a571f2310 file=examples/btor2_symbolic_property_portfolio_probe.rs
+sha256=bb677754429816c3f9113aa85758aeff932d4d91bb1921993c68c041a306351e file=scripts/run-btor2-symbolic-property-portfolio-probe-v1.sh
+sha256=99c1f8d24b9d79285af1f3c9d324486be886be87c09d28627bf615a87745350c file=scripts/check-btor2-symbolic-property-portfolio-probe-v1.sh
+sha256=0eb01ee4588c5c99dbf24f5cd41cccfe06a3b73752fa21c393062fd39ed3b09e file=results/opentitan-pwm-symbolic-property-portfolio-arm64-v1.csv

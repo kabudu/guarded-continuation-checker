@@ -84,6 +84,39 @@ not a systematic or professional patent search.
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
 
+The OpenTitan PWM symbolic-class boundary removes an input-free experimental
+fixture by retaining six live firmware-controlled bits under an explicit
+equal-input class contract. Its representative reduction is not a novelty
+candidate. Symmetry reduction, orbit representatives, guarded quotient
+structures, finite-state proof certificates, and 2026 guarded equivalence
+predicates for hardware self-composition are directly relevant prior art. The
+next source-bound conditional-equivalence certificate is product research only
+unless it demonstrates a semantic capability absent from those systems and
+passes a maintained equivalent-scope baseline plus independent review.
+
+The first symbolic PWM property portfolio stores one bounded proof per admitted
+class and replays UNSAFE inputs against target channels. Its 43.07% six-channel
+evidence reduction is the expected consequence of representative sharing, not
+a new invariant. V2 closes the horizon-2 resource refusal through a static
+explicit-state or proof-carrying bitblast route and retains a 19.33% reduction
+against direct UNSAFE witnesses. Static routing, bitblasting, independent proof
+checking, symmetry representatives, and canonical artifact codecs are
+established techniques. Codec v1 adds a frozen portable boundary but makes the
+complete retained artifact 4.53% larger than raw direct witnesses. The absence
+of a maintained-tool comparison, a distinct invariant, and independent review
+leaves this as an engineering mechanism only.
+
+Aggregate production preflight adds deterministic whole-batch admission before
+solving and closes one resource-governance gap. Static cost models, solver
+portfolios, and admission limits are established engineering. The retained
+threshold behavior therefore adds no novelty evidence and does not alter any
+claim gate.
+
+The versioned query and policy manifests, bounded file reads, no-clobber
+publication, stable process output, and typed resource refusal are conventional
+self-service integration controls. They strengthen reproducibility and product
+fitness but add no algorithmic novelty evidence.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the
@@ -710,3 +743,29 @@ but its complete retained portfolio is about 1.7 MB. This establishes a local
 proof-structure distinction while falsifying a certificate-byte advantage on
 this cohort. A larger repeated-revision workload must show an end-to-end
 construction or checking benefit before the candidate can support novelty.
+
+## Authentic PWM reachable equivalence
+
+The bounded reachable-equivalence artifact closes a narrower integrity gap for
+the authentic PWM region experiment. Its producer compares complete trace
+vectors exactly, while its checker independently replays the exact source and
+requires a canonical, complete channel partition. The six-channel model admits
+two non-singleton pairs at horizon 63; the two- and four-channel sources admit
+none. This is a falsifiable static gate rather than a universal symmetry claim.
+
+Bounded trace equivalence, symmetry reduction, canonical serialization and
+source digests are established. The current checker also repeats all channel
+work, so it demonstrates neither proof-checking reduction nor novel
+composition. The candidate remains open only if one verified admission can be
+amortised across several explicitly bound predicates, using one representative
+per class, unchanged exact evaluation for singletons and refused inputs, and a
+complete-batch advantage over direct exact and maintained-tool baselines.
+
+The first amortised predicate portfolio does not provide that advantage. It
+uses an opaque verified admission, one representative for each non-singleton
+class, and direct exact singleton routing across as many as 49,152 temporal
+window queries. Candidate and direct answers agree, and logical predicate work
+falls by exactly one third, but end-to-end speed stays within roughly half a
+percent of parity. Cheap trace scans are therefore a falsified target. A viable
+candidate must reuse substantially more expensive proof obligations and still
+pay for independent equivalence admission and complete exact fallback.

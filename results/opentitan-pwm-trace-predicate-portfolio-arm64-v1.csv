@@ -1,0 +1,5 @@
+schema_version,channels,horizon,predicates_per_channel,logical_queries,representative_evaluations,direct_singleton_evaluations,reused_queries,candidate_evaluation_bound,direct_evaluation_bound,work_reduction_percent,candidate_median_micros,direct_median_micros,speedup,exact_agreement,trials,selection,status
+1,6,4095,16,96,32,32,32,64,96,33.333333,157108,157915,1.005137,true,5,none,accepted
+1,6,4095,256,1536,512,512,512,1024,1536,33.333333,156663,156993,1.002106,true,5,none,accepted
+1,6,4095,4096,24576,8192,8192,8192,16384,24576,33.333333,155705,155578,0.999184,true,5,none,accepted
+1,6,4095,8192,49152,16384,16384,16384,32768,49152,33.333333,156310,155713,0.996181,true,5,none,accepted

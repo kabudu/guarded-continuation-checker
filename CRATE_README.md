@@ -25,6 +25,12 @@ The package provides:
   braking phases, source-separated controller/plant contracts, and both-answer
   bounded reachability with exact environment constraints, static exact-search
   fallbacks, and fixed resource limits.
+- an experimental source-replayed BTOR2 repeated-channel property portfolio
+  with canonical query and policy files, exact explicit-state or proof-carrying
+  bitblast routing, aggregate preflight, a no-clobber CLI, and a typed bounded
+  process client. An additive observed CLI exposes diagnostic phase timings
+  without making timing part of admission or correctness, and the typed client
+  strictly parses the observed schema.
 
 ## Status and claim boundary
 
@@ -93,7 +99,7 @@ guarded-continuation-checker production-profile-version
 ```
 
 The optional `research-qatq-transport` feature exposes a bounded, exact QatQ
-0.1.1 transport envelope for research evaluation of large canonical evidence
+0.1.5 transport envelope for research evaluation of large canonical evidence
 batches. It is not enabled by default, is not included by
 `production-firmware`, and does not change certificate semantics. Recover the
 canonical bytes and run their existing independent verifier before trusting an
@@ -125,6 +131,7 @@ guarded-continuation-checker firmware-cli-version
 guarded-continuation-checker predicate-cli-version
 guarded-continuation-checker event-contract-cli-version
 guarded-continuation-checker btor2-cli-version
+guarded-continuation-checker btor2-channel-property-cli-version
 guarded-continuation-checker controller-mtbdd-cli-version
 ```
 
@@ -132,12 +139,15 @@ guarded-continuation-checker controller-mtbdd-cli-version
 
 ```rust,no_run
 use guarded_continuation_checker::{
-    ControllerMtbddTool, ControllerPlantPortfolioTool, EventContractTool,
-    ExecutionPolicy, PredicateTool,
+    Btor2ChannelPropertyTool, ControllerMtbddTool, ControllerPlantPortfolioTool,
+    EventContractTool, ExecutionPolicy, PredicateTool,
 };
 
 # fn discover() -> Result<(), Box<dyn std::error::Error>> {
 let policy = ExecutionPolicy::default();
+let _channel_properties = Btor2ChannelPropertyTool::discover(
+    "guarded-continuation-checker",
+)?;
 let tool = PredicateTool::discover_with_policy(
     "guarded-continuation-checker",
     policy,

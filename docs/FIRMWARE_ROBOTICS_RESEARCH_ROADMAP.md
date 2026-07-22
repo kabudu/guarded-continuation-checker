@@ -181,7 +181,7 @@ whether exact QatQ compression can sit behind a GCC-owned, fail-closed
 transport envelope for large proof-carrying revision batches. The experiment
 passes hostile-input rejection, explicit resource limits, cross-platform byte
 identity, Linux and macOS process resource measurements, semantic replay and a
-retained zstd baseline. QatQ 0.1.4 now owns the exact-byte container and bounded
+retained zstd baseline. QatQ 0.1.5 now owns the exact-byte container and bounded
 byte-chunk boundary, closing that promotion gate without changing the frozen
 envelope.
 Compatibility history and independent review remain open. It cannot change
@@ -225,6 +225,69 @@ candidate contribution rather than a novelty claim. The isolated-container
 bias gate is now closed without claiming a warm service because tool processes
 remain fresh. The next experiment must test a larger connected public subsystem
 and compare against a persistent maintained service if one is available.
+
+The next larger public-subsystem cycle is predeclared as the
+[OpenTitan PWM channel-family certificate v1](OPENTITAN_PWM_CHANNEL_FAMILY_CERTIFICATE_V1.md).
+It tests whether one independently proved channel relation can be instantiated
+across 2, 4, and 6 authentic repeated channels with explicit disjoint state
+renaming, composed with one shared core, and checked against exact monolithic
+and maintained proof-producing routes. This targets reusable repeated-IP
+evidence, not another isolated timing comparison.
+
+The first [preliminary channel-family probe](OPENTITAN_PWM_CHANNEL_FAMILY_PROBE_V1.md)
+closes only the structural mechanism slice. Canonical source, parameter, root,
+instance-map, proof, and exact-fallback artifacts now fail closed under explicit
+resource limits and preserve both answers at 2, 4, and 6 instances. The compact
+map is 77.69% to 84.18% smaller than its expanded relation, but the exact proof
+members are unchanged and the complete family portfolio is larger than direct
+exact evidence. This is a retained negative control. The authentic independent
+channel fixture, representative-proof experiment, maintained baseline, process
+resource evidence, portability, and self-service acceptance gates remain open.
+
+The follow-up
+[representative channel-orbit probe](OPENTITAN_PWM_CHANNEL_FAMILY_ORBIT_PROBE_V1.md)
+passes the identical-binding mechanism gate. Five exact representative
+certificates cover 10, 20, and 30 logical properties at 2, 4, and 6 channels.
+At 6 channels this reduces retained exact evidence by 83.35% and the complete
+artifact by 80.35%, while preserving every result and earliest bad frame over
+five deterministic trials. This is established symmetry reduction, not a
+novelty result. Authentic independent channel bindings, hidden-coupling
+refusal, maintained evidence, process resources, portability, and self-service
+acceptance remain open.
+
+The source-faithful continuation is predeclared as
+[authentic OpenTitan PWM channel extraction v1](OPENTITAN_PWM_AUTHENTIC_CHANNEL_EXTRACTION_V1.md).
+It retains the exact upstream core, channel, and generated register package,
+then asks whether complete repeated regions and mixed equivalence classes can
+be derived and independently checked from the source-attested monolithic
+model. This avoids treating the reduced behavioural boundary as product
+evidence. Static refusal and exact fallback remain required outcomes.
+
+The authenticated symbolic-class continuation now reaches
+[property portfolio v2](OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V2.md). A
+static source-derived work projection chooses compact explicit-state evidence
+or bounded proof-carrying bitblast evidence before solving. Verification
+recomputes that route, independently checks each retained member, and replays
+derived UNSAFE traces against their target channels. The six-channel horizon-2
+workload closes its earlier refusal and reduces retained evidence plus
+admission by 19.33% against direct witnesses. This remains established
+symmetry and SAT proof engineering. Its canonical outer codec now supplies
+bounded exchange, nested preflight and a frozen compatibility fingerprint. The
+complete artifact is 4.53% larger than raw direct witnesses. Aggregate
+production preflight now authenticates and plans the complete query batch and
+refuses over-budget work before any property solver starts. A strict bounded
+no-clobber file CLI now runs production and independent verification from a
+canonical manifest and policy. Its typed governed process client now adds
+strict discovery and result parsing, deadline and stream controls, process
+containment, optional address-space enforcement, and refusal observations. The
+additive observed CLI now preserves byte-identical evidence while reporting
+eight internal production and replay phases. The governed typed client now
+strictly discovers and parses the schema, enforces cross-field invariants, and
+preserves typed no-result resource refusal. Hosted Linux now reproduces the
+retained artifact identity and whole-process resource gate. The next product
+boundary is realistic trace properties and an equivalent-scope maintained-tool
+comparison, followed by portability, compatibility, and independent-review
+gates.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit

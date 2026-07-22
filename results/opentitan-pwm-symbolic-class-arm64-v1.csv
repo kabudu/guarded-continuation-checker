@@ -1,0 +1,4 @@
+schema_version,channels,input_nodes,states,classes,non_singleton_classes,reused_channels,model_bytes,model_sha256,deterministic,status
+1,2,3,17,0;1,0,0,17101,ddf8746f51d521f17fadaab0a474c9faa59a50ecb0d4e914a027cf3175f03737,true,accepted
+1,4,3,25,0+2;1;3,1,1,26156,671136023f99b6bf9e21f140f267d770b42151738148d23f7f06162a2ebb86d1,true,accepted
+1,6,3,33,0+2+4;1;3+5,2,3,35208,9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e,true,accepted

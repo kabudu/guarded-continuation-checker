@@ -351,6 +351,96 @@ hostile-drift matrix are retained. Hosted Linux release-build run 29910725650
 reproduces the frozen bytes and semantics. Broader production and novelty gates
 remain open.
 
+The separate
+[authentic PWM reachable-equivalence certificate](docs/OPENTITAN_PWM_REACHABLE_EQUIVALENCE_CERTIFICATE_V1.md)
+retains a canonical source-bound partition of complete local-state and
+observation traces. Its verifier independently re-extracts region boundaries
+and replays every frame. Exact trace vectors, rather than SHA-256 equality,
+decide class membership. At horizon 63, the six-channel model has four classes
+and admits channels `[2, 4]` and `[3, 5]` for possible representative reuse;
+the two smaller models correctly admit none. The 220- to 420-byte artifacts
+close an integrity mechanism, not a novelty or performance gate. Property
+reuse with exact fallback and equivalent-scope baseline measurement remains
+the next experiment.
+
+That [trace-predicate portfolio experiment](docs/OPENTITAN_PWM_TRACE_PREDICATE_PORTFOLIO_V1.md)
+now evaluates 96 through 49,152 legitimate temporal-window queries. It reuses
+only the two independently admitted non-singleton classes, routes singleton
+channels through direct exact evaluation, and agrees on every match and
+earliest frame. Logical predicate evaluations fall by exactly one third, but
+end-to-end medians remain between 0.996 and 1.005 times direct. This falsifies
+cheap trace scanning as the practical reuse target. The next candidate must
+share an expensive independently checked property obligation.
+
+The follow-up [symbolic firmware-class boundary](docs/OPENTITAN_PWM_SYMBOLIC_CLASS_BOUNDARY_V1.md)
+removes the input-free-fixture limitation. Six live bits control two declared
+firmware register classes through the complete authenticated PWM channel
+equations. The six-channel model exposes three exact structural representatives
+instead of six, while preserving a singleton that fails to match. This is an
+explicit equal-input integration contract and established symmetry reduction,
+not an inferred assumption, safety proof, or novelty claim.
+Its canonical 232- to 460-byte admission artifacts bind the model, roots,
+signatures, and complete partition. Verification recomputes the partition from
+the separately supplied source and rejects all tested mutation and truncation
+cases before returning an opaque capability. The verifier is independent of
+artifact claims, but not a separately implemented or formally verified checker.
+
+The first [symbolic property portfolio](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V1.md)
+uses that verified capability for both-answer bounded proofs. At horizon 1, the
+six-channel workload stores six proof members for twelve logical properties,
+replays every UNSAFE input against its target channel, and reduces retained
+evidence by 43.07%. The two-channel negative control grows by 12.61%. The
+six-channel `OutputHigh` case is refused at horizon 2 by the explicit-state
+guard, so this is a bounded mechanism result, not production support or novelty.
+
+The new [proof-carrying BTOR2 bitblast](docs/BTOR2_PWM_BITBLAST_V1.md) resolves
+that refusal without changing the source or resource guard. It finds and
+replays the actual frame-2 UNSAFE firmware trace. At horizon 1 it agrees with
+explicit search and carries independently checked Varisat UNSAT evidence. Its
+SAFE certificate is much larger than explicit-state evidence, so a static
+portfolio split is required rather than universal replacement.
+
+That [static split is now integrated](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V2.md).
+Before solving, a deterministic work projection selects explicit state or the
+bounded proof-carrying bitblast route. The verifier independently recomputes
+that choice and rejects forced routing. On the six-channel horizon-2 workload,
+six bitblast members cover twelve logical properties, replay every derived
+target trace, and reduce retained evidence plus admission by 19.33% against
+twelve direct witnesses. Aggregate production-work preflight,
+maintained-tool comparison, cross-platform identity, and independent review
+remain open.
+
+The complete portfolio now has a
+[canonical v1 wire format](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_CODEC_V1.md)
+with caller-selected byte, query, member and evidence limits, nested
+certificate preflight, canonical re-encoding and a frozen compatibility
+fingerprint. Every retained truncation and single-byte mutation fails closed.
+The 1,568-byte complete artifact is 4.53% larger than the twelve raw direct
+witnesses, even though its structural admission plus member evidence is 19.33%
+smaller. This negative control separates portable integrity from payload
+reduction. A timing-free
+[aggregate production preflight](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_PREFLIGHT_V1.md)
+now authenticates and plans every representative model and exact backend before
+any property solver starts. Its inclusive caller ceiling refuses the complete
+batch one work unit below the retained plan without emitting partial evidence.
+Projected work is a deterministic admission token, not a runtime or memory
+estimate. A strict
+[self-service file CLI](docs/BTOR2_CHANNEL_PROPERTY_CLI_V1.md) now accepts a
+canonical property manifest and caller resource policy, derives the structural
+admission, produces and independently verifies the complete portfolio, rejects
+symlinks and drift, and never overwrites an output. The typed shell-free Rust
+client discovers that contract, applies bounded process execution, parses every
+result, and exposes resource refusal without inventing a logical answer. An
+additive observed CLI now reports eight diagnostic production and replay phases
+without changing artifact bytes or correctness decisions. The governed typed
+client strictly discovers and parses that additive schema, including phase-sum,
+operation, and verification-zero invariants. A retained five-trial arm64
+[process-resource baseline](docs/BTOR2_CHANNEL_PROPERTY_PROCESS_RESOURCES_V1.md)
+records 18,726,912-byte certification and 8,044,544-byte fresh-verification
+median peak RSS with deterministic evidence. Hosted Linux x86-64 reproduces
+the exact artifact and records 17,694,720-byte and 11,055,104-byte medians.
+Maintained comparison and full portability evidence remain open.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies
@@ -375,7 +465,7 @@ than the strongest retained zstd result on the revision batch. The negative
 maintained-proof-package control is 73.23% larger than zstd, so QatQ is not
 admitted universally. Hosted Linux, macOS and Windows reproduce the frozen
 envelope identity, and hosted Linux reproduces the resource measurement. QatQ
-0.1.4 now owns the exact-byte container framing, bounded inspection and
+0.1.5 now owns the exact-byte container framing, bounded inspection and
 chunk-at-a-time byte decode boundary, while retaining the frozen envelope
 bytes. QatQ remains outside `firmware-rtl-v1` pending compatibility history
 and independent review.

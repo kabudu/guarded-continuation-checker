@@ -1,0 +1,5 @@
+schema_version=1
+upstream_revision=86db2898288664d8d5e8fc635b48951ef63e3439
+phase_width=3
+channel_state=pulse-active-and-registered-output
+family_semantics=identical-bindings-preliminary-probe

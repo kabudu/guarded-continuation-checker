@@ -1,0 +1,21 @@
+schema_version=1
+scope=opentitan-pwm-authentic-complete-region-dependency-probe
+status=complete-mechanism-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=c440a542fb847b32f0e712a7ab5dedeabc8403b9
+channel_counts=2,4,6
+selection=none
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=not-measured
+sha256=57961a02fd4800063edcab72e66c525a345fdb69d1cf08891e70f58f8cc090ba file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-2.btor2
+sha256=c0c07ccb74753cfeaed4fb333d4c4d8169b5b448676bb336cc9ee2b1923a6316 file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-4.btor2
+sha256=1a902e884d8c71ebfedd99cc6161c207278909c83c54bd327815c8743c17062e file=corpus/rtl/opentitan-pwm-channel-family/generated/authentic-6.btor2
+sha256=edcf23db8dbeaf425c3d4b43e825d1000dd2a83e567c1509ef77f69ad100dd7d file=src/btor2_region_extract.rs
+sha256=15638bffe92d4ee30c967d6f1751fd321d592fefc51f4f007111306b52574f05 file=examples/btor2_complete_region_probe.rs
+sha256=caad883185a50f7351acbc98663f18da1d0afc702cf28edf56833c20e88a7b36 file=scripts/run-btor2-complete-region-probe-v1.sh
+sha256=4eca0977ae412a71bb5ea9d6f1114b736acb3de138649a4b06130a3c04263f8e file=scripts/check-btor2-complete-region-probe-v1.sh
+sha256=6b2937a4372e257c52d1124cf4d6e7a4e7701c444b232eb21299a8028f7fac48 file=Cargo.lock
+sha256=d643a7fdd7de6d9d3aff2e88aeae6361f8f46f058a9b3f24a66ae2332d5dc85b file=results/opentitan-pwm-complete-region-probe-arm64-v1.csv

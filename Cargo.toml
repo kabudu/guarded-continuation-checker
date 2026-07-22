@@ -1,6 +1,6 @@
 [package]
 name = "guarded-continuation-checker"
-version = "0.30.0"
+version = "0.31.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT"
@@ -35,7 +35,7 @@ debug = true
 
 [dependencies]
 libc = "0.2.186"
-qatq = { version = "=0.1.4", optional = true }
+qatq = { version = "=0.1.5", optional = true }
 sha2 = "0.11.0"
 varisat = "0.2.2"
 varisat-checker = "0.2.2"

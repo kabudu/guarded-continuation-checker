@@ -1,0 +1,24 @@
+schema_version=1
+scope=opentitan-pwm-symbolic-property-codec-v1
+status=canonical-bounded-codec-pass
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=2d06ccc
+channel_counts=6
+retained_horizon=2
+selection=all-predeclared-rows
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=bounded-not-process-measured
+compatibility_bytes=1568
+compatibility_sha256=31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=36de22219fbbb9e42fa58b04f886af038f6b8c0b555c8953e92dfcd312aded46 file=src/btor2_region_property.rs
+sha256=0df01f670966c0b894e11317d36d3dc940c890d9b681b349075612cd595b91ed file=src/btor2_bitblast.rs
+sha256=ad3b7989cd52f385af99f1f54829f75b0ae0e9425f15a1f36c8d253e2b47b50d file=src/btor2_region_equivalence.rs
+sha256=47c52bb4e29dc75a05437f344d48409d22823966f364973ec325a32747f4f1cb file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=5d020978c3037efb40b70c2630a57b5a071e85ed413619820b55c5ac07d5f99e file=examples/btor2_symbolic_property_codec_probe.rs
+sha256=5f9d2c2d13cfdf0dfb70bb7e66adcf0917f24e93c27daf553037f3a661d81786 file=scripts/run-btor2-symbolic-property-codec-probe-v1.sh
+sha256=5bfe030ac939b05c273f6e51f1cbcab50bea9268e089ea809b4173c2ee45f7a2 file=scripts/check-btor2-symbolic-property-codec-probe-v1.sh
+sha256=8652b6abb0fd6b9b7a5a8c3a813771fb745ae15841916f4107d645014126225d file=results/opentitan-pwm-symbolic-property-codec-arm64-v1.csv

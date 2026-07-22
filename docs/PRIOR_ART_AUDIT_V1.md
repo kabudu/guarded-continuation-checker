@@ -254,3 +254,77 @@ inclusion-minimal change sets, both-answer replay, and fail-closed self-service
 firmware integration. Even that combination is only a candidate until the
 predeclared maintained baseline, public semantic-revision, and independent
 review gates pass.
+
+## Repeated channel-family reassessment
+
+Date: 2026-07-22
+
+The OpenTitan PWM channel-family experiment asks whether one checked component
+relation can be instantiated across several identical RTL instances, with
+explicit renaming and independent checking of the resulting system. The broad
+novelty hypothesis is rejected before implementation. Symmetry reduction,
+parameterised verification, and independently checked certificates for
+parameterised systems are established techniques:
+
+- [Symmetry Reductions in Model Checking, CAV
+  1998](https://www.cs.cmu.edu/~emc/papers/Conference%20Papers/Symmetry%20Reductions%20in%20Model%20Checking.pdf)
+  identifies symmetric states through group actions, constructs a quotient
+  model over orbit representatives, and reports state-space reductions.
+- [Symmetry and Reduced Symmetry in Model Checking, TOPLAS
+  2004](https://patricegodefroid.github.io/public_psfiles/toplas2004.pdf)
+  introduces Guarded Annotated Quotient Structures. The representation can
+  recover original transitions from a more symmetric expanded graph and check
+  properties that are not themselves symmetric. This is especially close to
+  any broad claim based on a guarded quotient of repeated instances.
+- [Certificates for Parameterized Model Checking, FM
+  2015](https://mebsout.github.io/papers/fm2015.pdf) makes Cubicle produce proof
+  objects for systems with an arbitrary number of components and checks the
+  resulting invariant obligations independently with SMT solvers. Its
+  evaluation includes industrial cache-coherence protocols.
+
+The FM 2015 work targets unbounded array-based systems and SAFE inductive
+invariants. The GCC experiment instead targets finite RTL instances, exact
+source and wiring identity, bounded SAFE and UNSAFE evidence, reconstructable
+traces, hostile-input controls, and exact monolithic fallback. Those are useful
+scope and product-contract differences, but they are not evidence of a new
+verification algorithm.
+
+The surviving experiment is therefore an engineering and product hypothesis:
+
+> Can a canonical, source-bound finite-family artifact carry one component
+> relation plus explicit injective instance maps, let an independent verifier
+> reconstruct and authenticate the expanded RTL model, preserve both-answer
+> bounded traces, and reduce retained evidence or checker work across two,
+> four, and six OpenTitan PWM channels without trusting symmetry claims?
+
+Passing this experiment may justify a reusable self-service artifact format for
+repeated embedded IP. It cannot justify novelty wording by itself. A narrower
+novelty candidate would require a new certificate invariant or a measured
+capability absent from parameterised certificates, guarded quotient model
+checking, and composed hardware witness circuits. Until that evidence exists,
+the result must be labelled engineering differentiation only.
+
+### Guarded conditional-equivalence reassessment
+
+A closer 2026 result further narrows the surviving claim. Dai, Gao, Morsali,
+and Stan's [Guarded Equivalence Predicates for Scalable Formal Hardware
+Information-Flow Verification](https://arxiv.org/abs/2606.22063) uses
+self-composition, copy symmetry, global and guarded cross-copy equivalence
+predicates, and PDR proofs that guarded mismatches are unreachable. It reports
+substantial acceleration and recovered timeouts. Guarded or conditional
+equivalence predicates across repeated hardware copies are therefore not a
+credible GCC novelty claim.
+
+Gibson-Robinson and Lowe's [Symmetry reduction in CSP model
+checking](https://link.springer.com/article/10.1007/s10009-019-00516-4)
+also develops representative and orbit-based symmetry reduction for an
+industrial maintained checker. Heath and Miller's [proof-certificate
+framework for finite-state exploration](https://arxiv.org/abs/1507.08716)
+covers independently checkable reachability, non-reachability, and
+bisimulation evidence.
+
+The symbolic PWM class experiment consequently claims only an explicit,
+source-bound firmware integration contract and a product mechanism. Any future
+candidate distinction must survive direct semantic and maintained-tool
+comparison with these systems. Combining known symmetry, guarded predicates,
+and a conventional certificate format is insufficient.

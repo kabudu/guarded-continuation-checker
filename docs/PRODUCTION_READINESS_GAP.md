@@ -10,6 +10,7 @@ alone is not sufficient.
 | Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; canonical candidate v2 checks relation/terminal proofs, phase powers and traces without exhaustive input enumeration across the three-product and multiphase cohort | Preserve both formats across compatibility changes; close v2 reliability and cost gates before portfolio replacement | Closed for bounded v1 and candidate-v2 semantics |
 | Portfolio integration | Counterfactual portfolio v1 uses the versioned static rule; its strict consumer rechecks certificates or CDCL answers; forced resource exhaustion and both answer directions are covered across the three-product compatibility cohort | Preserve the contract and coverage across future API changes | Closed for bounded v1 |
 | Revision-local proof reuse | Canonical four-section BTOR2 portfolios, exact source-separated fallback, retained production and verification APIs and file commands, both answers, deterministic work observations, and two authentic Roa Logic PLIC source revisions pass locally. Hosted run 29879705053 reproduces the public revision cohort and maintained Yosys/Z3 control. A controlled workload reduces complete local candidate work from 4,100 valuations to four with byte-identical output, but local process measurements show a retained-memory premium. | Complete the hostile matrix, hosted resource replication, portable certificate identity, closest-system comparison at equivalent scope, compatibility history, and independent operator review | In progress; public revision and self-service mechanism subgates closed |
+| Repeated RTL family evidence | Public Rust APIs now construct a canonical finite BTOR2 family with disjoint state, bind exact component and parameter bytes, independently reconstruct the expanded model, replay bounded SAFE and UNSAFE evidence, govern artifact and verifier work, and select explicit exact fallback without masking invalid family input. A retained 2, 4, and 6-instance negative control shows 77.69% to 84.18% structural-model reduction but unchanged exact evidence. A separate identical-binding orbit gate uses five representatives for 10, 20, and 30 logical properties and reduces exact evidence by 50.00%, 75.02%, and 83.35%, with exact answer and earliest-frame agreement. Exact pinned OpenTitan core and channel sources now produce deterministic 2, 4, and 6-channel property-free models with 16, 26, and 36 states through an authenticated interface-only lowering. A canonical source-bound state-cut artifact independently recomputes ownership and next-state dependencies and rejects cross-channel or local-to-shared feedback. A distinct canonical complete-region certificate embeds that state cut, records every classified node and unique boundary edge, and independently recomputes the full graph at all three authentic sizes. The retained artifacts are 4,312, 7,448, and 10,584 bytes, or 26.43% to 27.82% of model text. The authenticated symbolic-class path now has a canonical property portfolio, exact explicit-state or proof-carrying bitblast routing, aggregate work preflight before any member solver starts, a strict self-service file CLI, a typed governed process client, byte-neutral diagnostic phase observations with strict typed discovery and parsing, and arm64 plus hosted x86-64 process-resource evidence with identical artifacts. | Add realistic properties, maintained monolithic evidence, complete hosted cross-platform identity, compatibility history, and independent operator acceptance | In progress; authenticated portfolio, governed self-service mechanism, typed phase schema, and two-host resource evidence closed; authentic product benefit unproven |
 | Resource governance | Static dimensions; Rust API applies deadlines, stream/file caps, Unix process groups and non-macOS Unix address-space limits; macOS group regression and a Rust 1.97 Linux container pass; [hosted run 29661860245](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29661860245) passes the Ubuntu limit regression, public RTL corpus and dependency audit; metrics record enforced controls and stable failure classes | Retain these regressions across supported releases; macOS remains development-only for hard memory evidence | Closed for predicate API v1 on supported Linux; macOS limitation explicit |
 | Input reliability | Strict certificate/transcript sizes and syntax; v2 reliability boundary; structural native-proof preflight; 5,000 deterministic parser transformations; invalid-UTF8, sparse-oversize and oversized-proof tests; 128 proof transformations; canonical no-clobber DIMACS export plus 40 individual and four aggregate proofs accepted by pinned CaDiCaL/DRAT-trim under Linux process limits | Add continuous robustness coverage; extend checker diversity from completeness obligations to the whole certificate | Closed for bounded v2 parsing and external completeness checking; whole-certificate diversity open |
 | Stable interface | Production support profile v1 now admits only firmware CLI v2 and artifact schema v4, identifies the compiled profile and rejects all research dispatch; predicate CLI v1 and typed Rust API v1 remain available in research builds | Reproduce the profile boundary in hosted CI and preserve firmware v2/schema v4 compatibility across a tagged release | Closed locally for the frozen candidate profile; hosted and release history open |
@@ -621,7 +622,7 @@ measurements. Its 82,428-byte revision-batch envelope is 29.41% smaller than the
 retained zstd result. The maintained-proof-package negative control is 73.23%
 larger than zstd. Hosted run 29893368169 reproduces the exact envelope identity
 on Linux, macOS, and Windows and the Linux resource result with 68,968,448-byte
-peak RSS. QatQ 0.1.4 closes the opaque-byte API boundary with exact-byte
+peak RSS. QatQ 0.1.5 preserves the closed opaque-byte API boundary with exact-byte
 containers and a bounded byte-chunk visitor while preserving the frozen
 envelope.
 Compatibility history and independent review remain open, so the transport is
@@ -633,6 +634,26 @@ compatibility, and independent review. None of this evidence changes the
 top-level production status.
 
 ## Post-production-release deliverables
+
+The symbolic PWM structural admission artifact closes a portable source-binding
+mechanism only. It has a bounded canonical codec, opaque verified capability,
+deterministic identity, and hostile mutation coverage, but no property-proof
+portfolio, exact monolithic fallback measurement, cross-platform artifact
+identity, compatibility fixture, maintained equivalent-scope comparison, or
+independent implementation review. It therefore closes no production row.
+
+The horizon-1 symbolic property portfolio adds exact SAFE and UNSAFE member
+certificates, direct singleton handling, target-channel UNSAFE input replay,
+and fail-closed query and backend binding. Portfolio v2 now integrates a static,
+timing-free explicit-state and proof-carrying bitblast route. It closes the
+six-channel horizon-2 refusal with six independently checked members for twelve
+logical properties and rejects forced route or changed bitblast evidence. It
+now has a canonical, resource-bounded outer wire format and frozen v1
+compatibility fingerprint. The complete artifact is 4.53% larger than raw
+direct witnesses, and it still has no file CLI, aggregate production-work
+preflight or process observability. Realistic safety properties,
+cross-platform reproduction, maintained baseline evidence, compatibility, and
+independent review remain open. No production row closes.
 
 - Create a visually polished, accessible SVG architecture diagram after the
   first production release passes every applicable gate. It must show GCC's

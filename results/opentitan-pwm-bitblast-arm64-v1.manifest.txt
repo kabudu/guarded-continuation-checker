@@ -1,0 +1,24 @@
+schema_version=1
+scope=opentitan-pwm-proof-carrying-btor2-bitblast
+status=complete-exact-fallback-mechanism-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=c1fd32c2d6e1c86500baaead078ed04b741e5fb1
+channel_counts=2,4,6
+horizons=1,2
+selection=none
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=governed-not-process-measured
+sha256=ddf8746f51d521f17fadaab0a474c9faa59a50ecb0d4e914a027cf3175f03737 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2
+sha256=671136023f99b6bf9e21f140f267d770b42151738148d23f7f06162a2ebb86d1 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-4.btor2
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=b631c3b49c3583850a12f7d13bdf7ca49fcce0c520d8636c172f793bde992f5e file=src/lib.rs
+sha256=0df01f670966c0b894e11317d36d3dc940c890d9b681b349075612cd595b91ed file=src/btor2_bitblast.rs
+sha256=8fcd7c04c40ff5860f77c5067246fbf116319bd9558d32d3183b48eae1ed1f89 file=src/btor2_region_property.rs
+sha256=432305c72704f664dd4d73fb298845212d4b9595c17b4fcacf4db571212655af file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=d55ae7db9cf0f6a89f3e11c0ee9188b4a849112ce5dd6078bfad649a0de403c5 file=examples/btor2_pwm_bitblast_probe.rs
+sha256=180952c89bd9e4b100fcc646daff5ddd4e0439ec08fb405184456c32861979c2 file=scripts/run-btor2-pwm-bitblast-probe-v1.sh
+sha256=25e4d5b9c7731e650b0acc9f21a9e1b0b4332923ee47e2b4e3dc04df5c6e7623 file=scripts/check-btor2-pwm-bitblast-probe-v1.sh
+sha256=a4f620eeae7fd2279a69ede2f68697d31acf1354bb26b41db029d94f075e7a1e file=results/opentitan-pwm-bitblast-arm64-v1.csv

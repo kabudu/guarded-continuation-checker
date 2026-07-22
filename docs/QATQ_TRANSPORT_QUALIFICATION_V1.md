@@ -140,3 +140,9 @@ All ten predeclared experiment gates pass. QatQ 0.1.4 closes the exact-byte API
 gate through upstream PR 14 and the release-qualified PR 15 without changing
 the frozen GCC envelope bytes. The remaining promotion gates are compatibility
 history across at least two GCC releases and independent review.
+
+GCC subsequently upgraded its optional dependency to QatQ 0.1.5. The original
+v1 measurements above remain a historical 0.1.4 qualification record. The
+local 0.1.5 compatibility run preserves the frozen envelope digest, exact round trips,
+hostile-input rejection, resource bounds, atomic publication, and exclusion
+from the production feature graph.

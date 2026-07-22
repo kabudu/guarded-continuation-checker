@@ -81,7 +81,7 @@ jobs:
           cargo clippy --locked --bin guarded-continuation-checker \
             --features production-firmware -- -D warnings
           cargo build --release --locked --features production-firmware
-          if cargo tree --locked --features production-firmware | grep -Eq '(^| )qatq v0\.1\.1'; then
+          if cargo tree --locked --features production-firmware | grep -Eq '(^| )qatq v'; then
             echo "production-firmware unexpectedly includes QatQ"
             exit 1
           fi
@@ -153,6 +153,7 @@ jobs:
             scripts/run-controller-split-resource-acceptance.sh \
             scripts/check-controller-split-compatibility-v1.sh \
             scripts/benchmark-controller-split-process-resources.sh \
+            scripts/benchmark-btor2-channel-property-process-resources-v1.sh \
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
@@ -187,6 +188,17 @@ jobs:
             /tmp/controller-split-observability-acceptance.csv
           diff -u results/controller-split-observability-acceptance-v1.csv \
             /tmp/controller-split-observability-acceptance.csv
+      - name: Measure channel property process resources
+        env:
+          TRIALS: 3
+        run: |
+          cargo build --release --locked
+          scripts/benchmark-btor2-channel-property-process-resources-v1.sh \
+            target/release/guarded-continuation-checker \
+            /tmp/channel-property-process-resources.csv
+          awk -F, -v trials="$TRIALS" 'NR > 1 { if ($5 <= 0 || $6 != 1568 || $7 < $8 || $13 != 12 || $14 != "measured") exit 1; digest[$12]++; seen[$2]++ } END { exit !(seen["certify"] == trials && seen["verify"] == trials && length(digest) == 1) }' \
+            /tmp/channel-property-process-resources.csv
+          cat /tmp/channel-property-process-resources.csv
       - name: Exercise proof-carrying MTBDD whole-process comparison
         env:
           TRIALS: 3

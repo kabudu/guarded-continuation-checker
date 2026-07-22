@@ -2,6 +2,168 @@
 
 ## Unreleased
 
+- Advance the crate candidate to 0.31.0 because the research API adds public
+  `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
+  v0.30.0 `BinaryOp` discriminant by appending the new shift operations after
+  the existing variants, and document the exhaustive-match migration.
+
+- Upgrade the optional research transport to hardened QatQ 0.1.5, retain the
+  frozen exact-byte envelope identity, and make the production-profile CI guard
+  reject any QatQ version rather than one historical version.
+
+- Add diagnostic phase observation for channel-property production and
+  verification. The additive versioned CLI measures input, structural
+  admission, preflight, proof construction, encoding, decoding, source replay,
+  and publication while retaining byte-identical evidence and timing-free
+  correctness decisions. Add strict governed Rust discovery and parsing with
+  phase-sum, operation, verification-zero, hostile-schema, and typed resource
+  refusal checks. Retain a five-trial macOS arm64 whole-process baseline with
+  deterministic artifacts, exact answer replay, internal-phase reconciliation,
+  and peak-RSS measurements, plus a hosted Linux reproduction job.
+
+- Add an authenticated OpenTitan PWM boundary with six live symbolic firmware
+  register bits and explicit even/odd equal-input classes. Retain deterministic
+  2, 4, and 6-channel models, exact structural partitions, source digests, and
+  a strict result checker. The six-channel graph admits three representative
+  channels while preserving a structural singleton. This closes the previous
+  input-free-fixture weakness but is established symmetry engineering, not a
+  proof or novelty claim.
+- Add a canonical, resource-bounded structural-equivalence artifact and stable
+  typed producer, decoder, verifier, and opaque admission API. Verification
+  authenticates separately supplied BTOR2 and recomputes every signature and
+  class. Retained artifacts occupy 232 to 460 bytes, about 1.3% of their source
+  models, and hostile truncation, mutation, source, class, and signature drift
+  tests fail closed.
+- Add a typed both-answer property portfolio driven only by the opaque verified
+  structural admission capability. It stores one exact bounded certificate per
+  class and property shape, keeps singleton classes on direct exact checking,
+  replays derived UNSAFE input valuations against every target channel, and
+  rejects admission, query, backend, evidence, or source drift. Horizon-1
+  retained evidence falls 43.07% on six channels but grows 12.61% on the
+  two-channel negative control. The six-channel `OutputHigh` case is honestly
+  refused at horizon 2 by the existing explicit-state resource guard.
+- Add bounded word-level BTOR2 bit-blasting with a canonical source-bound wire
+  certificate. SAFE answers carry Varisat proofs checked by the separate
+  `varisat-checker`; UNSAFE answers carry complete packed input valuations and
+  replay to the earliest bad frame. It agrees with explicit search where that
+  backend admits the workload and resolves the six-channel horizon-2 refusal as
+  a real frame-2 UNSAFE result. The horizon-1 SAFE certificate is 215,259 bytes,
+  so this backend is a scalable fallback rather than a universal evidence win.
+- Integrate a timing-free explicit-state and bitblast route into the symbolic
+  class property portfolio. The verifier recomputes the route from source,
+  rejects forced solver changes, and replays full-width, constraint-admissible
+  UNSAFE traces on every target channel. At horizon 2, six proof members cover
+  twelve six-channel properties and reduce retained evidence plus admission by
+  19.33% against direct witnesses. Queries outside every backend policy and
+  changed bitblast member evidence fail closed. Aggregate production-work
+  preflight remains open.
+- Add the canonical `GCCBCP01` outer property-portfolio codec with symmetric
+  caller limits, nested structural and certificate preflight, checksum,
+  canonical re-encoding, complete byte producer and verifier APIs, and a frozen
+  1,568-byte compatibility fingerprint. Every retained truncation and
+  single-byte mutation fails closed. The complete artifact is 4.53% larger than
+  twelve raw direct witnesses, so this closes an exchange-integrity mechanism
+  rather than an end-to-end size win. File CLI, aggregate production-work
+  governance, observability and portability remain open.
+- Add caller-governed aggregate production preflight for the symbolic channel
+  portfolio. It authenticates and plans every member and exact backend before
+  solving, returns deterministic route and work counts, admits an inclusive
+  ceiling, and refuses the complete batch one unit below it without partial
+  evidence. Retained 2, 4, and 6-channel rows cover both explicit-state and
+  bitblast routes. The projection is a static admission token, not elapsed time
+  or peak-memory evidence. File and process integration remains open.
+- Add the versioned self-service channel-property file CLI. Canonical query and
+  policy manifests drive source-derived structural admission, exact batch
+  production, independent verification, stable aggregate and per-query output,
+  no-clobber publication, and typed resource refusal. The executable acceptance
+  test covers source and query drift, artifact mutation, CRLF and noncanonical
+  manifests, symlink substitution, one-unit work refusal, and output collision.
+  Add a typed shell-free process client with strict capability and result
+  parsing, deadlines, output and file caps, process-group containment, optional
+  address-space enforcement, invocation metrics, and typed resource refusal.
+  Measured process-resource and portability evidence remain open.
+
+- Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
+  verifies one repeated channel relation, instantiates it across 2, 4, and 6
+  channels with disjoint state renaming, composes it with a shared core, and
+  compares exact whole-system evidence against monolithic GCC and maintained
+  proof-producing baselines without a performance threshold.
+- Reject broad novelty of repeated-instance proof reuse against symmetry
+  reduction, guarded quotient structures, and parameterised model-checking
+  certificates. Add the first bounded structural composer: its public grammar
+  permits channel inputs to reference only declared core inputs or roots,
+  creates disjoint state for every canonical instance, emits deterministic
+  BTOR2, and independently reparses the expanded model. Retained OpenTitan PWM
+  components compose at the predeclared 2, 4, and 6-channel sizes. Add a
+  checksummed, resource-bounded family artifact that stores each component
+  digest and instance map once; verification reconstructs the expanded model
+  from separately supplied bytes and rejects source or wiring drift. Add a
+  second canonical artifact layer with exact bounded SAFE and UNSAFE evidence
+  for ordered family properties. Its checker independently reconstructs the
+  model and replays every certificate under total query, evidence, and artifact
+  limits. Add an explicit portfolio route for exact whole-model evidence when
+  static discovery refuses family structure. Invalid family evidence and
+  resource errors fail closed instead of silently selecting that route.
+  Retain a five-trial 2, 4, and 6-channel preliminary negative control: the
+  compact family map is 77.69% to 84.18% smaller than the expanded model, but
+  exact proof evidence is identical and the complete family portfolio remains
+  292 to 476 bytes larger than direct exact evidence. Full authentic-subsystem
+  and maintained-baseline gates remain open.
+- Add a distinct representative-orbit proof format for the preliminary
+  identical-binding regime. It admits only two or more instances with identical
+  parameter digests and core bindings, requires one ordered exact certificate
+  for every channel root, and independently verifies those representatives
+  before deriving each isomorphic instance result. Distinct bindings,
+  incomplete roots, source drift, mutation, and truncation fail closed.
+- Retain five complete orbit-versus-direct trials at 2, 4, and 6 channels. All
+  logical answers and earliest bad frames agree. At 6 channels, five
+  representatives cover 30 logical properties, reducing exact evidence by
+  83.35% and the complete artifact by 80.35%. The result applies only to the
+  identical-binding preliminary fixture and is not a novelty claim.
+- Predeclare source-faithful repeated-region extraction from the exact pinned
+  OpenTitan PWM core, channel, and generated register package. The checker must
+  prove complete region boundaries and refuse hidden coupling before any mixed
+  orbit can reuse evidence.
+- Retain deterministic 2, 4, and 6-channel models synthesised from the exact
+  pinned OpenTitan PWM core and complete channel RTL. A checked interface-only
+  lowering works around pinned-Yosys packed-structure limitations; model state
+  grows by five nodes per added channel rather than collapsing instances.
+- Extend the strict BTOR2 core and family composer with width-checked logical
+  left and right shifts, including defined oversized-shift behaviour, and
+  accept one optional Yosys symbol on state edges while rejecting extra tokens.
+- Add a bounded, source-bound repeated-state region artifact. Its independent
+  verifier recomputes hierarchy ownership and every next-state dependency,
+  rejects shared-to-local feedback and cross-channel edges, and accepts the
+  authentic 2, 4, and 6-channel OpenTitan models deterministically.
+- Classify every authentic PWM combinational node and dependency edge from
+  semantic state support. Legal cross-instance common-subexpression merging is
+  treated as shared logic, while multi-channel aggregation is restricted to
+  declared observation cones and excluded from transitions.
+- Add a distinct canonical complete-region certificate that embeds the
+  source-bound state cut, encodes every classified node and unique boundary
+  edge, and independently recomputes the complete graph from the separately
+  supplied model. Authentic 2, 4, and 6-channel artifacts replay exactly and
+  deterministically in 4,312, 7,448, and 10,584 bytes. Correct the earlier
+  probe's operand-occurrence counts to unique graph-edge counts.
+- Add an exact structural channel-equivalence classifier and a separate bounded
+  reachable-trace classifier for deterministic, input-free, single-observation
+  regions. The authentic 6-channel PWM model retains strict singleton
+  structural classes but proves reachable classes `[2, 4]` and `[3, 5]` through
+  frame 63; channels with distinct startup histories remain separate.
+- Turn reachable-trace classification into a canonical source-bound artifact.
+  Class membership is decided from complete trace vectors rather than digest
+  equality; the independent verifier reparses and replays the supplied source.
+  Static count, horizon and byte limits plus checksum, truncation, mutation,
+  source-drift and semantic-drift tests fail closed. At horizon 63, authentic
+  2-, 4- and 6-channel artifacts occupy 220, 324 and 420 bytes; only the
+  6-channel source admits two channels for future representative reuse.
+- Add an opaque independently replayed admission capability and a bounded
+  masked temporal-predicate portfolio. Non-singleton classes reuse one
+  representative result, singleton classes remain direct exact, and invalid
+  evidence fails closed. A retained 96- to 49,152-query authentic PWM matrix
+  removes exactly one third of predicate evaluations with exact earliest-frame
+  agreement, but produces no stable end-to-end speedup (0.996 to 1.005 times).
+  Preserve this as a falsified cheap-scan reuse strategy.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
