@@ -7,12 +7,18 @@
   prefix validity. Length-one controls agree exactly with the retained high and
   low probes, a two-frame monitor recovers the known frame-2 PWM transition,
   and invalid patterns, property-bearing sources, out-of-range channels, and
-  zero-padded prefix matches fail closed. Portfolio artifacts and maintained
-  comparison remain open. Add the separate trace proof types, deterministic
-  static preflight, explicit-state or bitblast selection, one exact member per
-  verified class and trace shape, and independent target replay. Eighteen
-  logical both-answer queries use nine proof members; one-unit-under work
-  refusal, query drift, forced backend, and evidence mutation return no answer.
+  zero-padded prefix matches fail closed. The full authentic cohort and
+  maintained comparison remain open. Add the separate trace proof types,
+  deterministic static preflight, explicit-state or bitblast selection, one
+  exact member per verified class and trace shape, and independent target
+  replay. Eighteen logical both-answer queries use nine proof members;
+  one-unit-under work refusal, query drift, forced backend, and evidence
+  mutation return no answer.
+  Add a canonical checksummed wire artifact that binds the source, structural
+  admission, ordered queries, static routes, and exact member evidence. Retain
+  a 4,700-byte fingerprint and reject every truncation, every single-byte
+  mutation, trailing data, source drift, ordered-query drift, and outer or
+  nested byte-budget exhaustion.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every

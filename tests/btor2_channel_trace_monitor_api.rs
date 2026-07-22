@@ -9,10 +9,13 @@ use guarded_continuation_checker::btor2_region_property::{
     Btor2ChannelProperty, Btor2ChannelTraceBackend, Btor2ChannelTracePattern,
     Btor2ChannelTraceProductionPolicy, Btor2ChannelTraceProofPolicy, Btor2ChannelTraceQuery,
     Btor2ChannelTraceSolver, MAX_CHANNEL_TRACE_PATTERN_LENGTH, build_btor2_channel_property_model,
-    build_btor2_channel_trace_model, preflight_btor2_channel_trace_proof,
-    produce_btor2_channel_trace_proof, verify_btor2_channel_trace_proof,
+    build_btor2_channel_trace_model, decode_btor2_channel_trace_proof_artifact,
+    encode_btor2_channel_trace_proof_artifact, preflight_btor2_channel_trace_proof,
+    produce_btor2_channel_trace_proof, produce_btor2_channel_trace_proof_bytes,
+    verify_btor2_channel_trace_proof, verify_btor2_channel_trace_proof_bytes,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
+use sha2::{Digest, Sha256};
 
 const MODEL: &[u8] =
     include_bytes!("../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2");
@@ -277,4 +280,123 @@ fn trace_proof_preflight_and_verifier_fail_closed() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn trace_wire_artifact_is_canonical_deterministic_and_hostile_safe() {
+    let structural = structural_admission();
+    let queries = composed_queries();
+    let region_policy = Btor2RegionPolicy::default();
+    let production_policy = Btor2ChannelTraceProductionPolicy::default();
+    let proof_policy = production_policy.artifact();
+    let (plan, encoded) = produce_btor2_channel_trace_proof_bytes(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        production_policy,
+    )
+    .unwrap();
+    assert_eq!(encoded.len(), 4_700);
+    assert_eq!(
+        <[u8; 32]>::from(Sha256::digest(&encoded)),
+        [
+            192, 195, 94, 226, 116, 243, 193, 200, 209, 96, 43, 177, 229, 86, 149, 58, 4, 64, 15,
+            116, 77, 69, 166, 181, 97, 66, 224, 115, 110, 151, 61, 114,
+        ]
+    );
+    assert_eq!(plan.logical_queries, 18);
+    let decoded = decode_btor2_channel_trace_proof_artifact(&encoded, proof_policy).unwrap();
+    assert_eq!(
+        encode_btor2_channel_trace_proof_artifact(&decoded, proof_policy).unwrap(),
+        encoded
+    );
+    assert_eq!(
+        produce_btor2_channel_trace_proof_bytes(
+            MODEL,
+            &structural,
+            &queries,
+            region_policy,
+            production_policy,
+        )
+        .unwrap()
+        .1,
+        encoded
+    );
+    let summary = verify_btor2_channel_trace_proof_bytes(
+        MODEL,
+        &queries,
+        &encoded,
+        region_policy,
+        proof_policy,
+    )
+    .unwrap();
+    assert_eq!(summary.metrics.logical_queries, 18);
+    assert_eq!(summary.metrics.proof_members, 9);
+
+    let bounded_policy = Btor2ChannelTraceProofPolicy::new(
+        queries.len(),
+        decoded.members.len(),
+        decoded
+            .members
+            .iter()
+            .map(|member| member.evidence.len())
+            .sum(),
+        encoded.len(),
+    )
+    .unwrap();
+    decode_btor2_channel_trace_proof_artifact(&encoded, bounded_policy).unwrap();
+    let byte_refusal = Btor2ChannelTraceProofPolicy::new(
+        queries.len(),
+        decoded.members.len(),
+        bounded_policy.max_evidence_bytes(),
+        encoded.len() - 1,
+    )
+    .unwrap();
+    assert!(decode_btor2_channel_trace_proof_artifact(&encoded, byte_refusal).is_err());
+    let evidence_refusal = Btor2ChannelTraceProofPolicy::new(
+        queries.len(),
+        decoded.members.len(),
+        bounded_policy.max_evidence_bytes() - 1,
+        encoded.len(),
+    )
+    .unwrap();
+    assert!(decode_btor2_channel_trace_proof_artifact(&encoded, evidence_refusal).is_err());
+
+    let mut reordered_queries = queries.clone();
+    reordered_queries.swap(0, 1);
+    assert!(
+        verify_btor2_channel_trace_proof_bytes(
+            MODEL,
+            &reordered_queries,
+            &encoded,
+            region_policy,
+            proof_policy,
+        )
+        .is_err()
+    );
+    let mut source_drift = MODEL.to_vec();
+    source_drift.push(b'\n');
+    assert!(
+        verify_btor2_channel_trace_proof_bytes(
+            &source_drift,
+            &queries,
+            &encoded,
+            region_policy,
+            proof_policy,
+        )
+        .is_err()
+    );
+
+    for end in 0..encoded.len() {
+        assert!(decode_btor2_channel_trace_proof_artifact(&encoded[..end], proof_policy).is_err());
+    }
+    for offset in 0..encoded.len() {
+        let mut changed = encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_channel_trace_proof_artifact(&changed, proof_policy).is_err());
+    }
+    let mut trailing = encoded;
+    trailing.push(0);
+    assert!(decode_btor2_channel_trace_proof_artifact(&trailing, proof_policy).is_err());
 }

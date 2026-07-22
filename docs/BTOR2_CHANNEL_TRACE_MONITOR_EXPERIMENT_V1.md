@@ -1,11 +1,12 @@
 # BTOR2 channel trace monitor experiment v1
 
 Status: predeclared before implementation or measurement. The strict pattern
-type and canonical monitor-model construction now pass their first semantic and
-hostile-boundary tests. In-memory proof composition now passes an eighteen-query
-both-answer control with nine exact members, mixed static solver routing,
-aggregate work refusal, and target witness replay. The canonical wire artifact,
-full retained cohort, and maintained comparison remain open.
+type, canonical monitor-model construction, in-memory proof composition, and
+canonical wire artifact now pass their first semantic and hostile-boundary
+tests. An eighteen-query both-answer control uses nine exact members, mixed
+static solver routing, aggregate work refusal, and target witness replay. The
+full retained cohort, maintained comparison, file workflow, cross-platform
+consumer evidence, and whole-process resource evidence remain open.
 
 ## Product question
 
@@ -87,6 +88,25 @@ fingerprint. The new binary codec must bind:
 
 Decoding must preflight outer and nested counts and byte lengths before
 allocation, require canonical re-encoding, and reject trailing bytes.
+
+The first retained six-channel control encodes to exactly 4,700 bytes with
+SHA-256
+`c0c35ee274f3c1c8d1602bb1e556953a04400f744d45a6b56142e0736e973d72`.
+Independent decoding and canonical re-encoding reproduce those bytes. The
+hostile test rejects every truncation, every single-byte mutation, trailing
+data, source drift, ordered-query drift, an artifact one byte over its declared
+limit, and evidence one byte over its aggregate limit. This fingerprint covers
+the current mechanism fixture, not the still-open authentic retained cohort.
+
+## Current gate state
+
+The mechanism currently closes the local portions of gates 1, 2, 4, 6, 7, 8,
+9, 10, and 11. Gate 3 remains open until the maintained equivalent-scope
+control exists. Gate 5 remains open until the complete authentic cohort is
+retained. Gate 12 requires the file workflow. Gate 13 requires external
+consumer jobs on Linux, macOS, and Windows. Gate 14 requires retained local and
+hosted Linux whole-process evidence. No experiment pass or production claim is
+made while those gates remain open.
 
 ## Predeclared cohort
 

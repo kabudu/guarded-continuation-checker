@@ -112,6 +112,15 @@ portfolios, and admission limits are established engineering. The retained
 threshold behavior therefore adds no novelty evidence and does not alter any
 claim gate.
 
+The channel trace-monitor candidate adds masked finite-history predicates to
+the authenticated representative workflow and packages mixed exact evidence in
+one independently replayed artifact. Finite monitors, bounded model checking,
+symmetry reduction, solver portfolios, checksummed codecs, and proof reuse are
+all established techniques. The 4,700-byte mechanism fingerprint and hostile
+matrix strengthen product engineering but provide no novelty evidence. The
+maintained equivalent-scope comparison and focused prior-art analysis remain
+open, so this capability must not be described as a novel algorithm.
+
 The versioned query and policy manifests, bounded file reads, no-clobber
 publication, stable process output, and typed resource refusal are conventional
 self-service integration controls. They strengthen reproducibility and product
