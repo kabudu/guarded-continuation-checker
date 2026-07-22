@@ -79,6 +79,13 @@
   16 independently replayed observations on Linux, macOS, and Windows. This
   closes the certificate-format portability gate; larger public-subsystem and
   independent-review gates remain open.
+- Predeclare the larger public two-atom revision cohort against OpenTitan PWM
+  commit `86db2898288664d8d5e8fc635b48951ef63e3439`. Freeze the parent/child
+  source digests, connected core-clear and channel-output atom boundary, five
+  query classes including a combination-only regression, provenance,
+  deterministic production, independent replay, hostile drift, maintained
+  proof-producing baseline, resource, and hosted release-build gates before
+  extracting or measuring the fixture.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

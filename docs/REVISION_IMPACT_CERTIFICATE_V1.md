@@ -221,6 +221,8 @@ reordered, malformed, or noncanonical transition lines.
 11. **Public semantic revision:** reproduce the pinned OpenTitan `prim_count`
     behaviour-changing revision and then a larger upstream-derived subsystem
     whose whole transition semantics genuinely change.
+    The larger follow-up is predeclared as the two-atom
+    [OpenTitan PWM crosstalk cohort](OPENTITAN_PWM_CROSSTALK_REVISION_IMPACT_V1.md).
 12. **Self-service integration:** a versioned Rust API, file CLI, typed bounded
     process client, machine-readable capabilities, atomic no-clobber output,
     and a release-build acceptance pipeline all reproduce without per-formula
