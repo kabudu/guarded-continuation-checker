@@ -22,7 +22,7 @@ include = [
 [package.metadata.cargo-semver-checks.lints]
 # Before 1.0, additive operation telemetry variants are permitted in a minor
 # release. Every other default major-change lint remains enforced by the
-# explicit minor compatibility check.
+# version-aware compatibility check.
 enum_variant_added = { required-update = "minor" }
 
 [features]

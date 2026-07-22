@@ -190,5 +190,8 @@ documented Rust toolchain. CI and release automation use pinned
 recent crate on crates.io and reject changes that exceed the declared version
 transition. GCC 0.29.0 is the first published registry baseline. Before 1.0,
 additive operation telemetry variants are explicitly classified as minor. The
-0.30.0 gate forces minor-level checking so every other default major-change
-lint remains active instead of treating a pre-1.0 minor release as unconstrained.
+version-aware gate fetches the latest stable crates.io baseline, rejects a
+version regression, treats an unchanged version as patch-level, and forces
+minor-level checking for pre-1.0 minor transitions. Every other default
+major-change lint therefore remains active instead of treating a pre-1.0 minor
+release as unconstrained.
