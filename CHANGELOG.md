@@ -9,6 +9,12 @@
   channels while preserving a structural singleton. This closes the previous
   input-free-fixture weakness but is established symmetry engineering, not a
   proof or novelty claim.
+- Add a canonical, resource-bounded structural-equivalence artifact and stable
+  typed producer, decoder, verifier, and opaque admission API. Verification
+  authenticates separately supplied BTOR2 and recomputes every signature and
+  class. Retained artifacts occupy 232 to 460 bytes, about 1.3% of their source
+  models, and hostile truncation, mutation, source, class, and signature drift
+  tests fail closed.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

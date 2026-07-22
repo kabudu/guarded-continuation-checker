@@ -635,6 +635,13 @@ top-level production status.
 
 ## Post-production-release deliverables
 
+The symbolic PWM structural admission artifact closes a portable source-binding
+mechanism only. It has a bounded canonical codec, opaque verified capability,
+deterministic identity, and hostile mutation coverage, but no property-proof
+portfolio, exact monolithic fallback measurement, cross-platform artifact
+identity, compatibility fixture, maintained equivalent-scope comparison, or
+independent implementation review. It therefore closes no production row.
+
 - Create a visually polished, accessible SVG architecture diagram after the
   first production release passes every applicable gate. It must show GCC's
   platform boundary, the CQ-SAT engine, source-to-model attestation, governed

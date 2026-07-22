@@ -19,6 +19,7 @@ pub const MAX_REGION_EQUIVALENCE_HORIZON: u32 = 4096;
 pub const MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES: usize = 1024 * 1024;
 pub const MAX_REGION_EQUIVALENCE_QUERIES: usize = 65_536;
 const REACHABLE_ARTIFACT_MAGIC: &[u8; 8] = b"GCCBRE01";
+const STRUCTURAL_ARTIFACT_MAGIC: &[u8; 8] = b"GCCBSE01";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelEquivalenceSignature {
@@ -35,6 +36,37 @@ pub struct Btor2RegionEquivalenceSummary {
     pub version: u32,
     pub signatures: Vec<Btor2ChannelEquivalenceSignature>,
     pub classes: Vec<Vec<usize>>,
+}
+
+/// Canonical source-bound evidence for structural channel classes.
+///
+/// Verification reparses the separately supplied source, re-extracts complete
+/// regions, and recomputes every signature and class. The artifact does not
+/// carry authority to declare classes that the source does not reproduce.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2RegionEquivalenceArtifact {
+    pub version: u32,
+    pub model_sha256: [u8; 32],
+    pub semantic_roots: Vec<NodeId>,
+    pub expected_channels: usize,
+    pub summary: Btor2RegionEquivalenceSummary,
+}
+
+/// Opaque structural admission capability created only by source replay.
+#[derive(Clone, Debug)]
+pub struct Btor2RegionEquivalenceAdmission {
+    model_sha256: [u8; 32],
+    classes: Vec<Vec<usize>>,
+}
+
+impl Btor2RegionEquivalenceAdmission {
+    pub fn model_sha256(&self) -> [u8; 32] {
+        self.model_sha256
+    }
+
+    pub fn classes(&self) -> &[Vec<usize>] {
+        &self.classes
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -410,6 +442,149 @@ pub fn derive_btor2_region_equivalence(
     })
 }
 
+fn validate_structural_artifact(
+    artifact: &Btor2RegionEquivalenceArtifact,
+) -> Result<(), Btor2RegionError> {
+    let summary = &artifact.summary;
+    if artifact.version != BTOR2_REGION_EQUIVALENCE_VERSION
+        || summary.version != BTOR2_REGION_EQUIVALENCE_VERSION
+        || artifact.semantic_roots.is_empty()
+        || artifact.semantic_roots.len() > 1024
+        || artifact.semantic_roots.contains(&0)
+        || artifact
+            .semantic_roots
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+        || artifact.expected_channels == 0
+        || artifact.expected_channels > crate::btor2_region_extract::MAX_REGION_CHANNELS
+        || summary.signatures.len() != artifact.expected_channels
+        || summary.classes.is_empty()
+    {
+        return Err(reject(
+            "structural-equivalence artifact is outside static policy",
+        ));
+    }
+    if summary
+        .signatures
+        .iter()
+        .enumerate()
+        .any(|(channel, signature)| {
+            signature.channel_index != channel
+                || signature.local_states == 0
+                || signature.local_nodes == 0
+                || signature.outgoing_signals == 0
+        })
+    {
+        return Err(reject(
+            "structural-equivalence signatures are not canonical",
+        ));
+    }
+    let mut members = Vec::with_capacity(artifact.expected_channels);
+    for class in &summary.classes {
+        if class.is_empty()
+            || class.windows(2).any(|pair| pair[0] >= pair[1])
+            || class
+                .iter()
+                .any(|channel| *channel >= artifact.expected_channels)
+        {
+            return Err(reject("structural-equivalence classes are not canonical"));
+        }
+        members.extend_from_slice(class);
+    }
+    members.sort_unstable();
+    if members != (0..artifact.expected_channels).collect::<Vec<_>>()
+        || summary
+            .classes
+            .windows(2)
+            .any(|pair| pair[0][0] >= pair[1][0])
+    {
+        return Err(reject(
+            "structural-equivalence classes do not form a canonical partition",
+        ));
+    }
+    Ok(())
+}
+
+/// Produces deterministic source-bound evidence for structural classes.
+pub fn produce_btor2_region_equivalence_artifact(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2RegionEquivalenceArtifact, Btor2RegionError> {
+    let artifact = Btor2RegionEquivalenceArtifact {
+        version: BTOR2_REGION_EQUIVALENCE_VERSION,
+        model_sha256: Sha256::digest(model_bytes).into(),
+        semantic_roots: semantic_roots.to_vec(),
+        expected_channels,
+        summary: derive_btor2_region_equivalence(
+            model_bytes,
+            semantic_roots,
+            expected_channels,
+            policy,
+        )?,
+    };
+    let _ = encode_btor2_region_equivalence_artifact(&artifact)?;
+    Ok(artifact)
+}
+
+/// Encodes a structural-equivalence artifact in canonical v1 form.
+pub fn encode_btor2_region_equivalence_artifact(
+    artifact: &Btor2RegionEquivalenceArtifact,
+) -> Result<Vec<u8>, Btor2RegionError> {
+    validate_structural_artifact(artifact)?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(STRUCTURAL_ARTIFACT_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.extend_from_slice(&artifact.model_sha256);
+    push_u32(
+        &mut bytes,
+        artifact.semantic_roots.len(),
+        "semantic root count",
+    )?;
+    for root in &artifact.semantic_roots {
+        bytes.extend_from_slice(&root.to_le_bytes());
+    }
+    push_u32(&mut bytes, artifact.expected_channels, "channel count")?;
+    bytes.extend_from_slice(&artifact.summary.version.to_le_bytes());
+    push_u32(
+        &mut bytes,
+        artifact.summary.signatures.len(),
+        "signature count",
+    )?;
+    for signature in &artifact.summary.signatures {
+        push_u32(&mut bytes, signature.channel_index, "signature channel")?;
+        push_u32(&mut bytes, signature.local_states, "local state count")?;
+        push_u32(&mut bytes, signature.local_nodes, "local node count")?;
+        push_u32(
+            &mut bytes,
+            signature.incoming_signals,
+            "incoming signal count",
+        )?;
+        push_u32(
+            &mut bytes,
+            signature.outgoing_signals,
+            "outgoing signal count",
+        )?;
+        bytes.extend_from_slice(&signature.sha256);
+    }
+    push_u32(&mut bytes, artifact.summary.classes.len(), "class count")?;
+    for class in &artifact.summary.classes {
+        push_u32(&mut bytes, class.len(), "class member count")?;
+        for channel in class {
+            push_u32(&mut bytes, *channel, "class member")?;
+        }
+    }
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    if bytes.len() > MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES {
+        return Err(reject(
+            "structural-equivalence artifact exceeds byte policy",
+        ));
+    }
+    Ok(bytes)
+}
+
 /// Derives exact bounded trace classes for a deterministic, input-free model.
 ///
 /// Version 1 accepts exactly one observation edge per channel. It hashes every
@@ -733,6 +908,137 @@ impl<'a> ArtifactCursor<'a> {
         }
         Ok(count)
     }
+}
+
+/// Decodes and re-encodes a canonical structural-equivalence artifact.
+pub fn decode_btor2_region_equivalence_artifact(
+    bytes: &[u8],
+) -> Result<Btor2RegionEquivalenceArtifact, Btor2RegionError> {
+    if bytes.len() < 8 + 4 * 6 + 32 * 2 || bytes.len() > MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES {
+        return Err(reject(
+            "structural-equivalence artifact size is outside policy",
+        ));
+    }
+    let payload_end = bytes.len() - 32;
+    let expected: [u8; 32] = bytes[payload_end..].try_into().expect("fixed checksum");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_end])) != expected {
+        return Err(reject("structural-equivalence artifact checksum mismatch"));
+    }
+    let mut cursor = ArtifactCursor {
+        bytes: &bytes[..payload_end],
+        offset: 0,
+    };
+    if cursor.take(8)? != STRUCTURAL_ARTIFACT_MAGIC {
+        return Err(reject("structural-equivalence artifact magic mismatch"));
+    }
+    let version = cursor.u32()?;
+    let model_sha256 = cursor.take(32)?.try_into().expect("fixed digest");
+    let root_count = cursor.count(1024, "semantic root count")?;
+    let mut semantic_roots = Vec::with_capacity(root_count);
+    for _ in 0..root_count {
+        semantic_roots.push(cursor.u64()?);
+    }
+    let expected_channels = cursor.count(
+        crate::btor2_region_extract::MAX_REGION_CHANNELS,
+        "channel count",
+    )?;
+    let summary_version = cursor.u32()?;
+    let signature_count = cursor.count(expected_channels, "signature count")?;
+    let mut signatures = Vec::with_capacity(signature_count);
+    for _ in 0..signature_count {
+        signatures.push(Btor2ChannelEquivalenceSignature {
+            channel_index: cursor.count(expected_channels, "signature channel")?,
+            local_states: cursor.count(
+                crate::btor2_region_extract::MAX_REGION_STATES,
+                "local state count",
+            )?,
+            local_nodes: cursor.count(
+                crate::btor2_region_extract::MAX_REGION_DEPENDENCY_VISITS,
+                "local node count",
+            )?,
+            incoming_signals: cursor.count(
+                crate::btor2_region_extract::MAX_REGION_DEPENDENCY_VISITS,
+                "incoming signal count",
+            )?,
+            outgoing_signals: cursor.count(
+                crate::btor2_region_extract::MAX_REGION_DEPENDENCY_VISITS,
+                "outgoing signal count",
+            )?,
+            sha256: cursor.take(32)?.try_into().expect("fixed digest"),
+        });
+    }
+    let class_count = cursor.count(expected_channels, "class count")?;
+    let mut classes = Vec::with_capacity(class_count);
+    let mut total_members = 0usize;
+    for _ in 0..class_count {
+        let count = cursor.count(expected_channels, "class member count")?;
+        total_members = total_members
+            .checked_add(count)
+            .ok_or_else(|| reject("class member count overflow"))?;
+        if total_members > expected_channels {
+            return Err(reject("class members exceed channel count"));
+        }
+        let mut class = Vec::with_capacity(count);
+        for _ in 0..count {
+            class.push(cursor.count(expected_channels, "class member")?);
+        }
+        classes.push(class);
+    }
+    if cursor.offset != payload_end {
+        return Err(reject("trailing structural-equivalence artifact bytes"));
+    }
+    let artifact = Btor2RegionEquivalenceArtifact {
+        version,
+        model_sha256,
+        semantic_roots,
+        expected_channels,
+        summary: Btor2RegionEquivalenceSummary {
+            version: summary_version,
+            signatures,
+            classes,
+        },
+    };
+    if encode_btor2_region_equivalence_artifact(&artifact)? != bytes {
+        return Err(reject("structural-equivalence artifact is not canonical"));
+    }
+    Ok(artifact)
+}
+
+/// Independently verifies source binding and recomputes every structural class.
+pub fn verify_btor2_region_equivalence_artifact(
+    model_bytes: &[u8],
+    artifact: &Btor2RegionEquivalenceArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2RegionEquivalenceSummary, Btor2RegionError> {
+    let _ = encode_btor2_region_equivalence_artifact(artifact)?;
+    if <[u8; 32]>::from(Sha256::digest(model_bytes)) != artifact.model_sha256 {
+        return Err(reject("structural-equivalence model digest mismatch"));
+    }
+    let recomputed = derive_btor2_region_equivalence(
+        model_bytes,
+        &artifact.semantic_roots,
+        artifact.expected_channels,
+        policy,
+    )?;
+    if recomputed != artifact.summary {
+        return Err(reject(
+            "structural-equivalence artifact disagrees with source",
+        ));
+    }
+    Ok(recomputed)
+}
+
+/// Verifies an artifact once and returns an opaque admission capability.
+pub fn admit_btor2_region_equivalence_artifact(
+    model_bytes: &[u8],
+    artifact: &Btor2RegionEquivalenceArtifact,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2RegionEquivalenceAdmission, Btor2RegionError> {
+    let summary = verify_btor2_region_equivalence_artifact(model_bytes, artifact, policy)?;
+    Ok(Btor2RegionEquivalenceAdmission {
+        model_sha256: artifact.model_sha256,
+        classes: summary.classes,
+    })
 }
 
 /// Decodes and re-encodes the canonical v1 artifact before returning it.

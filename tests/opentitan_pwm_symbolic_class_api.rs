@@ -1,5 +1,10 @@
 use guarded_continuation_checker::btor2;
 use guarded_continuation_checker::btor2_region_equivalence::derive_btor2_region_equivalence;
+use guarded_continuation_checker::btor2_region_equivalence::{
+    MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES, admit_btor2_region_equivalence_artifact,
+    decode_btor2_region_equivalence_artifact, encode_btor2_region_equivalence_artifact,
+    produce_btor2_region_equivalence_artifact, verify_btor2_region_equivalence_artifact,
+};
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 
 struct Fixture {
@@ -62,5 +67,81 @@ fn symbolic_firmware_class_inputs_admit_only_exact_structural_classes() {
                 .collect::<Vec<_>>(),
             fixture.classes
         );
+        let artifact = produce_btor2_region_equivalence_artifact(
+            fixture.bytes,
+            fixture.roots,
+            fixture.channels,
+            Btor2RegionPolicy::default(),
+        )
+        .unwrap();
+        let encoded = encode_btor2_region_equivalence_artifact(&artifact).unwrap();
+        let decoded = decode_btor2_region_equivalence_artifact(&encoded).unwrap();
+        assert_eq!(
+            verify_btor2_region_equivalence_artifact(
+                fixture.bytes,
+                &decoded,
+                Btor2RegionPolicy::default(),
+            )
+            .unwrap(),
+            summary
+        );
+        let admission = admit_btor2_region_equivalence_artifact(
+            fixture.bytes,
+            &decoded,
+            Btor2RegionPolicy::default(),
+        )
+        .unwrap();
+        assert_eq!(admission.classes(), fixture.classes);
+        assert_eq!(
+            encoded,
+            encode_btor2_region_equivalence_artifact(
+                &produce_btor2_region_equivalence_artifact(
+                    fixture.bytes,
+                    fixture.roots,
+                    fixture.channels,
+                    Btor2RegionPolicy::default(),
+                )
+                .unwrap(),
+            )
+            .unwrap()
+        );
     }
+}
+
+#[test]
+fn structural_admission_fails_closed_under_hostile_changes() {
+    let model = include_bytes!(
+        "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+    );
+    let policy = Btor2RegionPolicy::default();
+    let artifact = produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, policy).unwrap();
+    let encoded = encode_btor2_region_equivalence_artifact(&artifact).unwrap();
+
+    for end in 0..encoded.len() {
+        assert!(decode_btor2_region_equivalence_artifact(&encoded[..end]).is_err());
+    }
+    for offset in 0..encoded.len() {
+        let mut changed = encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_region_equivalence_artifact(&changed).is_err());
+    }
+    assert!(
+        decode_btor2_region_equivalence_artifact(&vec![
+            0;
+            MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES + 1
+        ])
+        .is_err()
+    );
+
+    let mut source_drift = model.to_vec();
+    source_drift.push(b'\n');
+    assert!(verify_btor2_region_equivalence_artifact(&source_drift, &artifact, policy).is_err());
+
+    let mut class_drift = artifact.clone();
+    class_drift.summary.classes = (0..6).map(|channel| vec![channel]).collect();
+    assert!(verify_btor2_region_equivalence_artifact(model, &class_drift, policy).is_err());
+
+    let mut signature_drift = artifact.clone();
+    signature_drift.summary.signatures[0].sha256[0] ^= 1;
+    assert!(verify_btor2_region_equivalence_artifact(model, &signature_drift, policy).is_err());
 }

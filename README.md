@@ -379,6 +379,11 @@ equations. The six-channel model exposes three exact structural representatives
 instead of six, while preserving a singleton that fails to match. This is an
 explicit equal-input integration contract and established symmetry reduction,
 not an inferred assumption, safety proof, or novelty claim.
+Its canonical 232- to 460-byte admission artifacts bind the model, roots,
+signatures, and complete partition. Verification recomputes the partition from
+the separately supplied source and rejects all tested mutation and truncation
+cases before returning an opaque capability. The verifier is independent of
+artifact claims, but not a separately implemented or formally verified checker.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

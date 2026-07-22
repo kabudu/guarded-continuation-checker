@@ -1,0 +1,4 @@
+schema_version,channels,classes,artifact_bytes,byte_ratio,verified,deterministic,status
+1,2,0;1,232,0.01356646,true,true,accepted
+1,4,0+2;1;3,348,0.01330479,true,true,accepted
+1,6,0+2+4;1;3+5,460,0.01306521,true,true,accepted

@@ -1,0 +1,21 @@
+schema_version=1
+scope=opentitan-pwm-symbolic-class-structural-admission
+status=complete-portable-admission-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=4cd6e5f78608178c925583a5059ae0c65535b0a3
+channel_counts=2,4,6
+selection=none
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=not-measured
+sha256=ddf8746f51d521f17fadaab0a474c9faa59a50ecb0d4e914a027cf3175f03737 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2
+sha256=671136023f99b6bf9e21f140f267d770b42151738148d23f7f06162a2ebb86d1 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-4.btor2
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=ad3b7989cd52f385af99f1f54829f75b0ae0e9425f15a1f36c8d253e2b47b50d file=src/btor2_region_equivalence.rs
+sha256=41af39cba4ca4f3ecc09fe911860526664f8159f835378110d0593e8c8996de8 file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=d493f6216e61a23e9fa5c4e547566e05c3b666bb835b3301ae9909952ee06adb file=examples/btor2_symbolic_class_certificate_probe.rs
+sha256=b56a8e968595e07d6b0a9c6bddb39e4975aa49a5a9933f3e505604bddcff44cb file=scripts/run-btor2-symbolic-class-certificate-probe-v1.sh
+sha256=4dafef4336fe53ace78148fca1852cd7fab9076c9f476909fd9e56e272f65e25 file=scripts/check-btor2-symbolic-class-certificate-probe-v1.sh
+sha256=5bfc25c9d4211105ae9d773f9e90ceea6d6d1817ad20483eb38b906c822faab1 file=results/opentitan-pwm-symbolic-class-certificate-arm64-v1.csv

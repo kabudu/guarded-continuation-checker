@@ -36,11 +36,34 @@ The result checker freezes every model digest, size, state count, class, and
 input count. The API test also rejects accidental constraints or embedded bad
 properties. These are source-bound property-free models, not safety proofs.
 
+## Canonical admission artifact
+
+The follow-up artifact stores the exact model digest, semantic roots, channel
+count, ordered structural signatures, and complete partition. Its decoder
+preflights byte and count limits, verifies a SHA-256 envelope checksum, and
+requires byte-identical canonical re-encoding. Verification takes the model as
+a separate input, authenticates it, re-extracts all regions, and recomputes
+every signature and class before returning an opaque admission capability.
+
+| Channels | Artifact bytes | Artifact/model ratio |
+|---:|---:|---:|
+| 2 | 232 | 1.356646% |
+| 4 | 348 | 1.330479% |
+| 6 | 460 | 1.306521% |
+
+Every truncation and every single-byte mutation of the six-channel artifact is
+rejected. Source, class, and signature drift also fail closed. The producer and
+verifier share the repository's parser and structural derivation code, so this
+is independent replay from source rather than an independently implemented
+checker or formal proof of the Rust implementation.
+
 ## Reproduction
 
 ```console
 scripts/run-btor2-symbolic-class-probe-v1.sh /tmp/result.csv
 scripts/check-btor2-symbolic-class-probe-v1.sh /tmp/result.csv
+scripts/run-btor2-symbolic-class-certificate-probe-v1.sh /tmp/certificate.csv
+scripts/check-btor2-symbolic-class-certificate-probe-v1.sh /tmp/certificate.csv
 cargo test --locked --test opentitan_pwm_symbolic_class_api
 ```
 
