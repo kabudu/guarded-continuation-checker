@@ -1,12 +1,24 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 1 ]; then
-    echo "usage: $0 OUTPUT_DIRECTORY" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "usage: $0 OUTPUT_DIRECTORY [evaluation|firmware-rtl-v1]" >&2
     exit 2
 fi
 
 output=$1
+bundle_profile=${2:-evaluation}
+case "$bundle_profile" in
+    evaluation)
+        build_type=https://guardedcontinuation.org/buildtypes/linux-evaluation-bundle/v1
+        packaging_readme=README.md
+        ;;
+    firmware-rtl-v1)
+        build_type=https://guardedcontinuation.org/buildtypes/linux-production-candidate/v1
+        packaging_readme=PRODUCTION_README.md
+        ;;
+    *) echo "unsupported bundle profile: $bundle_profile" >&2; exit 2 ;;
+esac
 target=x86_64-unknown-linux-musl
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 
@@ -74,7 +86,11 @@ case "$version" in
     *[!0-9A-Za-z.+-]*|'') echo "package version is invalid" >&2; exit 2 ;;
 esac
 
-base="guarded-continuation-checker-$version-$target"
+if [ "$bundle_profile" = firmware-rtl-v1 ]; then
+    base="guarded-continuation-checker-$version-firmware-rtl-v1-$target"
+else
+    base="guarded-continuation-checker-$version-$target"
+fi
 parent=$(dirname -- "$output")
 mkdir -p "$parent"
 scratch=$(mktemp -d "$parent/.gcc-linux-bundle.XXXXXXXX")
@@ -90,9 +106,15 @@ export LC_ALL=C
 export TZ=UTC
 export RUSTFLAGS="-C strip=symbols -C link-arg=-Wl,--build-id=none --remap-path-prefix=$repo=/usr/src/guarded-continuation-checker"
 
-cargo build \
-    --manifest-path "$repo/Cargo.toml" \
-    --release --locked --target "$target"
+if [ "$bundle_profile" = firmware-rtl-v1 ]; then
+    cargo build \
+        --manifest-path "$repo/Cargo.toml" \
+        --release --locked --target "$target" --features production-firmware
+else
+    cargo build \
+        --manifest-path "$repo/Cargo.toml" \
+        --release --locked --target "$target"
+fi
 
 binary="$CARGO_TARGET_DIR/$target/release/guarded-continuation-checker"
 test -x "$binary" || {
@@ -102,20 +124,34 @@ test -x "$binary" || {
 
 cp "$binary" "$stage/bin/guarded-continuation-checker"
 cp "$repo/LICENSE" "$stage/LICENSE"
-cp "$repo/packaging/linux/README.md" "$stage/README.md"
+cp "$repo/packaging/linux/$packaging_readme" "$stage/README.md"
 cp "$repo/docs/OPERATIONS.md" "$stage/docs/OPERATIONS.md"
 cp "$repo/docs/ISOLATION_PROFILE_V1.md" "$stage/docs/ISOLATION_PROFILE_V1.md"
 cp "$repo/docs/FIRMWARE_CLI_V2.md" "$stage/docs/FIRMWARE_CLI_V2.md"
-cp "$repo/docs/PREDICATE_CLI_V1.md" "$stage/docs/PREDICATE_CLI_V1.md"
-cp "$repo/docs/EVENT_CONTRACT_CLI_V1.md" "$stage/docs/EVENT_CONTRACT_CLI_V1.md"
+if [ "$bundle_profile" = firmware-rtl-v1 ]; then
+    cp "$repo/docs/PRODUCTION_SUPPORT_PROFILE_V1.md" \
+        "$stage/docs/PRODUCTION_SUPPORT_PROFILE_V1.md"
+else
+    cp "$repo/docs/PREDICATE_CLI_V1.md" "$stage/docs/PREDICATE_CLI_V1.md"
+    cp "$repo/docs/EVENT_CONTRACT_CLI_V1.md" "$stage/docs/EVENT_CONTRACT_CLI_V1.md"
+fi
 cp "$repo/scripts/verify-linux-evaluation-bundle.sh" "$stage/verify-bundle.sh"
 chmod 0755 "$stage/bin/guarded-continuation-checker" "$stage/verify-bundle.sh"
 
-{
-    "$stage/bin/guarded-continuation-checker" firmware-cli-version
-    "$stage/bin/guarded-continuation-checker" predicate-cli-version
-    "$stage/bin/guarded-continuation-checker" event-contract-cli-version
-} >"$stage/CAPABILITIES.txt"
+if [ "$bundle_profile" = firmware-rtl-v1 ]; then
+    {
+        "$stage/bin/guarded-continuation-checker" production-profile-version
+        "$stage/bin/guarded-continuation-checker" firmware-cli-version
+    } >"$stage/CAPABILITIES.txt"
+    "$repo/scripts/check-production-support-profile-v1.sh" \
+        "$stage/bin/guarded-continuation-checker" >/dev/null
+else
+    {
+        "$stage/bin/guarded-continuation-checker" firmware-cli-version
+        "$stage/bin/guarded-continuation-checker" predicate-cli-version
+        "$stage/bin/guarded-continuation-checker" event-contract-cli-version
+    } >"$stage/CAPABILITIES.txt"
+fi
 
 cargo metadata --manifest-path "$repo/Cargo.toml" --locked --format-version 1 \
     --filter-platform "$target" \
@@ -137,6 +173,7 @@ jq -nS \
     --arg profile release \
     --arg rustc "$rustc_version" \
     --arg cargo "$cargo_version" \
+    --arg supportProfile "$bundle_profile" \
     --arg cargoLockSha256 "$lock_sha256" \
     --arg binarySha256 "$binary_sha256" '{
       schemaVersion: 1,
@@ -150,6 +187,7 @@ jq -nS \
         created: $created,
         target: $target,
         profile: $profile,
+        supportProfile: $supportProfile,
         locked: true,
         rustflags: "-C strip=symbols -C link-arg=-Wl,--build-id=none --remap-path-prefix=SOURCE=/usr/src/guarded-continuation-checker"
       },
@@ -187,16 +225,19 @@ jq -cnS \
     --arg target "$target" \
     --arg sourceDateEpoch "$source_date_epoch" \
     --arg rustc "$rustc_version" \
-    --arg cargo "$cargo_version" '{
+    --arg cargo "$cargo_version" \
+    --arg buildType "$build_type" \
+    --arg supportProfile "$bundle_profile" '{
       _type: "https://in-toto.io/Statement/v1",
       subject: [{name: $name, digest: {sha256: $digest}}],
       predicateType: "https://slsa.dev/provenance/v1",
       predicate: {
         buildDefinition: {
-          buildType: "https://guardedcontinuation.org/buildtypes/linux-evaluation-bundle/v1",
+          buildType: $buildType,
           externalParameters: {
             target: $target,
             profile: "release",
+            supportProfile: $supportProfile,
             locked: true,
             sourceDateEpoch: $sourceDateEpoch
           },
@@ -225,5 +266,5 @@ jq -cnS \
 mv "$result" "$output"
 trap - EXIT HUP INT TERM
 rm -rf "$scratch"
-printf 'linux-evaluation-bundle status=BUILT archive=%s sha256=%s dirty=%s\n' \
-    "$output/$base.tar.gz" "$archive_sha256" "$dirty"
+printf 'linux-bundle status=BUILT profile=%s archive=%s sha256=%s dirty=%s\n' \
+    "$bundle_profile" "$output/$base.tar.gz" "$archive_sha256" "$dirty"

@@ -77,3 +77,17 @@ cargo build --release --locked --features production-firmware
 scripts/check-production-support-profile-v1.sh \
   target/release/guarded-continuation-checker
 ```
+
+On x86_64 Linux with Rust 1.97 and the documented deterministic packaging
+tools, reproduce the complete candidate archive twice with:
+
+```console
+scripts/test-linux-production-candidate.sh /tmp/gcc-production-candidate
+```
+
+The archive name includes `firmware-rtl-v1`. Its capability snapshot, build
+information and in-toto provenance all bind that profile. The offline verifier
+rejects a profile/name/provenance disagreement without executing the binary.
+
+The archive format and current mechanism evidence are documented in
+[Linux production candidate v1](LINUX_PRODUCTION_CANDIDATE_V1.md).

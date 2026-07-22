@@ -655,8 +655,12 @@ jobs:
         run: |
           shellcheck -s sh \
             scripts/build-linux-evaluation-bundle.sh \
+            scripts/build-linux-production-candidate.sh \
             scripts/generate-spdx-sbom.sh \
             scripts/test-linux-evaluation-bundle.sh \
+            scripts/test-linux-production-candidate.sh \
             scripts/verify-linux-evaluation-bundle.sh
       - name: Rebuild twice, compare, verify, and reject tampering
         run: scripts/test-linux-evaluation-bundle.sh /tmp/gcc-linux-bundle-repro
+      - name: Rebuild and verify the frozen production candidate twice
+        run: scripts/test-linux-production-candidate.sh /tmp/gcc-linux-production-repro

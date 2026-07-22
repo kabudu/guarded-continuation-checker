@@ -1,13 +1,15 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-    echo "usage: $0 SCRATCH_DIRECTORY [RETAINED_OUTPUT_DIRECTORY]" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
+    echo "usage: $0 SCRATCH_DIRECTORY [RETAINED_OUTPUT_DIRECTORY] [evaluation|firmware-rtl-v1]" >&2
     exit 2
 fi
 
 scratch=$1
 retained=${2:-}
+bundle_profile=${3:-evaluation}
+case "$bundle_profile" in evaluation|firmware-rtl-v1) ;; *) echo "invalid bundle profile" >&2; exit 2;; esac
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 if [ -e "$scratch" ]; then
     echo "refusing to overwrite scratch directory: $scratch" >&2
@@ -19,15 +21,15 @@ trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 if [ -z "$(git -C "$repo" status --porcelain --untracked-files=normal)" ]; then
     git clone --quiet --no-hardlinks "$repo" "$scratch/source-first"
     git clone --quiet --no-hardlinks "$repo" "$scratch/source-second"
-    "$scratch/source-first/scripts/build-linux-evaluation-bundle.sh" "$scratch/first"
-    "$scratch/source-second/scripts/build-linux-evaluation-bundle.sh" "$scratch/second"
+    "$scratch/source-first/scripts/build-linux-evaluation-bundle.sh" "$scratch/first" "$bundle_profile"
+    "$scratch/source-second/scripts/build-linux-evaluation-bundle.sh" "$scratch/second" "$bundle_profile"
 else
     if [ "${GCC_ALLOW_DIRTY_BUNDLE:-0}" != 1 ]; then
         echo "reproducibility test requires a clean source tree" >&2
         exit 2
     fi
-    "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/first"
-    "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/second"
+    "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/first" "$bundle_profile"
+    "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/second" "$bundle_profile"
 fi
 
 first_archive=$(find "$scratch/first" -maxdepth 1 -type f -name '*.tar.gz')
@@ -146,7 +148,7 @@ if [ -e "$execution_sentinel" ]; then
     exit 1
 fi
 
-if "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/first" >/dev/null 2>&1; then
+if "$repo/scripts/build-linux-evaluation-bundle.sh" "$scratch/first" "$bundle_profile" >/dev/null 2>&1; then
     echo "bundle builder overwrote an existing output directory" >&2
     exit 1
 fi
@@ -159,5 +161,5 @@ if [ -n "$retained" ]; then
     cp -R "$scratch/first" "$retained"
 fi
 
-printf 'linux-evaluation-bundle-reproducibility status=PASS archive=%s sha256=%s\n' \
-    "$base.tar.gz" "$(sha256sum "$first_archive" | awk '{print $1}')"
+printf 'linux-bundle-reproducibility status=PASS profile=%s archive=%s sha256=%s\n' \
+    "$bundle_profile" "$base.tar.gz" "$(sha256sum "$first_archive" | awk '{print $1}')"

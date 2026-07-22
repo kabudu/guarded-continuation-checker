@@ -9,6 +9,11 @@
   research surfaces, the legacy experiment path, empty invocation and invalid
   capability arguments. Research builds and later additive releases remain
   available without expanding the first production compatibility promise.
+  Add a distinct deterministic Linux production-candidate archive that builds
+  the profiled binary, ships only supported contracts, binds the profile into
+  capabilities, build information and provenance, verifies without execution,
+  and is rebuilt twice in required CI. The existing broad evaluation archive
+  remains reproducible under its original profile.
 - Add a QatQ exact compression probe over the 14,164,144-byte OpenTitan
   revision batch. The best exact f32-word mapping produces 76,385 bytes and
   restores the canonical batch bit-for-bit. It is 34.5845% smaller than the

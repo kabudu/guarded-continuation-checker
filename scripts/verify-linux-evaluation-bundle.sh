@@ -42,6 +42,16 @@ case "$archive_name" in
     *) echo "archive name is not canonical" >&2; exit 2 ;;
 esac
 root=${archive_name%.tar.gz}
+case "$root" in
+    *-firmware-rtl-v1-x86_64-unknown-linux-musl)
+        expected_support_profile=firmware-rtl-v1
+        expected_build_type=https://guardedcontinuation.org/buildtypes/linux-production-candidate/v1
+        ;;
+    *)
+        expected_support_profile=evaluation
+        expected_build_type=https://guardedcontinuation.org/buildtypes/linux-evaluation-bundle/v1
+        ;;
+esac
 
 if ! awk -v name="$archive_name" '
     NR != 1 || NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/ || $2 != name { exit 1 }
@@ -131,17 +141,19 @@ if [ "$(wc -l < "$provenance" | tr -d ' ')" -ne 1 ]; then
 fi
 jq -e \
     --arg name "$archive_name" \
-    --arg digest "$actual_digest" '
+    --arg digest "$actual_digest" \
+    --arg buildType "$expected_build_type" \
+    --arg supportProfile "$expected_support_profile" '
   ._type == "https://in-toto.io/Statement/v1"
   and .predicateType == "https://slsa.dev/provenance/v1"
   and (.subject | length == 1)
   and .subject[0].name == $name
   and .subject[0].digest.sha256 == $digest
-  and .predicate.buildDefinition.buildType ==
-      "https://guardedcontinuation.org/buildtypes/linux-evaluation-bundle/v1"
+  and .predicate.buildDefinition.buildType == $buildType
   and .predicate.buildDefinition.externalParameters.target ==
       "x86_64-unknown-linux-musl"
   and .predicate.buildDefinition.externalParameters.locked == true
+  and .predicate.buildDefinition.externalParameters.supportProfile == $supportProfile
   and (.predicate.buildDefinition.resolvedDependencies | length == 2)
 ' "$provenance" >/dev/null || {
     echo "provenance statement failed structural or subject verification" >&2
@@ -152,6 +164,19 @@ dirty=$(jq -r '
   .source.dirty
   | if . == true then "true" elif . == false then "false" else error("invalid dirty flag") end
 ' "$bundle/BUILD-INFO.json")
+if [ "$(jq -er '.build.supportProfile' "$bundle/BUILD-INFO.json")" != \
+     "$expected_support_profile" ]; then
+    echo "bundle support profile disagrees with archive name" >&2
+    exit 2
+fi
+if [ "$expected_support_profile" = firmware-rtl-v1 ]; then
+    if [ "$(cat "$bundle/CAPABILITIES.txt")" != \
+         "production_support_profile=firmware-rtl-v1 firmware_cli_version=2 artifact_schema_version=4
+firmware_cli_version=2 artifact_schema_version=4" ]; then
+        echo "production candidate capabilities are not canonical" >&2
+        exit 2
+    fi
+fi
 if [ "$dirty" != false ] && [ "${GCC_ALLOW_DIRTY_BUNDLE:-0}" != 1 ]; then
     echo "bundle was built from a dirty source tree" >&2
     exit 2
@@ -203,5 +228,5 @@ fi
 # integrity and structure, not publisher identity. Execution belongs after
 # signature verification and inside the documented isolation boundary.
 
-printf 'linux-evaluation-bundle status=VERIFIED archive=%s sha256=%s revision=%s\n' \
-    "$archive_name" "$actual_digest" "$revision"
+printf 'linux-bundle status=VERIFIED profile=%s archive=%s sha256=%s revision=%s\n' \
+    "$expected_support_profile" "$archive_name" "$actual_digest" "$revision"
