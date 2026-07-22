@@ -1,9 +1,9 @@
 # Production-readiness gap register
 
-Guarded Continuation Checker v0.28.0 is an evaluation-ready research prototype. This register is
-the authoritative checklist for any future production-grade claim. A gate is
-closed only by linked, reproducible evidence; passing unit tests alone is not
-sufficient.
+Guarded Continuation Checker is an evaluation-ready research prototype. This
+register is the authoritative checklist for any future production-grade claim.
+A gate is closed only by linked, reproducible evidence; passing unit tests
+alone is not sufficient.
 
 | Gate | Current evidence | Closure requirement | Status |
 |---|---|---|---|

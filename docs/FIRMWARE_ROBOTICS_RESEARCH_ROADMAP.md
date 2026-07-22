@@ -208,15 +208,18 @@ public benchmark's local provenance mechanism gap. General signed partner build
 provenance, independent synthesis equivalence, and compatibility history remain
 open.
 
-The next semantic revision cycle is predeclared as
-[revision impact certificate v1](REVISION_IMPACT_CERTIFICATE_V1.md). It tests a
-bounded, deterministic certificate for exact component-evidence retention,
-counterfactual invalidation, and complete inclusion-minimal change sets across
-firmware revisions. Prior work already establishes incremental IC3 proof reuse,
-abstraction-precision reuse, mutation-impact propagation, and hierarchical RTL
-lemma reuse. The candidate is therefore deliberately narrow and must beat a
-pinned full-rebuild proof-producing baseline on a real semantic revision before
-it can advance any novelty hypothesis.
+The [revision impact certificate v1](REVISION_IMPACT_CERTIFICATE_V1.md) cycle
+now passes its predeclared OpenTitan PWM cohort gates. It provides a bounded,
+deterministic certificate for counterfactual evidence invalidation and complete
+inclusion-minimal semantic change sets across firmware revisions. A pinned
+full-rebuild proof-producing baseline agrees on all 20 answers and independently
+checks every artifact. GCC is faster at the matched shared-model orchestration
+scope but produces a larger artifact. Prior work already establishes
+incremental IC3 proof reuse, abstraction-precision reuse, mutation-impact
+propagation, and hierarchical RTL lemma reuse, so the result remains a narrow
+candidate contribution rather than a novelty claim. The next comparison must
+remove isolated-process bias with warm-service and parallel maintained-tool
+baselines, then test a larger connected public subsystem.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
