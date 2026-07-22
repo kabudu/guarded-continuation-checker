@@ -1,7 +1,7 @@
 # BTOR2 channel property process resources v1
 
-Status: all predeclared local gates pass on one arm64 development host. Hosted
-Linux replication remains open.
+Status: all predeclared local gates pass on one arm64 development host and the
+hosted Linux replication gate passes on x86-64.
 
 ## Question
 
@@ -41,10 +41,9 @@ The local experiment passes only when:
 6. every whole-process peak RSS is positive; and
 7. the script refuses invalid trial counts and an existing output path.
 
-Passing establishes reproducible local resource evidence only. Hosted Linux
-replication, independently sourced realistic properties, a maintained
-equivalent-scope comparison, and external operator review remain separate
-gates.
+Passing establishes reproducible resource evidence on the measured hosts only.
+Independently sourced realistic properties, a maintained equivalent-scope
+comparison, and external operator review remain separate gates.
 
 ## Local result
 
@@ -69,3 +68,20 @@ the invalid-trial and no-overwrite checks both return exit code 2.
 After measurement, the harness was additionally hardened to publish through an
 atomic no-overwrite hard link. An injected host-measurement failure leaves no
 partial CSV, and a one-trial host rerun confirms successful atomic publication.
+
+## Hosted Linux result
+
+[GitHub Actions run 29948749625](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29948749625)
+passes the same gates with three trials on hosted Linux x86-64. Median results
+are:
+
+| Operation | Wall time | Peak RSS | Internal total | Phase sum |
+|---|---:|---:|---:|---:|
+| Certification | 0.23 s | 17,694,720 bytes | 235,798 us | 235,735 us |
+| Fresh verification | 0.09 s | 11,055,104 bytes | 89,365 us | 89,305 us |
+
+All six hosted rows report twelve UNSAFE answers and the same artifact bytes
+and SHA-256 as arm64. The retained hosted evidence is
+`results/opentitan-pwm-channel-property-process-resources-linux-v1.csv`.
+These measurements describe two particular hosts and are not performance
+guarantees or admission thresholds.

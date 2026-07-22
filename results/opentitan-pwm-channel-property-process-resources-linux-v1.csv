@@ -1,0 +1,7 @@
+schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,artifact_bytes,internal_total_micros,phase_sum_micros,time_backend,operating_system,architecture,artifact_sha256,unsafe_answers,status
+1,certify,1,0.23,17522688,1568,235798,235735,gnu,Linux,x86_64,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,12,measured
+1,verify,1,0.09,11055104,1568,89222,89164,gnu,Linux,x86_64,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,12,measured
+1,certify,2,0.23,17760256,1568,234849,234783,gnu,Linux,x86_64,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,12,measured
+1,verify,2,0.09,11067392,1568,89763,89687,gnu,Linux,x86_64,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,12,measured
+1,certify,3,0.23,17694720,1568,237102,237045,gnu,Linux,x86_64,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,12,measured
+1,verify,3,0.09,10854400,1568,89365,89305,gnu,Linux,x86_64,31db59025d13872959c11783d6f1887fd98f3bac9e0234f3da7fb88ed52e3486,12,measured

@@ -437,8 +437,9 @@ client strictly discovers and parses that additive schema, including phase-sum,
 operation, and verification-zero invariants. A retained five-trial arm64
 [process-resource baseline](docs/BTOR2_CHANNEL_PROPERTY_PROCESS_RESOURCES_V1.md)
 records 18,726,912-byte certification and 8,044,544-byte fresh-verification
-median peak RSS with deterministic evidence. Hosted resource replication,
-maintained comparison and portability evidence remain open.
+median peak RSS with deterministic evidence. Hosted Linux x86-64 reproduces
+the exact artifact and records 17,694,720-byte and 11,055,104-byte medians.
+Maintained comparison and full portability evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
