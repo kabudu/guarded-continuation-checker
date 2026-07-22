@@ -545,8 +545,11 @@ trials nevertheless show a 0.09-second GCC median from source through answer,
 versus 4.84 seconds for 20 isolated maintained jobs, and about 20.0% lower
 producer-path peak RSS. This closes the local matched-resource gate only. The
 exact upstream patch and nine-case hostile-drift matrix now pass. The hosted
-release build, parallel and warm-service comparisons, and independent review
-remain open.
+Linux release-build identity and semantic gate passes in Actions run
+29910725650. This closes the predeclared PWM cohort qualification. Parallel and
+warm-service comparisons, larger public subsystems, independent review, and
+external product evaluation remain open before the mechanism can enter the
+production support profile.
 
 The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
 locally. Both cross-revision evidence swaps fail, and the new model needs only

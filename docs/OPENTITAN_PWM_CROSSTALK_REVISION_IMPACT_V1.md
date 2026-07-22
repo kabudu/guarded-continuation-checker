@@ -6,8 +6,9 @@ Predeclared before fixture extraction, implementation, or measurement. The
 local two-atom mechanism now passes with a frozen semantic explanation. The
 maintained baseline now agrees on all 20 observations and independently checks
 all evidence. The matched five-trial resource comparison also passes. The
-exact upstream patch and nine-case hostile-drift matrix now pass. The hosted
-release-build gate remains open.
+exact upstream patch and nine-case hostile-drift matrix now pass. Hosted Linux
+release-build Actions run `29910725650` reproduces the frozen certificate
+identity and both semantic tests. All nine predeclared cohort gates pass.
 
 ## Public revision
 
@@ -246,3 +247,20 @@ classes:
 valid bundle first, changes one bound dimension at a time, and requires the
 independent verifier to reject every case. This closes the local hostile-drift
 gate without treating parser rejection as semantic verification.
+
+## Hosted release-build acceptance
+
+The dedicated `revision-impact-public-release` job in Actions run
+`29910725650` builds the public API test in release mode on hosted Linux. It
+reproduces the exact 128,768-byte bundle at SHA-256
+`e788c497b514472db64fd79fd5fa319f03abf257a3cd656c96a2eb73a44678b3`,
+independently verifies all 20 observations and three semantic change sets, and
+passes all nine hostile-drift cases.
+
+This closes the predeclared cohort qualification. It does not establish a
+broad novelty or performance claim. The credible product distinction is now
+precise: one source-bound, independently replayable artifact explains separate
+and joint semantic effects across connected firmware or RTL changes, and this
+cohort shows a large source-to-answer orchestration advantage at the cost of a
+larger transferred artifact. Warm and parallel baselines, larger subsystems,
+independent review, and external product evaluation remain necessary.

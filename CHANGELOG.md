@@ -112,6 +112,11 @@
   hostile matrix proving fail-closed rejection of source, interface, query,
   revision-direction, atom-order, evidence, digest, result and minimal-set
   drift.
+- Add a dedicated hosted Linux release-build gate for the public OpenTitan PWM
+  cohort. Actions run 29910725650 reproduces the exact 128,768-byte bundle and
+  frozen SHA-256, all 20 observations, three minimal semantic change sets and
+  all nine hostile rejections. This closes every predeclared cohort gate, not
+  the broader production or novelty programme.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,
