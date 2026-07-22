@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Cancel superseded CI runs for the same pull request or manually dispatched
+  ref. Rapid experiment commits no longer leave obsolete full test and public
+  RTL corpus jobs consuming hosted runner time.
+
 ## 0.30.0 - 2026-07-22
 
 - Predeclare revision impact certificate v1 for selective firmware regression.
