@@ -98,6 +98,13 @@ impl VerifiedControllerMtbdd<'_> {
     }
 }
 
+pub(crate) fn reuse_verified_controller_mtbdd(
+    artifact: &ControllerMtbddArtifact,
+    summary: ControllerMtbddSummary,
+) -> VerifiedControllerMtbdd<'_> {
+    VerifiedControllerMtbdd { artifact, summary }
+}
+
 impl VerifiedControllerTransducer<'_> {
     pub fn summary(&self) -> &ControllerTransducerSummary {
         &self.summary

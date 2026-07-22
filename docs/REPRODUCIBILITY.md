@@ -882,3 +882,35 @@ member-result agreement and reports artifact size, production cost, and median
 verification time across three trials. The retained arm64 observation is
 `results/public-washing-controller-proof-mtbdd-plant-v1.csv`. Timings vary by
 host and are evidence, not an acceptance threshold.
+
+### Production-tagged OpenTitan AON watchdog
+
+Build Yosys at commit `b8e7da6f40ae8f552c116bf6c359b07c6533e159`, build GCC,
+then reproduce the source-bound models, certificates, exact boundary answers,
+and hostile controls:
+
+```sh
+cargo build --locked
+scripts/run-opentitan-aon-watchdog-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  /path/to/pinned/yosys \
+  /tmp/opentitan-aon-watchdog-acceptance.csv
+diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
+  /tmp/opentitan-aon-watchdog-acceptance.csv
+scripts/run-opentitan-aon-predicate-set-acceptance.sh \
+  target/debug/guarded-continuation-checker \
+  /path/to/pinned/yosys \
+  /tmp/opentitan-aon-predicate-set-acceptance.csv
+diff -u results/opentitan-aon-predicate-set-acceptance-v2.csv \
+  /tmp/opentitan-aon-predicate-set-acceptance.csv
+```
+
+The scripts accept only the pinned OpenTitan source digest and Yosys revision,
+regenerate four BTOR2 files and the retained certificates byte for byte,
+independently verify every answer, and run the single-property plus
+predicate-set hostile controls. Predicate-set v2 compares shared and separate
+evidence for joint SAFE, mixed, and billion-frame scale cases; records the
+separate bounded-search refusal for the billion-frame UNSAFE case; and verifies
+three retained v1 compatibility artifacts under their original semantics.
+Exact upstream and wrapper boundaries are documented under
+`corpus/rtl/opentitan-aon-timer`.

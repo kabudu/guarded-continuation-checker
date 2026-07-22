@@ -1,0 +1,238 @@
+# Prior-art audit v1
+
+Date: 2026-07-20
+
+Status: bounded maintainer research, not a legal patent opinion, freedom-to-operate
+analysis, systematic literature review, or scholarly novelty determination.
+
+## Question searched
+
+The audit tested whether this combination is absent from prior work:
+
+> Deterministic proof-carrying composition of dense Boolean input-predicate
+> projections, powered bounded phases, static portfolio admission, and concrete
+> witness recovery for repeated embedded-controller queries.
+
+Searches covered proof-carrying and certifying symbolic model checking,
+BDD-produced certificates, compositional hardware certificates, multi-property
+witness reuse, predicate abstraction, SAT-derived abstract transition
+relations, BTOR2 validation, embedded hardware/software composition, and patent
+records using those concepts. Sources were followed to primary papers, tool
+pages, and patent publications where available.
+
+This was a keyword and citation-neighbourhood search. It does not cover every
+language, non-public application, claim family, paid database, or unpublished
+implementation. An expert literature review and professional patent search
+remain required before any novelty or freedom-to-operate claim.
+
+## Materially close systems
+
+| Source | Existing capability | Consequence for GCC's claim boundary |
+|---|---|---|
+| [Towards Compositional Hardware Model Checking Certification, FMCAD 2023](https://froleyks.de/assets/pdf/Yu%20et%20al.%20-%202023%20-%20Towards%20compositional%20hardware%20model%20checking%20certification.pdf) | Certifies temporal decomposition by composing witness circuits. Its base engines include BDD symbolic model checking, k-induction, and IC3/PDR, and the final witness is checked externally. | Compositional certification, BDD-backed certificate production, preprocessing certificates, and external checking are prior art. |
+| [Certifying Constraints in Hardware Model Checking, FM 2026](https://cca.informatik.uni-freiburg.de/papers/FroleyksYuBiereHeljanko-FM26.pdf) | Defines certificate construction for explicit and extracted constraints, implements `aigmerge` for arbitrary circuit composition, and combines per-property witness circuits into one certificate with shared reset, transition, base, and step checks. | Shared multi-property certificate composition and reuse cannot be claimed as GCC inventions. This is the closest disconfirming result found. |
+| [Introducing Certificates to the Hardware Model Checking Competition, 2025](https://link.springer.com/chapter/10.1007/978-3-031-98668-0_14) | Makes machine-checkable positive certificates and counterexamples part of the HWMCC workflow, using AIGER witness circuits and Certifaiger. | Both-answer certifying hardware workflows and standard witness semantics are established. |
+| [Progress in Certifying Hardware Model Checking Results, CAV 2021](https://link.springer.com/chapter/10.1007/978-3-030-81688-9_17) | Uses k-witness circuits and an independent checker reduced to SAT and a simple QBF check. | Independently checked circuit certificates and compact safety witnesses are established. |
+| [iSMC: A BDD-based Symbolic Model Checker with Interactive Certification, 2026](https://arxiv.org/abs/2605.03705) | Adds probabilistic interactive certification to a BDD symbolic model checker for CTL with justice. | BDD model checking with a separate certification protocol is established, although its probabilistic and interactive trust model differs from GCC's deterministic artifact checker. |
+| [A framework for proof certificates in finite state exploration, 2015](https://arxiv.org/abs/1507.08716) | Defines trusted proof-checking semantics for reachability, non-reachability, bisimulation, and non-bisimulation. | Generic proof-certificate framing and independent finite-state checking are established. |
+| [Btor2-Cert, TACAS 2024](https://link.springer.com/chapter/10.1007/978-3-031-57256-2_7) | Transfers invariants between BTOR2 and software analyzers and validates safety and violation witnesses by re-verification and execution. | Source-language translation, invariant transport, and BTOR2 witness validation are established. |
+
+## Patent records found
+
+| Publication | Relevant disclosure | Audit treatment |
+|---|---|---|
+| [US7346486B2](https://patents.google.com/patent/US7346486B2/en) | SAT-based computation and enumeration of predicate-abstract transition relations, including reused common computation. | Directly disconfirms novelty of SAT-derived Boolean predicate transition enumeration and reuse in isolation. Claim scope and current legal status require professional analysis. |
+| [US7406405B2](https://patents.google.com/patent/US7406405/en) | Proof-based abstraction for design verification using bounded-model-checking proof information. | Disconfirms broad claims around proof-guided abstraction in hardware verification. |
+| [US8271404B2](https://patents.google.com/patent/US8271404B2/en) | SAT-assisted discovery of disjunctive and quantified invariants over predicate abstractions. | Disconfirms broad predicate-invariant discovery claims. |
+| [US20170031806A1](https://patents.google.com/patent/US20170031806A1/en) | Abstracts and composes hardware and software models for embedded-system safety checking and counterexample analysis. | Disconfirms broad claims around abstract controller/software and hardware composition for safety. |
+| [WO2024114920A1](https://patents.google.com/patent/WO2024114920A1/en) | Describes compositional verification of low-level drivers with hardware components. | Relevant to any future firmware/driver composition claim and requires claim-level professional review. |
+
+Search-result similarity does not establish infringement, validity, ownership,
+expiration, enforceability, or jurisdiction. No implementation decision should
+be based on this table alone.
+
+## Findings
+
+1. The broad candidate combination is not supportable as a novel algorithm.
+   Its central ingredients and several important combinations have close,
+   explicit predecessors.
+2. The FM 2026 multi-property witness composition is particularly close to
+   GCC's shared controller proof portfolio. GCC's artifact format, resource
+   envelope, attested source snapshot, exact fallback, and low-memory process
+   profile are engineering differences, not yet evidence of scholarly novelty.
+3. Deterministic checking distinguishes GCC from iSMC's probabilistic
+   interactive protocol, but deterministic certificate checking is already
+   established by Certifaiger and finite-state proof-certificate frameworks.
+4. Concrete UNSAFE trace replay, SAFE certificates, portfolio routing, source
+   digests, and self-service packaging are valuable product properties. Their
+   assembly may be practically useful without constituting a new verification
+   algorithm.
+5. The retained low-memory result is a measurable implementation profile. It
+   does not establish a novel method unless tied to a new certificate invariant
+   and compared against the closest composed witness-circuit representation.
+
+## Maintained-tool availability
+
+The audit inspected the public [Certifaiger repository](https://github.com/Froleyks/certifaiger)
+`main` branch at commit
+`3b8d9e9937234b5e064923bd00f20d3eb97ccc3f` from 2026-07-06. It provides the
+maintained witness checker and its CaDiCaL plus formally verified `lrat_isa`
+path already pinned by GCC's equivalent-evidence harness. The inspected tree
+does not contain the FM 2026 `aigmerge` implementation named by the paper.
+The paper itself states that `aigmerge` may eventually be added to the AIGER
+utilities, rather than identifying a released revision.
+Therefore a direct composed-witness baseline cannot honestly be represented by
+ordinary Certifaiger checking alone. The next cycle must either obtain the
+authors' released implementation at an immutable revision or implement and
+review a faithful paper-derived construction, clearly labelled as GCC's
+baseline implementation rather than the authors' tool.
+
+## Revised research target
+
+The next defensible research question is narrower:
+
+> Can a deterministic certificate encode an exact, reusable quotient of a
+> separately supplied controller's input/output relation and compose it with a
+> changing family of plant contracts, while a bounded low-memory checker proves
+> quotient completeness, wiring integrity, and each SAFE or UNSAFE result
+> without rebuilding or trusting a whole-circuit inductive witness?
+
+This is still only a research question. To distinguish it from the closest
+systems, the next comparison must use the FM 2026 composed-witness construction
+or a faithful maintained implementation and predeclare these measurements:
+
+- trust base and proof obligations;
+- shared and per-plant artifact bytes;
+- producer time and peak memory;
+- checker time and peak memory;
+- support for SAFE and UNSAFE members;
+- whether changing one plant requires rebuilding the controller evidence;
+- deterministic byte reproduction; and
+- failure behavior for wiring, source, certificate, and resource tampering.
+
+If GCC cannot demonstrate a semantic capability or measured property that the
+composed witness approach lacks, the novelty hypothesis must be rejected. The
+production case can continue on reliability, integration, and constrained
+verification value without a novelty claim.
+
+## Remaining gate
+
+This audit materially advances but does not close novelty gate 5. Closure still
+requires:
+
+- citation chaining through the closest papers and their subsequent work;
+- searches in additional scholarly and patent databases by qualified reviewers;
+- claim-level analysis of relevant live patent families;
+- an archived query and inclusion/exclusion log; and
+- independent expert review under novelty gate 6.
+
+## Predicate-set v3 reassessment
+
+Date: 2026-07-21
+
+The OpenTitan invariant-chaining result triggered a narrower follow-up search:
+does proving one state invariant, using it to simplify another transition cone,
+and sharing the resulting evidence across several properties establish a new
+certificate principle?
+
+The answer from the current evidence is no:
+
+- [Btor2-Cert, TACAS 2024](https://link.springer.com/chapter/10.1007/978-3-031-57256-2_7)
+  already transports BTOR2 invariants and validates consistency, initiation,
+  and consecution through separately generated checking circuits.
+- [Certifying Phase Abstraction, CAV 2024](https://link.springer.com/chapter/10.1007/978-3-031-63498-7_17)
+  constructs certificates backwards through model simplification and proves
+  that a witness for a reduced circuit certifies the original circuit.
+- [Introducing Certificates to the Hardware Model Checking Competition, CAV
+  2025](https://link.springer.com/chapter/10.1007/978-3-031-98668-0_14)
+  establishes independently checked SAFE witness circuits and replayed UNSAFE
+  traces on shared hardware models, including multi-property benchmark
+  families.
+- [Certifying Constraints in Hardware Model Checking, FM
+  2026](https://link.springer.com/chapter/10.1007/978-3-032-26204-2_9)
+  is closer still. It certifies constraints extracted from a model and
+  evaluates composed witnesses for 39 multi-property benchmarks, sharing the
+  expensive transition check across properties.
+- [AutoINV](https://arxiv.org/abs/2604.22285) uses helper assertions derived
+  from high-level hardware structure and reuses proving information to select
+  invariants for RTL verification. This further rules out a broad claim around
+  helper-invariant discovery or reuse.
+
+Predicate-set v3 still differs operationally: it is word-level and bounded,
+stores exact affine recurrence parameters rather than a bit-level witness
+circuit, combines SAFE members with earliest-frame UNSAFE witnesses in one
+ordered artifact, and uses a static fail-closed portfolio. Those are useful
+implementation and product-contract differences. The audit found no evidence
+that their combination is a new algorithm, and they must not be presented as
+one.
+
+The closest disconfirming baseline remains the FM 2026 composed-witness path
+already implemented and qualified elsewhere in this repository. The
+[predicate-set v3 identical-scope comparison](OPENTITAN_DUAL_TIMER_COMPOSED_WITNESS_BASELINE_V1.md)
+now translates the dual-timer scope to bit-level AIGER, retains three separately
+checkable properties, composes every multi-property SAFE set, and reports
+UNSAFE traces separately. All twelve answers agree. The composed witnesses are
+56.29% and 40.89% smaller than their independent inputs, confirming that
+substantial evidence sharing is already available through the established
+route. Differences in bounded instrumentation, source binding, checker
+footprint, setup cost, and answer class remain visible. Predicate-set v3 is an
+engineering capability, not a supported novelty result.
+
+## Word-level component-reuse reassessment
+
+Date: 2026-07-21
+
+The word-input search v5 result prompted a stricter question: can GCC claim a
+new method by combining word-level component relations, constraints, source
+separation, and independently checked certificates? The current evidence says
+no. Each broad ingredient, and several important combinations, already has a
+close predecessor:
+
+- [Btor2, BtorMC and Boolector 3.0](https://fmv.jku.at/papers/NiemetzPreinerWolfBiere-CAV18.pdf)
+  establishes word-level transition systems, constraints, witnesses, and
+  hardware model-checking workflows.
+- [Btor2-Cert](https://link.springer.com/chapter/10.1007/978-3-031-57256-2_7)
+  transports word-level invariants and validates both correctness and violation
+  evidence against BTOR2 models.
+- [Towards Compositional Hardware Model Checking Certification](https://froleyks.de/assets/pdf/Yu%20et%20al.%20-%202023%20-%20Towards%20compositional%20hardware%20model%20checking%20certification.pdf)
+  composes independently checkable witness circuits produced by temporally
+  decomposed verification tasks.
+- [Certifying Constraints in Hardware Model Checking](https://cca.informatik.uni-freiburg.de/papers/FroleyksYuBiereHeljanko-FM26.pdf)
+  certifies extracted constraints and composes multiple property witnesses
+  while sharing common checking obligations.
+- [Proof-Carrying Hardware via IC3](https://arxiv.org/abs/1410.4507) establishes
+  independently validated hardware safety proofs generated from IC3 results.
+- [C2Btor](https://arxiv.org/abs/2607.17622) further reduces any claim boundary
+  based merely on supplying firmware-like C through a word-level BTOR2 model.
+
+The repository already implements source-separated BTOR2 controller, plant,
+and wiring inputs, exact both-answer fallback, reusable controller obligations,
+and independent certificate checking. Repackaging those capabilities as
+"word-level component composition" would duplicate existing GCC work and
+would not establish novelty.
+
+The remaining candidate is narrower and remains unproven:
+
+> Can a canonical component-local certificate remain byte-identical and
+> independently valid when a different component is revised, while a separate
+> interface certificate proves word-level assumption and guarantee
+> compatibility, retains exact constrained SAFE and UNSAFE answers, and reports
+> the smallest source or boundary set that invalidates reuse?
+
+This is a revision-local proof-reuse and invalidation hypothesis, not a broad
+composition claim. Proof caching, incremental verification,
+assume-guarantee reasoning, unsatisfiable cores, and blame attribution are each
+established. A candidate contribution can survive only if the combined
+certificate invariant provides a measured capability absent from the closest
+maintained systems. The next experiment must therefore include revision pairs,
+stale-proof and hidden-coupling controls, an ordinary full-rebuild baseline,
+and a faithful composed-witness baseline. If unchanged evidence cannot be
+reused without weakening completeness or if the baseline supplies the same
+property, the hypothesis is falsified.
+
+The first same-scope test now triggers that falsification condition for the
+Roa Logic PLIC pair. The two source revisions synthesize to byte-identical
+whole-circuit models, and qualified SAFE and UNSAFE evidence is reusable
+without rebuilding. GCC has no novelty-supporting reuse distinction on this
+pair. A subsequent test must start from a revision-pinned public subsystem
+whose reachable transition semantics actually change.

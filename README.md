@@ -31,15 +31,71 @@ Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
 
+The first release line now has a frozen
+[production support profile](docs/PRODUCTION_SUPPORT_PROFILE_V1.md): firmware
+CLI contract v2 and RTL artifact schema v4 only. A separately profiled build
+rejects all research commands before dispatch, allowing release qualification
+to proceed without freezing or shipping every experimental interface as a
+supported product capability.
+
 The experimental [controller MTBDD plant CLI v1](docs/CONTROLLER_MTBDD_CLI_V1.md)
 provides a self-service producer and independent verifier for one public
 controller composed with an ordered plant-property batch. Its canonical
 manifest, exact query binding, stable per-member results, no-clobber output and
 hostile-input controls close a local integration gap. Independent acceptance,
-tagged compatibility and source-to-model attestation remain open.
+tagged compatibility and general partner source-to-model attestation remain
+open; the pinned public controller and physical plant now have deterministic
+local provenance evidence.
 Rust callers can use `ControllerMtbddTool` for capability discovery, bounded
 shell-free production and verification, typed batch and member results, and
 invocation metrics without parsing command output.
+The experimental
+[split-evidence CLI v1](docs/CONTROLLER_SPLIT_EVIDENCE_CLI_V1.md) separates one
+proof-carrying controller artifact from replaceable plant-result batches. Its
+multi-batch verifier admits the controller proof once per process, checks every
+controller and obligation binding, and emits per-batch plus aggregate results.
+Rust callers can use `ControllerSplitEvidenceTool` for strict capability
+discovery, shell-free bounded artifact production, one-process multi-batch
+verification, reconciled typed summaries, and invocation metrics. Caller-selected
+resource policies now govern both per-batch and complete-set work through the
+file CLI and `ControllerSplitResourceTool`. Tagged compatibility and independent
+acceptance remain open. Retained public washing-controller acceptance freezes
+the first two split manifest and artifact compatibility fingerprints.
+The first [governed split process-resource baseline](docs/CONTROLLER_SPLIT_PROCESS_RESOURCES_V1.md)
+separates controller certification, each replaceable plant result, and
+one-admission governed verification. Three Darwin arm64 trials retain exact
+answers, evidence sizes, wall time, and peak RSS, while Linux CI validates the
+same operation set without pretending host-dependent measurements are
+byte-reproducible. This is operational evidence, not a speed or production
+claim. Hosted run 29778509796 retains the corresponding Linux x86_64 rows with
+identical evidence sizes and answers.
+The [compatibility and migration policy](docs/COMPATIBILITY_AND_MIGRATION.md)
+defines contract-version semantics, a two-minor-release and 12-month minimum
+support window beginning with the first production tag, fail-closed version
+handling, immutable upgrade and rollback procedures, and an executable split-v1
+baseline. The current candidate establishes the baseline only; cross-tag
+history and registry SemVer evidence remain open.
+The typed clients also expose a bounded
+[process-client observability aggregate](docs/PROCESS_CLIENT_OBSERVABILITY_V1.md)
+and [governed split phase metrics](docs/CONTROLLER_SPLIT_OBSERVABILITY_V1.md),
+with an additive
+[allocation-event contract](docs/CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_V1.md).
+The additive
+[cache-observability contract](docs/CONTROLLER_SPLIT_CACHE_OBSERVABILITY_V1.md)
+permits process-local semantic replay reuse only after complete integrity
+preflight.
+It preserves successful and failed jobs, checked timing and stream totals,
+containment coverage, operation counts, and failure-class counts in canonical
+CSV. A real governed split integration test retains discovery, verification,
+and resource refusal in one three-job aggregate. The additive observed split
+path reports reconciled phase durations and structural work counters only after
+a complete success. After fixture setup, six observed-contract invocations
+aggregate four retained verified batches, exercise one duplicate-batch cache
+hit, and prove that a resource refusal emits no partial metrics. The
+allocation-observed path also validates positive
+system-allocator event counts without treating them as live heap or portable
+performance evidence. Cache lookup, hit, miss, and entry counters reconcile
+against the batch set, including a retained duplicate-batch hit probe.
 The [static MTBDD plant portfolio](docs/CONTROLLER_MTBDD_PLANT_PORTFOLIO_V1.md)
 now selects the reusable MTBDD path when its frozen structural limits admit the
 controller, and otherwise preserves the identical bounded query through direct
@@ -63,6 +119,25 @@ The retained six-job acceptance pipeline aggregates two verified batches, two
 valid refusals, and two invalid-input controls without dropping any row or
 inventing a logical answer for rejected work. This is simulated self-service
 evidence, not independent partner acceptance.
+The first experimental
+[governed proof-carrying MTBDD slice](docs/GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md)
+extends the Rust resource boundary to the equivalence artifact and embedded
+UNSAT proof while preserving zero exhaustive controller assignments. A
+canonical policy CLI and typed bounded process client expose the same contract
+with seven stable refusal reasons and no answer on refusal. Portfolio routing
+now has a first Rust API that selects proof-carrying MTBDD only after static
+admission and otherwise preserves the exact direct query. File/process
+portfolio commands and a typed bounded process client now cover capability
+discovery and governed verification for both the proof and exact fallback
+routes. A deterministic six-job acceptance pipeline now passes the pinned public
+washing-controller batch and the exact fallback under Linux process limits.
+The pinned controller and physical-plant AIGER files now also have
+[deterministic source-to-model attestation](docs/SOURCE_MODEL_ATTESTATION_V1.md)
+through their exact Yosys revision and synthesis recipes. Attestation can now
+be made mandatory in the governed proof-portfolio invocation, including through
+a typed Rust client. This prevents a valid portfolio result from being accepted
+against substituted controller or plant model bytes. General project
+provenance and compatibility gates remain open.
 Its [phase baseline](docs/CONTROLLER_PLANT_PORTFOLIO_PHASES_V1.md) shows that
 semantic replay, rather than model loading, dominates the admitted public
 workflow. Phase observations remain excluded from routing decisions.
@@ -103,6 +178,60 @@ near-neighbour cases, and agrees with official BTOR2Tools plus independent SMT
 controls. This is a narrow piecewise-affine result with established prior art,
 not a general robotics or novelty claim.
 
+The [OpenTitan AON watchdog experiment](docs/OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md)
+takes an unchanged production-tagged public RTL core through pinned Yosys BTOR2
+export and GCC's exact portfolio. It reproduces both boundary answers and proves
+a one-billion-frame SAFE query with a 326-byte independently checked certificate
+representing 500,000,001,500,000,001 logical reachable states. The corpus binds
+the exact upstream source, compatibility transformation, generated models, and
+certificates, then rejects source substitution and recogniser near-neighbours.
+It covers one configured watchdog path, not the complete OpenTitan product, and
+does not establish a novel algorithm or production validity.
+
+The additive [BTOR2 predicate-set certificate v2](docs/BTOR2_PREDICATE_SET_CERTIFICATE_V2.md)
+shares one source-bound recurrence claim across the watchdog's bark and bite
+properties, including mixed SAFE and UNSAFE batches. On the real OpenTitan path,
+it reduces the joint SAFE case from 598 to 348 bytes, the frame-5 mixed case
+from 517 to 357 bytes, and the billion-frame scale case from 652 to 384 bytes.
+On the small model it also proves exact UNSAFE frames 5 and 9 at a billion-frame
+horizon where the separate bounded search baseline refuses the query. The
+verifier reconstructs the recurrence, every result, and every earliest bad
+frame, rejects query drift and forced downgrade, and still verifies retained
+[v1 artifacts](docs/BTOR2_PREDICATE_SET_CERTIFICATE_V1.md) under their original
+rules. Multi-property checking, recurrence reasoning, and certificate
+composition are established prior art; this narrow combined contract remains a
+candidate contribution.
+
+The experimental [predicate-set certificate v3](docs/BTOR2_PREDICATE_SET_CERTIFICATE_V3.md)
+extends that contract across multiple recurrences connected by a proved state
+invariant. On the pinned OpenTitan dual-timer model, one 472-byte artifact
+preserves watchdog bark, wake-up, and bite violations at exact frames 5, 7, and
+9. A 515-byte artifact preserves the same earliest frames at a billion-frame
+horizon without explicit layer construction. The source-reconstructing checker
+rejects claim mutations and every truncated h9 artifact. Maintained-tool,
+cross-platform, and resource comparisons now pass for this narrow
+configuration. Focused prior-art and independent-review gates remain open.
+
+The next pinned
+[OpenTitan dual-timer experiment](docs/OPENTITAN_AON_DUAL_TIMER_EXPERIMENT_V1.md)
+extends the public target to wake-up interrupt, watchdog bark, and watchdog bite
+in one three-state model. The structural probe finds a zero-prescaler invariant
+that guards the wake-up recurrence, so the required mechanism is exact
+invariant chaining rather than simple independent-counter grouping. GCC now
+parses Yosys's standard reduction-or node and retains exact frame 5, 7, and 9
+semantic checks. Predicate-set v3 now completes the query through invariant
+chaining; the earlier v2 refusal remains the frozen pre-implementation control.
+
+The independent [Caliptra watchdog experiment](docs/CALIPTRA_WDT_EXPERIMENT_V1.md)
+adds an unmodified Apache-2.0 CHIPS Alliance module as a second public embedded
+design. Its frozen nine-row local matrix has five independently checked SAFE
+witnesses and four shortest replayed UNSAFE traces. Verified standard witness
+composition reduces the horizon-2 and horizon-3 SAFE sets by 68.90% and 53.89%.
+This broadens real-design evidence while further disconfirming a broad novelty
+claim for multi-property evidence sharing. Hosted amd64 reproduces the complete
+baseline with a byte-identical comparison CSV. Independent operator acceptance
+remains open.
+
 The experimental [BTOR2 component contract](docs/BTOR2_COMPONENT_CONTRACT_V1.md)
 keeps controller, plant, and synchronous wiring contract as separately hashed
 sources. Its specialised checker verifies the feedback relation without
@@ -119,6 +248,84 @@ A static portfolio keeps ordinary exact certificates for singleton or mixed
 fallback batches, where the reuse hypothesis did not win. Public-product,
 external-tool, and cross-platform evidence remain open, so this is not yet a
 novelty or production-readiness claim.
+
+The newer [revision-local component proof experiment](docs/REVISION_LOCAL_COMPONENT_PROOF_V1_PLAN.md)
+tests a narrower capability: retain one canonical, independently validated
+word-level component relation byte-for-byte while the opposite component
+changes. Its static portfolio now produces a complete four-section
+revision-local proof when bounded local composition is admitted and otherwise
+uses exact source-separated search without generating a merged BTOR2 model.
+Both routes preserve SAFE and earliest-frame UNSAFE evidence, reject forced
+routing, accept property-free components through explicit projected semantic
+roots, and are available through the bounded
+[CLI v1 workflow](docs/REVISION_LOCAL_CLI_V1.md). Current results remain
+experimental evidence.
+
+The first public revision pair now uses both authentic revisions of the small
+Roa Logic RISC-V PLIC gateway without injecting a parser-enabling assertion.
+The retained local result preserves SAFE and
+earliest-frame UNSAFE answers, reuses the unchanged monitor relation
+byte-for-byte, and agrees with maintained Yosys/Z3. See the
+[Roa Logic PLIC revision-local result](docs/ROALOGIC_PLIC_REVISION_REUSE_V1.md).
+Strong-baseline and portable certificate
+evidence remain open.
+
+A separate controlled cost run retains the public PLIC relation while changing
+only a small monitor. It reduces complete local candidate work from 4,100
+valuations to four and emits a byte-identical final artifact. The local
+21-trial medians are recorded in the
+[retained revision cost report](docs/ROALOGIC_PLIC_REVISION_COST_V1.md), with
+hosted Linux results and the final closest-system comparison still open.
+
+The first [same-scope closest-system comparison](docs/ROALOGIC_PLIC_CLOSEST_BASELINE_V1.md)
+falsifies the novelty hypothesis for this PLIC pair. Although the upstream
+source digests differ, pinned Yosys emits byte-identical SAFE and UNSAFE
+whole-circuit models. Qualified rIC3 and Certifaiger evidence produced for the
+old revision verifies unchanged against the new revision, so the established
+model-level route regenerates zero semantic evidence bytes. A new authentic
+revision pair with changed reachable semantics is required.
+
+The [OpenTitan `prim_count` semantic revision cohort](docs/OPENTITAN_PRIM_COUNT_REVISION_V1.md)
+now supplies that required precondition. Authentic stable-interface commit
+`369cffc8` changes a pinned cross-counter configuration from SAFE to UNSAFE at
+reset. GCC retains and reverifies the unchanged environment evidence while
+recomputing the changed counter relation, and a separate Yosys plus Z3 oracle
+agrees. Pinned Slang-enabled Yosys proves the selected specialisations
+sequentially equivalent to both untouched upstream revisions. The same-scope
+maintained-tool comparison below qualifies the distinction without showing a
+cost win, so this remains a research result rather than a novelty or
+production-readiness claim.
+
+The [equivalent-scope maintained baseline](docs/OPENTITAN_PRIM_COUNT_CLOSEST_BASELINE_V1.md)
+shows that the semantic change invalidates both directions of cross-revision
+evidence reuse. Qualified rIC3 and Certifaiger regenerate and independently
+check the new 13-byte UNSAFE trace. GCC retains explicit local evidence, but
+its complete portfolio is about 1.7 MB, so this cohort demonstrates local
+attribution rather than a certificate-size or production-cost advantage.
+
+The follow-up [distinct-property query-service experiment](docs/OPENTITAN_PRIM_COUNT_QUERY_SERVICE_V1.md)
+reuses the validated environment and revision relation across eight different
+properties. It preserves byte-identical standalone certificates and reduces
+internal candidate work by 87.5006%. The maintained rIC3 and Certifaiger route
+agrees on all 16 answers with about 12,738 times less model-plus-evidence data.
+The current container therefore has no artifact advantage. The measured result
+points to a shared-section batch certificate as the next experiment.
+
+That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
+implemented as a typed experimental API. It stores the three OpenTitan local
+relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies
+every shared relation and answer from source, and extracts byte-identical
+standalone certificates. The resulting 14,164,144-byte batch is still about
+1,593 times larger than the qualified maintained model-plus-evidence route.
+This is a concrete service and integrity improvement, not a novelty result or
+a production-supported artifact format.
+
+A follow-up [QatQ exact compression probe](docs/QATQ_REVISION_BATCH_COMPRESSION_V1.md)
+reduces that canonical batch to 76,385 bytes with bit-identical restoration,
+beating the strongest measured zstd configuration by 34.5845%. This is useful
+storage evidence, but the compressed batch remains 8.59 times larger than the
+maintained proof package. QatQ is therefore a promising later transport layer,
+not a dependency of the first production support profile.
 
 Validated findings:
 
@@ -178,6 +385,14 @@ publishing a release. This is release-path hardening, not a production or
 novelty claim. The first [signed Linux candidate](results/linux-evaluation-candidate-v1.md)
 passes exact source, workflow, runner, SLSA, SPDX, and offline verification.
 
+Release `v0.29.0` adds a distinct
+[Linux `firmware-rtl-v1` production candidate](docs/LINUX_PRODUCTION_CANDIDATE_V1.md).
+It compiles only the eight commands in the frozen support profile, rejects
+research dispatch, ships only supported contracts, and binds its profile into
+the archive name, capability snapshot, build information and provenance. It is
+an evaluation-ready release, not a production-grade claim; independent review
+and partner evidence remain required.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
@@ -203,6 +418,39 @@ The [BTOR2 bounded search certificate v1](docs/BTOR2_BOUNDED_SEARCH_V1.md)
 answers both bounded `SAFE` and `UNSAFE` reachability queries. It uses complete
 reachable layers as a deliberately conventional exact reference for future
 word-composition work, with explicit state-explosion limits.
+
+The additive [BTOR2 bounded search certificate v2](docs/BTOR2_BOUNDED_SEARCH_V2.md)
+extends that exact reference to bad properties that depend on the current
+one-bit input, as generated by ordinary asynchronous-reset lowering. It keeps
+the terminal-frame input distinct from transition inputs, independently checks
+both input values in SAFE layers, and leaves retained v1 artifacts
+byte-for-byte unchanged.
+
+[BTOR2 bounded search certificate v3](docs/BTOR2_BOUNDED_SEARCH_V3.md) extends
+the same exact fallback to two through eight independent one-bit inputs. Packed
+transition and terminal valuations preserve the complete input vector, and the
+verifier reconstructs every valuation for SAFE successor closure. A pinned
+public Roa Logic PLIC gateway supplies the first five-input retained case, with
+maintained Yosys and Z3 agreement and a governed resource refusal.
+
+[BTOR2 bounded search certificate v4](docs/BTOR2_BOUNDED_SEARCH_V4.md) adds
+exact all-frame environment constraints. It binds ordered constraint nodes,
+enumerates only admissible transitions and terminal observations, preserves
+empty layers after assumption dead ends, and charges resource limits against
+the full valuation space. A separate constrained PLIC workflow emits two real
+BTOR2 constraints and agrees with maintained Yosys plus Z3 through horizon 16,
+while retained v1 through v3 results remain byte-identical.
+
+The [BTOR2 bounded search certificate v5
+experiment](docs/BTOR2_BOUNDED_SEARCH_V5.md) extends the exact fallback to
+small word-valued register fields, bus values, and sensor samples. The local
+core binds each source width and reconstructs packed valuations by input-node
+order, then least-significant bit first within each word. It retains the v1
+through v4 routes and refuses models above eight total semantic input bits. A
+pinned Caliptra watchdog workflow preserves its live two-bit timeout field and
+agrees with maintained Yosys plus Z3 for the retained SAFE and UNSAFE bounds.
+Hosted amd64 run 29874337371 reproduces the complete result. This closes the v5
+experiment gates, but it is not an algorithmic novelty or production claim.
 
 The experimental [BTOR2 exact word-region certificate v1](docs/BTOR2_WORD_REGION_CERTIFICATE_V1.md)
 now replaces those layers for recognised reset-add and saturating counter

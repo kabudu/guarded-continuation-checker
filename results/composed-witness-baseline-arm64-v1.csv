@@ -1,0 +1,3 @@
+schema_version,case,model_bytes,witness_count,input_witness_bytes,composed_bytes,deterministic,certifaiger,lrat_isa,status
+1,upstream-01-self-composition,452,2,3258,333,true,pass,pass,validated
+1,syntactically-distinct-equivalent,452,2,3266,344,true,pass,pass,validated

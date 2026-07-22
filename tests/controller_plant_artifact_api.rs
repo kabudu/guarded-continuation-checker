@@ -6,14 +6,22 @@ use guarded_continuation_checker::controller_plant::{
 use guarded_continuation_checker::controller_plant_artifact::{
     ControllerMtbddPlantPortfolioArtifact, ControllerMtbddPlantPortfolioBackend,
     ControllerMtbddPlantSelectionReason, ControllerPlantArtifactInput,
-    decode_controller_direct_plant_artifact, decode_controller_mtbdd_plant_portfolio,
-    decode_controller_plant_artifact, decode_controller_proof_mtbdd_plant_artifact,
+    ControllerPlantResourceEnvelope, ControllerProofMtbddPlantPortfolioArtifact,
+    ControllerProofMtbddPlantPortfolioBackend, ControllerProofMtbddResourceEnvelope,
+    assess_controller_proof_mtbdd_plant_portfolio_resources,
+    assess_controller_proof_mtbdd_plant_resources, decode_controller_direct_plant_artifact,
+    decode_controller_mtbdd_plant_portfolio, decode_controller_plant_artifact,
+    decode_controller_proof_mtbdd_plant_artifact, decode_controller_proof_mtbdd_plant_portfolio,
     encode_controller_direct_plant_artifact, encode_controller_mtbdd_plant_portfolio,
     encode_controller_plant_artifact, encode_controller_proof_mtbdd_plant_artifact,
-    produce_controller_direct_plant_artifact, produce_controller_mtbdd_plant_portfolio,
-    produce_controller_plant_artifact, produce_controller_proof_mtbdd_plant_artifact,
+    encode_controller_proof_mtbdd_plant_portfolio, produce_controller_direct_plant_artifact,
+    produce_controller_mtbdd_plant_portfolio, produce_controller_plant_artifact,
+    produce_controller_proof_mtbdd_plant_artifact, produce_controller_proof_mtbdd_plant_portfolio,
     verify_controller_direct_plant_artifact, verify_controller_mtbdd_plant_portfolio,
     verify_controller_plant_artifact, verify_controller_proof_mtbdd_plant_artifact,
+    verify_controller_proof_mtbdd_plant_artifact_with_resources,
+    verify_controller_proof_mtbdd_plant_portfolio,
+    verify_controller_proof_mtbdd_plant_portfolio_with_resources,
 };
 use guarded_continuation_checker::controller_transducer::produce_controller_transducer;
 
@@ -204,7 +212,6 @@ fn proof_carrying_mtbdd_batch_is_canonical_bound_and_independently_checked() {
     .unwrap();
     assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
     assert_eq!(summary.assignments_checked, 0);
-
     for length in 0..encoded.len() {
         assert!(decode_controller_proof_mtbdd_plant_artifact(&encoded[..length]).is_err());
     }
@@ -217,6 +224,302 @@ fn proof_carrying_mtbdd_batch_is_canonical_bound_and_independently_checked() {
         verify_controller_proof_mtbdd_plant_artifact(&controller, [0; 32], &plants, &encoded,)
             .is_err()
     );
+}
+
+#[test]
+fn proof_carrying_mtbdd_resources_bound_proof_and_composition_before_replay() {
+    let controller = controller();
+    let plant = plant();
+    let controller_digest = [0xd0; 32];
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![0],
+        controller_action_outputs: vec![0],
+        plant_sensor_outputs: vec![0],
+        plant_action_inputs: vec![0],
+    };
+    let inputs = portfolio_inputs(&plant, &wiring);
+    let mtbdd = produce_controller_mtbdd(&controller, controller_digest, &[0], &[0]).unwrap();
+    let artifact = produce_controller_proof_mtbdd_plant_artifact(
+        &controller,
+        controller_digest,
+        &mtbdd,
+        &inputs,
+    )
+    .unwrap();
+    let encoded = encode_controller_proof_mtbdd_plant_artifact(&artifact).unwrap();
+    let composition = ControllerPlantResourceEnvelope::new(encoded.len(), 2, 8, 4, 72).unwrap();
+    let permissive = ControllerProofMtbddResourceEnvelope::new(
+        composition,
+        guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+        guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+    )
+    .unwrap();
+    let assessment =
+        assess_controller_proof_mtbdd_plant_resources(&controller, &inputs, &encoded, permissive)
+            .unwrap();
+    assert_eq!(assessment.members, 2);
+    assert_eq!(assessment.maximum_product_states, 4);
+    assert_eq!(assessment.transition_evaluation_bound, 72);
+    let governed = verify_controller_proof_mtbdd_plant_artifact_with_resources(
+        &controller,
+        controller_digest,
+        &inputs,
+        &encoded,
+        permissive,
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            governed.verification.safe,
+            governed.verification.unsafe_count
+        ),
+        (1, 1)
+    );
+    assert_eq!(governed.verification.assignments_checked, 0);
+    assert_eq!(governed.resources, assessment);
+
+    let proof_limited = ControllerProofMtbddResourceEnvelope::new(
+        composition,
+        assessment.equivalence_artifact_bytes - 1,
+        assessment.unsat_proof_bytes,
+    )
+    .unwrap();
+    assert!(
+        assess_controller_proof_mtbdd_plant_resources(
+            &controller,
+            &inputs,
+            &encoded,
+            proof_limited,
+        )
+        .unwrap_err()
+        .0
+        .contains("equivalence-artifact limit exceeded")
+    );
+    let unsat_limited = ControllerProofMtbddResourceEnvelope::new(
+        composition,
+        assessment.equivalence_artifact_bytes,
+        assessment.unsat_proof_bytes - 1,
+    )
+    .unwrap();
+    assert!(
+        assess_controller_proof_mtbdd_plant_resources(
+            &controller,
+            &inputs,
+            &encoded,
+            unsat_limited,
+        )
+        .unwrap_err()
+        .0
+        .contains("UNSAT-proof limit exceeded")
+    );
+    let mut drift = inputs;
+    drift[0].horizon -= 1;
+    assert!(
+        assess_controller_proof_mtbdd_plant_resources(&controller, &drift, &encoded, permissive,)
+            .unwrap_err()
+            .0
+            .contains("member mismatch")
+    );
+}
+
+#[test]
+fn proof_carrying_portfolio_uses_proof_and_falls_back_only_on_static_rejection() {
+    let controller = controller();
+    let plant = plant();
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![0],
+        controller_action_outputs: vec![0],
+        plant_sensor_outputs: vec![0],
+        plant_action_inputs: vec![0],
+    };
+    let inputs = portfolio_inputs(&plant, &wiring);
+    let encoded = produce_controller_proof_mtbdd_plant_portfolio(
+        &controller,
+        [0xe0; 32],
+        &[0],
+        &[0],
+        &inputs,
+    )
+    .unwrap();
+    let decoded = decode_controller_proof_mtbdd_plant_portfolio(&encoded).unwrap();
+    assert_eq!(
+        decoded.backend,
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd
+    );
+    assert_eq!(
+        decoded.reason,
+        ControllerMtbddPlantSelectionReason::MtbddAdmitted
+    );
+    assert_eq!(
+        encode_controller_proof_mtbdd_plant_portfolio(&decoded).unwrap(),
+        encoded
+    );
+    let summary = verify_controller_proof_mtbdd_plant_portfolio(
+        &controller,
+        [0xe0; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &encoded,
+    )
+    .unwrap();
+    assert_eq!((summary.safe, summary.unsafe_count), (1, 1));
+    assert_eq!(summary.assignments_checked, 0);
+    let proof_composition =
+        ControllerPlantResourceEnvelope::new(encoded.len(), 2, 8, 4, 72).unwrap();
+    let proof_envelope = ControllerProofMtbddResourceEnvelope::new(
+        proof_composition,
+        guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+        guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+    )
+    .unwrap();
+    let governed = verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+        &controller,
+        [0xe0; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &encoded,
+        proof_envelope,
+    )
+    .unwrap();
+    assert_eq!(
+        governed.resources.backend,
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd
+    );
+    assert!(governed.resources.unsat_proof_bytes > 1);
+    assert_eq!(governed.verification.assignments_checked, 0);
+    let tight_proof = ControllerProofMtbddResourceEnvelope::new(
+        proof_composition,
+        governed.resources.equivalence_artifact_bytes,
+        governed.resources.unsat_proof_bytes - 1,
+    )
+    .unwrap();
+    assert!(
+        assess_controller_proof_mtbdd_plant_portfolio_resources(
+            &controller,
+            &[0],
+            &[0],
+            &inputs,
+            &encoded,
+            tight_proof,
+        )
+        .unwrap_err()
+        .0
+        .contains("UNSAT-proof limit exceeded")
+    );
+    assert!(
+        assess_controller_proof_mtbdd_plant_portfolio_resources(
+            &controller,
+            &[],
+            &[0],
+            &inputs,
+            &encoded,
+            proof_envelope,
+        )
+        .unwrap_err()
+        .0
+        .contains("resource boundary mismatch")
+    );
+    let mismatched_wiring = ControllerPlantWiring {
+        controller_sensor_inputs: vec![],
+        ..wiring.clone()
+    };
+    let mismatched_inputs = portfolio_inputs(&plant, &mismatched_wiring);
+    assert!(
+        assess_controller_proof_mtbdd_plant_portfolio_resources(
+            &controller,
+            &[0],
+            &[0],
+            &mismatched_inputs,
+            &encoded,
+            proof_envelope,
+        )
+        .unwrap_err()
+        .0
+        .contains("member boundary mismatch")
+    );
+
+    let wide = wide_state_controller();
+    let fallback =
+        produce_controller_proof_mtbdd_plant_portfolio(&wide, [0xe1; 32], &[0], &[0], &inputs)
+            .unwrap();
+    let decoded_fallback = decode_controller_proof_mtbdd_plant_portfolio(&fallback).unwrap();
+    assert_eq!(
+        decoded_fallback.backend,
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact
+    );
+    assert_eq!(
+        decoded_fallback.reason,
+        ControllerMtbddPlantSelectionReason::BoundaryLimit
+    );
+    let fallback_summary = verify_controller_proof_mtbdd_plant_portfolio(
+        &wide,
+        [0xe1; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &fallback,
+    )
+    .unwrap();
+    assert_eq!(
+        (fallback_summary.safe, fallback_summary.unsafe_count),
+        (1, 1)
+    );
+    let fallback_composition =
+        ControllerPlantResourceEnvelope::new(fallback.len(), 2, 8, 256, 4608).unwrap();
+    let fallback_envelope =
+        ControllerProofMtbddResourceEnvelope::new(fallback_composition, 1, 1).unwrap();
+    let governed_fallback = verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+        &wide,
+        [0xe1; 32],
+        &[0],
+        &[0],
+        &inputs,
+        &fallback,
+        fallback_envelope,
+    )
+    .unwrap();
+    assert_eq!(
+        governed_fallback.resources.backend,
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact
+    );
+    assert_eq!(governed_fallback.resources.equivalence_artifact_bytes, 0);
+    assert_eq!(governed_fallback.resources.unsat_proof_bytes, 0);
+    assert_eq!(
+        governed_fallback.resources.transition_evaluation_bound,
+        4608
+    );
+
+    let forced = encode_controller_proof_mtbdd_plant_portfolio(
+        &ControllerProofMtbddPlantPortfolioArtifact {
+            version: decoded.version,
+            backend: ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+            reason: ControllerMtbddPlantSelectionReason::BoundaryLimit,
+            relevant_inputs: vec![0],
+            observed_outputs: vec![0],
+            payload: decoded_fallback.payload,
+        },
+    )
+    .unwrap();
+    assert!(
+        verify_controller_proof_mtbdd_plant_portfolio(
+            &controller,
+            [0xe0; 32],
+            &[0],
+            &[0],
+            &inputs,
+            &forced,
+        )
+        .unwrap_err()
+        .0
+        .contains("downgrade detected")
+    );
+    for index in 0..encoded.len() {
+        let mut mutated = encoded.clone();
+        mutated[index] ^= 1;
+        assert!(decode_controller_proof_mtbdd_plant_portfolio(&mutated).is_err());
+    }
 }
 
 #[test]

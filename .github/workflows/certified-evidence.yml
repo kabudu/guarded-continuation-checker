@@ -15,7 +15,9 @@ jobs:
       - name: Validate and run hosted evidence comparison
         run: |
           sudo apt-get update
-          sudo apt-get install --yes shellcheck
+          sudo apt-get install --yes \
+            bison flex gawk libffi-dev libreadline-dev pkg-config shellcheck \
+            tcl-dev zlib1g-dev
           shellcheck -s bash \
             scripts/run-certified-evidence-hosted-v1.sh \
             scripts/qualify-certifaiger-v1.sh \
@@ -23,7 +25,17 @@ jobs:
             scripts/certified-evidence-container-v1.sh \
             scripts/benchmark-certified-evidence-v1.sh \
             scripts/benchmark-gcc-proof-runlim-v1.sh \
+            scripts/test-composed-witness-baseline-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+            scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+            scripts/ric3-static-evidence-producer-v1.sh \
+            scripts/opentitan-dual-timer-resource-container-v1.sh \
+            scripts/benchmark-changing-plant-composed-witness-v1.sh \
             scripts/test-certified-evidence-hostile-v1.sh
+          shellcheck -s sh \
+            scripts/build-opentitan-aon-dual-timer-aiger.sh \
+            scripts/build-caliptra-wdt-aiger-v1.sh
           scripts/run-certified-evidence-hosted-v1.sh /tmp/evidence-results
           cat /tmp/evidence-results/*.csv
       - name: Retain hosted comparison evidence

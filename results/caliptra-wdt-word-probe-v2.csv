@@ -1,0 +1,5 @@
+schema_version,horizon,properties,expected_answers,actual_answers,portfolio_status,route,certificate_bytes,model_deterministic,evidence_deterministic,verified,status
+2,2,23+26+30,23:SAFE:none+26:SAFE:none+30:SAFE:none,23:SAFE:none+26:SAFE:none+30:SAFE:none,accepted,ordinary-exact,2747,true,true,true,validated
+2,3,23+26+30,23:SAFE:none+26:SAFE:none+30:UNSAFE:3,23:SAFE:none+26:SAFE:none+30:UNSAFE:3,accepted,ordinary-exact,2813,true,true,true,validated
+2,5,23+26+30,23:UNSAFE:5+26:UNSAFE:5+30:UNSAFE:3,23:UNSAFE:5+26:UNSAFE:5+30:UNSAFE:3,accepted,ordinary-exact,1561,true,true,true,validated
+2,1000000000,23+26+30,not-applicable,not-applicable,refused,search-horizon-limit,0,true,true,true,retained-negative

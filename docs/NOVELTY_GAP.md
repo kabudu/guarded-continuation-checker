@@ -39,6 +39,17 @@ Primary starting points:
 - [iSMC: A BDD-based Symbolic Model Checker with Interactive Certification](https://arxiv.org/abs/2605.03705)
 - [QBFcert](https://fmv.jku.at/qbfcert)
 
+The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) found materially closer
+disconfirming work than the original list captured. In particular, FMCAD 2023
+already composes certificates produced by BDD and other model-checking engines
+across temporal decomposition, while FM 2026 composes arbitrary witness
+circuits and shares certificate checks across multiple properties. Patent
+records also describe SAT-derived predicate transition enumeration, proof-based
+abstraction, and abstract hardware/software composition. The broad combination
+of BDDs, predicate projection, composition, and independently checked evidence
+is therefore not a credible novelty claim. Gate 5 remains open because this was
+not a systematic or professional patent search.
+
 ## Claim gates
 
 1. **Closed for candidate v1:** freeze a precise certificate language and
@@ -54,14 +65,97 @@ Primary starting points:
    replication gates pass on the frozen corpus. The result is negative on
    speed, size, and packaging. A low-memory GCC verifier profile reproduces on
    arm64 and amd64, and both evidence paths reproduce byte-identical artifacts
-   across architectures. Comparison with a formally verified checker remains
-   open.
+   across architectures. Certifaiger's SAFE obligations are checked through
+   CaDiCaL and the formally verified `lrat_isa` checker. The remaining gate is
+   a direct comparison with the FM 2026 composed multi-property witness, not a
+   missing formally verified SAT-proof consumer.
+   The first faithful safety-only implementation now composes two distinct SAFE
+   property witnesses for each of four changing plants. Qualified Certifaiger
+   plus `lrat_isa` accepts every individual and composed witness. Composition
+   reduces the eight witnesses from 19,164 to 9,665 bytes, a 49.57% reduction.
+   This is a negative result for any broad evidence-size distinction. Hosted
+   reproduction, resource measurement, one-plant replacement accounting, and
+   independent implementation review remain open before the narrower
+   controller-reuse question can be judged.
 5. Search papers, tools, patents and current implementations for the complete
    proposed combination, recording both confirming and disconfirming evidence.
 6. Obtain external expert review of the scoped claim.
 
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
+
+The frozen Caliptra watchdog comparison adds a second independently maintained
+public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
+five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the
+FM 2026 composer reduces the two shared SAFE sets by 68.90% and 53.89%. This is
+further disconfirming evidence against a broad multi-property evidence-sharing
+claim. It strengthens product validity and baseline breadth, not novelty.
+
+Bounded search certificate v2 separately closes the ordinary Yosys
+current-input representation gap exposed by the Caliptra word-level export.
+It records a terminal-frame input distinct from transition inputs and checks
+both input values over complete SAFE layers. This is conventional explicit
+bounded reachability with independently replayed evidence. It is an
+interoperability improvement and must not be presented as a novelty result.
+
+## Shared exact recurrence predicate-set candidate
+
+Predicate-set certificate v2 extends the narrower candidate mechanism on the
+word-level path. It shares one exact source-bound reset-add or
+reset-saturating-add recurrence claim across an ordered set of comparison
+predicates, represents SAFE and UNSAFE members together, and records an exact
+earliest bad frame plus source-reconstructed `advance_prefix` witness kind for
+each UNSAFE member. The verifier reconstructs the source recurrence, predicate,
+result, frame, route, and complete ordered query. Unsupported batches preserve
+ordinary exact fallback without partial results. Retained v1 artifacts remain
+verifiable under their original rules.
+
+This is not a claim to multi-property model checking. HWMCC introduced a
+multi-property track in 2011, the BTOR2 ecosystem supports multiple bad
+properties, and model checkers routinely share transition exploration.
+Proof-certificate frameworks, Certifaiger, and the FM 2026 composed-witness
+baseline also predate this experiment. The measured 41.8% joint-SAFE, 30.9%
+mixed, and 41.1% scale reductions on two OpenTitan watchdog properties are
+consistent with removing duplicated headers, recurrence fields, and
+per-property trace structure. They do not prove an asymptotic or broad
+algorithmic distinction. The billion-frame UNSAFE case extends the admitted
+capability beyond the separate explicit-search horizon, but only because the
+same narrow recurrence admits a closed-form earliest frame.
+
+The exact candidate question is whether existing systems already combine all
+of these constraints in one portable contract: caller-bound ordered property
+sets, a single independently reconstructed word-level recurrence claim, joint
+SAFE and UNSAFE members, compact earliest-bad witness reconstruction,
+deterministic forced-downgrade rejection, complete exact fallback, and retained
+v1 semantics. Gate 5 requires a focused implementation and patent search for
+that exact combination. Gate 6 still requires external expert review. Until
+both close, the result is useful product engineering and a candidate
+contribution only.
+
+Primary starting points are the
+[HWMCC 2011 multi-property track](https://fmv.jku.at/hwmcc11/results.html),
+[BTOR2 CAV 2018 artifact](https://fmv.jku.at/cav18-btor2),
+[Certifaiger](https://fmv.jku.at/certifaiger/), and
+[finite-state proof-certificate framework](https://arxiv.org/abs/1507.08716).
+
+The pinned OpenTitan dual-timer probe narrows the next candidate mechanism. Its
+wake-up counter is not an independent direct recurrence: a separately stored
+prescaler state is provably zero and that fact guards both wake-up increment and
+interrupt semantics. The proposed follow-up must therefore certificate one
+invariant, use it to simplify a dependent recurrence, and compose that result
+with an independent watchdog recurrence across three ordered properties. This
+is invariant chaining over a public embedded core, not evidence of novelty.
+Invariant propagation, cone decomposition, recurrence acceleration, and
+compositional model checking remain prior art and must be included in gate 5.
+
+The revised candidate question is whether exact controller evidence can remain
+reusable across separately supplied and changing plant contracts while a
+bounded low-memory checker proves quotient completeness, wiring, and both
+answer classes without rebuilding a whole-circuit inductive witness. This must
+be compared directly with the FM 2026 composed-witness construction under the
+[predeclared baseline](COMPOSED_WITNESS_BASELINE_V1.md). Until that comparison
+demonstrates a distinct semantic capability or measured property, it is a
+research direction rather than a candidate contribution.
 
 Gate 1 is represented by the frozen
 [`Dense predicate certificate v1`](PREDICATE_CERTIFICATE_V1.md), with working
@@ -339,13 +433,231 @@ checkable evidence, but those properties do not overcome established
 proof-carrying-hardware prior art. Hosted Linux reproduces the negative runtime
 result.
 
-The next predeclared experiment compares GCC evidence with the
+The completed equivalent-evidence experiment compares GCC evidence with the
 competition-standard Certifaiger and `aigsim` path at equivalent bounded scope.
-The [comparison plan](CERTIFAIGER_EQUIVALENT_EVIDENCE_PLAN.md) explicitly allows
-the portable-batch distinction to be falsified.
+Its negative runtime, size, and packaging result falsifies the broad
+portable-batch advantage for this corpus. The next gate is the closer FM 2026
+multi-property composed-witness baseline, which explicitly allows the narrower
+controller-reuse hypothesis to be falsified.
 
 Controller/plant resource envelope v1 converts the narrow low-memory result
 into an explicit conservative consumer policy boundary. Static work estimates,
 resource admission, exact fallback, and fail-closed verification are established
 systems techniques. This is production hardening, not novelty evidence, and it
 does not change any scholarly claim gate.
+
+The governed proof-carrying MTBDD portfolio experiment extends that same policy
+boundary to the equivalence artifact and embedded UNSAT proof. This is also
+production integration, not a new algorithmic claim. Its public-product and
+strong-baseline results may supply evidence for later work, but cannot close
+the novelty register by themselves.
+
+Deterministic source-to-model attestation for the public controller and plant is
+reproducible-build provenance, not a new verification algorithm. It strengthens
+the benchmark trust chain without changing any novelty claim or closest-prior-art
+conclusion.
+
+## Changing-plant evidence reuse
+
+The predeclared local replacement experiment now supplies the first positive
+evidence for the narrow candidate distinction. GCC checks a 248,889-byte
+controller MTBDD equivalence artifact once, retains a typed admitted capability,
+and binds separately replaceable plant results to its SHA-256. Replacing the
+third member of a four-plant package transfers 4,160 bytes including source and
+raw plant model. The faithful FM 2026-style route transfers 8,278 bytes including
+the same source, combined model, and independently accepted composed witness.
+This is a 49.75% marginal byte reduction at equal two-property SAFE scope.
+
+The result does not establish a novel algorithm. Content addressing, proof
+caching, assume-guarantee separation, and incremental verification are known.
+The complete initial GCC transfer is 265,927 bytes, 8.71 times the external
+30,531-byte initial package, and requires 58 observed replacements to recover
+that deficit. Hosted reproduction, peak memory, controlled checked-work
+accounting, independent review of the paper-derived merger, a search for systems
+with the same proof-cache boundary, and a non-repository-authored changing plant
+remain open. The narrow hypothesis advances; every broader novelty or product
+superiority claim remains prohibited.
+
+## Production-tagged OpenTitan watchdog
+
+The OpenTitan AON watchdog experiment demonstrates pinned public-source
+integration, exact fail-closed routing, and a constant-size proof for a very
+large bounded reset-add recurrence. Yosys BTOR export, affine recurrence
+acceleration, interval reachability, word-level SMT, and proof-carrying model
+checking are established. The result is therefore product mechanism evidence,
+not a novelty claim. A credible next claim still requires compact proof
+composition across multiple interacting dense predicates or separately changing
+public controller and plant contracts, plus equivalent-scope maintained-tool
+and prior-art comparisons.
+
+## Invariant-chained OpenTitan timer predicates
+
+Predicate-set v3 demonstrates a more specific composition contract: a proved
+state invariant simplifies one recurrence while a second recurrence remains
+direct, and one deterministic certificate preserves mixed results across both
+cones. This is stronger mechanism evidence than the single-counter predicate
+set, but invariant generation, recurrence acceleration, cone decomposition,
+and multi-property model checking are established fields.
+
+No novelty row closes. The candidate distinction is the exact combination of
+source-reconstructed invariant chaining, ordered earliest-frame claims,
+static downgrade detection, and complete-query fail-closed behaviour in a
+compact portable artifact. A focused closest-prior-art search and local
+maintained-tool comparison at identical scope are now complete. Hosted
+reproduction and independent expert review remain required before even that
+narrow combination could be reconsidered as novel.
+
+The focused 21 July reassessment substantially weakens even that narrow
+algorithmic hypothesis. FM 2026 already composes witnesses across 39
+multi-property benchmarks and shares transition checking, while Btor2-Cert
+validates transported BTOR2 invariants through explicit initiation and
+consecution obligations. GCC v3's bounded word-level encoding, mixed-answer
+artifact, static routing, and source binding remain practical differences, but
+are not currently supportable as a novel algorithm. The completed local
+identical-scope baseline agrees on all twelve answers and produces independently
+checked composed SAFE witnesses that are 56.29% and 40.89% smaller than their
+separate inputs. That closes the missing local comparison and further
+disconfirms a broad composition claim. [Hosted amd64 run
+29800096071](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29800096071)
+reproduces the same answers, exact frames, evidence sizes, and composed-witness
+hashes and adds nonzero resource measurements. This strengthens the engineering
+evidence but does not revive an algorithmic novelty claim. Independent expert
+review remains mandatory.
+
+Canonical hosted run 29860773683 additionally makes the complete twelve-row
+arm64 and amd64 comparison CSV byte-identical by normalising only non-semantic
+Yosys build-identification text. This closes a reproducibility gap, not a
+novelty row.
+
+## Multi-input public PLIC fallback
+
+The pinned Roa Logic PLIC gateway exposes a product-relevant multi-input
+boundary that search v2 cannot represent. Certificate v3 now packs complete
+transition and terminal valuations and enumerates all valuations for SAFE
+successor closure. Its local horizon-16 result agrees with maintained Yosys and
+Z3 and retains the first larger query as a governed refusal. Explicit-state
+multi-input reachability is established prior art, so this is an
+interoperability and product-validity result, not novelty evidence. Its value is
+to provide an exact, fail-closed baseline against which later dense
+proof-carrying composition can be measured on a third public embedded project.
+
+Constraint-aware bounded search v4 closes the next practical exact-fallback
+gap on a constrained public PLIC wrapper. Assumption-constrained reachability
+and explicit-state search are established prior art. The successful result is
+production engineering evidence only and does not change a novelty gate.
+
+The predeclared word-input bounded-search v5 experiment is also product
+engineering rather than a novelty candidate. Explicit finite-domain
+bit-vector enumeration, typed input reconstruction, and constrained bounded
+reachability are established. Its role is to make later word-level proof
+compression comparisons exact and source-faithful. The pinned Caliptra result
+confirms local product interoperability and maintained-tool agreement. It does
+not change that prior-art assessment or close any novelty row. Hosted amd64 run
+29874337371 reproduces the complete result and reinforces only the engineering
+claim.
+
+## Revision-local word-relation evidence
+
+The first revision-local result narrows the candidate without closing it. Two
+authentic revisions of the public Roa Logic PLIC gateway preserve both bounded
+answers and the earliest UNSAFE frame. The unchanged monitor relation remains
+byte-identical, and revised production and verification each report one changed
+section plus one reused validated section. A controlled monitor-revision
+workload retains the larger public PLIC relation, reduces complete local
+candidate work from 4,100 valuations to four, and emits the same final bytes as
+a full rebuild.
+
+This is useful evidence for an exact invalidation boundary, but it is not yet a
+novelty result. Proof caching, content-addressed reuse, incremental
+verification, assume-guarantee reasoning, and compositional certificates are
+established. The repository's faithful FM 2026-style baseline already shows
+that composed witnesses share checking obligations and can provide smaller
+initial evidence. On the earlier changing-plant family, GCC recovers its larger
+initial package only after 58 replacements. The new BTOR2 experiment has not
+yet shown that a maintained closest system cannot retain equivalent local
+semantics at the same source, answer, and evidence scope.
+
+The candidate distinction remains the conjunction of complete word-level local
+relations, byte-stable independently valid sections, exact constrained SAFE and
+earliest-frame UNSAFE answers, smallest-section failure attribution, and static
+fail-closed fallback. The complete hostile matrix, equivalent-scope
+closest-system result, hosted resource replication, portable certificate
+identity, and independent expert review remain mandatory. Until they pass, the
+current result is not a novelty claim.
+
+The eight-property OpenTitan query-service follow-up now supplies the missing
+larger repeated-query measurement. Exact in-process reuse cuts candidate work
+by 87.5006%, but 16 standalone certificates duplicate the shared relations and
+occupy 113,264,568 bytes. The equivalent maintained AIGER, rIC3, and Certifaiger
+route agrees on all answers using 8,892 model-plus-evidence bytes. This rejects
+the present certificate container as the invariant-breaking idea. The narrower
+open hypothesis is whether one independently verifiable, content-addressed
+batch can share complete local relations across heterogeneous queries while
+retaining exact failure attribution and fail-closed standalone extraction.
+
+Revision batch certificate v1 tests that narrower hypothesis. It shares three
+validated local relations across 16 heterogeneous OpenTitan queries, removes
+87.4946% of standalone bytes, independently replays every source and answer,
+and extracts the original standalone certificates byte-identically. This is a
+successful container and service result. It does not break the maintained-tool
+invariant: the 14,164,144-byte batch remains about 1,593 times larger than the
+equivalent 8,892-byte AIGER, rIC3 and Certifaiger package. Content addressing,
+deduplication and compositional proof checking are established, so the batch
+does not close a novelty gate.
+
+QatQ exact compression materially improves the batch's storage result. A
+bit-identical f32-word mapping reduces it to 76,385 bytes, 34.5845% below the
+strongest measured zstd configuration. The result supports an additive
+transport experiment, but compression is established and the output remains
+8.59 times larger than the maintained proof package. It changes neither the
+semantic invariant nor the novelty status.
+
+Strict interface contract v2 closes one integrity ambiguity in that candidate:
+every semantic input must now be classified as wired or external. This prevents
+an omitted cross-component wire from silently becoming an environment input.
+It strengthens the experiment but is not itself a novelty claim.
+
+Property-free component ingestion removes experiment-only assertion
+instrumentation from the public PLIC wrapper. Selected component outputs now
+bind semantic-input discovery directly and are independently replayed through
+both local and exact-fallback routes. This improves source fidelity and product
+integration. It is parser and verification engineering, not a novelty claim.
+
+The public workflow now closes the predeclared local hostile matrix with ten
+attack classes and one no-clobber control. Each rejection is tied to its
+smallest declared evidence section. This strengthens the candidate's trust
+boundary but does not distinguish it from closest prior systems.
+
+The first identical-scope maintained comparison falsifies the candidate for
+the public PLIC pair. Pinned Yosys produces byte-identical whole-circuit SAFE
+and UNSAFE models from the two source revisions. Qualified rIC3 and
+Certifaiger evidence generated once for the older source verifies unchanged
+against the newer source. The established route therefore retains all semantic
+evidence, which is strictly stronger reuse than GCC demonstrates on this pair.
+These revisions change source syntax but not reachable transition semantics,
+so they cannot support a novelty claim. The candidate remains open only for a
+new authentic revision pair with a semantic internal-logic change.
+
+The OpenTitan `prim_count` cohort supplies that missing semantic-change
+precondition. Across authentic stable-interface commit `369cffc8`, a pinned
+two-bit cross-counter configuration changes from SAFE to UNSAFE at reset. GCC
+reuses and semantically reverifies the unchanged environment section, then
+recomputes the changed component exactly. A separate Yosys plus Z3 assertion
+oracle agrees, and two clean runs reproduce byte-identical models,
+certificates, result CSV, and manifest.
+
+This revives the closest-system experiment, not the novelty claim. Pinned
+Slang-enabled Yosys now compiles the untouched package-based SystemVerilog and
+proves both selected-configuration specialisations sequentially equivalent.
+That gate caught and corrected an enum-encoding error in the first fixture.
+An identical-scope maintained-system comparison, portable certificate
+identity, and independent review remain mandatory.
+
+The identical-scope rIC3 and Certifaiger comparison is now complete locally.
+Unlike the PLIC pair, the old SAFE witness fails against the new model and the
+new UNSAFE trace fails against the old model. The maintained route regenerates
+only the 13-byte new trace. GCC retains and reverifies the environment section,
+but its complete retained portfolio is about 1.7 MB. This establishes a local
+proof-structure distinction while falsifying a certificate-byte advantage on
+this cohort. A larger repeated-revision workload must show an end-to-end
+construction or checking benefit before the candidate can support novelty.

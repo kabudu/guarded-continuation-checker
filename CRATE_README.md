@@ -18,12 +18,13 @@ The package provides:
   named assumptions, replayable counterexamples and versioned evidence bundles;
 - a static specialised-backend gate with exact persistent-CDCL fallback;
 - deterministic certificate formats with independent source-bound verification;
-  and
+- qualified Certifaiger plus `lrat_isa` SAFE checking and `aigsim` UNSAFE trace
+  replay in the repository evidence harness; and
 - experimental BTOR2 word semantics, counter-phase certificates, exact trace
   replay, proof-carrying exact word regions, coupled-motion curves, resettable
   braking phases, source-separated controller/plant contracts, and both-answer
-  bounded reachability with static exact-search fallbacks and fixed resource
-  limits.
+  bounded reachability with exact environment constraints, static exact-search
+  fallbacks, and fixed resource limits.
 
 ## Status and claim boundary
 
@@ -38,6 +39,31 @@ and
 [novelty](https://github.com/kabudu/guarded-continuation-checker/blob/master/docs/NOVELTY_GAP.md)
 gaps explicitly.
 
+The retained public-design evidence covers pinned OpenTitan timer RTL and an
+independently maintained CHIPS Alliance Caliptra watchdog module. The Caliptra
+baseline preserves five SAFE and four UNSAFE bounded outcomes, deterministic
+evidence, independently checked certificates and traces, verified
+multi-property witness composition, and hostile-evidence rejection. These are
+narrow configured-core results, not assurance for either complete product.
+
+The experimental exact bounded-search interface accepts state-only properties
+through retained certificate v1 and current-input-dependent properties through
+additive certificate v2. V2 represents asynchronous-reset semantics with a
+separate terminal-frame input and preserves v1 encoding unchanged. Both
+formats remain bounded research interfaces rather than production assurance.
+
+Additive certificate v3 admits two through eight one-bit semantic inputs and
+binds complete packed transition and terminal valuations. Retained v1 and v2
+encodings remain byte-identical. The v3 path is also experimental and subject
+to the same explicit state, work, horizon, and artifact limits.
+
+Additive certificates v4 and v5 preserve exact BTOR2 constraints and small
+word-valued semantic inputs respectively. V5 source-binds input widths and
+packs at most eight total input bits by input-node order, then
+least-significant bit first within each word. All five formats remain bounded
+research interfaces. Hosted amd64 run 29874337371 reproduces the complete v5
+Caliptra public-design result and compatibility matrix.
+
 Bounded portfolio v3 source-binds and independently checks the exact
 accelerate, brake, and stopped relation, with unchanged exact-search fallback
 for every unsupported or intersecting query. This remains a narrow experimental
@@ -51,13 +77,22 @@ monolithic specialisation, so no performance or novelty claim follows.
 
 ## Installation
 
-After the first crate release:
+Install the complete research build:
 
 ```sh
 cargo install guarded-continuation-checker --locked
 ```
 
-Until then, install the reviewed repository revision directly:
+For the frozen `firmware-rtl-v1` command boundary, install with the production
+feature. This build rejects every research command before dispatch:
+
+```sh
+cargo install guarded-continuation-checker --locked \
+  --features production-firmware
+guarded-continuation-checker production-profile-version
+```
+
+To evaluate an unreleased reviewed repository revision instead:
 
 ```sh
 cargo install --git https://github.com/kabudu/guarded-continuation-checker \
@@ -65,10 +100,9 @@ cargo install --git https://github.com/kabudu/guarded-continuation-checker \
 ```
 
 For self-service Linux evaluation, prefer the repository's reproducible static
-bundle contract. It includes an SPDX SBOM, deterministic provenance, internal
-checksums, and optional GitHub Sigstore attestations. The first crate has not yet
-been published, and no binary should be treated as an authenticated release
-without verifying its attestation policy.
+`firmware-rtl-v1` candidate. It includes an SPDX SBOM, deterministic provenance,
+internal checksums, and GitHub Sigstore attestations. No binary should be
+treated as an authenticated release without verifying its attestation policy.
 
 Confirm the versioned interfaces before integrating:
 

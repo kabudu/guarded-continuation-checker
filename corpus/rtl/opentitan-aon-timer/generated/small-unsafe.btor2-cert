@@ -1,0 +1,10 @@
+search_certificate_version=1
+source_sha256=560dad3ea46c0bc67c6cc100cdcac0065276722e3d0fcfc9d648591f95a20b84
+query_horizon=9
+bad_property=15
+input=3
+result=UNSAFE
+bad_frame=9
+witness=000000000
+layer_count=0
+status=complete

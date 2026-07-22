@@ -19,11 +19,18 @@ The generated model is experimental evidence derived from the GPL-2.0 source
 and is distributed with the same upstream licence notice.
 
 Verify the source, licence, and pinned generated-model bytes with
-`shasum -a 256 -c SHA256SUMS`. Release preparation must additionally regenerate
-the AIGER model with the recorded Yosys build and compare it byte for byte.
+`shasum -a 256 -c SHA256SUMS`. Release preparation additionally regenerates the
+AIGER model with the recorded Yosys build and compares it byte for byte through
+the provenance pipeline below.
 Oracle environments with a different Yosys version check the pinned bytes and
 formal properties but report regeneration as skipped. They do not provide
 source-to-model attestation.
+
+The canonical `source-model-provenance-v1.txt` and
+`scripts/attest-source-model-provenance.sh` now turn exact-revision regeneration
+into retained deterministic evidence. The attestation covers the controller and
+the stateful physical-plant model used by the governed proof portfolio. See
+`docs/SOURCE_MODEL_ATTESTATION_V1.md` for its security and claim boundaries.
 
 The maintained oracle reads that generated AIGER model without overriding its
 latch initialisation. This makes the synthesis recipe, GCC, and SymbiYosys use

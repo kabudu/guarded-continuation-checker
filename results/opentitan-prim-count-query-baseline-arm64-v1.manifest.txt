@@ -1,0 +1,7 @@
+schema_version=1
+baseline=maintained-aiger-ric3-certifaiger
+scope=opentitan-prim-count-distinct-property-query-service
+model_set_sha256=858aa83de42e2fa88cc3f58d9b653a219ffab4831fd097d99973ee418ab25a0c
+ric3_binary_sha256=4dae89bb3ccdbd3b0aecf5e1461fd54eb91842cbe1f0601eca7883642064510d
+certifaiger_check_sha256=5025dc68cc22a1d8d898757bd59603403e2e89de6d35d2350e618c37850c382a
+status=qualified-maintained-baseline

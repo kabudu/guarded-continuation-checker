@@ -1,0 +1,2 @@
+schema_version,plant,multi_model_bytes,single_model_bytes,witness_bytes,composed_bytes,deterministic,individual_verified,composed_verified,status
+1,actuator-transport-lag,2486,4924,5524,3117,true,true,true,validated

@@ -1,0 +1,11 @@
+word_interface_version=2
+wire_count=7
+wire=left,3,4
+wire=left,3,6
+wire=left,3,7
+wire=left,4,8
+wire=left,9,2
+wire=left,12,5
+wire=right,100,2
+external_count=0
+status=complete

@@ -1,0 +1,12 @@
+; GCC-authored hostile monitor with a two-bit wired input.
+1 sort bitvec 1
+2 sort bitvec 2
+3 input 2 pending
+4 state 1 pending_seen
+5 zero 1
+6 init 1 4 5
+7 slice 1 3 0 0
+8 next 1 4 7
+9 and 1 4 7 repeated_pending
+10 and 1 5 7 impossible
+11 bad 9 repeated_pending_bad

@@ -1,0 +1,5 @@
+schema_version,plant,multi_model_bytes,single_model_bytes,witness_bytes,composed_bytes,deterministic,individual_verified,composed_verified,status
+1,nominal,2512,4976,4801,2421,true,true,true,validated
+1,sensor-stuck,2383,4718,4559,2299,true,true,true,validated
+1,actuator-delay,2545,5042,4871,2458,true,true,true,validated
+1,persistent-disturbance,2578,5108,4933,2487,true,true,true,validated

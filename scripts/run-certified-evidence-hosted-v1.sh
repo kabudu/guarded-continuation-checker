@@ -32,6 +32,16 @@ clone_at https://github.com/gipsyh/rIC3.git \
 git -C /tmp/ric3 submodule update --init --recursive
 cargo vendor --locked --manifest-path /tmp/ric3/Cargo.toml /tmp/ric3-vendor \
   > /tmp/ric3-vendor-config.toml
+clone_at https://github.com/YosysHQ/yosys.git \
+  b8e7da6f40ae8f552c116bf6c359b07c6533e159 /tmp/yosys-attestation
+git -C /tmp/yosys-attestation submodule update --init --depth 1 -- \
+  libs/cxxopts libs/fmt libs/tomlplusplus libs/boost_regex \
+  libs/slang frontends/slang/lib
+cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DYOSYS_CHECKOUT_INFO=b8e7da6f40ae8f552c116bf6c359b07c6533e159 \
+  -DYOSYS_WITHOUT_ABC=ON -DYOSYS_WITHOUT_SLANG=ON
+cmake --build /tmp/yosys-attestation/build --parallel 2 --target yosys
 
 docker pull ubuntu:24.04
 docker tag ubuntu:24.04 gcc-ubuntu-24.04-base:v1-amd64
@@ -60,10 +70,97 @@ QUALIFICATION_IMAGE=gcc-ric3-qualification:v1-amd64 \
 cd "$repo_root"
 cargo test --locked --test controller_plant_bounded_aiger_api
 cargo build --release --locked
+cargo build --release --locked --example opentitan_prim_count_query_service
+cargo build --release --locked --example opentitan_prim_count_revision_batch
 mkdir -p /tmp/gcc-output
 cp target/release/guarded-continuation-checker /tmp/gcc-output/
 sha256sum /tmp/gcc-output/guarded-continuation-checker \
   /tmp/ric3-output/ric3 /tmp/certifaiger-output/bin/* > "$output/binaries.sha256"
+
+CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+scripts/test-composed-witness-baseline-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/certifaiger-input/certifaiger /tmp/certifaiger-output \
+  "$output/composed-witness-baseline-amd64-v1.csv"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/opentitan-dual-timer-composed-witness-amd64-v1.csv" \
+  "$output/opentitan-dual-timer-composed-witness-amd64-v1.manifest.txt"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/caliptra-wdt-composed-witness-amd64-v1.csv" \
+  "$output/caliptra-wdt-composed-witness-amd64-v1.manifest.txt"
+TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  GCC_RUNTIME_IMAGE=gcc-ubuntu-24.04-base:v1-amd64 \
+  scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/opentitan-dual-timer-resources-amd64-v1.csv" \
+  "$output/opentitan-dual-timer-resources-amd64-v1.manifest.txt"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-changing-plant-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/changing-plant-composed-witness-amd64-v1.csv"
+GCC_COMPOSED_WITNESS_PLANTS=actuator-transport-lag \
+  RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-changing-plant-composed-witness-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/changing-plant-replacement-composed-witness-amd64-v1.csv"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-roalogic-plic-closest-baseline-v1.sh \
+  /tmp/gcc-output/guarded-continuation-checker \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/roalogic-plic-closest-baseline-amd64-v1.csv" \
+  "$output/roalogic-plic-closest-baseline-amd64-v1.manifest.txt"
+mkdir "$output/opentitan-prim-count-closest-work"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-opentitan-prim-count-closest-baseline-v1.sh \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/opentitan-prim-count-closest-baseline-amd64-v1.csv" \
+  "$output/opentitan-prim-count-closest-baseline-amd64-v1.manifest.txt" \
+  "$output/opentitan-prim-count-closest-work"
+mkdir "$output/opentitan-prim-count-query-service-work"
+TRIALS=3 scripts/benchmark-opentitan-prim-count-query-service-v1.sh \
+  /tmp/yosys-attestation/build/yosys \
+  target/release/examples/opentitan_prim_count_query_service \
+  "$output/opentitan-prim-count-query-service-amd64-v1.csv" \
+  "$output/opentitan-prim-count-query-service-work"
+mkdir "$output/opentitan-prim-count-query-baseline-work"
+RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
+  CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \
+  scripts/benchmark-opentitan-prim-count-query-baseline-v1.sh \
+  /tmp/yosys-attestation/build/yosys \
+  /tmp/ric3-output /tmp/certifaiger-output \
+  "$output/opentitan-prim-count-query-baseline-amd64-v1.csv" \
+  "$output/opentitan-prim-count-query-baseline-amd64-v1.manifest.txt" \
+  "$output/opentitan-prim-count-query-baseline-work" 1
+mkdir "$output/opentitan-prim-count-revision-batch-work"
+TRIALS=3 scripts/benchmark-opentitan-prim-count-revision-batch-v1.sh \
+  /tmp/yosys-attestation/build/yosys \
+  target/release/examples/opentitan_prim_count_revision_batch \
+  "$output/opentitan-prim-count-revision-batch-amd64-v1.csv" \
+  "$output/opentitan-prim-count-revision-batch-work"
+cargo run --release --locked --quiet \
+  --example changing_plant_controller_evidence_reuse \
+  >"$output/changing-plant-controller-evidence-reuse-amd64-v1.csv"
 
 TRIALS=3 RIC3_IMAGE=gcc-ric3-qualification:v1-amd64 \
   CERTIFAIGER_IMAGE=gcc-certifaiger-qualification:v1-amd64 \

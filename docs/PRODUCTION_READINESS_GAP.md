@@ -9,14 +9,15 @@ sufficient.
 |---|---|---|---|
 | Exact specialised backend | Certificate v1 independently rebuilds source support, phase powers and terminal sets; canonical candidate v2 checks relation/terminal proofs, phase powers and traces without exhaustive input enumeration across the three-product and multiphase cohort | Preserve both formats across compatibility changes; close v2 reliability and cost gates before portfolio replacement | Closed for bounded v1 and candidate-v2 semantics |
 | Portfolio integration | Counterfactual portfolio v1 uses the versioned static rule; its strict consumer rechecks certificates or CDCL answers; forced resource exhaustion and both answer directions are covered across the three-product compatibility cohort | Preserve the contract and coverage across future API changes | Closed for bounded v1 |
+| Revision-local proof reuse | Canonical four-section BTOR2 portfolios, exact source-separated fallback, retained production and verification APIs and file commands, both answers, deterministic work observations, and two authentic Roa Logic PLIC source revisions pass locally. Hosted run 29879705053 reproduces the public revision cohort and maintained Yosys/Z3 control. A controlled workload reduces complete local candidate work from 4,100 valuations to four with byte-identical output, but local process measurements show a retained-memory premium. | Complete the hostile matrix, hosted resource replication, portable certificate identity, closest-system comparison at equivalent scope, compatibility history, and independent operator review | In progress; public revision and self-service mechanism subgates closed |
 | Resource governance | Static dimensions; Rust API applies deadlines, stream/file caps, Unix process groups and non-macOS Unix address-space limits; macOS group regression and a Rust 1.97 Linux container pass; [hosted run 29661860245](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29661860245) passes the Ubuntu limit regression, public RTL corpus and dependency audit; metrics record enforced controls and stable failure classes | Retain these regressions across supported releases; macOS remains development-only for hard memory evidence | Closed for predicate API v1 on supported Linux; macOS limitation explicit |
 | Input reliability | Strict certificate/transcript sizes and syntax; v2 reliability boundary; structural native-proof preflight; 5,000 deterministic parser transformations; invalid-UTF8, sparse-oversize and oversized-proof tests; 128 proof transformations; canonical no-clobber DIMACS export plus 40 individual and four aggregate proofs accepted by pinned CaDiCaL/DRAT-trim under Linux process limits | Add continuous robustness coverage; extend checker diversity from completeness obligations to the whole certificate | Closed for bounded v2 parsing and external completeness checking; whole-certificate diversity open |
-| Stable interface | Predicate CLI v1 freezes discovery, commands and exit meanings; typed Rust API v1 validates capabilities and exposes shell-free v1/v2 production/verification; a separate integration-test crate proves discovery, production and checking against the real binary | Preserve API compatibility across a tagged release; add an in-process verifier only if deployment evidence shows the process boundary is unsuitable | Closed for candidate CLI/Rust API v1; release evidence open |
-| Observability | Portfolio/cost reports preserve backend decisions and timings; predicate Rust API metrics schema v1 records every observed operation's duration, stream sizes, configured limits, exit status and stable failure class with canonical CSV output | Add cache/resource counters inside the executable and demonstrate multi-job aggregation in a product pipeline | In progress |
-| Cross-platform distribution | Candidate Linux bundle v1 defines static x86_64 musl archives, SPDX 2.3 SBOM, deterministic provenance, non-executing offline verification, and two-source-path reproducibility; [signed candidate run 29675023822](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29675023822) passes exact SLSA and SPDX identity policy with [retained evidence](../results/linux-evaluation-candidate-v1.md) | Add a justified macOS distribution decision, tagged-release compatibility, and release-level verification evidence | In progress; first Linux candidate gate closed |
-| Real product validity | Public synthetic/product-shaped fixtures | Multiple unmodified public firmware/robotics designs plus independent self-service evaluation outcomes | Open |
-| Operational guidance | Evaluation and isolation documentation | Installation, sizing, failure handling, upgrade/rollback and incident-response runbooks | Open |
-| Release governance | Claim-bounded tagged releases | Production release checklist requires every row above closed or explicitly excludes the capability from production support | Open |
+| Stable interface | Production support profile v1 now admits only firmware CLI v2 and artifact schema v4, identifies the compiled profile and rejects all research dispatch; predicate CLI v1 and typed Rust API v1 remain available in research builds | Reproduce the profile boundary in hosted CI and preserve firmware v2/schema v4 compatibility across a tagged release | Closed locally for the frozen candidate profile; hosted and release history open |
+| Observability | Portfolio/cost reports preserve backend decisions and timings; predicate Rust API metrics schema v1 records every observed operation's duration, stream sizes, configured limits, exit status and stable failure class; bounded aggregate schema v1 preserves operation, containment, and failure distributions; governed split observability adds four internal phase durations, eleven checked work counters, system-allocation events, and integrity-preserving process-local cache counters | Retain phase, resource, allocation, and cache acceptance across supported releases; allocator peaks remain covered only by the separate process-resource benchmark | Closed for the governed split candidate surface |
+| Cross-platform distribution | Evaluation bundle v1 retains static x86_64 musl archives, SPDX 2.3 SBOM, deterministic provenance, offline verification and two-source reproducibility. A distinct firmware-rtl-v1 production candidate now builds the profiled binary, ships only supported contracts and binds the profile into capabilities, build information and provenance. macOS remains development-only and Windows receives compatibility testing, not production distribution | Pass the new production-candidate reproduction in hosted CI, then add tagged-release compatibility and signed release-level verification evidence | In progress; production packaging implemented locally, hosted evidence pending |
+| Real product validity | Public synthetic/product-shaped fixtures, a source-bound production-tagged OpenTitan AON timer core, and a second independently maintained Apache-2.0 Caliptra watchdog module under narrow authored wrappers; the Caliptra nine-row arm64 and hosted amd64 baselines have byte-identical answers, exact both-answer agreement, independently checked evidence, deterministic regeneration, verified composition, and hostile controls | Multiple public firmware/robotics designs at representative integration scope, plus independent self-service evaluation outcomes | Open; second public embedded-core cross-platform mechanism closed |
+| Operational guidance | [Operations runbook](OPERATIONS.md), [isolation profile](ISOLATION_PROFILE_V1.md), and executable Linux qualification cover installation, sizing, failure handling, upgrade, rollback, incident response, restoration, and evidence retention | Retain the executable qualification and runbook drills across supported releases; independent operator execution remains part of the external-acceptance gate | Closed for the documented evaluation scope |
+| Release governance | Claim-bounded tagged releases; the external production gate binds the exact register and release to an independently authenticated OpenSSH attestation | Production release checklist requires every row above closed or explicitly excludes the capability from production support; exercise the authenticated gate with real independent evidence | In progress; authenticated fail-closed mechanism complete |
 
 ## Event-contract experimental boundary
 
@@ -56,11 +57,34 @@ Bitwuzla endpoint formulas. It proves only a claimed bad endpoint for a supplied
 phase trace. It does not prove safety, absence of earlier failures,
 unavoidability, or generic BTOR2 semantics. The counter-trace portfolio now
 preserves rejected supplied one-input traces through exact replay up to 100,000
-transitions. Separately, bounded search v1 provides exact existential bad
+  transitions. Separately, bounded search v1 provides exact existential bad
 reachability and its SAFE
   complement for the one-input, constraint-free subset through fixed state and
   work limits. Its explicit-layer certificate is a research reference, with no
   compatibility history, broad product corpus, or external acceptance evidence.
+  Additive bounded search v2 covers bad properties that depend on the current
+  one-bit input, including the retained Caliptra asynchronous-reset export,
+  while keeping v1 byte-for-byte unchanged. It closes an interoperability gap,
+  but retains the same explicit-state limits and experimental support boundary.
+  Bounded search v3 now covers two to eight one-bit inputs after a pinned public
+  PLIC gateway exposed a five-input refusal. Generated both-answer oracles,
+  deterministic PLIC evidence, maintained Yosys plus Z3 agreement, hostile
+  controls, a node-step refusal, and retained v1/v2 compatibility pass. Hosted
+  amd64 run 29872388711 reproduces the complete result. Tagged-release
+  compatibility and product validity remain open.
+  Constraint-aware bounded search v4 now preserves the environment assumptions
+  needed for legal reset, bus, interrupt, and actuator traces. Its local public
+  PLIC workflow, independent oracle, hostile controls, maintained Yosys plus Z3
+  agreement, and retained v1 through v3 compatibility pass. Hosted amd64 run
+  29872388711 reproduces the pinned model, evidence, maintained-tool baseline,
+  Linux suite, and downstream API matrix. This closes the v4 experiment gates,
+  but does not close wider release compatibility or product-validity rows.
+  Word-input bounded search v5 closes v4's refusal of small
+  register fields, bus values, and sensor samples. Its local width binding,
+  exact fallback, public Caliptra workflow, retained compatibility, hostile
+  controls, and maintained Yosys plus Z3 gates now pass. Hosted amd64 run
+  29874337371 reproduces the full result and closes the v5 experiment gates.
+  The bounded workflow does not close product validity or production release.
   Exact word-region certificate v1 compresses SAFE evidence for two recognised
   one-state recurrence families, with static explicit-search fallback and
   retained both-answer agreement. It remains a narrow source-language result,
@@ -253,6 +277,324 @@ release-build acceptance pipeline also passes with every governed verification
 under that address-space ceiling. Hosted Linux CI reproduces the governed
 pipeline. Address space is not peak RSS, and this evidence is not independent
 acceptance.
+
+The governed proof-carrying MTBDD portfolio now binds caller-selected proof and
+composition limits before proof checking or semantic replay. Its static route
+uses proof-carrying MTBDD only after structural admission and exact direct replay
+only for the three versioned structural rejection classes. Proof generation,
+encoding, checking, malformed evidence, and query drift fail closed rather than
+triggering fallback. Rust, file CLI, and typed bounded-process interfaces cover
+both routes and seven typed resource refusals. A deterministic six-job pipeline
+preserves 3 SAFE and 5 UNSAFE results across the public washing-controller batch
+and a boundary fallback control, with four negative controls carrying no answer.
+The acceptance CSV and both canonical artifact SHA-256 fingerprints are
+byte-identical on macOS and an offline Linux container under a 64 MiB
+address-space ceiling. This closes the local public-workflow, process-integration,
+and compatibility-baseline mechanism gates. Exact-head hosted reproduction,
+compatibility through a subsequent tagged release, independently sourced plant
+validity, general partner source-to-model attestation, and independent suitability
+assessment remain open. The pinned public controller and physical plant now
+have deterministic exact-revision Yosys regeneration with retained source,
+recipe, model, and regenerated-model SHA-256 evidence. This closes their local
+source-to-model provenance mechanism gap, but does not independently prove Yosys
+correct or cover external designs. Attested portfolio verification additionally
+binds provenance to the exact source and model snapshot loaded for the query and
+rejects post-snapshot replacement. No production-readiness row closes yet.
+
+The changing-plant experiment now separates controller proof evidence from
+content-addressed plant results and supports process-local proof admission.
+Every ordered obligation field is caller-bound, and stale evidence, reordered
+or duplicated obligations, mutation, and truncation fail closed. The local
+five-plant fixture shows a 49.75% marginal byte reduction against the faithful
+composed-witness route, but an 8.71 times larger initial package and a 58-change
+byte break-even. Stable file and typed bounded-process interfaces plus hosted
+cross-platform artifact reproduction are implemented. Compatibility through a
+later tag and external acceptance remain open. A three-trial Darwin arm64
+baseline now separates controller production, both replaceable plant-result
+producers, and governed verification, retaining peak RSS, wall time,
+deterministic evidence bytes, and exact answer agreement. Ordinary Linux CI
+validates the same measurement schema and complete operation set without
+comparing host-dependent values for equality. Hosted Linux run
+29776279270 passes the real governed CLI and typed-client integration, including
+every tight policy boundary and hostile response controls. Two one-property
+public washing-controller manifests now seed compatibility history with exact
+manifest, controller-evidence, and plant-result fingerprints. This adds a
+candidate product mechanism and closes no production-readiness row.
+
+The split Rust API now preflights controller artifact bytes and embedded UNSAT
+proof bytes before admission, then independently preflights plant artifact
+bytes, complete ordered obligations, horizon, product states, and conservative
+transition evaluations before replay. Exact boundaries pass and tighter limits
+fail closed. This closes the in-process resource-governance mechanism only.
+The versioned file CLI now creates deterministic split artifacts and admits one
+controller proof for multiple manifest/result pairs in a single process. It
+reports per-batch verification time and one aggregate while failing closed on
+controller, boundary, obligation, integrity, and argument drift. The typed Rust
+client now applies bounded shell-free execution, strictly parses the discovered
+contract and result rows, reconciles all batch totals with checked arithmetic,
+and reports stable per-invocation metrics. A separate governed CLI and typed
+client now enforce caller-selected controller, proof, batch, per-batch, and
+complete-set limits before semantic replay. The two-pass verifier binds
+manifest semantics, source/model snapshots, result digests, and resource
+assessments across preflight and replay, emits no verified row on refusal, and
+maps eleven stable refusal reasons to exit code 3 without a logical answer.
+Retained self-service acceptance now aggregates one verified two-batch job,
+three typed refusals, two invalid controls, structural resource totals, and
+exact compatibility fingerprints while omitting non-reproducible timings.
+Compatibility through a later tag remains open. Hosted Linux run 29777543062
+reproduces the retained public acceptance CSV on exact commit `e74828f`.
+Hosted amd64 run 29773273695 now reproduces the split controller and replacement
+artifact hashes, structural byte accounting, independent composed-witness
+hashes, and all logical answers from arm64. This closes the mechanism's second
+architecture reproduction gate. Hosted run 29778509796 independently measures
+the complete process-resource lifecycle on Linux x86_64 with identical evidence
+bytes and answers. Compatibility through a later tag and independent acceptance
+remain open.
+
+The additive governed split observability contract now reports four versioned
+internal phase durations and eleven checked structural work counters after a
+complete success. Its typed client reconciles those counters with the strict
+base result, rejects hostile or overflowing summaries, and returns no partial
+measurement on refusal. The additive cache path reports process-local semantic
+replay lookups, hits, misses, and entries only after full two-pass integrity
+preflight. Allocator peaks, CPU counters, and per-phase peak RSS remain outside
+this contract.
+After fixture setup, the retained acceptance adds six observed-contract
+invocations: discovery, three successful verifications covering four retained
+batches, one duplicate-batch cache probe, and one fail-closed resource refusal.
+Its canonical CSV aggregates deterministic work and evidence totals while
+excluding host-dependent phase timings and the separate cache probe.
+The workflow now exercises allocation observation on all three successes,
+requires positive allocation calls and bytes, and still requires no stdout on
+refusal. Allocation values remain live checks rather than portable retained
+numbers.
+Hosted run 29781337392 passes the underlying observed CLI and typed contract on
+exact commit `6393ccf`, including all portable API, public RTL, hostile-input,
+dependency, and reproducible-package companion jobs. Hosted run 29782315590
+reproduces the retained multi-job CSV on exact commit `7b9e024`, with every
+companion job green. Hosted run 29783651272 validates allocation observation on
+exact commit `2c68e5e`, with every required job green.
+Hosted run 29784705375 validates the cache contract on exact commit `eb8b6fd`,
+including the portable API matrix, public RTL corpus, maintained Bitwuzla
+baseline, dependency audit, and reproducible Linux bundle.
+
+The [OpenTitan AON watchdog experiment](OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md)
+adds the first production-tagged public embedded core to the word-level path.
+Pinned source and Yosys regeneration produce byte-identical models; retained
+SAFE, UNSAFE, and billion-frame SAFE certificates verify independently; and
+five hostile controls fail closed or route to exact fallback. The wrapper fixes
+one watchdog configuration and supplies reduced register types, so it does not
+close the real-product row or substitute for independent operator acceptance.
+Hosted run 29787171907 reproduces this complete path on exact commit `6f0c4d4`,
+including pinned Linux Yosys, maintained Bitwuzla, official BTOR2Tools, the
+three-platform Rust API matrix, dependency audit, and reproducible packaging.
+
+The predicate-set v2 follow-up keeps the additive Rust API and two self-service
+CLI commands while sharing one exact recurrence across joint SAFE, mixed, and
+joint UNSAFE batches. Each UNSAFE member carries an exact earliest frame and a
+compact source-reconstructed witness kind. Unsupported batches preserve the
+complete query through exact fallback, and any member failure returns no
+partial batch. The pinned OpenTitan cases retain four v2 artifacts, verify three
+v1 compatibility artifacts, compare every available separate baseline, record
+the billion-frame bounded-search refusal explicitly, and exercise nine hostile
+controls. Local reproduction is complete. Hosted reproduction for the exact v2
+commit passes in
+[run 29791772775](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29791772775),
+including pinned Linux Yosys, official BTOR2Tools, maintained Bitwuzla,
+three-platform downstream APIs, RustSec audit, the full retained workflow, and
+reproducible packaging. A frozen first-release compatibility fingerprint,
+external operator acceptance, and expert novelty review remain open.
+
+The OpenTitan dual-timer probe expands the same pinned core from one live
+timer path to wake-up and watchdog operation together. It adds exact parser
+support for Yosys reduction-or and freezes a post-reset three-state model with
+bad frames 5, 7, and 9. Predicate-set v3 now reconstructs the prescaler
+invariant and both timer recurrences, then emits deterministic artifacts for
+horizons 4, 5, 7, 9, and one billion. Local regeneration, exact frames, retained
+v1/v2 compatibility, ten hostile controls, and every h9 truncation pass. The
+separate baseline is explicitly unavailable, not counted as a win. Pinned
+official BTOR2Tools locally parses the model and replays isolated witnesses at
+all three exact bad boundaries, and maintained SMT agrees at all six boundary
+queries. The local identical-scope AIGER control now agrees on all twelve
+property answers. Certifaiger plus `lrat_isa` independently accepts six SAFE
+certificates, `aigsim` replays six UNSAFE traces, and the two applicable SAFE
+sets compose and verify. Model and evidence regeneration is byte-deterministic.
+Six targeted evidence substitution, mutation, and truncation controls fail
+closed. A predeclared hosted resource harness now measures complete h4 and h5
+production and consumption under the same process-group monitor, using repeated
+invocations to avoid missing short-lived memory peaks. Hosted reproduction and
+measurements are completed below. Linux policy enforcement and independent
+review remain open, so this does not close the broader production-readiness
+row.
+
+The first hosted attempt exposed a producer-contract defect rather than an
+answer error: IC3 returned a replayable horizon-9 bark counterexample ending at
+frame 9, while the independently established first bad frame is 5. The
+identical-scope baseline and resource harness now start IC3 and depth-ordered
+BMC for every property, accept IC3 only for SAFE certificates, and accept BMC
+only for UNSAFE traces. The expected answer never selects the engine. The
+retained schema binds that static race, and the consumer rejects a trace whose
+terminated valuation count does not equal the expected earliest frame plus
+one. At that point, hosted artifact retention and resource reproduction of the
+corrected contract remained open.
+
+Hosted run 29798977299 subsequently passed that corrected twelve-row baseline,
+all independent checks, both compositions, deterministic regeneration, and all
+six hostile controls on amd64. Its resource phase exposed a container ABI and
+ownership defect: an Ubuntu 24.04-built GCC composer was mounted into a Debian
+Bookworm producer container, then root-owned partial outputs could not be
+removed by the runner. The resource producer now uses the declared Ubuntu 24.04
+runtime and the runner's UID. Because the failed job did not upload its partial
+artifact, a clean hosted rerun was required before this subgate could close.
+
+[Hosted run 29800096071](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29800096071)
+then completed the clean rerun and artifact upload on commit `8621d80`. It
+retained the twelve-row independently checked comparison,
+both composed witnesses, six hostile controls, and three nonzero resource
+trials at horizons 4 and 5. The retained checker binds those files to the
+workflow artifact digest and confirms cross-host identity of answers, earliest
+frames, evidence sizes, and composed-witness hashes. AAG model text is not
+byte-identical across arm64 and amd64, so no broader model-reproducibility claim
+is made. This closes the hosted reproduction and measurement subgate for this
+narrow OpenTitan experiment. Independent expert review and the repository's
+other production gates remain open.
+
+A subsequent reproducibility checkpoint canonicalises only the pinned Yosys
+build-identification strings embedded in AAG comments and witness maps. Two
+clean arm64 exports and the full local evidence baseline pass under profile
+`canonical-yosys-revision-v1`. Hosted run 29860773683 reproduces the complete
+twelve-row CSV byte-for-byte on amd64, including model sizes, answers, earliest
+frames, and evidence sizes. The manifests differ only in the expected
+architecture-specific producer and consumer binary hashes. This closes the
+canonical cross-platform model-serialization subgate for the OpenTitan
+experiment; it does not close independent review or the broader production
+release gates.
+
+## Revision-local component proof boundary
+
+The revision-local portfolio is an experimental interface, not a
+production-supported capability. Its local relation certificates enumerate
+complete constrained word-level behavior under strict state, input, output,
+composition, horizon, and transition limits. A static selector uses the local
+route only inside those limits and otherwise preserves the original sources,
+interface, and query through exact source-separated fallback.
+
+The first public cohort covers both authentic revisions of the Roa Logic PLIC
+gateway path. It preserves SAFE and earliest-frame UNSAFE results, retains the
+unchanged 272-byte monitor relation exactly, agrees with maintained Yosys/Z3,
+and rejects the initial four hostile controls. Hosted run 29879705053 reproduces
+that result. The retained producer and verifier file workflows then expose one
+produced and one reused section while their output remains acceptable to the
+ordinary from-scratch verifier.
+
+Strict interface contract v2 now requires every semantic input to be declared
+as either a wire destination or an external input. It rejects omitted,
+contradictory, duplicate, and non-semantic declarations before composition.
+The public PLIC cohort passes with strict contracts. Version 1 remains readable
+only for compatibility with prior experimental artifacts and retains its
+implicit external-input interpretation.
+
+The public workflow now exercises all ten predeclared hostile-input classes,
+plus output no-clobber, and checks deterministic smallest-section attribution.
+Stale proof, hidden coupling, width drift, direction swap, constraint drift,
+source drift, truncation, reordering, count, and size attacks all fail closed.
+This closes the local hostile-matrix subgate. Hosted reproduction of the
+expanded matrix remains pending.
+
+The first identical-scope closest-system comparison is disconfirming. Both
+authentic PLIC source revisions synthesize to byte-identical whole-circuit
+AIGER models for the SAFE and UNSAFE properties. One qualified rIC3 SAFE
+witness and one UNSAFE trace independently verify against both revisions, so
+the maintained model-level route regenerates zero semantic evidence bytes.
+This falsifies a revision-local advantage for this pair and shows that it does
+not contain the required semantic internal-logic change. A new public revision
+cohort with changed reachable semantics is mandatory.
+
+The OpenTitan `prim_count` cohort now closes that semantic-change prerequisite.
+An authentic stable-interface revision changes the bounded answer from SAFE to
+UNSAFE at reset, while GCC reuses and reverifies the unchanged environment
+section and recomputes the counter relation. A separate Yosys plus Z3 oracle
+agrees, and local regeneration is byte-identical. Pinned Slang-enabled Yosys
+compiles both untouched Git revisions and proves each selected-configuration
+specialisation sequentially equivalent. The hosted, closest-system, portable,
+compatibility, and independent-review gates remain open. The top-level
+production status therefore does not change yet.
+
+The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
+locally. Both cross-revision evidence swaps fail, and the new model needs only
+a 13-byte regenerated trace. GCC's roughly 1.7 MB retained portfolio therefore
+has no artifact-size advantage on this pair. Hosted reproduction and a larger
+representative revision service workload remain required before revision-local
+reuse can change a production-readiness row.
+
+The component parser now admits property-free BTOR2 using explicit projected
+semantic roots. The authentic PLIC cohort no longer adds a false assertion to
+make the component parseable. Local and exact-fallback paths produce and
+independently verify the same property-free component semantics, and the file
+CLI has a strict v2 end-to-end regression. This closes the property-free
+ingestion subgate, not the broader public-product or independent-review gates.
+
+A separate controlled cost workload keeps the public PLIC relation unchanged
+while revising a small GCC monitor. Deterministic work falls from 4,100 complete
+local candidate valuations to four, with byte-identical output. Local medians
+favour retained production and verification in-process. Whole-process retained
+creation is faster at the available timer resolution but uses more peak memory;
+whole-process verification time is unresolved at that resolution and also uses
+more peak memory. The tradeoff is therefore policy-dependent, not a universal
+performance win.
+
+The typed API now also accepts two previously validated component relations for
+repeated queries. Production reports zero produced and two reused local
+sections. Verification reports zero decoded and zero semantically replayed
+local sections while recomposing the validated relations and checking the new
+final proof. Exact byte identity and substitution rejection pass in unit tests.
+The larger repeated-query product workload and resource comparison remain open,
+so this does not yet change a production-readiness row.
+
+The larger workload is now measured across eight distinct predicates per
+OpenTitan revision. Retained production emits byte-identical certificates,
+preserves all answers, and reduces candidate enumeration by 87.5006%. However,
+the 16 standalone GCC certificates occupy 113,264,568 bytes. Equivalent
+qualified Yosys, rIC3, and Certifaiger models plus independently verified
+evidence occupy 8,892 bytes and agree on every answer. This falsifies an
+artifact advantage for the current repeated-query container. A canonical
+shared-section batch format, hosted reproduction, hostile testing, portability,
+and independent review are required before this mechanism can change a
+production-readiness row.
+
+Revision batch certificate v1 implements that canonical shared-section format.
+It validates three local relations once, binds 16 heterogeneous queries by
+digest, independently verifies every answer from the exact source set, and
+extracts byte-identical standalone certificates. It removes 99,100,424 bytes,
+or 87.4946%, from the OpenTitan workload. The remaining 14,164,144-byte batch
+is still about 1,593 times larger than the qualified maintained evidence route.
+The format remains experimental pending hosted artifact identity, a broader
+hostile corpus, public file/CLI integration, compatibility history and
+independent review, so no production-readiness row closes.
+
+An exact QatQ v0.1.1 probe compresses the canonical 14,164,144-byte batch to
+76,385 bytes and restores it bit-for-bit. It beats the strongest measured zstd
+configuration by 34.5845%, making a later bounded transport envelope credible.
+It is not included in the first production support profile because the current
+mapping treats opaque evidence as f32 words and lacks GCC-specific latency,
+memory, portability and hostile-container qualification.
+
+The remaining gates include hosted Linux resource results, certificate-byte
+agreement across Linux, macOS, and Windows, long-lived multi-revision service
+amortisation, hosted reproduction of the semantic-changing closest-system
+comparison, tagged compatibility, and independent review. None of this
+evidence changes the top-level production status.
+
+## Post-production-release deliverables
+
+- Create a visually polished, accessible SVG architecture diagram after the
+  first production release passes every applicable gate. It must show GCC's
+  platform boundary, the CQ-SAT engine, source-to-model attestation, governed
+  verification and exact fallback, proof artifacts, independent checking, and
+  embedded firmware and RTL integration paths. Keep the source editable and
+  publish an optimised web-ready SVG as the canonical asset embedded in both
+  the project README and guardedcontinuation.org. Include accessible metadata,
+  responsive sizing, and a lightweight fallback for non-SVG contexts.
 
 ## Rules
 

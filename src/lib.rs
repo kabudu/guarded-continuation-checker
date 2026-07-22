@@ -9,10 +9,13 @@ pub mod btor2;
 pub mod btor2_bounded;
 pub mod btor2_braking;
 pub mod btor2_component;
+pub mod btor2_invariant_chain;
 pub mod btor2_motion;
 pub mod btor2_phase;
+pub mod btor2_predicate_set;
 pub mod btor2_region;
 pub mod btor2_search;
+pub mod composed_witness;
 pub mod controller_mtbdd;
 pub mod controller_mtbdd_proof;
 pub mod controller_plant;
@@ -20,8 +23,12 @@ pub mod controller_plant_aiger;
 pub mod controller_plant_artifact;
 pub mod controller_transducer;
 pub mod dense_relation;
+pub mod revision_batch;
+pub mod revision_local;
+pub mod source_model_attestation;
 pub mod unsat_proof;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Read;
 #[cfg(unix)]
@@ -161,6 +168,23 @@ pub enum OperationKind {
     VerifyControllerPlantPortfolio,
     DiscoverControllerPlantResource,
     VerifyControllerPlantPortfolioResources,
+    DiscoverControllerProofMtbddResource,
+    VerifyControllerProofMtbddPlantResources,
+    DiscoverControllerProofMtbddPortfolio,
+    VerifyControllerProofMtbddPortfolioResources,
+    VerifyControllerProofMtbddPortfolioResourcesAttested,
+    DiscoverControllerSplitEvidence,
+    CertifyControllerProofEvidence,
+    CertifyBoundPlantResults,
+    VerifyBoundPlantResultSet,
+    DiscoverControllerSplitResource,
+    VerifyBoundPlantResultSetResources,
+    DiscoverControllerSplitObservability,
+    VerifyBoundPlantResultSetResourcesObserved,
+    DiscoverControllerSplitAllocationObservability,
+    VerifyBoundPlantResultSetResourcesAllocationObserved,
+    DiscoverControllerSplitCacheObservability,
+    VerifyBoundPlantResultSetResourcesCacheObserved,
 }
 
 impl OperationKind {
@@ -192,6 +216,43 @@ impl OperationKind {
             Self::DiscoverControllerPlantResource => "discover_controller_plant_resource",
             Self::VerifyControllerPlantPortfolioResources => {
                 "verify_controller_plant_portfolio_resources"
+            }
+            Self::DiscoverControllerProofMtbddResource => {
+                "discover_controller_proof_mtbdd_resource"
+            }
+            Self::VerifyControllerProofMtbddPlantResources => {
+                "verify_controller_proof_mtbdd_plant_resources"
+            }
+            Self::DiscoverControllerProofMtbddPortfolio => {
+                "discover_controller_proof_mtbdd_portfolio"
+            }
+            Self::VerifyControllerProofMtbddPortfolioResources => {
+                "verify_controller_proof_mtbdd_portfolio_resources"
+            }
+            Self::VerifyControllerProofMtbddPortfolioResourcesAttested => {
+                "verify_controller_proof_mtbdd_portfolio_resources_attested"
+            }
+            Self::DiscoverControllerSplitEvidence => "discover_controller_split_evidence",
+            Self::CertifyControllerProofEvidence => "certify_controller_proof_evidence",
+            Self::CertifyBoundPlantResults => "certify_bound_plant_results",
+            Self::VerifyBoundPlantResultSet => "verify_bound_plant_result_set",
+            Self::DiscoverControllerSplitResource => "discover_controller_split_resource",
+            Self::VerifyBoundPlantResultSetResources => "verify_bound_plant_result_set_resources",
+            Self::DiscoverControllerSplitObservability => "discover_controller_split_observability",
+            Self::VerifyBoundPlantResultSetResourcesObserved => {
+                "verify_bound_plant_result_set_resources_observed"
+            }
+            Self::DiscoverControllerSplitAllocationObservability => {
+                "discover_controller_split_allocation_observability"
+            }
+            Self::VerifyBoundPlantResultSetResourcesAllocationObserved => {
+                "verify_bound_plant_result_set_resources_allocation_observed"
+            }
+            Self::DiscoverControllerSplitCacheObservability => {
+                "discover_controller_split_cache_observability"
+            }
+            Self::VerifyBoundPlantResultSetResourcesCacheObserved => {
+                "verify_bound_plant_result_set_resources_cache_observed"
             }
         }
     }
@@ -272,6 +333,181 @@ impl InvocationMetrics {
             failure_class,
         )
     }
+}
+
+pub const INVOCATION_METRICS_AGGREGATE_SCHEMA_VERSION: u32 = 1;
+pub const MAX_AGGREGATED_INVOCATIONS: usize = 1_000_000;
+
+/// Bounded, canonical aggregation of process-client observations.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct InvocationMetricsAggregate {
+    pub schema_version: u32,
+    pub jobs: u64,
+    pub successes: u64,
+    pub failures: u64,
+    pub total_duration_ns: u128,
+    pub maximum_duration_ns: u128,
+    pub total_stdout_bytes: u128,
+    pub total_stderr_bytes: u128,
+    pub process_group_contained_jobs: u64,
+    pub memory_limited_jobs: u64,
+    pub operation_counts: BTreeMap<&'static str, u64>,
+    pub failure_counts: BTreeMap<&'static str, u64>,
+}
+
+impl InvocationMetricsAggregate {
+    pub const fn csv_header() -> &'static str {
+        "schema_version,jobs,successes,failures,total_duration_ns,maximum_duration_ns,total_stdout_bytes,total_stderr_bytes,process_group_contained_jobs,memory_limited_jobs,operation_counts,failure_counts"
+    }
+
+    pub fn to_csv_row(&self) -> String {
+        let counts = |values: &BTreeMap<&'static str, u64>| {
+            if values.is_empty() {
+                "none".to_string()
+            } else {
+                values
+                    .iter()
+                    .map(|(name, count)| format!("{name}={count}"))
+                    .collect::<Vec<_>>()
+                    .join(";")
+            }
+        };
+        format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{}",
+            self.schema_version,
+            self.jobs,
+            self.successes,
+            self.failures,
+            self.total_duration_ns,
+            self.maximum_duration_ns,
+            self.total_stdout_bytes,
+            self.total_stderr_bytes,
+            self.process_group_contained_jobs,
+            self.memory_limited_jobs,
+            counts(&self.operation_counts),
+            counts(&self.failure_counts),
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum MetricsAggregationError {
+    Empty,
+    TooManyJobs,
+    UnsupportedSchema(u32),
+    Overflow,
+}
+
+impl fmt::Display for MetricsAggregationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(formatter, "invocation metrics set is empty"),
+            Self::TooManyJobs => write!(
+                formatter,
+                "invocation metrics set exceeds {MAX_AGGREGATED_INVOCATIONS} jobs"
+            ),
+            Self::UnsupportedSchema(version) => {
+                write!(formatter, "unsupported invocation metrics schema {version}")
+            }
+            Self::Overflow => write!(formatter, "invocation metrics aggregate overflows"),
+        }
+    }
+}
+
+impl std::error::Error for MetricsAggregationError {}
+
+/// Aggregate process observations without dropping failed jobs.
+pub fn aggregate_invocation_metrics<'a>(
+    metrics: impl IntoIterator<Item = &'a InvocationMetrics>,
+) -> Result<InvocationMetricsAggregate, MetricsAggregationError> {
+    let mut aggregate = InvocationMetricsAggregate {
+        schema_version: INVOCATION_METRICS_AGGREGATE_SCHEMA_VERSION,
+        jobs: 0,
+        successes: 0,
+        failures: 0,
+        total_duration_ns: 0,
+        maximum_duration_ns: 0,
+        total_stdout_bytes: 0,
+        total_stderr_bytes: 0,
+        process_group_contained_jobs: 0,
+        memory_limited_jobs: 0,
+        operation_counts: BTreeMap::new(),
+        failure_counts: BTreeMap::new(),
+    };
+    for metric in metrics {
+        if metric.schema_version != INVOCATION_METRICS_SCHEMA_VERSION {
+            return Err(MetricsAggregationError::UnsupportedSchema(
+                metric.schema_version,
+            ));
+        }
+        if aggregate.jobs as usize == MAX_AGGREGATED_INVOCATIONS {
+            return Err(MetricsAggregationError::TooManyJobs);
+        }
+        aggregate.jobs = aggregate
+            .jobs
+            .checked_add(1)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        let duration = metric.duration.as_nanos();
+        aggregate.total_duration_ns = aggregate
+            .total_duration_ns
+            .checked_add(duration)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        aggregate.maximum_duration_ns = aggregate.maximum_duration_ns.max(duration);
+        aggregate.total_stdout_bytes = aggregate
+            .total_stdout_bytes
+            .checked_add(metric.stdout_bytes as u128)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        aggregate.total_stderr_bytes = aggregate
+            .total_stderr_bytes
+            .checked_add(metric.stderr_bytes as u128)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        if metric.process_group_containment {
+            aggregate.process_group_contained_jobs = aggregate
+                .process_group_contained_jobs
+                .checked_add(1)
+                .ok_or(MetricsAggregationError::Overflow)?;
+        }
+        if metric.memory_limit_bytes.is_some() {
+            aggregate.memory_limited_jobs = aggregate
+                .memory_limited_jobs
+                .checked_add(1)
+                .ok_or(MetricsAggregationError::Overflow)?;
+        }
+        let operation_count = aggregate
+            .operation_counts
+            .entry(metric.operation.as_str())
+            .or_default();
+        *operation_count = operation_count
+            .checked_add(1)
+            .ok_or(MetricsAggregationError::Overflow)?;
+        match metric.status {
+            InvocationStatus::Success => {
+                aggregate.successes = aggregate
+                    .successes
+                    .checked_add(1)
+                    .ok_or(MetricsAggregationError::Overflow)?;
+            }
+            InvocationStatus::Failed(class) => {
+                aggregate.failures = aggregate
+                    .failures
+                    .checked_add(1)
+                    .ok_or(MetricsAggregationError::Overflow)?;
+                let failure_count = aggregate.failure_counts.entry(class.as_str()).or_default();
+                *failure_count = failure_count
+                    .checked_add(1)
+                    .ok_or(MetricsAggregationError::Overflow)?;
+            }
+        }
+    }
+    if aggregate.jobs == 0 {
+        return Err(MetricsAggregationError::Empty);
+    }
+    if aggregate.successes.checked_add(aggregate.failures) != Some(aggregate.jobs) {
+        return Err(MetricsAggregationError::Overflow);
+    }
+    Ok(aggregate)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -419,6 +655,185 @@ impl ControllerProofMtbddCapabilities {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitEvidenceCapabilities {
+    pub cli_version: u32,
+    pub controller_artifact_version: u32,
+    pub plant_artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_manifest_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_batches: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitArtifactSummary {
+    pub artifact_version: u32,
+    pub members: Option<usize>,
+    pub mtbdd_nodes: Option<usize>,
+    pub mtbdd_terminals: Option<usize>,
+    pub artifact_bytes: usize,
+    pub elapsed_micros: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitBatchSummary {
+    pub index: usize,
+    pub members: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub verification_micros: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitSetSummary {
+    pub controller_admissions: usize,
+    pub members: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub controller_evidence_bytes: usize,
+    pub admission_micros: usize,
+    pub elapsed_micros: usize,
+    pub batches: Vec<ControllerSplitBatchSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitResourceCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub controller_envelope_version: u32,
+    pub plant_envelope_version: u32,
+    pub controller_artifact_version: u32,
+    pub plant_artifact_version: u32,
+    pub manifest_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_controller_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
+    pub max_plant_artifact_bytes: usize,
+    pub max_batches: usize,
+    pub max_members_per_batch: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitResourceBatchSummary {
+    pub index: usize,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub verification_micros: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitResourceSetSummary {
+    pub controller_admissions: usize,
+    pub members: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub controller_evidence_bytes: usize,
+    pub controller_mtbdd_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub total_plant_artifact_bytes: usize,
+    pub total_transition_evaluation_bound: usize,
+    pub admission_micros: usize,
+    pub elapsed_micros: usize,
+    pub batches: Vec<ControllerSplitResourceBatchSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitObservabilityCapabilities {
+    pub cli_version: u32,
+    pub phase_metrics_version: u32,
+    pub resource: ControllerSplitResourceCapabilities,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitPhaseMetrics {
+    pub version: u32,
+    pub policy_and_input_micros: u128,
+    pub controller_admission_micros: u128,
+    pub complete_set_preflight_micros: u128,
+    pub semantic_replay_micros: u128,
+    pub total_micros: u128,
+    pub controller_admissions: usize,
+    pub manifest_loads: usize,
+    pub plant_artifact_reads: usize,
+    pub resource_assessments: usize,
+    pub batch_verifications: usize,
+    pub buffered_result_rows: usize,
+    pub prepared_batches: usize,
+    pub prepared_members: usize,
+    pub controller_evidence_bytes: usize,
+    pub total_plant_artifact_bytes: usize,
+    pub total_transition_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitObservedSummary {
+    pub verification: ControllerSplitResourceSetSummary,
+    pub phases: ControllerSplitPhaseMetrics,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitAllocationObservabilityCapabilities {
+    pub cli_version: u32,
+    pub observability: ControllerSplitObservabilityCapabilities,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitAllocationMetrics {
+    pub version: u32,
+    pub allocation_calls: u64,
+    pub allocated_bytes: u64,
+    pub deallocation_calls: u64,
+    pub deallocated_bytes: u64,
+    pub reallocation_calls: u64,
+    pub reallocated_bytes: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitAllocationObservedSummary {
+    pub observed: ControllerSplitObservedSummary,
+    pub allocations: ControllerSplitAllocationMetrics,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitCacheObservabilityCapabilities {
+    pub cli_version: u32,
+    pub allocation_observability: ControllerSplitAllocationObservabilityCapabilities,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitCacheMetrics {
+    pub version: u32,
+    pub lookups: usize,
+    pub hits: usize,
+    pub misses: usize,
+    pub entries: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerSplitCacheObservedSummary {
+    pub observed: ControllerSplitAllocationObservedSummary,
+    pub cache: ControllerSplitCacheMetrics,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerMtbddAnswer {
     Safe,
@@ -515,6 +930,94 @@ pub struct ControllerPlantResourceCapabilities {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddResourceCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub manifest_version: u32,
+    pub artifact_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_equivalence_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
+    pub max_members: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddResourceSummary {
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub assignments_checked: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub elapsed_micros: usize,
+    pub member_results: Vec<ControllerMtbddMemberResult>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPortfolioCapabilities {
+    pub cli_version: u32,
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub proof_artifact_version: u32,
+    pub direct_artifact_version: u32,
+    pub manifest_version: u32,
+    pub source_model_attestation_version: u32,
+    pub max_policy_bytes: usize,
+    pub max_artifact_bytes: usize,
+    pub max_equivalence_artifact_bytes: usize,
+    pub max_unsat_proof_bytes: usize,
+    pub max_members: usize,
+    pub max_horizon: usize,
+    pub max_product_states: usize,
+    pub max_attestation_bytes: usize,
+    pub refusal_exit_code: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPortfolioResourceSummary {
+    pub policy_version: u32,
+    pub envelope_version: u32,
+    pub artifact_version: u32,
+    pub backend: ControllerPlantPortfolioBackend,
+    pub reason: ControllerPlantPortfolioReason,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub artifact_bytes: usize,
+    pub assignments_checked: usize,
+    pub load_micros: usize,
+    pub artifact_micros: usize,
+    pub verification_micros: usize,
+    pub elapsed_micros: usize,
+    pub member_results: Vec<ControllerMtbddMemberResult>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerPlantResourceSummary {
     pub policy_version: u32,
     pub envelope_version: u32,
@@ -539,20 +1042,40 @@ pub struct ControllerPlantResourceSummary {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerPlantResourceRefusalReason {
     ArtifactBytes,
+    ControllerArtifactBytes,
+    PlantArtifactBytes,
+    EquivalenceArtifactBytes,
+    UnsatProofBytes,
+    Batches,
     Members,
+    MembersPerBatch,
     Horizon,
     ProductStates,
     TransitionEvaluations,
+    TransitionsPerBatch,
+    TotalPlantArtifactBytes,
+    TotalMembers,
+    TotalTransitionEvaluations,
 }
 
 impl ControllerPlantResourceRefusalReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ArtifactBytes => "artifact-bytes",
+            Self::ControllerArtifactBytes => "controller-artifact-bytes",
+            Self::PlantArtifactBytes => "plant-artifact-bytes",
+            Self::EquivalenceArtifactBytes => "equivalence-artifact-bytes",
+            Self::UnsatProofBytes => "unsat-proof-bytes",
+            Self::Batches => "batches",
             Self::Members => "members",
+            Self::MembersPerBatch => "members-per-batch",
             Self::Horizon => "horizon",
             Self::ProductStates => "product-states",
             Self::TransitionEvaluations => "transition-evaluations",
+            Self::TransitionsPerBatch => "transitions-per-batch",
+            Self::TotalPlantArtifactBytes => "total-plant-artifact-bytes",
+            Self::TotalMembers => "total-members",
+            Self::TotalTransitionEvaluations => "total-transition-evaluations",
         }
     }
 }
@@ -1093,6 +1616,660 @@ impl ControllerProofMtbddTool {
     }
 }
 
+/// Typed, shell-free client for split controller evidence and plant batches.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitEvidenceTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitEvidenceCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitEvidenceTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-evidence-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitEvidence,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_split_evidence_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitEvidenceCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn certify_controller_evidence(
+        &self,
+        manifest: &Path,
+        output: &Path,
+    ) -> Result<ControllerSplitArtifactSummary, PredicateApiError> {
+        self.certify_controller_evidence_observed(manifest, output)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_controller_evidence_observed(
+        &self,
+        manifest: &Path,
+        output: &Path,
+    ) -> Result<Observed<ControllerSplitArtifactSummary>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("certify-controller-proof-evidence-v1")
+            .arg(manifest)
+            .arg(output);
+        let bounded = run_bounded(
+            OperationKind::CertifyControllerProofEvidence,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_artifact_summary(
+            bounded,
+            "controller-split-evidence",
+            false,
+            output,
+            &self.capabilities,
+        )
+    }
+
+    pub fn certify_plant_results(
+        &self,
+        manifest: &Path,
+        evidence: &Path,
+        output: &Path,
+    ) -> Result<ControllerSplitArtifactSummary, PredicateApiError> {
+        self.certify_plant_results_observed(manifest, evidence, output)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn certify_plant_results_observed(
+        &self,
+        manifest: &Path,
+        evidence: &Path,
+        output: &Path,
+    ) -> Result<Observed<ControllerSplitArtifactSummary>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("certify-bound-plant-results-v1")
+            .arg(manifest)
+            .arg(evidence)
+            .arg(output);
+        let bounded = run_bounded(
+            OperationKind::CertifyBoundPlantResults,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_artifact_summary(
+            bounded,
+            "controller-split-plant",
+            true,
+            output,
+            &self.capabilities,
+        )
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitSetSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitSetSummary>, PredicateOperationError> {
+        if batches.is_empty() || batches.len() > self.capabilities.max_batches {
+            let error = PredicateApiError::InvalidPolicy(
+                "split-evidence batch count is outside discovered limits".to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSet,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-v1")
+            .arg(evidence);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let bounded = run_bounded(
+            OperationKind::VerifyBoundPlantResultSet,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_set_summary(bounded, batches.len(), &self.capabilities)
+    }
+}
+
+/// Typed, shell-free client for governed split-evidence verification v1.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitResourceTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitResourceCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitResourceTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-resource-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitResource,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_split_resource_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitResourceCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitResourceSetSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitResourceSetSummary>, PredicateOperationError> {
+        if batches.is_empty() || batches.len() > self.capabilities.max_batches {
+            let error = PredicateApiError::InvalidPolicy(
+                "governed split-evidence batch count is outside discovered limits".to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResources,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_resource_set_summary(output, batches.len(), &self.capabilities)
+            .map_err(classify_controller_split_resource_refusal)
+    }
+}
+
+/// Typed, shell-free client for governed split verification with phase metrics.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitObservabilityTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitObservabilityCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitObservabilityTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-observability-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitObservability,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_split_observability_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitObservabilityCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitObservedSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitObservedSummary>, PredicateOperationError> {
+        if batches.is_empty() || batches.len() > self.capabilities.resource.max_batches {
+            let error = PredicateApiError::InvalidPolicy(
+                "observed split-evidence batch count is outside discovered limits".to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResourcesObserved,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-observed-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResourcesObserved,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_observed_summary(output, batches.len(), &self.capabilities)
+            .map_err(classify_controller_split_resource_refusal)
+    }
+}
+
+/// Typed client for governed split verification with allocator accounting.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitAllocationObservabilityTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitAllocationObservabilityCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitAllocationObservabilityTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-allocation-observability-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitAllocationObservability,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_controller_split_allocation_observability_capabilities(&stdout)
+            .map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitAllocationObservabilityCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitAllocationObservedSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitAllocationObservedSummary>, PredicateOperationError> {
+        if batches.is_empty()
+            || batches.len() > self.capabilities.observability.resource.max_batches
+        {
+            let error = PredicateApiError::InvalidPolicy(
+                "allocation-observed split-evidence batch count is outside discovered limits"
+                    .to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResourcesAllocationObserved,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-allocation-observed-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResourcesAllocationObserved,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_allocation_observed_summary(
+            output,
+            batches.len(),
+            &self.capabilities,
+        )
+        .map_err(classify_controller_split_resource_refusal)
+    }
+}
+
+/// Typed client for governed split verification with integrity-preserving
+/// semantic replay caching and allocator accounting.
+#[derive(Clone, Debug)]
+pub struct ControllerSplitCacheObservabilityTool {
+    executable: PathBuf,
+    capabilities: ControllerSplitCacheObservabilityCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerSplitCacheObservabilityTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-split-cache-observability-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerSplitCacheObservability,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities = parse_controller_split_cache_observability_capabilities(&stdout)
+            .map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerSplitCacheObservabilityCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify_set(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<ControllerSplitCacheObservedSummary, PredicateApiError> {
+        self.verify_set_observed(evidence, resource_policy, batches)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_set_observed(
+        &self,
+        evidence: &Path,
+        resource_policy: &Path,
+        batches: &[(&Path, &Path)],
+    ) -> Result<Observed<ControllerSplitCacheObservedSummary>, PredicateOperationError> {
+        if batches.is_empty()
+            || batches.len()
+                > self
+                    .capabilities
+                    .allocation_observability
+                    .observability
+                    .resource
+                    .max_batches
+        {
+            let error = PredicateApiError::InvalidPolicy(
+                "cache-observed split-evidence batch count is outside discovered limits"
+                    .to_string(),
+            );
+            return Err(PredicateOperationError {
+                metrics: empty_metrics(
+                    OperationKind::VerifyBoundPlantResultSetResourcesCacheObserved,
+                    self.policy,
+                    InvocationStatus::Failed(error.failure_class()),
+                ),
+                error: Box::new(error),
+            });
+        }
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-bound-plant-result-set-with-resources-cache-observed-v1")
+            .arg(evidence)
+            .arg(resource_policy);
+        for &(manifest, result) in batches {
+            command.arg(manifest).arg(result);
+        }
+        let output = run_bounded(
+            OperationKind::VerifyBoundPlantResultSetResourcesCacheObserved,
+            command,
+            self.policy,
+        )?;
+        parse_controller_split_cache_observed_summary(output, batches.len(), &self.capabilities)
+            .map_err(classify_controller_split_resource_refusal)
+    }
+}
+
 /// Typed, shell-free client for statically routed controller/plant portfolio v1.
 #[derive(Clone, Debug)]
 pub struct ControllerPlantPortfolioTool {
@@ -1332,6 +2509,250 @@ impl ControllerPlantResourceTool {
         )?;
         parse_controller_plant_resource_summary(output, &self.capabilities)
             .map_err(classify_controller_plant_resource_refusal)
+    }
+}
+
+/// Typed, shell-free client for governed proof-carrying MTBDD verification v1.
+#[derive(Clone, Debug)]
+pub struct ControllerProofMtbddResourceTool {
+    executable: PathBuf,
+    capabilities: ControllerProofMtbddResourceCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerProofMtbddResourceTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-proof-mtbdd-resource-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerProofMtbddResource,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_proof_mtbdd_resource_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerProofMtbddResourceCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerProofMtbddResourceSummary, PredicateApiError> {
+        self.verify_observed(manifest, resource_policy, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerProofMtbddResourceSummary>, PredicateOperationError> {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-plant-resources")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPlantResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_proof_mtbdd_resource_summary(output, &self.capabilities)
+            .map_err(classify_controller_proof_mtbdd_resource_refusal)
+    }
+}
+
+/// Typed, shell-free client for the governed proof/direct controller portfolio.
+#[derive(Clone, Debug)]
+pub struct ControllerProofMtbddPortfolioTool {
+    executable: PathBuf,
+    capabilities: ControllerProofMtbddPortfolioCapabilities,
+    policy: ExecutionPolicy,
+}
+
+impl ControllerProofMtbddPortfolioTool {
+    pub fn discover(executable: impl Into<PathBuf>) -> Result<Self, PredicateApiError> {
+        Self::discover_with_policy(executable, ExecutionPolicy::default())
+    }
+
+    pub fn discover_with_policy(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Self, PredicateApiError> {
+        Self::discover_observed(executable, policy)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn discover_observed(
+        executable: impl Into<PathBuf>,
+        policy: ExecutionPolicy,
+    ) -> Result<Observed<Self>, PredicateOperationError> {
+        let executable = executable.into();
+        let mut command = Command::new(&executable);
+        command.arg("controller-proof-mtbdd-portfolio-cli-version");
+        let output = run_bounded(
+            OperationKind::DiscoverControllerProofMtbddPortfolio,
+            command,
+            policy,
+        )?;
+        let (stdout, mut metrics) = successful_stdout(output)?;
+        let capabilities =
+            parse_controller_proof_mtbdd_portfolio_capabilities(&stdout).map_err(|error| {
+                metrics.status = InvocationStatus::Failed(error.failure_class());
+                PredicateOperationError {
+                    error: Box::new(error),
+                    metrics: metrics.clone(),
+                }
+            })?;
+        Ok(Observed {
+            value: Self {
+                executable,
+                capabilities,
+                policy,
+            },
+            metrics,
+        })
+    }
+
+    pub fn capabilities(&self) -> &ControllerProofMtbddPortfolioCapabilities {
+        &self.capabilities
+    }
+
+    pub fn execution_policy(&self) -> ExecutionPolicy {
+        self.policy
+    }
+
+    pub fn with_execution_policy(mut self, policy: ExecutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn verify(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
+        self.verify_observed(manifest, resource_policy, artifact)
+            .map(|observed| observed.value)
+            .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+    ) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError>
+    {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-portfolio-resources")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPortfolioResources,
+            command,
+            self.policy,
+        )?;
+        parse_controller_proof_mtbdd_portfolio_resource_summary(output, &self.capabilities, false)
+            .map_err(classify_controller_proof_mtbdd_resource_refusal)
+    }
+
+    pub fn verify_attested(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+        provenance_manifest: &Path,
+        attestation: &Path,
+    ) -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
+        self.verify_attested_observed(
+            manifest,
+            resource_policy,
+            artifact,
+            provenance_manifest,
+            attestation,
+        )
+        .map(|observed| observed.value)
+        .map_err(|failure| *failure.error)
+    }
+
+    pub fn verify_attested_observed(
+        &self,
+        manifest: &Path,
+        resource_policy: &Path,
+        artifact: &Path,
+        provenance_manifest: &Path,
+        attestation: &Path,
+    ) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError>
+    {
+        let mut command = Command::new(&self.executable);
+        command
+            .arg("verify-controller-proof-mtbdd-portfolio-resources-attested")
+            .arg(manifest)
+            .arg(resource_policy)
+            .arg(artifact)
+            .arg(provenance_manifest)
+            .arg(attestation);
+        let output = run_bounded(
+            OperationKind::VerifyControllerProofMtbddPortfolioResourcesAttested,
+            command,
+            self.policy,
+        )?;
+        parse_controller_proof_mtbdd_portfolio_resource_summary(output, &self.capabilities, true)
+            .map_err(classify_controller_proof_mtbdd_resource_refusal)
     }
 }
 
@@ -1904,10 +3325,271 @@ fn canonical_u32(value: &str, field: &str) -> Result<u32, PredicateApiError> {
     })
 }
 
+fn canonical_u128(value: &str, field: &str) -> Result<u128, PredicateApiError> {
+    let parsed = value.parse::<u128>().map_err(|_| {
+        PredicateApiError::InvalidResponse(format!("{field} is not an unsigned integer"))
+    })?;
+    if parsed.to_string() != value {
+        return Err(PredicateApiError::InvalidResponse(format!(
+            "{field} is noncanonical"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn canonical_u64(value: &str, field: &str) -> Result<u64, PredicateApiError> {
+    let parsed = value.parse::<u64>().map_err(|_| {
+        PredicateApiError::InvalidResponse(format!("{field} is not an unsigned integer"))
+    })?;
+    if parsed.to_string() != value {
+        return Err(PredicateApiError::InvalidResponse(format!(
+            "{field} is noncanonical"
+        )));
+    }
+    Ok(parsed)
+}
+
 fn token_value<'a>(token: &'a str, key: &str) -> Result<&'a str, PredicateApiError> {
     token
         .strip_prefix(&format!("{key}="))
         .ok_or_else(|| PredicateApiError::InvalidResponse(format!("expected response field {key}")))
+}
+
+fn parse_controller_proof_mtbdd_resource_capabilities(
+    line: &str,
+) -> Result<ControllerProofMtbddResourceCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD resource capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_proof_mtbdd_resource_cli_version",
+        "policy_version",
+        "envelope_version",
+        "manifest_version",
+        "artifact_version",
+        "max_policy_bytes",
+        "max_artifact_bytes",
+        "max_equivalence_artifact_bytes",
+        "max_unsat_proof_bytes",
+        "max_members",
+        "max_horizon",
+        "max_product_states",
+        "refusal_exit",
+        "verification",
+        "exhaustive_replay",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD resource capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[13..]
+        != [
+            "unsat-miter",
+            "no",
+            "conservative-static",
+            "none",
+            "none",
+            "proof-reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD resource contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..5]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[5..12]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 5]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[12], keys[12])?;
+    if versions != [1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD resource version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD resource discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerProofMtbddResourceCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        envelope_version: versions[2],
+        manifest_version: versions[3],
+        artifact_version: versions[4],
+        max_policy_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_equivalence_artifact_bytes: limits[2],
+        max_unsat_proof_bytes: limits[3],
+        max_members: limits[4],
+        max_horizon: limits[5],
+        max_product_states: limits[6],
+        refusal_exit_code: 3,
+    })
+}
+
+fn parse_controller_proof_mtbdd_portfolio_capabilities(
+    line: &str,
+) -> Result<ControllerProofMtbddPortfolioCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD portfolio capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_proof_mtbdd_portfolio_cli_version",
+        "policy_version",
+        "envelope_version",
+        "artifact_version",
+        "proof_artifact_version",
+        "direct_artifact_version",
+        "manifest_version",
+        "source_model_attestation_version",
+        "max_policy_bytes",
+        "max_artifact_bytes",
+        "max_equivalence_artifact_bytes",
+        "max_unsat_proof_bytes",
+        "max_members",
+        "max_horizon",
+        "max_product_states",
+        "max_attestation_bytes",
+        "refusal_exit",
+        "backends",
+        "routing",
+        "fallback",
+        "proof_failure",
+        "attested_verification",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD portfolio capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[17..]
+        != [
+            "proof-mtbdd,direct-exact",
+            "static",
+            "exact",
+            "fail-closed",
+            "required",
+            "conservative-static",
+            "none",
+            "none",
+            "proof-reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD portfolio contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..8]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[8..16]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 8]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[16], keys[16])?;
+    if versions != [1, 1, 1, 1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller proof MTBDD portfolio version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller proof MTBDD portfolio discovered limit must be positive".to_string(),
+        ));
+    }
+    Ok(ControllerProofMtbddPortfolioCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        envelope_version: versions[2],
+        artifact_version: versions[3],
+        proof_artifact_version: versions[4],
+        direct_artifact_version: versions[5],
+        manifest_version: versions[6],
+        source_model_attestation_version: versions[7],
+        max_policy_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_equivalence_artifact_bytes: limits[2],
+        max_unsat_proof_bytes: limits[3],
+        max_members: limits[4],
+        max_horizon: limits[5],
+        max_product_states: limits[6],
+        max_attestation_bytes: limits[7],
+        refusal_exit_code: 3,
+    })
+}
+
+fn classify_controller_proof_mtbdd_resource_refusal(
+    mut failure: PredicateOperationError,
+) -> PredicateOperationError {
+    let reason = match failure.error.as_ref() {
+        PredicateApiError::CommandFailed {
+            exit_code: Some(3),
+            stderr,
+        } => stderr
+            .trim_end_matches(['\r', '\n'])
+            .strip_prefix("error: controller-proof-mtbdd-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none"))
+            .and_then(|value| match value {
+                "artifact-bytes" => Some(ControllerPlantResourceRefusalReason::ArtifactBytes),
+                "equivalence-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::EquivalenceArtifactBytes)
+                }
+                "unsat-proof-bytes" => Some(ControllerPlantResourceRefusalReason::UnsatProofBytes),
+                "members" => Some(ControllerPlantResourceRefusalReason::Members),
+                "horizon" => Some(ControllerPlantResourceRefusalReason::Horizon),
+                "product-states" => Some(ControllerPlantResourceRefusalReason::ProductStates),
+                "transition-evaluations" => {
+                    Some(ControllerPlantResourceRefusalReason::TransitionEvaluations)
+                }
+                _ => None,
+            }),
+        _ => None,
+    };
+    if let Some(reason) = reason {
+        let error = PredicateApiError::ResourceRefused { reason };
+        failure.metrics.status = InvocationStatus::Failed(error.failure_class());
+        failure.error = Box::new(error);
+    }
+    failure
 }
 
 fn parse_controller_plant_resource_capabilities(
@@ -2227,6 +3909,497 @@ fn parse_controller_plant_resource_summary(
             artifact_micros: numeric[10],
             verification_micros: numeric[11],
             elapsed_micros: numeric[12],
+            member_results,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_proof_mtbdd_resource_summary(
+    output: ManagedOutput,
+    capabilities: &ControllerProofMtbddResourceCapabilities,
+) -> Result<Observed<ControllerProofMtbddResourceSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerProofMtbddResourceSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource summary line is missing".to_string(),
+            )
+        })?;
+        let fields = first.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-proof-mtbdd-resource",
+            "status",
+            "cli_version",
+            "policy_version",
+            "envelope_version",
+            "artifact_version",
+            "members",
+            "maximum_member_horizon",
+            "maximum_product_states",
+            "transition_evaluation_bound",
+            "equivalence_artifact_bytes",
+            "unsat_proof_bytes",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "assignments_checked",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len()
+            || fields[0] != keys[0]
+            || token_value(fields[1], "status")? != "VERIFIED"
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource summary shape is invalid".to_string(),
+            ));
+        }
+        let cli_version = canonical_u32(token_value(fields[2], keys[2])?, keys[2])?;
+        let policy_version = canonical_u32(token_value(fields[3], keys[3])?, keys[3])?;
+        let envelope_version = canonical_u32(token_value(fields[4], keys[4])?, keys[4])?;
+        let artifact_version = canonical_u32(token_value(fields[5], keys[5])?, keys[5])?;
+        if cli_version != capabilities.cli_version
+            || policy_version != capabilities.policy_version
+            || envelope_version != capabilities.envelope_version
+            || artifact_version != capabilities.artifact_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller proof MTBDD resource response version changed".to_string(),
+            ));
+        }
+        let numeric = fields[6..]
+            .iter()
+            .zip(&keys[6..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        let member_count = numeric[0];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[1] > capabilities.max_horizon
+            || numeric[2] > capabilities.max_product_states
+            || numeric[4] > capabilities.max_equivalence_artifact_bytes
+            || numeric[5] > capabilities.max_unsat_proof_bytes
+            || numeric[10] > capabilities.max_artifact_bytes
+            || numeric[11] != 0
+            || numeric[6].checked_add(numeric[7]) != Some(member_count)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut member_results = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-proof-mtbdd-resource-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], "index")?, "index")?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member ordering changed".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], "answer")? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller proof MTBDD resource member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_usize(token_value(fields[3], "horizon")?, "horizon")?;
+            let bad_frame = match token_value(fields[4], "bad_frame")? {
+                "none" => None,
+                value => Some(canonical_usize(value, "bad_frame")?),
+            };
+            let values = fields[5..]
+                .iter()
+                .zip(&keys[5..])
+                .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if horizon > capabilities.max_horizon
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => values[0] != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || values[0] != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD resource member result is inconsistent".to_string(),
+                ));
+            }
+            member_results.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps: values[0],
+                reachable_product_states: values[1],
+                explored_transitions: values[2],
+            });
+        }
+        let safe = member_results
+            .iter()
+            .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+            .count();
+        let unsafe_count = member_results.len() - safe;
+        let reachable = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.reachable_product_states)
+        });
+        let explored = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.explored_transitions)
+        });
+        if lines.next().is_some()
+            || safe != numeric[6]
+            || unsafe_count != numeric[7]
+            || reachable != Some(numeric[8])
+            || explored != Some(numeric[9])
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD resource member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerProofMtbddResourceSummary {
+            policy_version,
+            envelope_version,
+            artifact_version,
+            members: member_count,
+            maximum_member_horizon: numeric[1],
+            maximum_product_states: numeric[2],
+            transition_evaluation_bound: numeric[3],
+            equivalence_artifact_bytes: numeric[4],
+            unsat_proof_bytes: numeric[5],
+            safe: numeric[6],
+            unsafe_count: numeric[7],
+            reachable_product_states: numeric[8],
+            explored_transitions: numeric[9],
+            artifact_bytes: numeric[10],
+            assignments_checked: numeric[11],
+            load_micros: numeric[12],
+            artifact_micros: numeric[13],
+            verification_micros: numeric[14],
+            elapsed_micros: numeric[15],
+            member_results,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_proof_mtbdd_portfolio_resource_summary(
+    output: ManagedOutput,
+    capabilities: &ControllerProofMtbddPortfolioCapabilities,
+    require_attestation: bool,
+) -> Result<Observed<ControllerProofMtbddPortfolioResourceSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerProofMtbddPortfolioResourceSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio response is not canonical LF text".to_string(),
+            ));
+        }
+        let mut lines = stdout.lines();
+        let first = lines.next().ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio summary line is missing".to_string(),
+            )
+        })?;
+        let fields = first.split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-proof-mtbdd-portfolio-resource",
+            "status",
+            "cli_version",
+            "policy_version",
+            "envelope_version",
+            "artifact_version",
+            "backend",
+            "reason",
+            "members",
+            "maximum_member_horizon",
+            "maximum_product_states",
+            "transition_evaluation_bound",
+            "equivalence_artifact_bytes",
+            "unsat_proof_bytes",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "artifact_bytes",
+            "assignments_checked",
+            "load_micros",
+            "artifact_micros",
+            "verification_micros",
+            "elapsed_micros",
+        ];
+        let attested = fields.len() == keys.len() + 5;
+        if attested != require_attestation
+            || (!attested && fields.len() != keys.len())
+            || fields[0] != keys[0]
+            || token_value(fields[1], "status")? != "VERIFIED"
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio summary shape is invalid".to_string(),
+            ));
+        }
+        if attested {
+            let attestation_keys = [
+                "source_model_attestation_version",
+                "source_model_members",
+                "source_model_tool",
+                "source_model_tool_revision",
+                "provenance",
+            ];
+            let attestation_fields = &fields[keys.len()..];
+            let version = canonical_u32(
+                token_value(attestation_fields[0], attestation_keys[0])?,
+                attestation_keys[0],
+            )?;
+            let members = canonical_usize(
+                token_value(attestation_fields[1], attestation_keys[1])?,
+                attestation_keys[1],
+            )?;
+            let tool = token_value(attestation_fields[2], attestation_keys[2])?;
+            let revision = token_value(attestation_fields[3], attestation_keys[3])?;
+            let provenance = token_value(attestation_fields[4], attestation_keys[4])?;
+            if version != capabilities.source_model_attestation_version
+                || members == 0
+                || members > capabilities.max_members.saturating_add(1)
+                || tool != "yosys"
+                || revision.len() != 40
+                || !revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || provenance != "BOUND"
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio attestation response is invalid".to_string(),
+                ));
+            }
+        }
+        let cli_version = canonical_u32(token_value(fields[2], keys[2])?, keys[2])?;
+        let policy_version = canonical_u32(token_value(fields[3], keys[3])?, keys[3])?;
+        let envelope_version = canonical_u32(token_value(fields[4], keys[4])?, keys[4])?;
+        let artifact_version = canonical_u32(token_value(fields[5], keys[5])?, keys[5])?;
+        if cli_version != capabilities.cli_version
+            || policy_version != capabilities.policy_version
+            || envelope_version != capabilities.envelope_version
+            || artifact_version != capabilities.artifact_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller proof MTBDD portfolio response version changed".to_string(),
+            ));
+        }
+        let backend = match token_value(fields[6], keys[6])? {
+            "PROOF_MTBDD" => ControllerPlantPortfolioBackend::Mtbdd,
+            "DIRECT_EXACT" => ControllerPlantPortfolioBackend::DirectExact,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio backend is invalid".to_string(),
+                ));
+            }
+        };
+        let reason = match token_value(fields[7], keys[7])? {
+            "MTBDD_ADMITTED" => ControllerPlantPortfolioReason::MtbddAdmitted,
+            "BOUNDARY_LIMIT" => ControllerPlantPortfolioReason::BoundaryLimit,
+            "TERMINAL_LIMIT" => ControllerPlantPortfolioReason::TerminalLimit,
+            "NODE_LIMIT" => ControllerPlantPortfolioReason::NodeLimit,
+            _ => {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio reason is invalid".to_string(),
+                ));
+            }
+        };
+        if matches!(backend, ControllerPlantPortfolioBackend::Mtbdd)
+            != matches!(reason, ControllerPlantPortfolioReason::MtbddAdmitted)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio route is inconsistent".to_string(),
+            ));
+        }
+        let numeric = fields[8..keys.len()]
+            .iter()
+            .zip(&keys[8..])
+            .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        let member_count = numeric[0];
+        if member_count == 0
+            || member_count > capabilities.max_members
+            || numeric[1] > capabilities.max_horizon
+            || numeric[2] > capabilities.max_product_states
+            || numeric[4] > capabilities.max_equivalence_artifact_bytes
+            || numeric[5] > capabilities.max_unsat_proof_bytes
+            || numeric[10] > capabilities.max_artifact_bytes
+            || numeric[11] != 0
+            || numeric[6].checked_add(numeric[7]) != Some(member_count)
+            || (matches!(backend, ControllerPlantPortfolioBackend::DirectExact)
+                && (numeric[4] != 0 || numeric[5] != 0))
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio response exceeds discovered limits".to_string(),
+            ));
+        }
+        let mut member_results = Vec::with_capacity(member_count);
+        for expected_index in 0..member_count {
+            let line = lines.next().ok_or_else(|| {
+                PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member line is missing".to_string(),
+                )
+            })?;
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-proof-mtbdd-portfolio-resource-member",
+                "index",
+                "answer",
+                "horizon",
+                "bad_frame",
+                "trace_steps",
+                "reachable_product_states",
+                "explored_transitions",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member shape is invalid".to_string(),
+                ));
+            }
+            let index = canonical_usize(token_value(fields[1], keys[1])?, keys[1])?;
+            if index != expected_index {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member ordering changed".to_string(),
+                ));
+            }
+            let answer = match token_value(fields[2], keys[2])? {
+                "SAFE" => ControllerMtbddAnswer::Safe,
+                "UNSAFE" => ControllerMtbddAnswer::Unsafe,
+                _ => {
+                    return Err(PredicateApiError::InvalidResponse(
+                        "controller proof MTBDD portfolio member answer is invalid".to_string(),
+                    ));
+                }
+            };
+            let horizon = canonical_usize(token_value(fields[3], keys[3])?, keys[3])?;
+            let bad_frame = match token_value(fields[4], keys[4])? {
+                "none" => None,
+                value => Some(canonical_usize(value, keys[4])?),
+            };
+            let values = fields[5..]
+                .iter()
+                .zip(&keys[5..])
+                .map(|(field, key)| canonical_usize(token_value(field, key)?, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            if horizon > capabilities.max_horizon
+                || match (answer, bad_frame) {
+                    (ControllerMtbddAnswer::Safe, None) => values[0] != 0,
+                    (ControllerMtbddAnswer::Unsafe, Some(frame)) => {
+                        frame > horizon || values[0] != frame.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller proof MTBDD portfolio member result is inconsistent".to_string(),
+                ));
+            }
+            member_results.push(ControllerMtbddMemberResult {
+                index,
+                answer,
+                horizon,
+                bad_frame,
+                trace_steps: values[0],
+                reachable_product_states: values[1],
+                explored_transitions: values[2],
+            });
+        }
+        let safe = member_results
+            .iter()
+            .filter(|member| matches!(member.answer, ControllerMtbddAnswer::Safe))
+            .count();
+        let unsafe_count = member_results.len() - safe;
+        let reachable = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.reachable_product_states)
+        });
+        let explored = member_results.iter().try_fold(0usize, |total, member| {
+            total.checked_add(member.explored_transitions)
+        });
+        if lines.next().is_some()
+            || safe != numeric[6]
+            || unsafe_count != numeric[7]
+            || reachable != Some(numeric[8])
+            || explored != Some(numeric[9])
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller proof MTBDD portfolio member totals disagree".to_string(),
+            ));
+        }
+        Ok(ControllerProofMtbddPortfolioResourceSummary {
+            policy_version,
+            envelope_version,
+            artifact_version,
+            backend,
+            reason,
+            members: member_count,
+            maximum_member_horizon: numeric[1],
+            maximum_product_states: numeric[2],
+            transition_evaluation_bound: numeric[3],
+            equivalence_artifact_bytes: numeric[4],
+            unsat_proof_bytes: numeric[5],
+            safe: numeric[6],
+            unsafe_count: numeric[7],
+            reachable_product_states: numeric[8],
+            explored_transitions: numeric[9],
+            artifact_bytes: numeric[10],
+            assignments_checked: numeric[11],
+            load_micros: numeric[12],
+            artifact_micros: numeric[13],
+            verification_micros: numeric[14],
+            elapsed_micros: numeric[15],
             member_results,
         })
     })();
@@ -2566,6 +4739,382 @@ fn parse_controller_plant_portfolio_summary(
     }
 }
 
+fn parse_controller_split_evidence_capabilities(
+    line: &str,
+) -> Result<ControllerSplitEvidenceCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split-evidence capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_evidence_cli_version",
+        "controller_artifact_version",
+        "plant_artifact_version",
+        "manifest_version",
+        "max_manifest_bytes",
+        "max_artifact_bytes",
+        "max_batches",
+        "admission",
+        "verification",
+        "exhaustive_replay",
+        "source_binding",
+        "obligation_binding",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split-evidence capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[7..]
+        != [
+            "once",
+            "unsat-miter",
+            "no",
+            "sha256",
+            "complete-ordered",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split-evidence trust contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..4]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[4..7]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 4]))
+        .collect::<Result<Vec<_>, _>>()?;
+    if versions != [1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split-evidence version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split-evidence discovered limit must be positive".to_string(),
+        ));
+    }
+    if limits[0] > 64 * 1024
+        || limits[1] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+        || limits[2] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split-evidence limits exceed client safety ceilings".to_string(),
+        ));
+    }
+    Ok(ControllerSplitEvidenceCapabilities {
+        cli_version: versions[0],
+        controller_artifact_version: versions[1],
+        plant_artifact_version: versions[2],
+        manifest_version: versions[3],
+        max_manifest_bytes: limits[0],
+        max_artifact_bytes: limits[1],
+        max_batches: limits[2],
+    })
+}
+
+fn parse_controller_split_resource_capabilities(
+    line: &str,
+) -> Result<ControllerSplitResourceCapabilities, PredicateApiError> {
+    if line.contains('\r') || !line.ends_with('\n') || line.lines().count() != 1 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split resource capability line is not canonical".to_string(),
+        ));
+    }
+    let fields = line.trim_end_matches('\n').split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_resource_cli_version",
+        "policy_version",
+        "controller_envelope_version",
+        "plant_envelope_version",
+        "controller_artifact_version",
+        "plant_artifact_version",
+        "manifest_version",
+        "max_policy_bytes",
+        "max_controller_artifact_bytes",
+        "max_unsat_proof_bytes",
+        "max_plant_artifact_bytes",
+        "max_batches",
+        "max_members_per_batch",
+        "max_horizon",
+        "max_product_states",
+        "refusal_exit",
+        "admission",
+        "verification",
+        "exhaustive_replay",
+        "accounting",
+        "timing_calibration",
+        "result_on_refusal",
+        "refusal_schema",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split resource capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    if values[16..]
+        != [
+            "once",
+            "unsat-miter",
+            "no",
+            "conservative-static-per-batch-and-total",
+            "none",
+            "none",
+            "split-reason-v1",
+            "fail-closed",
+        ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split resource trust contract is unsupported".to_string(),
+        ));
+    }
+    let versions = values[..7]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_u32(value, keys[index]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let limits = values[7..15]
+        .iter()
+        .enumerate()
+        .map(|(index, value)| canonical_usize(value, keys[index + 7]))
+        .collect::<Result<Vec<_>, _>>()?;
+    let refusal_exit = canonical_usize(values[15], keys[15])?;
+    if versions != [1, 1, 1, 1, 1, 1, 1] {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split resource version tuple is unsupported".to_string(),
+        ));
+    }
+    if limits.contains(&0) || refusal_exit != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split resource discovered limits are invalid".to_string(),
+        ));
+    }
+    if limits[0] > 4096
+        || limits[1] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+        || limits[2] > unsat_proof::MAX_UNSAT_PROOF_BYTES
+        || limits[3] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+        || limits[4] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+        || limits[5] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+        || limits[6] > controller_plant::MAX_COMPOSITION_HORIZON
+        || limits[7] > controller_plant::MAX_PRODUCT_STATES
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split resource limits exceed client safety ceilings".to_string(),
+        ));
+    }
+    Ok(ControllerSplitResourceCapabilities {
+        cli_version: versions[0],
+        policy_version: versions[1],
+        controller_envelope_version: versions[2],
+        plant_envelope_version: versions[3],
+        controller_artifact_version: versions[4],
+        plant_artifact_version: versions[5],
+        manifest_version: versions[6],
+        max_policy_bytes: limits[0],
+        max_controller_artifact_bytes: limits[1],
+        max_unsat_proof_bytes: limits[2],
+        max_plant_artifact_bytes: limits[3],
+        max_batches: limits[4],
+        max_members_per_batch: limits[5],
+        max_horizon: limits[6],
+        max_product_states: limits[7],
+        refusal_exit_code: 3,
+    })
+}
+
+fn parse_controller_split_observability_capabilities(
+    text: &str,
+) -> Result<ControllerSplitObservabilityCapabilities, PredicateApiError> {
+    if text.contains('\r') || !text.ends_with('\n') || text.lines().count() != 2 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split observability capability response is not canonical".to_string(),
+        ));
+    }
+    let lines = text.lines().collect::<Vec<_>>();
+    let resource = parse_controller_split_resource_capabilities(&format!("{}\n", lines[0]))?;
+    let fields = lines[1].split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_observability_cli_version",
+        "base_cli_version",
+        "phase_metrics_version",
+        "phases",
+        "counters",
+        "timing_calibration",
+        "partial_metrics_on_failure",
+        "result_on_refusal",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split observability capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[0], keys[0])?;
+    let base_cli_version = canonical_u32(values[1], keys[1])?;
+    let phase_metrics_version = canonical_u32(values[2], keys[2])?;
+    if cli_version != 1
+        || base_cli_version != resource.cli_version
+        || phase_metrics_version != 1
+        || values[3]
+            != "policy-and-input,controller-admission,complete-set-preflight,semantic-replay"
+        || values[4]
+            != "controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound"
+        || values[5..] != ["none", "none", "none", "fail-closed"]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split observability contract is unsupported".to_string(),
+        ));
+    }
+    Ok(ControllerSplitObservabilityCapabilities {
+        cli_version,
+        phase_metrics_version,
+        resource,
+    })
+}
+
+fn parse_controller_split_allocation_observability_capabilities(
+    text: &str,
+) -> Result<ControllerSplitAllocationObservabilityCapabilities, PredicateApiError> {
+    if text.contains('\r') || !text.ends_with('\n') || text.lines().count() != 3 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split allocation capability response is not canonical".to_string(),
+        ));
+    }
+    let lines = text.lines().collect::<Vec<_>>();
+    let observability = parse_controller_split_observability_capabilities(&format!(
+        "{}\n{}\n",
+        lines[0], lines[1]
+    ))?;
+    let fields = lines[2].split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_allocation_observability_cli_version",
+        "base_observability_cli_version",
+        "allocator",
+        "scope",
+        "counters",
+        "overflow",
+        "timing_calibration",
+        "partial_metrics_on_failure",
+        "result_on_refusal",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split allocation capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[0], keys[0])?;
+    let base_version = canonical_u32(values[1], keys[1])?;
+    if cli_version != 1
+        || base_version != observability.cli_version
+        || values[2] != "system"
+        || values[3] != "policy-through-replay"
+        || values[4]
+            != "allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes"
+        || values[5..] != ["fail-closed", "none", "none", "none", "fail-closed"]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split allocation observability contract is unsupported".to_string(),
+        ));
+    }
+    Ok(ControllerSplitAllocationObservabilityCapabilities {
+        cli_version,
+        observability,
+    })
+}
+
+fn parse_controller_split_cache_observability_capabilities(
+    text: &str,
+) -> Result<ControllerSplitCacheObservabilityCapabilities, PredicateApiError> {
+    if text.contains('\r') || !text.ends_with('\n') || text.lines().count() != 4 {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split cache capability response is not canonical".to_string(),
+        ));
+    }
+    let lines = text.lines().collect::<Vec<_>>();
+    let allocation_observability = parse_controller_split_allocation_observability_capabilities(
+        &format!("{}\n{}\n{}\n", lines[0], lines[1], lines[2]),
+    )?;
+    let fields = lines[3].split(' ').collect::<Vec<_>>();
+    let keys = [
+        "controller_split_cache_observability_cli_version",
+        "base_allocation_observability_cli_version",
+        "scope",
+        "key",
+        "counters",
+        "integrity_preflight",
+        "overflow",
+        "timing_calibration",
+        "partial_metrics_on_failure",
+        "result_on_refusal",
+        "unsupported",
+    ];
+    if fields.len() != keys.len() {
+        return Err(PredicateApiError::InvalidResponse(
+            "controller split cache capability field count is invalid".to_string(),
+        ));
+    }
+    let values = fields
+        .iter()
+        .zip(keys)
+        .map(|(field, key)| token_value(field, key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cli_version = canonical_u32(values[0], keys[0])?;
+    let base_version = canonical_u32(values[1], keys[1])?;
+    if cli_version != 1
+        || base_version != allocation_observability.cli_version
+        || values[2] != "semantic-replay"
+        || values[3] != "manifest-snapshot,resource-assessment,result-sha256"
+        || values[4] != "lookups,hits,misses,entries"
+        || values[5..]
+            != [
+                "required",
+                "fail-closed",
+                "none",
+                "none",
+                "none",
+                "fail-closed",
+            ]
+    {
+        return Err(PredicateApiError::IncompatibleContract(
+            "controller split cache observability contract is unsupported".to_string(),
+        ));
+    }
+    Ok(ControllerSplitCacheObservabilityCapabilities {
+        cli_version,
+        allocation_observability,
+    })
+}
+
 fn parse_controller_mtbdd_capabilities(
     line: &str,
 ) -> Result<ControllerMtbddCapabilities, PredicateApiError> {
@@ -2729,6 +5278,948 @@ fn parse_controller_proof_mtbdd_capabilities(
         max_terminals: limits[9],
         max_horizon: limits[10],
     })
+}
+
+fn parse_controller_split_artifact_summary(
+    output: ManagedOutput,
+    prefix: &str,
+    has_members: bool,
+    expected_output: &Path,
+    capabilities: &ControllerSplitEvidenceCapabilities,
+) -> Result<Observed<ControllerSplitArtifactSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitArtifactSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') || stdout.lines().count() != 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split artifact response is not canonical".to_string(),
+            ));
+        }
+        let line = stdout.trim_end_matches('\n');
+        let (summary, output_path) = line.rsplit_once(" output=").ok_or_else(|| {
+            PredicateApiError::InvalidResponse(
+                "controller split artifact output field is missing".to_string(),
+            )
+        })?;
+        if output_path != expected_output.to_string_lossy() {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split artifact output disagrees".to_string(),
+            ));
+        }
+        let fields = summary.split(' ').collect::<Vec<_>>();
+        let keys = if has_members {
+            vec![
+                prefix,
+                "status",
+                "cli_version",
+                "artifact_version",
+                "members",
+                "artifact_bytes",
+                "elapsed_micros",
+            ]
+        } else {
+            vec![
+                prefix,
+                "status",
+                "cli_version",
+                "artifact_version",
+                "mtbdd_nodes",
+                "mtbdd_terminals",
+                "artifact_bytes",
+                "elapsed_micros",
+            ]
+        };
+        if fields.len() != keys.len() || fields[0] != prefix {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split artifact field count is invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "CREATED"
+            || canonical_u32(values[1], "cli_version")? != capabilities.cli_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split artifact creation contract changed".to_string(),
+            ));
+        }
+        let artifact_version = canonical_u32(values[2], "artifact_version")?;
+        let expected_version = if has_members {
+            capabilities.plant_artifact_version
+        } else {
+            capabilities.controller_artifact_version
+        };
+        if artifact_version != expected_version {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split artifact version changed".to_string(),
+            ));
+        }
+        let members = has_members
+            .then(|| canonical_usize(values[3], "members"))
+            .transpose()?;
+        if matches!(members, Some(0))
+            || members.is_some_and(|count| {
+                count > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+            })
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split artifact member count is zero".to_string(),
+            ));
+        }
+        let mtbdd_nodes = (!has_members)
+            .then(|| canonical_usize(values[3], "mtbdd_nodes"))
+            .transpose()?;
+        let mtbdd_terminals = (!has_members)
+            .then(|| canonical_usize(values[4], "mtbdd_terminals"))
+            .transpose()?;
+        if matches!(mtbdd_nodes, Some(0))
+            || mtbdd_nodes.is_some_and(|count| count > controller_mtbdd::MAX_MTBDD_NODES)
+            || matches!(mtbdd_terminals, Some(0))
+            || mtbdd_terminals.is_some_and(|count| count > controller_mtbdd::MAX_MTBDD_TERMINALS)
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split evidence MTBDD dimensions are outside limits".to_string(),
+            ));
+        }
+        let offset = if has_members { 4 } else { 5 };
+        let artifact_bytes = canonical_usize(values[offset], "artifact_bytes")?;
+        let elapsed_micros = canonical_usize(values[offset + 1], "elapsed_micros")?;
+        if artifact_bytes == 0 || artifact_bytes > capabilities.max_artifact_bytes {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split artifact byte count is outside limits".to_string(),
+            ));
+        }
+        Ok(ControllerSplitArtifactSummary {
+            artifact_version,
+            members,
+            mtbdd_nodes,
+            mtbdd_terminals,
+            artifact_bytes,
+            elapsed_micros,
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_split_set_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitEvidenceCapabilities,
+) -> Result<Observed<ControllerSplitSetSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitSetSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split set response is not canonical LF text".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        if lines.len() != expected_batches + 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split set response line count is invalid".to_string(),
+            ));
+        }
+        let mut batches = Vec::with_capacity(expected_batches);
+        for (expected_index, line) in lines[..expected_batches].iter().enumerate() {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-split-batch",
+                "index",
+                "status",
+                "members",
+                "safe",
+                "unsafe",
+                "reachable_product_states",
+                "explored_transitions",
+                "artifact_bytes",
+                "verification_micros",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split batch fields are invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(&keys[1..])
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            let index = canonical_usize(values[0], "index")?;
+            if index != expected_index || values[1] != "VERIFIED" {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split batch order or status is invalid".to_string(),
+                ));
+            }
+            let numbers = values[2..]
+                .iter()
+                .enumerate()
+                .map(|(index, value)| canonical_usize(value, keys[index + 3]))
+                .collect::<Result<Vec<_>, _>>()?;
+            if numbers[0] == 0
+                || numbers[0] > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+                || numbers[1].checked_add(numbers[2]) != Some(numbers[0])
+                || numbers[5] == 0
+                || numbers[5] > capabilities.max_artifact_bytes
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split batch dimensions are invalid".to_string(),
+                ));
+            }
+            batches.push(ControllerSplitBatchSummary {
+                index,
+                members: numbers[0],
+                safe: numbers[1],
+                unsafe_count: numbers[2],
+                reachable_product_states: numbers[3],
+                explored_transitions: numbers[4],
+                artifact_bytes: numbers[5],
+                verification_micros: numbers[6],
+            });
+        }
+        let fields = lines[expected_batches].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-set",
+            "status",
+            "cli_version",
+            "controller_admissions",
+            "batches",
+            "members",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "controller_evidence_bytes",
+            "admission_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split aggregate fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "VERIFIED"
+            || canonical_u32(values[1], "cli_version")? != capabilities.cli_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split aggregate contract changed".to_string(),
+            ));
+        }
+        let numbers = values[2..]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 3]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let summary = ControllerSplitSetSummary {
+            controller_admissions: numbers[0],
+            members: numbers[2],
+            safe: numbers[3],
+            unsafe_count: numbers[4],
+            reachable_product_states: numbers[5],
+            explored_transitions: numbers[6],
+            controller_evidence_bytes: numbers[7],
+            admission_micros: numbers[8],
+            elapsed_micros: numbers[9],
+            batches,
+        };
+        let batch_members = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.members));
+        let batch_safe = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.safe));
+        let batch_unsafe = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.unsafe_count));
+        let batch_reachable = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.reachable_product_states)
+        });
+        let batch_transitions = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.explored_transitions)
+        });
+        if summary.controller_admissions != 1
+            || numbers[1] != expected_batches
+            || Some(summary.members) != batch_members
+            || Some(summary.safe) != batch_safe
+            || Some(summary.unsafe_count) != batch_unsafe
+            || Some(summary.reachable_product_states) != batch_reachable
+            || Some(summary.explored_transitions) != batch_transitions
+            || summary.controller_evidence_bytes == 0
+            || summary.controller_evidence_bytes > capabilities.max_artifact_bytes
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split aggregate does not reconcile".to_string(),
+            ));
+        }
+        Ok(summary)
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_split_resource_set_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitResourceCapabilities,
+) -> Result<Observed<ControllerSplitResourceSetSummary>, PredicateOperationError> {
+    let (stdout, mut metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitResourceSetSummary, PredicateApiError> {
+        if stdout.contains('\r') || !stdout.ends_with('\n') {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource response is not canonical LF text".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        if lines.len() != expected_batches + 1 {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource response line count is invalid".to_string(),
+            ));
+        }
+        let mut batches = Vec::with_capacity(expected_batches);
+        for (expected_index, line) in lines[..expected_batches].iter().enumerate() {
+            let fields = line.split(' ').collect::<Vec<_>>();
+            let keys = [
+                "controller-split-resource-batch",
+                "index",
+                "status",
+                "policy_version",
+                "envelope_version",
+                "artifact_version",
+                "members",
+                "maximum_member_horizon",
+                "maximum_product_states",
+                "transition_evaluation_bound",
+                "safe",
+                "unsafe",
+                "reachable_product_states",
+                "explored_transitions",
+                "artifact_bytes",
+                "verification_micros",
+            ];
+            if fields.len() != keys.len() || fields[0] != keys[0] {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split resource batch fields are invalid".to_string(),
+                ));
+            }
+            let values = fields[1..]
+                .iter()
+                .zip(&keys[1..])
+                .map(|(field, key)| token_value(field, key))
+                .collect::<Result<Vec<_>, _>>()?;
+            let index = canonical_usize(values[0], "index")?;
+            if index != expected_index || values[1] != "VERIFIED" {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split resource batch order or status is invalid".to_string(),
+                ));
+            }
+            let policy_version = canonical_u32(values[2], "policy_version")?;
+            let envelope_version = canonical_u32(values[3], "envelope_version")?;
+            let artifact_version = canonical_u32(values[4], "artifact_version")?;
+            if policy_version != capabilities.policy_version
+                || envelope_version != capabilities.plant_envelope_version
+                || artifact_version != capabilities.plant_artifact_version
+            {
+                return Err(PredicateApiError::IncompatibleContract(
+                    "controller split resource batch versions changed".to_string(),
+                ));
+            }
+            let numbers = values[5..]
+                .iter()
+                .enumerate()
+                .map(|(index, value)| canonical_usize(value, keys[index + 6]))
+                .collect::<Result<Vec<_>, _>>()?;
+            if numbers[0] == 0
+                || numbers[0] > capabilities.max_members_per_batch
+                || numbers[1] > capabilities.max_horizon
+                || numbers[2] > capabilities.max_product_states
+                || numbers[4].checked_add(numbers[5]) != Some(numbers[0])
+                || numbers[8] == 0
+                || numbers[8] > capabilities.max_plant_artifact_bytes
+            {
+                return Err(PredicateApiError::InvalidResponse(
+                    "controller split resource batch dimensions are invalid".to_string(),
+                ));
+            }
+            batches.push(ControllerSplitResourceBatchSummary {
+                index,
+                members: numbers[0],
+                maximum_member_horizon: numbers[1],
+                maximum_product_states: numbers[2],
+                transition_evaluation_bound: numbers[3],
+                safe: numbers[4],
+                unsafe_count: numbers[5],
+                reachable_product_states: numbers[6],
+                explored_transitions: numbers[7],
+                artifact_bytes: numbers[8],
+                verification_micros: numbers[9],
+            });
+        }
+        let fields = lines[expected_batches].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-resource-set",
+            "status",
+            "cli_version",
+            "policy_version",
+            "controller_envelope_version",
+            "plant_envelope_version",
+            "controller_admissions",
+            "batches",
+            "members",
+            "safe",
+            "unsafe",
+            "reachable_product_states",
+            "explored_transitions",
+            "controller_evidence_bytes",
+            "controller_mtbdd_bytes",
+            "equivalence_artifact_bytes",
+            "unsat_proof_bytes",
+            "total_plant_artifact_bytes",
+            "total_transition_evaluation_bound",
+            "admission_micros",
+            "elapsed_micros",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource aggregate fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "VERIFIED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || canonical_u32(values[2], keys[3])? != capabilities.policy_version
+            || canonical_u32(values[3], keys[4])? != capabilities.controller_envelope_version
+            || canonical_u32(values[4], keys[5])? != capabilities.plant_envelope_version
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split resource aggregate contract changed".to_string(),
+            ));
+        }
+        let numbers = values[5..]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 6]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let summary = ControllerSplitResourceSetSummary {
+            controller_admissions: numbers[0],
+            members: numbers[2],
+            safe: numbers[3],
+            unsafe_count: numbers[4],
+            reachable_product_states: numbers[5],
+            explored_transitions: numbers[6],
+            controller_evidence_bytes: numbers[7],
+            controller_mtbdd_bytes: numbers[8],
+            equivalence_artifact_bytes: numbers[9],
+            unsat_proof_bytes: numbers[10],
+            total_plant_artifact_bytes: numbers[11],
+            total_transition_evaluation_bound: numbers[12],
+            admission_micros: numbers[13],
+            elapsed_micros: numbers[14],
+            batches,
+        };
+        let batch_members = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.members));
+        let batch_safe = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.safe));
+        let batch_unsafe = summary
+            .batches
+            .iter()
+            .try_fold(0usize, |total, batch| total.checked_add(batch.unsafe_count));
+        let batch_reachable = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.reachable_product_states)
+        });
+        let batch_explored = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.explored_transitions)
+        });
+        let batch_artifact_bytes = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.artifact_bytes)
+        });
+        let batch_transition_bound = summary.batches.iter().try_fold(0usize, |total, batch| {
+            total.checked_add(batch.transition_evaluation_bound)
+        });
+        if summary.controller_admissions != 1
+            || numbers[1] != expected_batches
+            || Some(summary.members) != batch_members
+            || Some(summary.safe) != batch_safe
+            || Some(summary.unsafe_count) != batch_unsafe
+            || Some(summary.reachable_product_states) != batch_reachable
+            || Some(summary.explored_transitions) != batch_explored
+            || Some(summary.total_plant_artifact_bytes) != batch_artifact_bytes
+            || Some(summary.total_transition_evaluation_bound) != batch_transition_bound
+            || summary.controller_evidence_bytes == 0
+            || summary.controller_evidence_bytes > capabilities.max_controller_artifact_bytes
+            || summary.controller_mtbdd_bytes == 0
+            || summary.equivalence_artifact_bytes == 0
+            || summary.unsat_proof_bytes == 0
+            || summary.unsat_proof_bytes > capabilities.max_unsat_proof_bytes
+            || summary.controller_mtbdd_bytes >= summary.controller_evidence_bytes
+            || summary.equivalence_artifact_bytes >= summary.controller_evidence_bytes
+            || summary
+                .controller_mtbdd_bytes
+                .checked_add(summary.equivalence_artifact_bytes)
+                .is_none_or(|payload| payload >= summary.controller_evidence_bytes)
+            || summary.unsat_proof_bytes > summary.equivalence_artifact_bytes
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split resource aggregate does not reconcile".to_string(),
+            ));
+        }
+        Ok(summary)
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed { value, metrics }),
+        Err(error) => {
+            metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_split_observed_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitObservabilityCapabilities,
+) -> Result<Observed<ControllerSplitObservedSummary>, PredicateOperationError> {
+    let status = output.status;
+    let (stdout, mut invocation_metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitObservedSummary, PredicateApiError> {
+        if stdout.contains('\r')
+            || !stdout.ends_with('\n')
+            || stdout.lines().count() != expected_batches + 2
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split observed response line count is invalid".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let base_stdout = format!("{}\n", lines[..expected_batches + 1].join("\n"));
+        let base_output = ManagedOutput {
+            status,
+            stdout: base_stdout.into_bytes(),
+            stderr: Vec::new(),
+            metrics: invocation_metrics.clone(),
+        };
+        let verification = parse_controller_split_resource_set_summary(
+            base_output,
+            expected_batches,
+            &capabilities.resource,
+        )
+        .map_err(|failure| *failure.error)?
+        .value;
+
+        let fields = lines[expected_batches + 1].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-resource-observability",
+            "status",
+            "cli_version",
+            "phase_metrics_version",
+            "policy_and_input_micros",
+            "controller_admission_micros",
+            "complete_set_preflight_micros",
+            "semantic_replay_micros",
+            "total_micros",
+            "controller_admissions",
+            "manifest_loads",
+            "plant_artifact_reads",
+            "resource_assessments",
+            "batch_verifications",
+            "buffered_result_rows",
+            "prepared_batches",
+            "prepared_members",
+            "controller_evidence_bytes",
+            "total_plant_artifact_bytes",
+            "total_transition_evaluation_bound",
+            "timing_calibration",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split observed metrics fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "MEASURED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || canonical_u32(values[2], keys[3])? != capabilities.phase_metrics_version
+            || values[19] != "none"
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split observed metrics contract changed".to_string(),
+            ));
+        }
+        let timings = values[3..8]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_u128(value, keys[index + 4]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let counts = values[8..19]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 9]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let expected_manifest_loads = expected_batches
+            .checked_mul(2)
+            .and_then(|count| count.checked_add(1));
+        let expected_double_batches = expected_batches.checked_mul(2);
+        let expected_rows = expected_batches.checked_add(1);
+        let phase_sum = timings[..4]
+            .iter()
+            .try_fold(0u128, |total, value| total.checked_add(*value));
+        if phase_sum.is_none_or(|sum| sum > timings[4])
+            || u128::try_from(verification.elapsed_micros) != Ok(timings[4])
+            || counts[0] != 1
+            || Some(counts[1]) != expected_manifest_loads
+            || Some(counts[2]) != expected_double_batches
+            || Some(counts[3]) != expected_double_batches
+            || counts[4] != expected_batches
+            || Some(counts[5]) != expected_rows
+            || counts[6] != expected_batches
+            || counts[7] != verification.members
+            || counts[8] != verification.controller_evidence_bytes
+            || counts[9] != verification.total_plant_artifact_bytes
+            || counts[10] != verification.total_transition_evaluation_bound
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split observed metrics do not reconcile".to_string(),
+            ));
+        }
+        Ok(ControllerSplitObservedSummary {
+            verification,
+            phases: ControllerSplitPhaseMetrics {
+                version: capabilities.phase_metrics_version,
+                policy_and_input_micros: timings[0],
+                controller_admission_micros: timings[1],
+                complete_set_preflight_micros: timings[2],
+                semantic_replay_micros: timings[3],
+                total_micros: timings[4],
+                controller_admissions: counts[0],
+                manifest_loads: counts[1],
+                plant_artifact_reads: counts[2],
+                resource_assessments: counts[3],
+                batch_verifications: counts[4],
+                buffered_result_rows: counts[5],
+                prepared_batches: counts[6],
+                prepared_members: counts[7],
+                controller_evidence_bytes: counts[8],
+                total_plant_artifact_bytes: counts[9],
+                total_transition_evaluation_bound: counts[10],
+            },
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed {
+            value,
+            metrics: invocation_metrics,
+        }),
+        Err(error) => {
+            invocation_metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: invocation_metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_split_allocation_observed_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitAllocationObservabilityCapabilities,
+) -> Result<Observed<ControllerSplitAllocationObservedSummary>, PredicateOperationError> {
+    let status = output.status;
+    let (stdout, mut invocation_metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitAllocationObservedSummary, PredicateApiError> {
+        if stdout.contains('\r')
+            || !stdout.ends_with('\n')
+            || stdout.lines().count() != expected_batches + 3
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split allocation response line count is invalid".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let observed_stdout = format!("{}\n", lines[..expected_batches + 2].join("\n"));
+        let observed_output = ManagedOutput {
+            status,
+            stdout: observed_stdout.into_bytes(),
+            stderr: Vec::new(),
+            metrics: invocation_metrics.clone(),
+        };
+        let observed = parse_controller_split_observed_summary(
+            observed_output,
+            expected_batches,
+            &capabilities.observability,
+        )
+        .map_err(|failure| *failure.error)?
+        .value;
+
+        let fields = lines[expected_batches + 2].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-allocation-observability",
+            "status",
+            "cli_version",
+            "allocator",
+            "scope",
+            "allocation_calls",
+            "allocated_bytes",
+            "deallocation_calls",
+            "deallocated_bytes",
+            "reallocation_calls",
+            "reallocated_bytes",
+            "overflow",
+            "timing_calibration",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split allocation metrics fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "MEASURED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || values[2] != "system"
+            || values[3] != "policy-through-replay"
+            || values[10] != "none"
+            || values[11] != "none"
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split allocation metrics contract changed".to_string(),
+            ));
+        }
+        let counts = values[4..10]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_u64(value, keys[index + 5]))
+            .collect::<Result<Vec<_>, _>>()?;
+        if counts[0] == 0 || counts[1] == 0 {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split allocation metrics are empty".to_string(),
+            ));
+        }
+        Ok(ControllerSplitAllocationObservedSummary {
+            observed,
+            allocations: ControllerSplitAllocationMetrics {
+                version: capabilities.cli_version,
+                allocation_calls: counts[0],
+                allocated_bytes: counts[1],
+                deallocation_calls: counts[2],
+                deallocated_bytes: counts[3],
+                reallocation_calls: counts[4],
+                reallocated_bytes: counts[5],
+            },
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed {
+            value,
+            metrics: invocation_metrics,
+        }),
+        Err(error) => {
+            invocation_metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: invocation_metrics,
+            })
+        }
+    }
+}
+
+fn parse_controller_split_cache_observed_summary(
+    output: ManagedOutput,
+    expected_batches: usize,
+    capabilities: &ControllerSplitCacheObservabilityCapabilities,
+) -> Result<Observed<ControllerSplitCacheObservedSummary>, PredicateOperationError> {
+    let status = output.status;
+    let (stdout, mut invocation_metrics) = successful_stdout(output)?;
+    let parsed = (|| -> Result<ControllerSplitCacheObservedSummary, PredicateApiError> {
+        if stdout.contains('\r')
+            || !stdout.ends_with('\n')
+            || stdout.lines().count() != expected_batches + 4
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split cache response line count is invalid".to_string(),
+            ));
+        }
+        let lines = stdout.lines().collect::<Vec<_>>();
+        let allocation_stdout = format!("{}\n", lines[..expected_batches + 3].join("\n"));
+        let allocation_output = ManagedOutput {
+            status,
+            stdout: allocation_stdout.into_bytes(),
+            stderr: Vec::new(),
+            metrics: invocation_metrics.clone(),
+        };
+        let observed = parse_controller_split_allocation_observed_summary(
+            allocation_output,
+            expected_batches,
+            &capabilities.allocation_observability,
+        )
+        .map_err(|failure| *failure.error)?
+        .value;
+
+        let fields = lines[expected_batches + 3].split(' ').collect::<Vec<_>>();
+        let keys = [
+            "controller-split-cache-observability",
+            "status",
+            "cli_version",
+            "scope",
+            "key",
+            "lookups",
+            "hits",
+            "misses",
+            "entries",
+            "integrity_preflight",
+            "overflow",
+            "timing_calibration",
+        ];
+        if fields.len() != keys.len() || fields[0] != keys[0] {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split cache metrics fields are invalid".to_string(),
+            ));
+        }
+        let values = fields[1..]
+            .iter()
+            .zip(&keys[1..])
+            .map(|(field, key)| token_value(field, key))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values[0] != "MEASURED"
+            || canonical_u32(values[1], keys[2])? != capabilities.cli_version
+            || values[2] != "semantic-replay"
+            || values[3] != "manifest-snapshot,resource-assessment,result-sha256"
+            || values[8] != "required"
+            || values[9] != "none"
+            || values[10] != "none"
+        {
+            return Err(PredicateApiError::IncompatibleContract(
+                "controller split cache metrics contract changed".to_string(),
+            ));
+        }
+        let counts = values[4..8]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| canonical_usize(value, keys[index + 5]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let accounted = counts[1].checked_add(counts[2]);
+        if counts[0] != expected_batches
+            || accounted != Some(counts[0])
+            || counts[3] != counts[2]
+            || counts[3] > counts[0]
+        {
+            return Err(PredicateApiError::InvalidResponse(
+                "controller split cache metrics do not reconcile".to_string(),
+            ));
+        }
+        Ok(ControllerSplitCacheObservedSummary {
+            observed,
+            cache: ControllerSplitCacheMetrics {
+                version: capabilities.cli_version,
+                lookups: counts[0],
+                hits: counts[1],
+                misses: counts[2],
+                entries: counts[3],
+            },
+        })
+    })();
+    match parsed {
+        Ok(value) => Ok(Observed {
+            value,
+            metrics: invocation_metrics,
+        }),
+        Err(error) => {
+            invocation_metrics.status = InvocationStatus::Failed(error.failure_class());
+            Err(PredicateOperationError {
+                error: Box::new(error),
+                metrics: invocation_metrics,
+            })
+        }
+    }
+}
+
+fn classify_controller_split_resource_refusal(
+    mut failure: PredicateOperationError,
+) -> PredicateOperationError {
+    let reason = match failure.error.as_ref() {
+        PredicateApiError::CommandFailed {
+            exit_code: Some(3),
+            stderr,
+        } => stderr
+            .trim_end_matches(['\r', '\n'])
+            .strip_prefix("error: controller-split-resource refusal=")
+            .and_then(|value| value.strip_suffix(" result=none"))
+            .and_then(|value| match value {
+                "controller-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::ControllerArtifactBytes)
+                }
+                "unsat-proof-bytes" => Some(ControllerPlantResourceRefusalReason::UnsatProofBytes),
+                "batches" => Some(ControllerPlantResourceRefusalReason::Batches),
+                "plant-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::PlantArtifactBytes)
+                }
+                "members-per-batch" => Some(ControllerPlantResourceRefusalReason::MembersPerBatch),
+                "horizon" => Some(ControllerPlantResourceRefusalReason::Horizon),
+                "product-states" => Some(ControllerPlantResourceRefusalReason::ProductStates),
+                "transitions-per-batch" => {
+                    Some(ControllerPlantResourceRefusalReason::TransitionsPerBatch)
+                }
+                "total-plant-artifact-bytes" => {
+                    Some(ControllerPlantResourceRefusalReason::TotalPlantArtifactBytes)
+                }
+                "total-members" => Some(ControllerPlantResourceRefusalReason::TotalMembers),
+                "total-transition-evaluations" => {
+                    Some(ControllerPlantResourceRefusalReason::TotalTransitionEvaluations)
+                }
+                _ => None,
+            }),
+        _ => None,
+    };
+    if let Some(reason) = reason {
+        let error = PredicateApiError::ResourceRefused { reason };
+        failure.metrics.status = InvocationStatus::Failed(error.failure_class());
+        failure.error = Box::new(error);
+    }
+    failure
 }
 
 fn parse_controller_mtbdd_summary(
@@ -3229,6 +6720,141 @@ mod tests {
     }
 
     #[test]
+    fn controller_split_evidence_capability_parser_is_strict() {
+        let canonical = "controller_split_evidence_cli_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_batches=64 admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed\n";
+        let parsed = parse_controller_split_evidence_capabilities(canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.max_batches, 64);
+        for hostile in [
+            canonical.replace("admission=once", "admission=per-batch"),
+            canonical.replace("verification=unsat-miter", "verification=trusted"),
+            canonical.replace("exhaustive_replay=no", "exhaustive_replay=yes"),
+            canonical.replace("source_binding=sha256", "source_binding=path"),
+            canonical.replace(
+                "obligation_binding=complete-ordered",
+                "obligation_binding=partial",
+            ),
+            canonical.replace("max_batches=64", "max_batches=0"),
+            canonical.replace("max_batches=64", "max_batches=064"),
+            canonical.replace("max_batches=64", "max_batches=65"),
+            canonical.replace("max_artifact_bytes=16777216", "max_artifact_bytes=16777217"),
+            canonical.replace("unsupported=fail-closed", "unsupported=best-effort"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_split_evidence_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_split_resource_capability_parser_is_strict() {
+        let canonical = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_split_resource_capabilities(canonical).unwrap();
+        assert_eq!(parsed.policy_version, 1);
+        assert_eq!(parsed.max_batches, 64);
+        for hostile in [
+            canonical.replace("admission=once", "admission=per-batch"),
+            canonical.replace("verification=unsat-miter", "verification=trusted"),
+            canonical.replace(
+                "accounting=conservative-static-per-batch-and-total",
+                "accounting=measured",
+            ),
+            canonical.replace("timing_calibration=none", "timing_calibration=per-formula"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("refusal_exit=3", "refusal_exit=2"),
+            canonical.replace("max_batches=64", "max_batches=65"),
+            canonical.replace("max_policy_bytes=4096", "max_policy_bytes=0"),
+            canonical.replace("refusal_schema=split-reason-v1", "refusal_schema=free-text"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_split_resource_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_split_observability_capability_parser_is_strict() {
+        let resource = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed";
+        let observability = "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let canonical = format!("{resource}\n{observability}\n");
+        let parsed = parse_controller_split_observability_capabilities(&canonical).unwrap();
+        assert_eq!(parsed.resource.cli_version, 1);
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.phase_metrics_version, 1);
+        for hostile in [
+            canonical.replace("phase_metrics_version=1", "phase_metrics_version=2"),
+            canonical.replace("semantic-replay", "trusted-replay"),
+            canonical.replace("manifest-loads", "manifest-hints"),
+            canonical.replace(
+                "partial_metrics_on_failure=none",
+                "partial_metrics_on_failure=yes",
+            ),
+            canonical.replace("timing_calibration=none", "timing_calibration=per-formula"),
+            canonical.replace('\n', "\r\n"),
+            format!("{resource}\n"),
+            format!("{observability}\n{resource}\n"),
+        ] {
+            assert!(parse_controller_split_observability_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_split_allocation_capability_parser_is_strict() {
+        let resource = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed";
+        let observability = "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let allocation = "controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let canonical = format!("{resource}\n{observability}\n{allocation}\n");
+        let parsed =
+            parse_controller_split_allocation_observability_capabilities(&canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.observability.cli_version, 1);
+        for hostile in [
+            canonical.replace("allocator=system", "allocator=jemalloc"),
+            canonical.replace("scope=policy-through-replay", "scope=whole-process"),
+            canonical.replace("allocated-bytes", "live-bytes"),
+            canonical.replace("overflow=fail-closed", "overflow=saturate"),
+            canonical.replace(
+                "base_observability_cli_version=1",
+                "base_observability_cli_version=2",
+            ),
+            canonical.replace('\n', "\r\n"),
+            format!("{resource}\n{observability}\n"),
+        ] {
+            assert!(
+                parse_controller_split_allocation_observability_capabilities(&hostile).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn controller_split_cache_capability_parser_is_strict() {
+        let resource = "controller_split_resource_cli_version=1 policy_version=1 controller_envelope_version=1 plant_envelope_version=1 controller_artifact_version=1 plant_artifact_version=1 manifest_version=1 max_policy_bytes=4096 max_controller_artifact_bytes=16777216 max_unsat_proof_bytes=1048576 max_plant_artifact_bytes=16777216 max_batches=64 max_members_per_batch=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed";
+        let observability = "controller_split_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let allocation = "controller_split_allocation_observability_cli_version=1 base_observability_cli_version=1 allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let cache = "controller_split_cache_observability_cli_version=1 base_allocation_observability_cli_version=1 scope=semantic-replay key=manifest-snapshot,resource-assessment,result-sha256 counters=lookups,hits,misses,entries integrity_preflight=required overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed";
+        let canonical = format!("{resource}\n{observability}\n{allocation}\n{cache}\n");
+        let parsed = parse_controller_split_cache_observability_capabilities(&canonical).unwrap();
+        assert_eq!(parsed.cli_version, 1);
+        assert_eq!(parsed.allocation_observability.cli_version, 1);
+        for hostile in [
+            canonical.replace("scope=semantic-replay", "scope=preflight"),
+            canonical.replace("manifest-snapshot", "manifest-path"),
+            canonical.replace(
+                "integrity_preflight=required",
+                "integrity_preflight=optional",
+            ),
+            canonical.replace("hits,misses", "misses,hits"),
+            canonical.replace("overflow=fail-closed", "overflow=saturate"),
+            canonical.replace(
+                "base_allocation_observability_cli_version=1",
+                "base_allocation_observability_cli_version=2",
+            ),
+            canonical.replace('\n', "\r\n"),
+            format!("{resource}\n{observability}\n{allocation}\n"),
+        ] {
+            assert!(parse_controller_split_cache_observability_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
     fn controller_plant_portfolio_capability_parser_is_strict() {
         let canonical = "controller_plant_portfolio_cli_version=1 artifact_version=1 manifest_version=1 max_manifest_bytes=65536 max_artifact_bytes=16777216 max_members=64 backends=mtbdd,direct-exact routing=static fallback=exact unsupported=fail-closed\n";
         let parsed = parse_controller_plant_portfolio_capabilities(canonical).unwrap();
@@ -3269,6 +6895,49 @@ mod tests {
             canonical.replace('\n', "\r\n"),
         ] {
             assert!(parse_controller_plant_resource_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_resource_capability_parser_is_strict() {
+        let canonical = "controller_proof_mtbdd_resource_cli_version=1 policy_version=1 envelope_version=1 manifest_version=1 artifact_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_horizon=1024 max_product_states=4096 refusal_exit=3 verification=unsat-miter exhaustive_replay=no accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_proof_mtbdd_resource_capabilities(canonical).unwrap();
+        assert_eq!(parsed.max_equivalence_artifact_bytes, 2_097_152);
+        assert_eq!(parsed.max_unsat_proof_bytes, 1_048_576);
+        for hostile in [
+            canonical.replace("verification=unsat-miter", "verification=trusted"),
+            canonical.replace("exhaustive_replay=no", "exhaustive_replay=yes"),
+            canonical.replace("accounting=conservative-static", "accounting=measured"),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("refusal_schema=proof-reason-v1", "refusal_schema=free-text"),
+            canonical.replace("max_unsat_proof_bytes=1048576", "max_unsat_proof_bytes=0"),
+            canonical.replace("max_members=64", "max_members=064"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_proof_mtbdd_resource_capabilities(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_portfolio_capability_parser_is_strict() {
+        let canonical = "controller_proof_mtbdd_portfolio_cli_version=1 policy_version=1 envelope_version=1 artifact_version=1 proof_artifact_version=1 direct_artifact_version=1 manifest_version=1 source_model_attestation_version=1 max_policy_bytes=4096 max_artifact_bytes=16777216 max_equivalence_artifact_bytes=2097152 max_unsat_proof_bytes=1048576 max_members=64 max_horizon=1024 max_product_states=4096 max_attestation_bytes=65536 refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed attested_verification=required accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed\n";
+        let parsed = parse_controller_proof_mtbdd_portfolio_capabilities(canonical).unwrap();
+        assert_eq!(parsed.artifact_version, 1);
+        assert_eq!(parsed.max_unsat_proof_bytes, 1_048_576);
+        for hostile in [
+            canonical.replace("backends=proof-mtbdd,direct-exact", "backends=direct-exact"),
+            canonical.replace("routing=static", "routing=timed"),
+            canonical.replace("fallback=exact", "fallback=heuristic"),
+            canonical.replace("proof_failure=fail-closed", "proof_failure=fallback"),
+            canonical.replace(
+                "attested_verification=required",
+                "attested_verification=optional",
+            ),
+            canonical.replace("result_on_refusal=none", "result_on_refusal=safe"),
+            canonical.replace("max_members=64", "max_members=064"),
+            canonical.replace('\n', "\r\n"),
+        ] {
+            assert!(parse_controller_proof_mtbdd_portfolio_capabilities(&hostile).is_err());
         }
     }
 
@@ -3329,6 +6998,53 @@ mod tests {
         assert_eq!(
             metrics.to_csv_row(),
             "1,verify_v2,123,45,6,700,8192,2,error,exit_status"
+        );
+
+        let successful = InvocationMetrics {
+            schema_version: 1,
+            operation: OperationKind::Discover,
+            duration: Duration::from_nanos(7),
+            stdout_bytes: 10,
+            stderr_bytes: 0,
+            timeout: Duration::from_millis(700),
+            output_limit_bytes: 8192,
+            memory_limit_bytes: None,
+            file_limit_bytes: 32 * 1024 * 1024,
+            process_group_containment: true,
+            exit_code: Some(0),
+            status: InvocationStatus::Success,
+        };
+        let aggregate = aggregate_invocation_metrics([&metrics, &successful]).unwrap();
+        assert_eq!(aggregate.jobs, 2);
+        assert_eq!(aggregate.successes, 1);
+        assert_eq!(aggregate.failures, 1);
+        assert_eq!(aggregate.total_duration_ns, 130);
+        assert_eq!(aggregate.maximum_duration_ns, 123);
+        assert_eq!(aggregate.total_stdout_bytes, 55);
+        assert_eq!(aggregate.total_stderr_bytes, 6);
+        assert_eq!(aggregate.process_group_contained_jobs, 2);
+        assert_eq!(aggregate.memory_limited_jobs, 1);
+        assert_eq!(aggregate.operation_counts["discover"], 1);
+        assert_eq!(aggregate.operation_counts["verify_v2"], 1);
+        assert_eq!(aggregate.failure_counts["exit_status"], 1);
+        assert_eq!(
+            InvocationMetricsAggregate::csv_header(),
+            "schema_version,jobs,successes,failures,total_duration_ns,maximum_duration_ns,total_stdout_bytes,total_stderr_bytes,process_group_contained_jobs,memory_limited_jobs,operation_counts,failure_counts"
+        );
+        assert_eq!(
+            aggregate.to_csv_row(),
+            "1,2,1,1,130,123,55,6,2,1,discover=1;verify_v2=1,exit_status=1"
+        );
+
+        let mut incompatible = successful.clone();
+        incompatible.schema_version = 2;
+        assert_eq!(
+            aggregate_invocation_metrics([&incompatible]),
+            Err(MetricsAggregationError::UnsupportedSchema(2))
+        );
+        assert_eq!(
+            aggregate_invocation_metrics(std::iter::empty()),
+            Err(MetricsAggregationError::Empty)
         );
     }
 

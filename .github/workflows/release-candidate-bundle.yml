@@ -1,4 +1,4 @@
-name: Attested Linux evaluation bundle
+name: Attested Linux production candidate
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
           sudo apt-get install --yes musl-tools jq binutils
       - name: Build and prove byte reproducibility
         run: |
-          scripts/test-linux-evaluation-bundle.sh \
+          scripts/test-linux-production-candidate.sh \
             /tmp/gcc-linux-bundle-repro dist
       - name: Resolve canonical artifact paths
         id: bundle
@@ -43,10 +43,10 @@ jobs:
         with:
           subject-path: ${{ steps.bundle.outputs.archive }}
           sbom-path: ${{ steps.bundle.outputs.sbom }}
-      - name: Retain evaluation bundle
+      - name: Retain production candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: guarded-continuation-checker-linux-evaluation-bundle
+          name: guarded-continuation-checker-linux-production-candidate
           path: dist/*
           if-no-files-found: error
           retention-days: 14

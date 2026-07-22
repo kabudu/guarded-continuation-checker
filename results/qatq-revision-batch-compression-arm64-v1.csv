@@ -1,0 +1,14 @@
+schema_version,codec,dtype,max_values_per_chunk,encoded_bytes,ratio_to_raw,bit_identical,status
+1,lz4,opaque,0,2909792,0.205434,true,measured
+1,zstd-3,opaque,0,515606,0.036402,true,measured
+1,zstd-19,opaque,0,118276,0.008350,true,measured
+1,zstd-22,opaque,0,118468,0.008364,true,measured
+1,zstd-22-long-27,opaque,0,116769,0.008244,true,measured
+1,qatq-exact,bf16,16384,266729,0.018831,true,measured
+1,qatq-exact,bf16,65536,228098,0.016104,true,measured
+1,qatq-exact,bf16,262144,219546,0.015500,true,measured
+1,qatq-exact,f32,16384,140446,0.009916,true,measured
+1,qatq-exact,f32,65536,111187,0.007850,true,measured
+1,qatq-exact,f32,262144,102244,0.007219,true,measured
+1,qatq-exact,f32,1048576,82324,0.005812,true,measured
+1,qatq-exact,f32,3541036,76385,0.005393,true,measured-best

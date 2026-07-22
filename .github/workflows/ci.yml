@@ -17,7 +17,9 @@ jobs:
       - name: Validate and run hosted evidence comparison
         run: |
           sudo apt-get update
-          sudo apt-get install --yes shellcheck
+          sudo apt-get install --yes \
+            bison flex gawk libffi-dev libreadline-dev pkg-config shellcheck \
+            tcl-dev zlib1g-dev
           shellcheck -s bash \
             scripts/run-certified-evidence-hosted-v1.sh \
             scripts/qualify-certifaiger-v1.sh \
@@ -25,7 +27,18 @@ jobs:
             scripts/certified-evidence-container-v1.sh \
             scripts/benchmark-certified-evidence-v1.sh \
             scripts/benchmark-gcc-proof-runlim-v1.sh \
+            scripts/test-composed-witness-baseline-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+            scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+            scripts/opentitan-dual-timer-resource-container-v1.sh \
+            scripts/benchmark-changing-plant-composed-witness-v1.sh \
+            scripts/build-roalogic-plic-revision-aiger-v1.sh \
+            scripts/benchmark-roalogic-plic-closest-baseline-v1.sh \
             scripts/test-certified-evidence-hostile-v1.sh
+          shellcheck -s sh \
+            scripts/build-opentitan-aon-dual-timer-aiger.sh \
+            scripts/build-caliptra-wdt-aiger-v1.sh
           scripts/run-certified-evidence-hosted-v1.sh /tmp/evidence-results
           cat /tmp/evidence-results/*.csv
       - name: Retain hosted comparison evidence
@@ -53,13 +66,49 @@ jobs:
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets
+      - name: Check frozen production support profile
+        run: |
+          shellcheck -s bash scripts/check-production-support-profile-v1.sh
+          cargo clippy --locked --bin guarded-continuation-checker \
+            --features production-firmware -- -D warnings
+          cargo build --release --locked --features production-firmware
+          scripts/check-production-support-profile-v1.sh \
+            target/release/guarded-continuation-checker
       - name: Test
         run: cargo test --locked
+      - name: Package and install exact crate payload
+        run: scripts/test-crate-package-v1.sh
+      - name: Reproduce composed-witness model exports
+        run: scripts/test-composed-witness-model-exports-v1.sh
       - name: Check BTOR2 baseline scripts
         run: |
+          shellcheck -s bash scripts/build-opentitan-aon-watchdog-btor2.sh
+          shellcheck -s bash \
+            scripts/build-caliptra-wdt-btor2-v1.sh \
+            scripts/run-caliptra-wdt-word-probe-v2.sh \
+            scripts/build-caliptra-wdt-word-input-btor2-v1.sh \
+            scripts/run-caliptra-wdt-word-input-acceptance-v1.sh \
+            scripts/build-roalogic-plic-gateway-btor2-v1.sh \
+            scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
+            scripts/build-roalogic-plic-gateway-constrained-btor2-v1.sh \
+            scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
+            scripts/build-roalogic-plic-revision-component-v1.sh \
+            scripts/run-roalogic-plic-revision-reuse-v1.sh \
+            scripts/benchmark-roalogic-plic-revision-resources-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
+            scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
+            scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
+            scripts/opentitan-dual-timer-resource-container-v1.sh \
+            scripts/test-crate-package-v1.sh
           shellcheck -s sh \
+            scripts/build-opentitan-aon-dual-timer-aiger.sh \
+            scripts/build-caliptra-wdt-aiger-v1.sh \
             scripts/test-btor2tools-baseline.sh \
             scripts/test-bitwuzla-phase-baseline.sh \
+            scripts/run-opentitan-aon-watchdog-acceptance.sh \
+            scripts/run-opentitan-aon-predicate-set-acceptance.sh \
+            scripts/run-opentitan-aon-dual-timer-probe.sh \
+            scripts/run-opentitan-aon-dual-timer-acceptance.sh \
             scripts/run-btor2-search-cohort.sh \
             scripts/run-btor2-region-cohort.sh \
             scripts/run-btor2-motion-cohort.sh \
@@ -82,6 +131,9 @@ jobs:
             scripts/benchmark-controller-plant-portfolio-phases.sh \
             scripts/benchmark-controller-proof-mtbdd-plant.sh \
             scripts/run-controller-proof-mtbdd-self-service-acceptance.sh \
+            scripts/run-controller-split-resource-acceptance.sh \
+            scripts/check-controller-split-compatibility-v1.sh \
+            scripts/benchmark-controller-split-process-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-process.sh \
             scripts/benchmark-controller-proof-mtbdd-resources.sh \
             scripts/benchmark-controller-proof-mtbdd-maintained-baseline.sh
@@ -102,6 +154,18 @@ jobs:
             /tmp/controller-proof-mtbdd-acceptance.csv
           diff -u results/controller-proof-mtbdd-self-service-acceptance-v1.csv \
             /tmp/controller-proof-mtbdd-acceptance.csv
+      - name: Reproduce governed split-evidence acceptance
+        run: |
+          scripts/check-controller-split-compatibility-v1.sh \
+            target/debug/guarded-continuation-checker
+      - name: Reproduce governed split observability acceptance
+        run: |
+          shellcheck -s sh scripts/run-controller-split-observability-acceptance.sh
+          scripts/run-controller-split-observability-acceptance.sh \
+            target/debug/guarded-continuation-checker \
+            /tmp/controller-split-observability-acceptance.csv
+          diff -u results/controller-split-observability-acceptance-v1.csv \
+            /tmp/controller-split-observability-acceptance.csv
       - name: Exercise proof-carrying MTBDD whole-process comparison
         env:
           TRIALS: 3
@@ -123,6 +187,16 @@ jobs:
           awk -F, -v trials="$TRIALS" 'NR > 1 { if ($5 <= 0 || $6 <= 0) exit 1; seen[$2 ":" $3]++ } END { exit !(seen["compact:create"] == trials && seen["compact:verify"] == trials && seen["proof:create"] == trials && seen["proof:verify"] == trials) }' \
             /tmp/controller-proof-mtbdd-resources.csv
           cat /tmp/controller-proof-mtbdd-resources.csv
+      - name: Measure governed split-evidence process resources
+        env:
+          TRIALS: 3
+        run: |
+          scripts/benchmark-controller-split-process-resources.sh \
+            target/release/guarded-continuation-checker \
+            /tmp/controller-split-process-resources.csv
+          awk -F, -v trials="$TRIALS" 'BEGIN { allowed["controller-certify"]=1; allowed["plant-door-certify"]=1; allowed["plant-lock-certify"]=1; allowed["governed-set-verify"]=1 } NR == 1 { expected="schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,portable_evidence_bytes,time_backend,operating_system,architecture,answers_agree,status"; if ($0 != expected) exit 1; next } { if (!($2 in allowed) || $4 < 0 || $5 <= 0 || $6 <= 0 || $7 != "gnu" || $8 != "Linux" || $9 == "" || $10 != "true" || $11 != "ok") exit 1; seen[$2]++ } END { exit !(NR == 1 + (4 * trials) && seen["controller-certify"] == trials && seen["plant-door-certify"] == trials && seen["plant-lock-certify"] == trials && seen["governed-set-verify"] == trials) }' \
+            /tmp/controller-split-process-resources.csv
+          cat /tmp/controller-split-process-resources.csv
       - name: Cross-check BTOR2 model and witness with pinned BTOR2Tools
         run: |
           git init /tmp/btor2tools
@@ -250,6 +324,9 @@ jobs:
         run: |
           cargo test --locked --lib btor2_component
           cargo test --locked --test btor2_component_api
+          cargo test --locked --test opentitan_aon_watchdog_api
+          cargo test --locked --lib btor2_predicate_set
+          cargo test --locked --test btor2_predicate_set_api
 
   public-rtl-corpus:
     runs-on: ubuntu-latest
@@ -278,6 +355,165 @@ jobs:
         run: scripts/test-public-washing-controller-oracle.sh /tmp/sby/sbysrc/sby.py
       - name: Cross-check stateful physical-plant batch with SymbiYosys
         run: scripts/test-public-washing-controller-physical-oracle.sh /tmp/sby/sbysrc/sby.py
+      - name: Build pinned Yosys for source attestation
+        run: |
+          sudo apt-get install --yes \
+            bison flex gawk libffi-dev libreadline-dev pkg-config tcl-dev zlib1g-dev
+          git init /tmp/yosys-attestation
+          git -C /tmp/yosys-attestation remote add origin https://github.com/YosysHQ/yosys.git
+          git -C /tmp/yosys-attestation fetch --depth 1 origin \
+            b8e7da6f40ae8f552c116bf6c359b07c6533e159
+          git -C /tmp/yosys-attestation checkout --detach FETCH_HEAD
+          git -C /tmp/yosys-attestation submodule update --init --depth 1 -- \
+            libs/cxxopts libs/fmt libs/tomlplusplus libs/boost_regex \
+            libs/slang frontends/slang/lib
+          cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DYOSYS_CHECKOUT_INFO=b8e7da6f40ae8f552c116bf6c359b07c6533e159 \
+            -DYOSYS_WITHOUT_ABC=ON
+          cmake --build /tmp/yosys-attestation/build --parallel 2 --target yosys
+      - name: Reproduce public source-to-model attestation
+        run: |
+          PATH="/tmp/yosys-attestation/build:$PATH" \
+            scripts/test-source-model-provenance.sh \
+            results/public-washing-source-model-attestation-v1.csv
+          PATH="/tmp/yosys-attestation/build:$PATH" \
+            scripts/test-composed-witness-plant-provenance-v1.sh
+      - name: Reproduce OpenTitan AON watchdog acceptance
+        run: |
+          scripts/run-opentitan-aon-watchdog-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-watchdog-acceptance.csv
+          diff -u results/opentitan-aon-watchdog-acceptance-v1.csv \
+            /tmp/opentitan-aon-watchdog-acceptance.csv
+      - name: Reproduce OpenTitan semantic revision acceptance
+        run: |
+          mkdir /tmp/opentitan-prim-count-revision-v1
+          scripts/run-opentitan-prim-count-revision-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/opentitan-prim-count-revision-v1.csv \
+            /tmp/opentitan-prim-count-revision-amd64-v1.manifest.txt \
+            /tmp/opentitan-prim-count-revision-v1
+          diff -u results/opentitan-prim-count-revision-v1.csv \
+            /tmp/opentitan-prim-count-revision-v1.csv
+      - name: Prove OpenTitan verbatim-source equivalence
+        run: |
+          git init /tmp/opentitan-prim-count-verbatim
+          git -C /tmp/opentitan-prim-count-verbatim remote add origin \
+            https://github.com/lowRISC/opentitan.git
+          git -C /tmp/opentitan-prim-count-verbatim fetch --depth 1 origin \
+            34157c7afb84a7be7b1b1250d673f9fa8a3c18ce \
+            369cffc85db0e6d5a667676a6f89987b94210e70
+          git -C /tmp/opentitan-prim-count-verbatim worktree add --detach \
+            /tmp/opentitan-prim-before 34157c7afb84a7be7b1b1250d673f9fa8a3c18ce
+          git -C /tmp/opentitan-prim-count-verbatim worktree add --detach \
+            /tmp/opentitan-prim-after 369cffc85db0e6d5a667676a6f89987b94210e70
+          mkdir /tmp/opentitan-prim-count-equivalence-v1
+          scripts/test-opentitan-prim-count-verbatim-equivalence-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-prim-before /tmp/opentitan-prim-after \
+            /tmp/opentitan-prim-count-verbatim-equivalence-v1.csv \
+            /tmp/opentitan-prim-count-equivalence-v1
+          diff -u results/opentitan-prim-count-verbatim-equivalence-v1.csv \
+            /tmp/opentitan-prim-count-verbatim-equivalence-v1.csv
+      - name: Reproduce Caliptra and Roa Logic PLIC search acceptance
+        run: |
+          cargo build --release --locked \
+            --example roalogic_plic_revision_reuse \
+            --example roalogic_plic_revision_cost
+          scripts/run-caliptra-wdt-word-probe-v2.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/caliptra-wdt-word-probe-v2.csv
+          diff -u results/caliptra-wdt-word-probe-v2.csv \
+            /tmp/caliptra-wdt-word-probe-v2.csv
+          scripts/run-caliptra-wdt-word-input-acceptance-v1.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            /tmp/caliptra-wdt-word-input-acceptance-v1.csv
+          diff -u results/caliptra-wdt-word-input-acceptance-v1.csv \
+            /tmp/caliptra-wdt-word-input-acceptance-v1.csv
+          scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            /tmp/roalogic-plic-gateway-acceptance-v1.csv
+          diff -u results/roalogic-plic-gateway-acceptance-v1.csv \
+            /tmp/roalogic-plic-gateway-acceptance-v1.csv
+          scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
+          diff -u results/roalogic-plic-gateway-constrained-acceptance-v1.csv \
+            /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
+          mkdir /tmp/roalogic-plic-revision-work
+          scripts/run-roalogic-plic-revision-reuse-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/roalogic-plic-revision-reuse-v1.csv \
+            /tmp/roalogic-plic-revision-work
+          diff -u results/roalogic-plic-revision-reuse-v1.csv \
+            /tmp/roalogic-plic-revision-reuse-v1.csv
+          scripts/build-roalogic-plic-revision-aiger-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/roalogic-plic-revision-aiger-v1
+          grep -q '^a18e30f70df2c716abcecc3e4fab96321bb5b6ea66246389a1df09a169adbce7  old-safe.aag$' \
+            /tmp/roalogic-plic-revision-aiger-v1/SHA256SUMS
+          grep -q '^354fa8eea1402249e520c96b603ca5fa20cd5fa6a2318639a23c2ad3d4b6a8b2  old-unsafe.aag$' \
+            /tmp/roalogic-plic-revision-aiger-v1/SHA256SUMS
+          target/release/examples/roalogic_plic_revision_cost \
+            /tmp/roalogic-plic-revision-work/plic-new.btor2 \
+            corpus/rtl/roalogic-plic-gateway/revision-cohort/monitor.btor2 \
+            corpus/rtl/roalogic-plic-gateway/revision-cohort/monitor-v2.btor2 \
+            corpus/rtl/roalogic-plic-gateway/revision-cohort/interface-retained-plic.txt \
+            > /tmp/roalogic-plic-revision-cost-v1.csv
+          grep -q '^1,21,525192,4100,4,1,1,.*true,true,measured$' \
+            /tmp/roalogic-plic-revision-cost-v1.csv
+          mkdir /tmp/roalogic-plic-revision-resources
+          scripts/benchmark-roalogic-plic-revision-resources-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv \
+            /tmp/roalogic-plic-revision-resources 3
+          test "$(wc -l < /tmp/roalogic-plic-revision-resources-linux-v1.csv)" -eq 13
+          grep -q '^1,full-create,.*UNSAFE,2,0,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+          grep -q '^1,retained-create,.*UNSAFE,1,1,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+          grep -q '^1,full-verify,.*UNSAFE,2,0,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+          grep -q '^1,retained-verify,.*UNSAFE,1,1,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+      - name: Reproduce OpenTitan AON predicate-set acceptance
+        run: |
+          scripts/run-opentitan-aon-predicate-set-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-predicate-set-acceptance.csv
+          diff -u results/opentitan-aon-predicate-set-acceptance-v2.csv \
+            /tmp/opentitan-aon-predicate-set-acceptance.csv
+      - name: Reproduce OpenTitan AON dual-timer structural probe
+        run: |
+          scripts/run-opentitan-aon-dual-timer-probe.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-dual-timer-probe.csv
+          diff -u results/opentitan-aon-dual-timer-probe-v1.csv \
+            /tmp/opentitan-aon-dual-timer-probe.csv
+      - name: Reproduce OpenTitan AON dual-timer predicate-set v3 acceptance
+        run: |
+          scripts/run-opentitan-aon-dual-timer-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/opentitan-aon-dual-timer-acceptance.csv
+          diff -u results/opentitan-aon-dual-timer-acceptance-v1.csv \
+            /tmp/opentitan-aon-dual-timer-acceptance.csv
       - name: Compare proof profile with maintained formal workflow
         env:
           TRIALS: 1
@@ -309,6 +545,13 @@ jobs:
             /tmp/controller-plant-resource.csv
           diff -u results/controller-plant-resource-acceptance-v1.csv \
             /tmp/controller-plant-resource.csv
+      - name: Reproduce governed proof portfolio acceptance
+        run: |
+          scripts/run-governed-proof-portfolio-acceptance.sh \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/governed-proof-portfolio.csv
+          diff -u results/governed-proof-mtbdd-portfolio-acceptance-linux-v1.csv \
+            /tmp/governed-proof-portfolio.csv
       - name: Exercise controller plant phase observability
         env:
           TRIALS: 1
@@ -412,8 +655,12 @@ jobs:
         run: |
           shellcheck -s sh \
             scripts/build-linux-evaluation-bundle.sh \
+            scripts/build-linux-production-candidate.sh \
             scripts/generate-spdx-sbom.sh \
             scripts/test-linux-evaluation-bundle.sh \
+            scripts/test-linux-production-candidate.sh \
             scripts/verify-linux-evaluation-bundle.sh
       - name: Rebuild twice, compare, verify, and reject tampering
         run: scripts/test-linux-evaluation-bundle.sh /tmp/gcc-linux-bundle-repro
+      - name: Rebuild and verify the frozen production candidate twice
+        run: scripts/test-linux-production-candidate.sh /tmp/gcc-linux-production-repro

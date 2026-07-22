@@ -7,8 +7,8 @@ use sha2::{Digest, Sha256};
 
 use crate::aiger_obligation::AigerTransition;
 use crate::controller_mtbdd::{
-    ControllerMtbddAdmissionFailure, ControllerMtbddArtifact, decode_controller_mtbdd,
-    encode_controller_mtbdd, produce_controller_mtbdd,
+    ControllerMtbddAdmissionFailure, ControllerMtbddArtifact, ControllerMtbddSummary,
+    decode_controller_mtbdd, encode_controller_mtbdd, produce_controller_mtbdd,
 };
 use crate::controller_mtbdd_proof::{
     ControllerMtbddEquivalenceProof, decode_controller_mtbdd_equivalence_proof,
@@ -18,7 +18,7 @@ use crate::controller_plant::{
     ControllerPlantAnswer, ControllerPlantBatchInput, ControllerPlantBatchResult,
     ControllerPlantResult, ControllerPlantTraceStep, ControllerPlantWiring,
     MAX_COMPOSITION_HORIZON, compose_controller_plant_batch, compose_controller_plant_direct_batch,
-    compose_verified_mtbdd_plant, verify_mtbdd_for_composition,
+    compose_verified_mtbdd_plant, reuse_verified_controller_mtbdd, verify_mtbdd_for_composition,
     verify_proof_carrying_mtbdd_for_composition,
 };
 use crate::controller_transducer::{
@@ -33,11 +33,19 @@ pub const MTBDD_PLANT_ARTIFACT_VERSION: u32 = 1;
 const MTBDD_MAGIC: &[u8; 8] = b"GCCMPA01";
 pub const PROOF_MTBDD_PLANT_ARTIFACT_VERSION: u32 = 1;
 const PROOF_MTBDD_MAGIC: &[u8; 8] = b"GCCMPF01";
+pub const CONTROLLER_PROOF_EVIDENCE_VERSION: u32 = 1;
+const CONTROLLER_PROOF_EVIDENCE_MAGIC: &[u8; 8] = b"GCCCPE01";
+pub const BOUND_PLANT_RESULTS_VERSION: u32 = 1;
+const BOUND_PLANT_RESULTS_MAGIC: &[u8; 8] = b"GCCBPR01";
 pub const DIRECT_PLANT_ARTIFACT_VERSION: u32 = 1;
 const DIRECT_MAGIC: &[u8; 8] = b"GCCDPA01";
 pub const MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
 const PORTFOLIO_MAGIC: &[u8; 8] = b"GCCMPP01";
+pub const PROOF_MTBDD_PLANT_PORTFOLIO_VERSION: u32 = 1;
+const PROOF_PORTFOLIO_MAGIC: &[u8; 8] = b"GCCPGP01";
 pub const CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION: u32 = 1;
+pub const CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION: u32 = 1;
+pub const CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ControllerPlantArtifactInput<'a> {
@@ -82,6 +90,108 @@ pub struct ControllerProofMtbddPlantBatchArtifact {
     pub equivalence_proof: Vec<u8>,
 }
 
+/// Controller-local evidence that can be cached independently of plant results.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofEvidenceArtifact {
+    pub version: u32,
+    pub controller_mtbdd: Vec<u8>,
+    pub equivalence_proof: Vec<u8>,
+}
+
+/// Plant-local results bound to the digest of one canonical controller artifact.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundPlantResultsArtifact {
+    pub version: u32,
+    pub controller_evidence_sha256: [u8; 32],
+    pub members: Vec<ControllerPlantArtifactMember>,
+}
+
+/// A process-local capability proving that controller evidence was admitted.
+///
+/// Its fields are private so callers cannot construct a trusted session without
+/// passing canonical evidence through the independent proof checker.
+#[derive(Debug)]
+pub struct AdmittedControllerProofEvidence {
+    evidence_sha256: [u8; 32],
+    controller: ControllerMtbddArtifact,
+    summary: ControllerMtbddSummary,
+}
+
+/// Caller-selected limits checked before controller proof admission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerProofEvidenceResourceEnvelope {
+    max_artifact_bytes: usize,
+    max_unsat_proof_bytes: usize,
+}
+
+impl ControllerProofEvidenceResourceEnvelope {
+    pub fn new(
+        max_artifact_bytes: usize,
+        max_unsat_proof_bytes: usize,
+    ) -> Result<Self, ControllerPlantArtifactError> {
+        if max_artifact_bytes == 0
+            || max_artifact_bytes > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES
+            || max_unsat_proof_bytes == 0
+            || max_unsat_proof_bytes > crate::unsat_proof::MAX_UNSAT_PROOF_BYTES
+        {
+            return Err(reject(
+                "controller proof evidence resource envelope is outside static limits",
+            ));
+        }
+        Ok(Self {
+            max_artifact_bytes,
+            max_unsat_proof_bytes,
+        })
+    }
+
+    pub fn max_artifact_bytes(self) -> usize {
+        self.max_artifact_bytes
+    }
+
+    pub fn max_unsat_proof_bytes(self) -> usize {
+        self.max_unsat_proof_bytes
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofEvidenceResourceAssessment {
+    pub version: u32,
+    pub artifact_bytes: usize,
+    pub mtbdd_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+}
+
+#[derive(Debug)]
+pub struct GovernedAdmittedControllerProofEvidence {
+    pub resources: ControllerProofEvidenceResourceAssessment,
+    pub admitted: AdmittedControllerProofEvidence,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GovernedBoundPlantResultsSummary {
+    pub resources: ControllerPlantResourceAssessment,
+    pub verification: ControllerMtbddPlantBatchSummary,
+}
+
+impl AdmittedControllerProofEvidence {
+    pub fn evidence_sha256(&self) -> [u8; 32] {
+        self.evidence_sha256
+    }
+
+    pub fn summary(&self) -> &ControllerMtbddSummary {
+        &self.summary
+    }
+
+    pub fn relevant_inputs(&self) -> &[usize] {
+        &self.controller.relevant_inputs
+    }
+
+    pub fn observed_outputs(&self) -> &[usize] {
+        &self.controller.observed_outputs
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ControllerDirectPlantBatchArtifact {
     pub version: u32,
@@ -111,6 +221,34 @@ pub struct ControllerMtbddPlantPortfolioArtifact {
     pub relevant_inputs: Vec<usize>,
     pub observed_outputs: Vec<usize>,
     pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerProofMtbddPlantPortfolioBackend {
+    ProofMtbdd,
+    DirectExact,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPlantPortfolioArtifact {
+    pub version: u32,
+    pub backend: ControllerProofMtbddPlantPortfolioBackend,
+    pub reason: ControllerMtbddPlantSelectionReason,
+    pub relevant_inputs: Vec<usize>,
+    pub observed_outputs: Vec<usize>,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPlantPortfolioSummary {
+    pub backend: ControllerProofMtbddPlantPortfolioBackend,
+    pub reason: ControllerMtbddPlantSelectionReason,
+    pub members: Vec<ControllerPlantResult>,
+    pub safe: usize,
+    pub unsafe_count: usize,
+    pub reachable_product_states: usize,
+    pub explored_transitions: usize,
+    pub assignments_checked: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -217,6 +355,91 @@ pub struct ControllerPlantResourceAssessment {
 pub struct GovernedControllerMtbddPlantPortfolioSummary {
     pub resources: ControllerPlantResourceAssessment,
     pub verification: ControllerMtbddPlantPortfolioSummary,
+}
+
+/// Caller-selected limits for proof-carrying MTBDD verification.
+///
+/// The ordinary controller/plant envelope governs the batch and composition
+/// workload. The additional bounds govern the equivalence artifact and its
+/// embedded UNSAT proof before proof checking begins.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddResourceEnvelope {
+    composition: ControllerPlantResourceEnvelope,
+    max_equivalence_artifact_bytes: usize,
+    max_unsat_proof_bytes: usize,
+}
+
+impl ControllerProofMtbddResourceEnvelope {
+    pub fn new(
+        composition: ControllerPlantResourceEnvelope,
+        max_equivalence_artifact_bytes: usize,
+        max_unsat_proof_bytes: usize,
+    ) -> Result<Self, ControllerPlantArtifactError> {
+        if max_equivalence_artifact_bytes == 0
+            || max_equivalence_artifact_bytes
+                > crate::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES
+            || max_unsat_proof_bytes == 0
+            || max_unsat_proof_bytes > crate::unsat_proof::MAX_UNSAT_PROOF_BYTES
+        {
+            return Err(reject(
+                "proof-carrying controller MTBDD resource envelope is outside static limits",
+            ));
+        }
+        Ok(Self {
+            composition,
+            max_equivalence_artifact_bytes,
+            max_unsat_proof_bytes,
+        })
+    }
+
+    pub fn composition(self) -> ControllerPlantResourceEnvelope {
+        self.composition
+    }
+
+    pub fn max_equivalence_artifact_bytes(self) -> usize {
+        self.max_equivalence_artifact_bytes
+    }
+
+    pub fn max_unsat_proof_bytes(self) -> usize {
+        self.max_unsat_proof_bytes
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddResourceAssessment {
+    pub version: u32,
+    pub artifact_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GovernedControllerProofMtbddPlantSummary {
+    pub resources: ControllerProofMtbddResourceAssessment,
+    pub verification: ControllerMtbddPlantBatchSummary,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ControllerProofMtbddPortfolioResourceAssessment {
+    pub version: u32,
+    pub backend: ControllerProofMtbddPlantPortfolioBackend,
+    pub artifact_bytes: usize,
+    pub equivalence_artifact_bytes: usize,
+    pub unsat_proof_bytes: usize,
+    pub members: usize,
+    pub maximum_member_horizon: usize,
+    pub maximum_product_states: usize,
+    pub transition_evaluation_bound: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GovernedControllerProofMtbddPortfolioSummary {
+    pub resources: ControllerProofMtbddPortfolioResourceAssessment,
+    pub verification: ControllerProofMtbddPlantPortfolioSummary,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1037,6 +1260,538 @@ pub fn verify_controller_proof_mtbdd_plant_artifact(
     })
 }
 
+/// Produce controller-local proof evidence without embedding any plant result.
+pub fn produce_controller_proof_evidence_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller: &ControllerMtbddArtifact,
+) -> Result<ControllerProofEvidenceArtifact, ControllerPlantArtifactError> {
+    let proof = produce_controller_mtbdd_equivalence_proof(
+        controller_model,
+        controller_source_sha256,
+        controller,
+    )
+    .map_err(|error| reject(error.to_string()))?;
+    verify_proof_carrying_mtbdd_for_composition(
+        controller_model,
+        controller_source_sha256,
+        controller,
+        &proof,
+    )
+    .map_err(|error| reject(error.to_string()))?;
+    Ok(ControllerProofEvidenceArtifact {
+        version: CONTROLLER_PROOF_EVIDENCE_VERSION,
+        controller_mtbdd: encode_controller_mtbdd(controller)
+            .map_err(|error| reject(error.to_string()))?,
+        equivalence_proof: encode_controller_mtbdd_equivalence_proof(&proof)
+            .map_err(|error| reject(error.to_string()))?,
+    })
+}
+
+/// Encode one canonical, content-addressable controller evidence object.
+pub fn encode_controller_proof_evidence_artifact(
+    artifact: &ControllerProofEvidenceArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if artifact.version != CONTROLLER_PROOF_EVIDENCE_VERSION {
+        return Err(reject("controller proof evidence version mismatch"));
+    }
+    decode_controller_mtbdd(&artifact.controller_mtbdd)
+        .map_err(|error| reject(error.to_string()))?;
+    decode_controller_mtbdd_equivalence_proof(&artifact.equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(CONTROLLER_PROOF_EVIDENCE_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.extend_from_slice(
+        &narrow(artifact.controller_mtbdd.len(), "controller MTBDD length")?.to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.controller_mtbdd);
+    bytes.extend_from_slice(
+        &narrow(
+            artifact.equivalence_proof.len(),
+            "controller equivalence proof length",
+        )?
+        .to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.equivalence_proof);
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject("controller proof evidence exceeds byte limit"));
+    }
+    Ok(bytes)
+}
+
+/// Decode a controller evidence object without trusting its internal payloads.
+pub fn decode_controller_proof_evidence_artifact(
+    bytes: &[u8],
+) -> Result<ControllerProofEvidenceArtifact, ControllerPlantArtifactError> {
+    if bytes.len() < 8 + 4 + 4 + 4 + 32 || bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject("controller proof evidence size is invalid"));
+    }
+    let (payload, integrity) = bytes.split_at(bytes.len() - 32);
+    if Sha256::digest(payload).as_slice() != integrity {
+        return Err(reject("controller proof evidence integrity mismatch"));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, 8)? != CONTROLLER_PROOF_EVIDENCE_MAGIC {
+        return Err(reject("controller proof evidence magic mismatch"));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != CONTROLLER_PROOF_EVIDENCE_VERSION {
+        return Err(reject("controller proof evidence version mismatch"));
+    }
+    let mtbdd_len = read_u32(payload, &mut cursor)? as usize;
+    let controller_mtbdd = take(payload, &mut cursor, mtbdd_len)?.to_vec();
+    decode_controller_mtbdd(&controller_mtbdd).map_err(|error| reject(error.to_string()))?;
+    let proof_len = read_u32(payload, &mut cursor)? as usize;
+    let equivalence_proof = take(payload, &mut cursor, proof_len)?.to_vec();
+    decode_controller_mtbdd_equivalence_proof(&equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    if cursor != payload.len() {
+        return Err(reject("controller proof evidence has trailing bytes"));
+    }
+    Ok(ControllerProofEvidenceArtifact {
+        version,
+        controller_mtbdd,
+        equivalence_proof,
+    })
+}
+
+fn put_artifact_member(
+    bytes: &mut Vec<u8>,
+    member: &ControllerPlantArtifactMember,
+) -> Result<(), ControllerPlantArtifactError> {
+    bytes.extend_from_slice(&member.plant_source_sha256);
+    put_vec(bytes, &member.wiring.controller_sensor_inputs)?;
+    put_vec(bytes, &member.wiring.controller_action_outputs)?;
+    put_vec(bytes, &member.wiring.plant_sensor_outputs)?;
+    put_vec(bytes, &member.wiring.plant_action_inputs)?;
+    for (value, field) in [
+        (member.initial_controller_state, "initial controller state"),
+        (member.initial_plant_state, "initial plant state"),
+        (member.bad_plant_output, "bad plant output"),
+        (member.horizon, "member horizon"),
+    ] {
+        bytes.extend_from_slice(&narrow(value, field)?.to_le_bytes());
+    }
+    put_result(bytes, &member.result)
+}
+
+fn read_artifact_member(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<ControllerPlantArtifactMember, ControllerPlantArtifactError> {
+    let plant_source_sha256 = take(bytes, cursor, 32)?
+        .try_into()
+        .map_err(|_| reject("plant digest decode failed"))?;
+    let wiring = ControllerPlantWiring {
+        controller_sensor_inputs: read_vec(bytes, cursor)?,
+        controller_action_outputs: read_vec(bytes, cursor)?,
+        plant_sensor_outputs: read_vec(bytes, cursor)?,
+        plant_action_inputs: read_vec(bytes, cursor)?,
+    };
+    let initial_controller_state = read_u32(bytes, cursor)? as usize;
+    let initial_plant_state = read_u32(bytes, cursor)? as usize;
+    let bad_plant_output = read_u32(bytes, cursor)? as usize;
+    let horizon = read_u32(bytes, cursor)? as usize;
+    let result = read_result(bytes, cursor)?;
+    Ok(ControllerPlantArtifactMember {
+        plant_source_sha256,
+        wiring,
+        initial_controller_state,
+        initial_plant_state,
+        bad_plant_output,
+        horizon,
+        result,
+    })
+}
+
+/// Produce plant-local results bound to canonical controller evidence bytes.
+pub fn produce_bound_plant_results_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller_evidence_bytes: &[u8],
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<BoundPlantResultsArtifact, ControllerPlantArtifactError> {
+    let admitted = admit_controller_proof_evidence(
+        controller_model,
+        controller_source_sha256,
+        controller_evidence_bytes,
+    )?;
+    produce_bound_plant_results_with_admitted_controller(&admitted, members)
+}
+
+/// Produce replaceable plant results after admitting controller evidence once.
+pub fn produce_bound_plant_results_with_admitted_controller(
+    admitted: &AdmittedControllerProofEvidence,
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<BoundPlantResultsArtifact, ControllerPlantArtifactError> {
+    if members.is_empty() || members.len() > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
+        return Err(reject("bound plant result member count is outside limit"));
+    }
+    let verified = reuse_verified_controller_mtbdd(&admitted.controller, admitted.summary.clone());
+    let members = members
+        .iter()
+        .map(|member| {
+            let result = compose_verified_mtbdd_plant(
+                &verified,
+                member.plant,
+                member.wiring,
+                member.initial_controller_state,
+                member.initial_plant_state,
+                member.bad_plant_output,
+                member.horizon,
+            )
+            .map_err(|error| reject(error.to_string()))?;
+            Ok(ControllerPlantArtifactMember {
+                plant_source_sha256: member.plant_source_sha256,
+                wiring: member.wiring.clone(),
+                initial_controller_state: member.initial_controller_state,
+                initial_plant_state: member.initial_plant_state,
+                bad_plant_output: member.bad_plant_output,
+                horizon: member.horizon,
+                result,
+            })
+        })
+        .collect::<Result<Vec<_>, ControllerPlantArtifactError>>()?;
+    Ok(BoundPlantResultsArtifact {
+        version: BOUND_PLANT_RESULTS_VERSION,
+        controller_evidence_sha256: admitted.evidence_sha256,
+        members,
+    })
+}
+
+pub fn encode_bound_plant_results_artifact(
+    artifact: &BoundPlantResultsArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if artifact.version != BOUND_PLANT_RESULTS_VERSION
+        || artifact.members.is_empty()
+        || artifact.members.len() > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+    {
+        return Err(reject("bound plant result dimensions are invalid"));
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(BOUND_PLANT_RESULTS_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.extend_from_slice(&artifact.controller_evidence_sha256);
+    bytes.push(artifact.members.len() as u8);
+    for member in &artifact.members {
+        put_artifact_member(&mut bytes, member)?;
+    }
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject("bound plant result artifact exceeds byte limit"));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_bound_plant_results_artifact(
+    bytes: &[u8],
+) -> Result<BoundPlantResultsArtifact, ControllerPlantArtifactError> {
+    if bytes.len() < 8 + 4 + 32 + 1 + 32 || bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject("bound plant result artifact size is invalid"));
+    }
+    let (payload, integrity) = bytes.split_at(bytes.len() - 32);
+    if Sha256::digest(payload).as_slice() != integrity {
+        return Err(reject("bound plant result artifact integrity mismatch"));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, 8)? != BOUND_PLANT_RESULTS_MAGIC {
+        return Err(reject("bound plant result artifact magic mismatch"));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != BOUND_PLANT_RESULTS_VERSION {
+        return Err(reject("bound plant result artifact version mismatch"));
+    }
+    let controller_evidence_sha256 = take(payload, &mut cursor, 32)?
+        .try_into()
+        .map_err(|_| reject("controller evidence digest decode failed"))?;
+    let member_count = read_u8(payload, &mut cursor)? as usize;
+    if member_count == 0 || member_count > MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS {
+        return Err(reject("bound plant result member count is outside limit"));
+    }
+    let mut members = Vec::with_capacity(member_count);
+    for _ in 0..member_count {
+        members.push(read_artifact_member(payload, &mut cursor)?);
+    }
+    if cursor != payload.len() {
+        return Err(reject("bound plant result artifact has trailing bytes"));
+    }
+    Ok(BoundPlantResultsArtifact {
+        version,
+        controller_evidence_sha256,
+        members,
+    })
+}
+
+/// Check controller evidence once and return a non-forgeable process-local capability.
+pub fn admit_controller_proof_evidence(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller_evidence_bytes: &[u8],
+) -> Result<AdmittedControllerProofEvidence, ControllerPlantArtifactError> {
+    let evidence = decode_controller_proof_evidence_artifact(controller_evidence_bytes)?;
+    let controller = decode_controller_mtbdd(&evidence.controller_mtbdd)
+        .map_err(|error| reject(error.to_string()))?;
+    let proof = decode_controller_mtbdd_equivalence_proof(&evidence.equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    let summary = verify_proof_carrying_mtbdd_for_composition(
+        controller_model,
+        controller_source_sha256,
+        &controller,
+        &proof,
+    )
+    .map_err(|error| reject(error.to_string()))?
+    .summary()
+    .clone();
+    Ok(AdmittedControllerProofEvidence {
+        evidence_sha256: Sha256::digest(controller_evidence_bytes).into(),
+        controller,
+        summary,
+    })
+}
+
+/// Preflight controller evidence byte and embedded proof limits without
+/// checking the proof or admitting a trusted controller capability.
+pub fn assess_controller_proof_evidence_resources(
+    controller_evidence_bytes: &[u8],
+    envelope: ControllerProofEvidenceResourceEnvelope,
+) -> Result<ControllerProofEvidenceResourceAssessment, ControllerPlantArtifactError> {
+    if controller_evidence_bytes.len() > envelope.max_artifact_bytes {
+        return Err(reject(
+            "controller proof evidence resource artifact-byte limit exceeded",
+        ));
+    }
+    let evidence = decode_controller_proof_evidence_artifact(controller_evidence_bytes)?;
+    let proof = decode_controller_mtbdd_equivalence_proof(&evidence.equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    if proof.proof.len() > envelope.max_unsat_proof_bytes {
+        return Err(reject(
+            "controller proof evidence resource UNSAT-proof limit exceeded",
+        ));
+    }
+    Ok(ControllerProofEvidenceResourceAssessment {
+        version: CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION,
+        artifact_bytes: controller_evidence_bytes.len(),
+        mtbdd_bytes: evidence.controller_mtbdd.len(),
+        equivalence_artifact_bytes: evidence.equivalence_proof.len(),
+        unsat_proof_bytes: proof.proof.len(),
+    })
+}
+
+/// Admit controller evidence only after it fits every caller-selected proof
+/// resource limit.
+pub fn admit_controller_proof_evidence_with_resources(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller_evidence_bytes: &[u8],
+    envelope: ControllerProofEvidenceResourceEnvelope,
+) -> Result<GovernedAdmittedControllerProofEvidence, ControllerPlantArtifactError> {
+    let resources =
+        assess_controller_proof_evidence_resources(controller_evidence_bytes, envelope)?;
+    let admitted = admit_controller_proof_evidence(
+        controller_model,
+        controller_source_sha256,
+        controller_evidence_bytes,
+    )?;
+    Ok(GovernedAdmittedControllerProofEvidence {
+        resources,
+        admitted,
+    })
+}
+
+/// Conservatively preflight a replaceable plant batch before semantic replay.
+pub fn assess_bound_plant_results_resources(
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    plant_results_bytes: &[u8],
+    envelope: ControllerPlantResourceEnvelope,
+) -> Result<ControllerPlantResourceAssessment, ControllerPlantArtifactError> {
+    if plant_results_bytes.len() > envelope.max_artifact_bytes {
+        return Err(reject(
+            "bound plant result resource artifact-byte limit exceeded",
+        ));
+    }
+    if members.is_empty() || members.len() > envelope.max_members {
+        return Err(reject("bound plant result resource member limit exceeded"));
+    }
+    let artifact = decode_bound_plant_results_artifact(plant_results_bytes)?;
+    if members.len() != artifact.members.len() {
+        return Err(reject("bound plant result resource member count mismatch"));
+    }
+    let controller_states = bounded_state_count(controller_model.latches.len())?;
+    let mut maximum_member_horizon = 0usize;
+    let mut maximum_product_states = 0usize;
+    let mut transition_evaluation_bound = 0usize;
+    for (member, claimed) in members.iter().zip(&artifact.members) {
+        if member.plant_source_sha256 != claimed.plant_source_sha256
+            || member.wiring != &claimed.wiring
+            || member.initial_controller_state != claimed.initial_controller_state
+            || member.initial_plant_state != claimed.initial_plant_state
+            || member.bad_plant_output != claimed.bad_plant_output
+            || member.horizon != claimed.horizon
+        {
+            return Err(reject("bound plant result resource obligation mismatch"));
+        }
+        if member.horizon > envelope.max_member_horizon {
+            return Err(reject("bound plant result resource horizon limit exceeded"));
+        }
+        maximum_member_horizon = maximum_member_horizon.max(member.horizon);
+        let plant_states = bounded_state_count(member.plant.latches.len())?;
+        let product_states = controller_states
+            .checked_mul(plant_states)
+            .ok_or_else(|| reject("bound plant result product-state bound overflow"))?;
+        if product_states > envelope.max_product_states_per_member {
+            return Err(reject(
+                "bound plant result resource product-state limit exceeded",
+            ));
+        }
+        maximum_product_states = maximum_product_states.max(product_states);
+        let external_inputs = member
+            .plant
+            .inputs
+            .len()
+            .checked_sub(member.wiring.plant_action_inputs.len())
+            .ok_or_else(|| reject("bound plant result resource wiring is invalid"))?;
+        let external_patterns = 1usize
+            .checked_shl(
+                u32::try_from(external_inputs)
+                    .map_err(|_| reject("bound plant result input width exceeds range"))?,
+            )
+            .ok_or_else(|| reject("bound plant result input width exceeds range"))?;
+        let member_bound = product_states
+            .checked_mul(member.horizon.saturating_add(1))
+            .and_then(|value| value.checked_mul(external_patterns))
+            .ok_or_else(|| reject("bound plant result transition bound overflow"))?;
+        transition_evaluation_bound = transition_evaluation_bound
+            .checked_add(member_bound)
+            .ok_or_else(|| reject("bound plant result transition bound overflow"))?;
+        if transition_evaluation_bound > envelope.max_transition_evaluations {
+            return Err(reject(
+                "bound plant result resource transition limit exceeded",
+            ));
+        }
+    }
+    Ok(ControllerPlantResourceAssessment {
+        version: CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+        backend: ControllerMtbddPlantPortfolioBackend::Mtbdd,
+        artifact_bytes: plant_results_bytes.len(),
+        members: members.len(),
+        maximum_member_horizon,
+        maximum_product_states,
+        transition_evaluation_bound,
+    })
+}
+
+/// Check a plant-result batch using previously admitted controller evidence.
+pub fn verify_bound_plant_results_with_admitted_controller(
+    admitted: &AdmittedControllerProofEvidence,
+    members: &[ControllerPlantArtifactInput<'_>],
+    plant_results_bytes: &[u8],
+) -> Result<ControllerMtbddPlantBatchSummary, ControllerPlantArtifactError> {
+    let results = decode_bound_plant_results_artifact(plant_results_bytes)?;
+    if results.controller_evidence_sha256 != admitted.evidence_sha256 {
+        return Err(reject("bound plant result controller evidence mismatch"));
+    }
+    if members.len() != results.members.len() {
+        return Err(reject("bound plant result source count mismatch"));
+    }
+    let verified = reuse_verified_controller_mtbdd(&admitted.controller, admitted.summary.clone());
+    let mut verified_members = Vec::with_capacity(members.len());
+    let mut safe = 0usize;
+    let mut unsafe_count = 0usize;
+    let mut reachable_product_states = 0usize;
+    let mut explored_transitions = 0usize;
+    for (member, claimed) in members.iter().zip(&results.members) {
+        if member.plant_source_sha256 != claimed.plant_source_sha256
+            || member.wiring != &claimed.wiring
+            || member.initial_controller_state != claimed.initial_controller_state
+            || member.initial_plant_state != claimed.initial_plant_state
+            || member.bad_plant_output != claimed.bad_plant_output
+            || member.horizon != claimed.horizon
+        {
+            return Err(reject("bound plant result obligation mismatch"));
+        }
+        let result = compose_verified_mtbdd_plant(
+            &verified,
+            member.plant,
+            member.wiring,
+            member.initial_controller_state,
+            member.initial_plant_state,
+            member.bad_plant_output,
+            member.horizon,
+        )
+        .map_err(|error| reject(error.to_string()))?;
+        if result != claimed.result {
+            return Err(reject("bound plant result mismatch"));
+        }
+        match result.answer {
+            ControllerPlantAnswer::Safe => safe += 1,
+            ControllerPlantAnswer::Unsafe => unsafe_count += 1,
+        }
+        reachable_product_states = reachable_product_states
+            .checked_add(result.reachable_product_states)
+            .ok_or_else(|| reject("bound plant reachable count overflow"))?;
+        explored_transitions = explored_transitions
+            .checked_add(result.explored_transitions)
+            .ok_or_else(|| reject("bound plant transition count overflow"))?;
+        verified_members.push(result);
+    }
+    Ok(ControllerMtbddPlantBatchSummary {
+        members: verified_members,
+        safe,
+        unsafe_count,
+        mtbdd_nodes: verified.summary().nodes,
+        mtbdd_terminals: verified.summary().terminals,
+        assignments_checked: verified.summary().assignments_checked,
+        reachable_product_states,
+        explored_transitions,
+    })
+}
+
+/// Verify a replaceable plant batch only after every caller-selected
+/// composition limit fits.
+pub fn verify_bound_plant_results_with_resources(
+    admitted: &AdmittedControllerProofEvidence,
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    plant_results_bytes: &[u8],
+    envelope: ControllerPlantResourceEnvelope,
+) -> Result<GovernedBoundPlantResultsSummary, ControllerPlantArtifactError> {
+    let resources = assess_bound_plant_results_resources(
+        controller_model,
+        members,
+        plant_results_bytes,
+        envelope,
+    )?;
+    let verification = verify_bound_plant_results_with_admitted_controller(
+        admitted,
+        members,
+        plant_results_bytes,
+    )?;
+    Ok(GovernedBoundPlantResultsSummary {
+        resources,
+        verification,
+    })
+}
+
+/// Stateless convenience path that admits controller evidence before checking
+/// every separately supplied plant result.
+pub fn verify_bound_plant_results_artifact(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    controller_evidence_bytes: &[u8],
+    members: &[ControllerPlantArtifactInput<'_>],
+    plant_results_bytes: &[u8],
+) -> Result<ControllerMtbddPlantBatchSummary, ControllerPlantArtifactError> {
+    let admitted = admit_controller_proof_evidence(
+        controller_model,
+        controller_source_sha256,
+        controller_evidence_bytes,
+    )?;
+    verify_bound_plant_results_with_admitted_controller(&admitted, members, plant_results_bytes)
+}
+
 pub fn produce_controller_direct_plant_artifact(
     controller_model: &AigerTransition,
     controller_source_sha256: [u8; 32],
@@ -1416,6 +2171,194 @@ pub fn produce_controller_mtbdd_plant_portfolio(
     })
 }
 
+fn proof_portfolio_backend_tag(backend: ControllerProofMtbddPlantPortfolioBackend) -> u8 {
+    match backend {
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => 0,
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact => 1,
+    }
+}
+
+pub fn encode_controller_proof_mtbdd_plant_portfolio(
+    artifact: &ControllerProofMtbddPlantPortfolioArtifact,
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    let route_is_valid = matches!(
+        (artifact.backend, artifact.reason),
+        (
+            ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd,
+            ControllerMtbddPlantSelectionReason::MtbddAdmitted
+        ) | (
+            ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+            ControllerMtbddPlantSelectionReason::BoundaryLimit
+                | ControllerMtbddPlantSelectionReason::TerminalLimit
+                | ControllerMtbddPlantSelectionReason::NodeLimit
+        )
+    );
+    if artifact.version != PROOF_MTBDD_PLANT_PORTFOLIO_VERSION
+        || !route_is_valid
+        || artifact.relevant_inputs.is_empty()
+        || artifact.observed_outputs.is_empty()
+        || artifact.payload.is_empty()
+    {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio dimensions are invalid",
+        ));
+    }
+    match artifact.backend {
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
+            decode_controller_proof_mtbdd_plant_artifact(&artifact.payload)?;
+        }
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact => {
+            decode_controller_direct_plant_artifact(&artifact.payload)?;
+        }
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(PROOF_PORTFOLIO_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.push(proof_portfolio_backend_tag(artifact.backend));
+    bytes.push(portfolio_reason_tag(artifact.reason));
+    put_vec(&mut bytes, &artifact.relevant_inputs)?;
+    put_vec(&mut bytes, &artifact.observed_outputs)?;
+    bytes.extend_from_slice(
+        &narrow(artifact.payload.len(), "proof portfolio payload length")?.to_le_bytes(),
+    );
+    bytes.extend_from_slice(&artifact.payload);
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio exceeds byte limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_controller_proof_mtbdd_plant_portfolio(
+    bytes: &[u8],
+) -> Result<ControllerProofMtbddPlantPortfolioArtifact, ControllerPlantArtifactError> {
+    if bytes.len() > MAX_CONTROLLER_PLANT_ARTIFACT_BYTES || bytes.len() < 52 {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio size is invalid",
+        ));
+    }
+    let payload_len = bytes.len() - 32;
+    let (payload, integrity) = bytes.split_at(payload_len);
+    if Sha256::digest(payload).as_slice() != integrity {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio integrity mismatch",
+        ));
+    }
+    let mut cursor = 0usize;
+    if take(payload, &mut cursor, PROOF_PORTFOLIO_MAGIC.len())? != PROOF_PORTFOLIO_MAGIC {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio magic mismatch",
+        ));
+    }
+    let version = read_u32(payload, &mut cursor)?;
+    if version != PROOF_MTBDD_PLANT_PORTFOLIO_VERSION {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio version mismatch",
+        ));
+    }
+    let backend = match read_u8(payload, &mut cursor)? {
+        0 => ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd,
+        1 => ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+        _ => {
+            return Err(reject(
+                "proof-carrying controller MTBDD portfolio backend is invalid",
+            ));
+        }
+    };
+    let reason = match read_u8(payload, &mut cursor)? {
+        0 => ControllerMtbddPlantSelectionReason::MtbddAdmitted,
+        1 => ControllerMtbddPlantSelectionReason::BoundaryLimit,
+        2 => ControllerMtbddPlantSelectionReason::TerminalLimit,
+        3 => ControllerMtbddPlantSelectionReason::NodeLimit,
+        _ => {
+            return Err(reject(
+                "proof-carrying controller MTBDD portfolio reason is invalid",
+            ));
+        }
+    };
+    let relevant_inputs = read_vec(payload, &mut cursor)?;
+    let observed_outputs = read_vec(payload, &mut cursor)?;
+    let embedded_len = read_u32(payload, &mut cursor)? as usize;
+    let embedded = take(payload, &mut cursor, embedded_len)?.to_vec();
+    if cursor != payload.len() {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio has trailing bytes",
+        ));
+    }
+    let artifact = ControllerProofMtbddPlantPortfolioArtifact {
+        version,
+        backend,
+        reason,
+        relevant_inputs,
+        observed_outputs,
+        payload: embedded,
+    };
+    encode_controller_proof_mtbdd_plant_portfolio(&artifact)?;
+    Ok(artifact)
+}
+
+/// Produce a proof-carrying MTBDD portfolio when the exact MTBDD boundary is
+/// statically admitted. Only a narrow MTBDD admission failure selects direct
+/// exact fallback; proof production and encoding failures propagate.
+pub fn produce_controller_proof_mtbdd_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+) -> Result<Vec<u8>, ControllerPlantArtifactError> {
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio member boundary mismatch",
+        ));
+    }
+    let (backend, reason, payload) = match produce_controller_mtbdd(
+        controller_model,
+        controller_source_sha256,
+        relevant_inputs,
+        observed_outputs,
+    ) {
+        Ok(mtbdd) => {
+            let artifact = produce_controller_proof_mtbdd_plant_artifact(
+                controller_model,
+                controller_source_sha256,
+                &mtbdd,
+                members,
+            )?;
+            (
+                ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd,
+                ControllerMtbddPlantSelectionReason::MtbddAdmitted,
+                encode_controller_proof_mtbdd_plant_artifact(&artifact)?,
+            )
+        }
+        Err(error) => {
+            let failure = error
+                .admission_failure()
+                .ok_or_else(|| reject(error.to_string()))?;
+            let artifact = produce_controller_direct_plant_artifact(
+                controller_model,
+                controller_source_sha256,
+                members,
+            )?;
+            (
+                ControllerProofMtbddPlantPortfolioBackend::DirectExact,
+                portfolio_reason_from_failure(failure),
+                encode_controller_direct_plant_artifact(&artifact)?,
+            )
+        }
+    };
+    encode_controller_proof_mtbdd_plant_portfolio(&ControllerProofMtbddPlantPortfolioArtifact {
+        version: PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+        backend,
+        reason,
+        relevant_inputs: relevant_inputs.to_vec(),
+        observed_outputs: observed_outputs.to_vec(),
+        payload,
+    })
+}
+
 fn portfolio_boundary_matches_members(
     relevant_inputs: &[usize],
     observed_outputs: &[usize],
@@ -1450,6 +2393,304 @@ fn bounded_state_count(latches: usize) -> Result<usize, ControllerPlantArtifactE
                 .map_err(|_| reject("controller-plant resource state width exceeds range"))?,
         )
         .ok_or_else(|| reject("controller-plant resource state width exceeds range"))
+}
+
+/// Conservatively preflight a proof-carrying MTBDD batch before checking its
+/// equivalence proof or replaying controller/plant reachability.
+pub fn assess_controller_proof_mtbdd_plant_resources(
+    controller_model: &AigerTransition,
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerProofMtbddResourceEnvelope,
+) -> Result<ControllerProofMtbddResourceAssessment, ControllerPlantArtifactError> {
+    let composition = envelope.composition;
+    if bytes.len() > composition.max_artifact_bytes {
+        return Err(reject(
+            "proof-carrying controller MTBDD resource artifact-byte limit exceeded",
+        ));
+    }
+    if members.is_empty() || members.len() > composition.max_members {
+        return Err(reject(
+            "proof-carrying controller MTBDD resource member limit exceeded",
+        ));
+    }
+    let outer = decode_controller_proof_mtbdd_plant_artifact(bytes)?;
+    if outer.equivalence_proof.len() > envelope.max_equivalence_artifact_bytes {
+        return Err(reject(
+            "proof-carrying controller MTBDD resource equivalence-artifact limit exceeded",
+        ));
+    }
+    let proof = decode_controller_mtbdd_equivalence_proof(&outer.equivalence_proof)
+        .map_err(|error| reject(error.to_string()))?;
+    if proof.proof.len() > envelope.max_unsat_proof_bytes {
+        return Err(reject(
+            "proof-carrying controller MTBDD resource UNSAT-proof limit exceeded",
+        ));
+    }
+    let inner = decode_controller_mtbdd_plant_artifact(&outer.controller_mtbdd_plant)?;
+    if members.len() != inner.members.len() {
+        return Err(reject(
+            "proof-carrying controller MTBDD resource member count mismatch",
+        ));
+    }
+    let controller_states = bounded_state_count(controller_model.latches.len())?;
+    let mut maximum_member_horizon = 0usize;
+    let mut maximum_product_states = 0usize;
+    let mut transition_evaluation_bound = 0usize;
+    for (member, claimed) in members.iter().zip(&inner.members) {
+        if member.plant_source_sha256 != claimed.plant_source_sha256
+            || member.wiring != &claimed.wiring
+            || member.initial_controller_state != claimed.initial_controller_state
+            || member.initial_plant_state != claimed.initial_plant_state
+            || member.bad_plant_output != claimed.bad_plant_output
+            || member.horizon != claimed.horizon
+        {
+            return Err(reject(
+                "proof-carrying controller MTBDD resource member mismatch",
+            ));
+        }
+        if member.horizon > composition.max_member_horizon {
+            return Err(reject(
+                "proof-carrying controller MTBDD resource horizon limit exceeded",
+            ));
+        }
+        maximum_member_horizon = maximum_member_horizon.max(member.horizon);
+        let plant_states = bounded_state_count(member.plant.latches.len())?;
+        let product_states = controller_states
+            .checked_mul(plant_states)
+            .ok_or_else(|| reject("proof-carrying product-state bound overflow"))?;
+        if product_states > composition.max_product_states_per_member {
+            return Err(reject(
+                "proof-carrying controller MTBDD resource product-state limit exceeded",
+            ));
+        }
+        maximum_product_states = maximum_product_states.max(product_states);
+        let external_inputs = member
+            .plant
+            .inputs
+            .len()
+            .checked_sub(member.wiring.plant_action_inputs.len())
+            .ok_or_else(|| reject("proof-carrying controller MTBDD resource wiring is invalid"))?;
+        let external_patterns = 1usize
+            .checked_shl(
+                u32::try_from(external_inputs)
+                    .map_err(|_| reject("proof-carrying input width exceeds range"))?,
+            )
+            .ok_or_else(|| reject("proof-carrying input width exceeds range"))?;
+        let member_bound = product_states
+            .checked_mul(member.horizon.saturating_add(1))
+            .and_then(|value| value.checked_mul(external_patterns))
+            .ok_or_else(|| reject("proof-carrying transition bound overflow"))?;
+        transition_evaluation_bound = transition_evaluation_bound
+            .checked_add(member_bound)
+            .ok_or_else(|| reject("proof-carrying transition bound overflow"))?;
+        if transition_evaluation_bound > composition.max_transition_evaluations {
+            return Err(reject(
+                "proof-carrying controller MTBDD resource transition limit exceeded",
+            ));
+        }
+    }
+    Ok(ControllerProofMtbddResourceAssessment {
+        version: CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+        artifact_bytes: bytes.len(),
+        equivalence_artifact_bytes: outer.equivalence_proof.len(),
+        unsat_proof_bytes: proof.proof.len(),
+        members: members.len(),
+        maximum_member_horizon,
+        maximum_product_states,
+        transition_evaluation_bound,
+    })
+}
+
+/// Verify a proof-carrying MTBDD batch only after every caller-selected proof
+/// and composition limit fits.
+pub fn verify_controller_proof_mtbdd_plant_artifact_with_resources(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerProofMtbddResourceEnvelope,
+) -> Result<GovernedControllerProofMtbddPlantSummary, ControllerPlantArtifactError> {
+    let resources =
+        assess_controller_proof_mtbdd_plant_resources(controller_model, members, bytes, envelope)?;
+    let plants = members
+        .iter()
+        .map(|member| (member.plant, member.plant_source_sha256))
+        .collect::<Vec<_>>();
+    let verification = verify_controller_proof_mtbdd_plant_artifact(
+        controller_model,
+        controller_source_sha256,
+        &plants,
+        bytes,
+    )?;
+    Ok(GovernedControllerProofMtbddPlantSummary {
+        resources,
+        verification,
+    })
+}
+
+pub fn assess_controller_proof_mtbdd_plant_portfolio_resources(
+    controller_model: &AigerTransition,
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerProofMtbddResourceEnvelope,
+) -> Result<ControllerProofMtbddPortfolioResourceAssessment, ControllerPlantArtifactError> {
+    let composition = envelope.composition;
+    if bytes.len() > composition.max_artifact_bytes {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource artifact-byte limit exceeded",
+        ));
+    }
+    if members.is_empty() || members.len() > composition.max_members {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource member limit exceeded",
+        ));
+    }
+    let portfolio = decode_controller_proof_mtbdd_plant_portfolio(bytes)?;
+    if portfolio.relevant_inputs != relevant_inputs
+        || portfolio.observed_outputs != observed_outputs
+    {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource boundary mismatch",
+        ));
+    }
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio resource member boundary mismatch",
+        ));
+    }
+    match portfolio.backend {
+        ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
+            let assessment = assess_controller_proof_mtbdd_plant_resources(
+                controller_model,
+                members,
+                &portfolio.payload,
+                envelope,
+            )?;
+            Ok(ControllerProofMtbddPortfolioResourceAssessment {
+                version: CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                backend: portfolio.backend,
+                artifact_bytes: bytes.len(),
+                equivalence_artifact_bytes: assessment.equivalence_artifact_bytes,
+                unsat_proof_bytes: assessment.unsat_proof_bytes,
+                members: assessment.members,
+                maximum_member_horizon: assessment.maximum_member_horizon,
+                maximum_product_states: assessment.maximum_product_states,
+                transition_evaluation_bound: assessment.transition_evaluation_bound,
+            })
+        }
+        ControllerProofMtbddPlantPortfolioBackend::DirectExact => {
+            let artifact = decode_controller_direct_plant_artifact(&portfolio.payload)?;
+            if !portfolio_members_match(&artifact.members, members) {
+                return Err(reject(
+                    "proof-carrying controller MTBDD portfolio resource member mismatch",
+                ));
+            }
+            let controller_states = bounded_state_count(controller_model.latches.len())?;
+            let omitted_controller_inputs = controller_model
+                .inputs
+                .len()
+                .checked_sub(relevant_inputs.len())
+                .ok_or_else(|| reject("proof-carrying portfolio resource boundary is invalid"))?;
+            let direct_multiplier = 1usize
+                .checked_shl(
+                    u32::try_from(omitted_controller_inputs)
+                        .map_err(|_| reject("proof-carrying input width exceeds range"))?,
+                )
+                .ok_or_else(|| reject("proof-carrying input width exceeds range"))?;
+            let mut maximum_member_horizon = 0usize;
+            let mut maximum_product_states = 0usize;
+            let mut transition_evaluation_bound = 0usize;
+            for member in members {
+                if member.horizon > composition.max_member_horizon {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio resource horizon limit exceeded",
+                    ));
+                }
+                maximum_member_horizon = maximum_member_horizon.max(member.horizon);
+                let plant_states = bounded_state_count(member.plant.latches.len())?;
+                let product_states = controller_states
+                    .checked_mul(plant_states)
+                    .ok_or_else(|| reject("proof-carrying product-state bound overflow"))?;
+                if product_states > composition.max_product_states_per_member {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio resource product-state limit exceeded",
+                    ));
+                }
+                maximum_product_states = maximum_product_states.max(product_states);
+                let external_inputs = member
+                    .plant
+                    .inputs
+                    .len()
+                    .checked_sub(member.wiring.plant_action_inputs.len())
+                    .ok_or_else(|| reject("proof-carrying portfolio resource wiring is invalid"))?;
+                let external_patterns = 1usize
+                    .checked_shl(
+                        u32::try_from(external_inputs)
+                            .map_err(|_| reject("proof-carrying input width exceeds range"))?,
+                    )
+                    .ok_or_else(|| reject("proof-carrying input width exceeds range"))?;
+                let member_bound = product_states
+                    .checked_mul(member.horizon.saturating_add(1))
+                    .and_then(|value| value.checked_mul(external_patterns))
+                    .and_then(|value| value.checked_mul(direct_multiplier))
+                    .ok_or_else(|| reject("proof-carrying transition bound overflow"))?;
+                transition_evaluation_bound = transition_evaluation_bound
+                    .checked_add(member_bound)
+                    .ok_or_else(|| reject("proof-carrying transition bound overflow"))?;
+                if transition_evaluation_bound > composition.max_transition_evaluations {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio resource transition limit exceeded",
+                    ));
+                }
+            }
+            Ok(ControllerProofMtbddPortfolioResourceAssessment {
+                version: CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                backend: portfolio.backend,
+                artifact_bytes: bytes.len(),
+                equivalence_artifact_bytes: 0,
+                unsat_proof_bytes: 0,
+                members: members.len(),
+                maximum_member_horizon,
+                maximum_product_states,
+                transition_evaluation_bound,
+            })
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+    envelope: ControllerProofMtbddResourceEnvelope,
+) -> Result<GovernedControllerProofMtbddPortfolioSummary, ControllerPlantArtifactError> {
+    let resources = assess_controller_proof_mtbdd_plant_portfolio_resources(
+        controller_model,
+        relevant_inputs,
+        observed_outputs,
+        members,
+        bytes,
+        envelope,
+    )?;
+    let verification = verify_controller_proof_mtbdd_plant_portfolio(
+        controller_model,
+        controller_source_sha256,
+        relevant_inputs,
+        observed_outputs,
+        members,
+        bytes,
+    )?;
+    Ok(GovernedControllerProofMtbddPortfolioSummary {
+        resources,
+        verification,
+    })
 }
 
 /// Conservatively preflight one portfolio verification against caller-selected
@@ -1662,5 +2903,110 @@ pub fn verify_controller_mtbdd_plant_portfolio(
         unsafe_count,
         reachable_product_states,
         explored_transitions,
+    })
+}
+
+pub fn verify_controller_proof_mtbdd_plant_portfolio(
+    controller_model: &AigerTransition,
+    controller_source_sha256: [u8; 32],
+    relevant_inputs: &[usize],
+    observed_outputs: &[usize],
+    members: &[ControllerPlantArtifactInput<'_>],
+    bytes: &[u8],
+) -> Result<ControllerProofMtbddPlantPortfolioSummary, ControllerPlantArtifactError> {
+    let artifact = decode_controller_proof_mtbdd_plant_portfolio(bytes)?;
+    if artifact.relevant_inputs != relevant_inputs || artifact.observed_outputs != observed_outputs
+    {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio boundary mismatch",
+        ));
+    }
+    if !portfolio_boundary_matches_members(relevant_inputs, observed_outputs, members) {
+        return Err(reject(
+            "proof-carrying controller MTBDD portfolio member boundary mismatch",
+        ));
+    }
+    let plants = members
+        .iter()
+        .map(|member| (member.plant, member.plant_source_sha256))
+        .collect::<Vec<_>>();
+    let (results, safe, unsafe_count, reachable, explored, assignments_checked) =
+        match artifact.backend {
+            ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => {
+                let outer = decode_controller_proof_mtbdd_plant_artifact(&artifact.payload)?;
+                let inner = decode_controller_mtbdd_plant_artifact(&outer.controller_mtbdd_plant)?;
+                if !portfolio_members_match(&inner.members, members) {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio member mismatch",
+                    ));
+                }
+                let summary = verify_controller_proof_mtbdd_plant_artifact(
+                    controller_model,
+                    controller_source_sha256,
+                    &plants,
+                    &artifact.payload,
+                )?;
+                (
+                    summary.members,
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                    summary.assignments_checked,
+                )
+            }
+            ControllerProofMtbddPlantPortfolioBackend::DirectExact => {
+                let expected_reason = match produce_controller_mtbdd(
+                    controller_model,
+                    controller_source_sha256,
+                    relevant_inputs,
+                    observed_outputs,
+                ) {
+                    Ok(_) => {
+                        return Err(reject(
+                            "proof-carrying controller MTBDD portfolio downgrade detected",
+                        ));
+                    }
+                    Err(error) => error
+                        .admission_failure()
+                        .map(portfolio_reason_from_failure)
+                        .ok_or_else(|| reject(error.to_string()))?,
+                };
+                if artifact.reason != expected_reason {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio reason mismatch",
+                    ));
+                }
+                let decoded = decode_controller_direct_plant_artifact(&artifact.payload)?;
+                if !portfolio_members_match(&decoded.members, members) {
+                    return Err(reject(
+                        "proof-carrying controller MTBDD portfolio member mismatch",
+                    ));
+                }
+                let summary = verify_controller_direct_plant_artifact(
+                    controller_model,
+                    controller_source_sha256,
+                    &plants,
+                    &artifact.payload,
+                )?;
+                (
+                    summary.members,
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                    0,
+                )
+            }
+        };
+    Ok(ControllerProofMtbddPlantPortfolioSummary {
+        backend: artifact.backend,
+        reason: artifact.reason,
+        members: results,
+        safe,
+        unsafe_count,
+        reachable_product_states: reachable,
+        explored_transitions: explored,
+        assignments_checked,
     })
 }

@@ -1,0 +1,6 @@
+schema_version,trial,revisions,properties_per_revision,total_queries,artifact_bytes,full_candidate_valuations,service_candidate_valuations,candidate_reduction_ratio,service_produced_sections,service_reused_sections,verification_reused_sections,full_produce_nanos,service_produce_nanos,produce_ratio,full_verify_nanos,service_verify_nanos,verify_ratio,artifacts_identical,before_safe,before_unsafe,after_safe,after_unsafe,status
+1,1,2,8,16,113264568,655424,81924,0.124994,3,29,31,2616812958,559547791,0.213828,1503995292,107399500,0.071409,true,7,1,5,3,measured
+1,2,2,8,16,113264568,655424,81924,0.124994,3,29,31,2653967167,769108208,0.289796,1529798500,109277667,0.071433,true,7,1,5,3,measured
+1,3,2,8,16,113264568,655424,81924,0.124994,3,29,31,2648765416,618827917,0.233629,1744097084,108467625,0.062191,true,7,1,5,3,measured
+1,4,2,8,16,113264568,655424,81924,0.124994,3,29,31,2625474167,549081291,0.209136,1509916084,106666500,0.070644,true,7,1,5,3,measured
+1,5,2,8,16,113264568,655424,81924,0.124994,3,29,31,2632955584,558707000,0.212198,1507151667,108301333,0.071858,true,7,1,5,3,measured

@@ -1,0 +1,2 @@
+schema_version,scope,safe_model_bytes,unsafe_model_bytes,models_identical,safe_witness_bytes,unsafe_trace_bytes,evidence_reusable,old_safe_verified,new_safe_verified,old_unsafe_verified,new_unsafe_verified,semantic_regenerated_bytes,status
+1,public-plic-two-revision-both-answer,177,1590,true,84,37,true,true,true,true,true,0,falsified

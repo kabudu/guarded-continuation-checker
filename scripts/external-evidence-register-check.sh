@@ -6,26 +6,41 @@ readonly MAX_BYTES=8388608
 readonly MAX_ROWS=10000
 
 usage() {
-  echo "usage: $0 REGISTER.csv | $0 --production-gate REGISTER.csv ATTESTATION.conf SOURCE_REPOSITORY" >&2
+  echo "usage: $0 REGISTER.csv | $0 --production-gate REGISTER.csv ATTESTATION.conf ALLOWED_SIGNERS SIGNATURE SOURCE_REPOSITORY" >&2
   exit 2
 }
 
 mode=validate
 if [[ $# -eq 1 ]]; then
   register=$1
-elif [[ $# -eq 4 && $1 == --production-gate ]]; then
+elif [[ $# -eq 6 && $1 == --production-gate ]]; then
   mode=production-gate
   register=$2
   attestation=$3
-  source_repository=$4
+  allowed_signers=$4
+  signature=$5
+  source_repository=$6
 else
   usage
 fi
 
-[[ -f "$register" && ! -L "$register" ]] || {
-  echo "evidence register must be a regular non-symlink file: $register" >&2
-  exit 2
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-external-evidence.XXXXXXXX")
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+snapshot_regular_file() {
+  local source=$1 destination=$2 label=$3
+  [[ -f "$source" && ! -L "$source" ]] || {
+    echo "$label must be a regular non-symlink file: $source" >&2
+    exit 2
+  }
+  cp -P -- "$source" "$destination"
+  [[ -f "$destination" && ! -L "$destination" ]] || {
+    echo "$label changed while it was being snapshotted" >&2
+    exit 2
+  }
 }
+
+snapshot_regular_file "$register" "$scratch/register.csv" "evidence register"
+register=$scratch/register.csv
 register_bytes=$(wc -c < "$register")
 (( register_bytes <= MAX_BYTES )) || {
   echo "evidence register exceeds $MAX_BYTES bytes" >&2
@@ -85,16 +100,26 @@ if [[ $mode == validate ]]; then
   exit 0
 fi
 
-[[ -f "$attestation" && ! -L "$attestation" ]] || {
-  echo "attestation must be a regular non-symlink file: $attestation" >&2
-  exit 2
-}
+snapshot_regular_file "$attestation" "$scratch/attestation.conf" "attestation"
+attestation=$scratch/attestation.conf
 attestation_bytes=$(wc -c < "$attestation")
 (( attestation_bytes <= 65536 )) || { echo "attestation exceeds 65536 bytes" >&2; exit 2; }
-if LC_ALL=C grep -q $'[\r,\"]' "$attestation"; then
-  echo "attestation contains a prohibited CR, comma, or quote" >&2
+if LC_ALL=C grep -q $'[\r,\"]' "$attestation" || \
+    ! LC_ALL=C tr -d '\000' <"$attestation" | cmp -s - "$attestation"; then
+  echo "attestation contains a prohibited CR, NUL, comma, or quote" >&2
   exit 2
 fi
+[[ $(tail -c 1 "$attestation" | wc -l) -eq 1 ]] || {
+  echo "attestation must end with LF" >&2
+  exit 2
+}
+snapshot_regular_file "$allowed_signers" "$scratch/allowed-signers" "allowed signers"
+allowed_signers=$scratch/allowed-signers
+snapshot_regular_file "$signature" "$scratch/attestation.sig" "signature"
+signature=$scratch/attestation.sig
+(( $(wc -c < "$allowed_signers") <= 65536 )) || { echo "allowed signers exceeds 65536 bytes" >&2; exit 2; }
+(( $(wc -c < "$signature") <= 65536 )) || { echo "signature exceeds 65536 bytes" >&2; exit 2; }
+command -v ssh-keygen >/dev/null 2>&1 || { echo "ssh-keygen is required" >&2; exit 2; }
 
 awk -F, '
   function fail(message) {
@@ -141,7 +166,7 @@ awk -F, '
     }
   }
   END {
-    required["protocol_version"] = "1"
+    required["protocol_version"] = "2"
     required["security_assessment_status"] = "PASS"
     required["technical_review_status"] = "PASS"
     required["operator_exercises_status"] = "PASS"
@@ -152,6 +177,7 @@ awk -F, '
     for (key in required) if (attest[key] != required[key]) fail("attestation requirement failed: " key)
     needed["target_tag"] = 1
     needed["target_commit"] = 1
+    needed["register_digest"] = 1
     needed["security_assessment_report"] = 1
     needed["technical_review_report"] = 1
     needed["independent_reviewer_id"] = 1
@@ -160,6 +186,7 @@ awk -F, '
     for (key in needed) if (!(key in attest) || attest[key] == "") fail("missing attestation key: " key)
     if (attest["target_tag"] !~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) fail("invalid attestation target_tag")
     if (length(attest["target_commit"]) != 40 || attest["target_commit"] !~ /^[0-9a-f]+$/) fail("invalid attestation target_commit")
+    if (!digest(attest["register_digest"])) fail("invalid attestation register_digest")
     if (attest["assessment_date"] !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) fail("invalid assessment_date")
     month = substr(attest["assessment_date"], 6, 2) + 0
     day = substr(attest["assessment_date"], 9, 2) + 0
@@ -167,7 +194,7 @@ awk -F, '
     if (!identifier(attest["independent_reviewer_id"])) fail("invalid independent_reviewer_id")
     if (!reference(attest["security_assessment_report"]) || !reference(attest["technical_review_report"]) || !reference(attest["independent_aggregate_report"])) fail("invalid attestation report reference")
     for (key in seen_key) key_count++
-    if (key_count != 15) fail("attestation must contain exactly 15 keys")
+    if (key_count != 16) fail("attestation must contain exactly 16 keys")
     if (security < 7) fail("fewer than 7 security-review cases")
     if (technical < 3) fail("fewer than 3 technical-review cases")
     if (partner < 30) fail("fewer than 30 partner-pilot configurations")
@@ -180,8 +207,26 @@ awk -F, '
   }
 ' "$attestation" "$register"
 
-[[ -d "$source_repository" ]] || {
-  echo "external production gate: source repository is not a directory" >&2
+if command -v sha256sum >/dev/null 2>&1; then
+  register_sha256=$(sha256sum "$register" | awk '{print $1}')
+else
+  register_sha256=$(shasum -a 256 "$register" | awk '{print $1}')
+fi
+attested_register_sha256=$(sed -n 's/^register_digest=sha256://p' "$attestation")
+if [[ "$attested_register_sha256" != "$register_sha256" ]]; then
+  echo "external production gate: evidence register digest mismatch" >&2
+  exit 1
+fi
+independent_reviewer_id=$(sed -n 's/^independent_reviewer_id=//p' "$attestation")
+if ! ssh-keygen -Y verify -q -f "$allowed_signers" \
+    -I "$independent_reviewer_id" -n gcc-production-evidence-v2 \
+    -s "$signature" < "$attestation"; then
+  echo "external production gate: independent reviewer signature verification failed" >&2
+  exit 1
+fi
+
+[[ -d "$source_repository" && ! -L "$source_repository" ]] || {
+  echo "external production gate: source repository is not a non-symlink directory" >&2
   exit 1
 }
 target_tag=$(sed -n 's/^target_tag=//p' "$attestation")

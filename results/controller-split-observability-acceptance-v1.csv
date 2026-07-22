@@ -1,0 +1,6 @@
+schema_version,job,outcome,batches,members,safe,unsafe,controller_admissions,manifest_loads,plant_artifact_reads,resource_assessments,batch_verifications,buffered_result_rows,prepared_batches,prepared_members,controller_evidence_bytes,total_plant_artifact_bytes,total_transition_bound,phase_contract,status
+1,public-washing-two-batch,verified,2,2,0,2,1,5,4,4,2,3,2,2,248889,841,4325376,v1-structural-only,accepted
+1,public-washing-door,verified,1,1,0,1,1,3,2,2,1,2,1,1,248889,365,2162688,v1-structural-only,accepted
+1,public-washing-lock,verified,1,1,0,1,1,3,2,2,1,2,1,1,248889,476,2162688,v1-structural-only,accepted
+1,controller-budget-control,refused,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,no-partial-metrics,accepted
+1,aggregate,summary,4,4,0,4,3,11,8,8,4,7,4,4,746667,1682,8650752,3-measured-1-refused,accepted

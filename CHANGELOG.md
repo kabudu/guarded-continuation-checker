@@ -2,6 +2,333 @@
 
 ## Unreleased
 
+## 0.29.0 - 2026-07-22
+
+- Bound the crates.io source payload to the executable and library sources,
+  licence and user-facing READMEs. Add a 64-file and 768 KiB compressed package
+  gate that excludes CI, corpora, retained results, research examples, scripts
+  and tests from the installed product payload. Permit Cargo's platform-specific
+  empty auto-target directories while continuing to reject files and symlinks
+  below them, and root-anchor every include pattern so nested research READMEs
+  cannot enter through basename matching.
+
+- Freeze production support profile v1 around firmware CLI contract v2 and RTL
+  artifact schema v4. Add a build feature and machine-readable capability that
+  make the profiled binary reject every research command before dispatch. Add
+  an executable boundary gate covering all eight supported commands, six named
+  research surfaces, the legacy experiment path, empty invocation and invalid
+  capability arguments. Research builds and later additive releases remain
+  available without expanding the first production compatibility promise.
+  Add a distinct deterministic Linux production-candidate archive that builds
+  the profiled binary, ships only supported contracts, binds the profile into
+  capabilities, build information and provenance, verifies without execution,
+  and is rebuilt twice in required CI. The existing broad evaluation archive
+  remains reproducible under its original profile.
+- Add a QatQ exact compression probe over the 14,164,144-byte OpenTitan
+  revision batch. The best exact f32-word mapping produces 76,385 bytes and
+  restores the canonical batch bit-for-bit. It is 34.5845% smaller than the
+  strongest measured zstd configuration, but remains 8.59 times larger than
+  the maintained model-plus-evidence package. Keep QatQ outside the first
+  production support profile pending an opaque-word API, resource evidence,
+  portability and hostile-container testing.
+- Add revision batch certificate v1, a canonical content-addressed format that
+  stores each validated local relation once and binds heterogeneous queries to
+  shared sections. Add typed production, canonical encoding and decoding,
+  independent source replay, exact standalone extraction, strict limits and a
+  hostile mutation matrix. On 16 OpenTitan queries the batch removes
+  99,100,424 duplicated bytes, preserves all answers and extracts every
+  standalone certificate byte-identically. At 14,164,144 bytes it remains
+  about 1,593 times larger than the qualified maintained model-plus-evidence
+  route, so this closes a container defect without establishing novelty.
+- Add an eight-property repeated-query workload over the authentic OpenTitan
+  `prim_count` semantic revision. Reusing two validated relations preserves
+  byte-identical artifacts and all 16 answers while reducing local candidate
+  work by 87.5006%; median internal production and verification ratios are
+  0.213828 and 0.071409. An equivalent qualified Yosys, rIC3, and Certifaiger
+  baseline agrees on every answer using 8,892 total model and evidence bytes,
+  versus 113,264,568 embedded GCC certificate bytes. This falsifies a broad
+  artifact advantage and motivates a content-addressed shared-section batch
+  certificate instead of another standalone-certificate optimisation.
+- Add a typed repeated-query API that accepts two previously validated local
+  relation artifacts, produces no new local sections, reuses both sections
+  byte-for-byte, and regenerates only the query-specific bounded answer. Its
+  verifier performs no local decoding or semantic replay after validation,
+  recomposes the validated relations, and checks the final proof. Add exact
+  from-scratch artifact identity, SAFE result, work accounting, and right-side
+  substitution rejection tests.
+- Add the first authentic stable-interface revision cohort with a reachable
+  semantic change. OpenTitan `prim_count` moves from SAFE to UNSAFE at reset
+  across commit `369cffc8`; GCC reuses and reverifies the unchanged environment
+  relation while recomputing the changed counter relation. Add deterministic
+  model and certificate manifests, a separate Yosys plus Z3 oracle, strict
+  source provenance, and hosted reproduction. Add a pinned Slang-enabled Yosys
+  gate that compiles both untouched upstream revisions and proves each selected
+  specialisation sequentially equivalent. This gate exposed and corrected the
+  initial fixture's collapsed comparison-valid enum. A maintained
+  equivalent-scope rIC3 and Certifaiger baseline proves the old SAFE witness and
+  new UNSAFE trace, rejects both cross-revision evidence swaps, and regenerates
+  only a 13-byte trace. This qualifies the functional distinction but
+  falsifies a GCC certificate-byte advantage on the tiny cohort.
+- Add bounded search certificate v5 for one through eight word-valued semantic
+  inputs with at most eight total bits. Bind source input widths, reconstruct
+  fields in input-node and least-significant-bit order, preserve optional exact
+  constraints and assumption dead ends, and charge work against the complete
+  packed valuation space. Add an independent exhaustive oracle across widths
+  two through eight, downstream API and no-clobber CLI coverage, targeted
+  hostile controls, and deterministic resource refusal. Retain v1 through v4
+  selection and encoding. Add a pinned Caliptra watchdog workflow with a live
+  two-bit timeout field, exact nonzero constraint, SAFE and UNSAFE results,
+  deterministic evidence, seven hostile controls, and maintained Yosys plus Z3
+  agreement. Hosted amd64 run 29874337371 reproduces all evidence and passes the
+  complete platform and release-build matrix.
+- Add bounded search certificate v4 for exact BTOR2 environment constraints.
+  Bind ordered input and constraint nodes, quantify only admissible all-frame
+  valuations, preserve assumption dead ends, and charge governance against the
+  full valuation space. Recheck every UNSAFE transition and terminal valuation
+  against the bound all-frame constraints, with forbidden-transition and
+  forbidden-terminal regression cases. Add a constrained public Roa Logic PLIC
+  workflow with deterministic source and evidence, hostile constraint controls, an
+  independent exhaustive oracle, and maintained Yosys plus Z3 agreement through
+  horizon 16. Retain v1, Caliptra v2, and PLIC v3 results byte-for-byte. This is
+  product-workflow evidence, not an algorithmic novelty claim.
+- Add bounded search certificate v3 for two through eight independent one-bit
+  semantic inputs. Bind ordered input nodes, complete packed transition
+  valuations, and a distinct UNSAFE terminal valuation; enumerate every
+  valuation when independently reconstructing SAFE layers; account for the
+  valuation count before search; and reject reorder, high-bit, downgrade,
+  truncation, and resource attacks. Preserve retained v1 and v2 evidence
+  byte-for-byte. Add a revision-pinned unmodified Roa Logic PLIC gateway whose
+  five-input wrapper properties move from governed refusal to exact SAFE
+  answers through horizon 16, agree with maintained Yosys plus Z3, and retain a
+  horizon-64 node-step refusal. This is public-RTL interoperability and exact
+  fallback evidence, not an algorithmic novelty claim.
+- Add bounded search certificate v2 for bad properties that depend on the
+  current one-bit semantic input. Preserve transition inputs separately from
+  the terminal-frame input, check both terminal values over every complete SAFE
+  layer, reject cross-version reinterpretation and downgrade, and continue to
+  produce retained byte-identical v1 evidence for state-only properties. Turn
+  the pinned Caliptra word-level horizons 2, 3, and 5 from governed refusals
+  into independently verified exact answers while retaining the billion-frame
+  resource refusal. This closes a Yosys asynchronous-reset interoperability
+  gap; it is conventional explicit search, not an algorithmic novelty claim.
+- Add the pinned OpenTitan AON dual-timer structural probe for invariant-chained
+  predicate composition. Enable wake-up and watchdog paths together, retain a
+  deterministic three-state BTOR2 model, implement standard reduction-or word
+  semantics in the strict parser, and validate wake-up, bark, and bite boundary
+  frames through the public semantic API. Make the post-reset zero-initial state
+  assumption explicit in the Yosys builder and provenance. Predeclare exact
+  multi-recurrence acceptance criteria and retain predicate-set v2's complete-
+  query refusal as the negative control. This identifies the next mechanism; it
+  does not yet implement invariant chaining or establish novelty.
+- Add an exact BTOR2 predicate-set portfolio with canonical v1 and v2
+  source-bound certificates. Version 2 shares one recurrence claim across 2 to
+  64 ordered SAFE and UNSAFE predicates, carries exact earliest bad frames, and
+  reconstructs compact `advance_prefix` witnesses instead of embedding separate
+  traces. Reproduce routing during independent verification, reject omitted,
+  reordered, substituted, or downgraded queries, and preserve unsupported
+  complete queries through the existing exact per-property portfolio without
+  partial answers. Continue to decode and verify retained v1 artifacts under
+  their original selection rules. Add stable Rust and no-clobber CLI surfaces,
+  bounded canonical decoding, mutation tests, and a pinned OpenTitan
+  bark-plus-bite workflow. The retained public RTL cases reduce certificate
+  bytes by 41.8% for joint SAFE, 30.9% for mixed UNSAFE and SAFE, and 41.1% for
+  the billion-frame scale case. A 384-byte shared artifact also gives exact bad
+  frames 5 and 9 at a billion-frame horizon where the separate bounded search
+  baseline refuses both queries. Add official BTOR2Tools parsing, maintained
+  Bitwuzla endpoints, deterministic Yosys regeneration, nine hostile controls,
+  and explicit prior-art boundaries. This is a narrow candidate contribution,
+  not an established novelty or production claim.
+- Accept standard Yosys BTOR2 observation statements and optional node symbols,
+  while exposing only inputs that reach transition, constraint, or bad-property
+  semantics. Admit exact Boolean identity wrappers in the independently checked
+  word-region route and reject an XOR near-neighbour to exact fallback. Add a
+  source-bound, production-tagged OpenTitan AON watchdog target with pinned
+  Yosys regeneration, deterministic SAFE and UNSAFE certificates, a
+  billion-frame compact proof, BTOR2Tools and Bitwuzla controls, public Rust API
+  coverage, five hostile controls, and retained self-service acceptance. This
+  closes a narrow public-RTL integration mechanism, not product validity,
+  production readiness, or scholarly novelty.
+- Add an additive governed split observability contract without changing the
+  existing strict resource capability or result rows. Report four versioned
+  phase durations and eleven checked structural work counters only after a
+  complete success. Add a bounded shell-free Rust client that strictly parses
+  and reconciles every counter, rejects hostile or overflowing helper output,
+  and preserves typed refusals plus whole-process metrics without returning a
+  partial observed result. After fixture setup, retain five observed-contract
+  invocations across discovery, three successful requests, four verified
+  batches, and a refusal that emits no partial metrics. Reproduce their
+  deterministic structural aggregate in ordinary Linux CI while excluding
+  host-dependent timings.
+  Add a separate allocation-observability v1 discovery, command, strict final
+  row, and typed Rust client without changing either existing observability v1
+  response. Count successful system-allocation, deallocation, and reallocation
+  events plus requested bytes across the policy-through-replay scope. Use an
+  opt-in concurrency barrier, fail closed on overflow or hostile summaries, and
+  emit no partial metrics on refusal. Exercise positive allocation evidence in
+  every successful retained observed request while keeping allocator-dependent
+  totals out of portable CSV evidence.
+  Add an integrity-preserving process-local semantic replay cache behind a new
+  additive discovery, command, strict result row, and typed Rust client. Require
+  complete manifest, source/model snapshot, result-digest, and resource
+  revalidation before lookup. Reconcile lookup, hit, miss, and entry counters,
+  reject hostile summaries, retain old commands on their uncached paths, and
+  exercise a deterministic duplicate-batch hit without changing the portable
+  structural CSV.
+- Add the first Rust API slice for governed proof-carrying controller MTBDD
+  verification. Bound the complete artifact, equivalence artifact, embedded
+  UNSAT proof, members, horizons, product states, and transition evaluations
+  before proof checking or semantic replay. Bind every ordered member and
+  preserve the existing independently checked proof path with zero exhaustive
+  controller assignments. Add canonical policy and capability contracts, a
+  governed verification command, seven stable refusal reasons, exit code 3
+  without a logical answer, strict response parsing, and a typed shell-free
+  process client. Add a canonical proof/direct portfolio whose fallback is
+  limited to the three structural MTBDD rejection classes. Reproduce the route
+  during verification, reject forced downgrade, preserve both answer classes,
+  and reject every retained outer-artifact mutation. Portfolio typed-process,
+  public-product, and compatibility gates remain open. Add versioned portfolio
+  capability, certification, verification, and governed-verification file
+  commands. The admitted proof route reports its structural decision, preserves
+  both answer classes and zero exhaustive assignments, and refuses a tight
+  proof budget before proof checking. Add a strict typed portfolio process
+  client and direct-route CLI acceptance with proof limits deliberately ignored
+  only when no proof is present. Add deterministic macOS/Linux acceptance for the six-property public
+  washing-controller proof route, exact fallback, two typed refusals, malformed
+  policy, and corrupt evidence. Hosted reproduction and compatibility remain
+  open. Freeze SHA-256 fingerprints for both routed v1 artifacts so a subsequent
+  tagged release can prove byte compatibility.
+  Bind standalone portfolio resource assessment to caller-supplied relevant
+  inputs, observed outputs, and member wiring before workload calculation.
+  Add canonical source-to-model provenance for the public controller and plant,
+  with exact-revision isolated Yosys regeneration, deterministic SHA-256
+  evidence, CI reproduction, and hostile manifest/model controls. Add a public
+  canonical attestation verifier and an attested governed-portfolio command
+  that binds the exact controller and distinct plant source/model subjects
+  before returning any answer. Expose the same fail-closed path through the
+  typed Rust client and exercise it in public acceptance. Bind the attestation
+  pass to source and model digests captured during query loading so concurrent
+  post-snapshot file replacement cannot substitute the verified semantics.
+  Make exact regeneration portable across compilers by checking the pinned
+  binary revision separately and using Yosys `--no-version` for deterministic
+  AIGER footers.
+  Bind the external production gate to the exact evidence-register digest and
+  require an OpenSSH signature from the attested independent reviewer under a
+  fixed namespace and caller-controlled allowed-signers policy. Add hostile
+  register substitution, attestation tampering, and untrusted-key controls.
+  Add bounded prior-art audit v1. Record the disconfirming FMCAD 2023 and FM
+  2026 compositional certificate results and relevant predicate-abstraction
+  patent records. Narrow the research target to reusable controller evidence
+  across independently changing plant contracts, with a required direct
+  composed-witness baseline before any novelty claim. Predeclare that baseline
+  against the FM 2026 construction, including four changing-plant fixtures,
+  exact incremental-rebuild accounting, independent Certifaiger validation,
+  hostile controls, and explicit falsification criteria. Record that no public
+  `aigmerge` implementation was present in the inspected upstream branches, so
+  ordinary per-property Certifaiger checking cannot stand in for composition.
+  Freeze the first four-plant comparison family with nominal, sensor-stuck,
+  actuator-delay, and persistent-disturbance semantics. Reproduce each model
+  byte-for-byte from source with pinned Yosys, independently replay all 24
+  horizon-32 answers and shortest traces, preserve two SAFE properties per
+  plant, and add source, model, and member-substitution hostile controls.
+  Add a safety-only FM 2026 Theorem 1 baseline implementation with a versioned
+  Rust API and CLI. Coalesce shared model mappings, preserve private variables,
+  union reset and transition functions, conjoin safety and constraints, and
+  deterministically hash-cons gates. Fail closed on bounded parsing, mapping
+  mismatches, liveness, comment mappings, truncation, symlinks, and output
+  collisions. Validate an immutable upstream witness self-composition with
+  qualified Certifaiger 10.2.0 and formally verified `lrat_isa`; retain its
+  exact hashes and add hosted amd64 reproduction. Distinct-property composition
+  and the changing-plant comparison remain open, so this establishes baseline
+  fidelity only and no novelty result.
+  Extend the bounded AIGER exporter with deterministic multi-property bad
+  sections and freeze paired single-property and shared two-property models for
+  all four changing plants. Generate eight separate SAFE witnesses with pinned
+  rIC3, independently validate each, compose each plant's two properties with
+  the FM 2026 baseline, and validate all four composed witnesses with
+  Certifaiger plus `lrat_isa`. The composed total is 9,665 bytes versus 19,164
+  bytes separately, a 49.57% reduction and a negative result for any broad GCC
+  evidence-size claim. Incremental plant-replacement cost remains the active
+  candidate distinction. Add canonical split artifacts for content-addressed
+  controller MTBDD equivalence evidence and separately replaceable plant
+  results. A typed admitted-controller capability checks the controller proof
+  once per process and permits later plant batches to reuse that verified state;
+  the stateless convenience path remains fail closed. Bind plant results to the
+  exact controller-evidence SHA-256 and reject stale evidence, source drift,
+  cross-plant substitution, mutation, and truncation. Real-family marginal-cost
+  measurement now replaces the third member of a four-plant package with a
+  fifth pinned-Yosys-attested actuator transport-lag revision. Bind the complete
+  ordered property, wiring, state, and horizon obligation and reject missing,
+  duplicated, reordered, mutated, truncated, or stale evidence. GCC transfers
+  4,160 marginal bytes versus 8,278 for the independently accepted FM 2026-style
+  composed-witness path, a 49.75% reduction, but its initial package is 8.71
+  times larger and breaks even only after 58 observed replacements. Hosted
+  replacement reproduction, controlled resource accounting, file and process
+  APIs, and resource-envelope integration remain open. Add the replacement
+  baseline and split-evidence measurement to the exact hosted amd64 evidence
+  workflow; a successful exact-head run is still required before treating the
+  cross-platform gate as closed. Add two-stage Rust resource governance for the
+  split route. Controller evidence and its embedded UNSAT proof are bounded
+  before proof checking and admission; replaceable plant artifacts, ordered
+  obligations, horizons, product states, and conservative transition work are
+  bounded before semantic replay. Exact inclusive boundaries pass and each
+  tighter byte, proof, horizon, state, or transition limit fails closed.
+  Add split-evidence CLI v1 with strict capability discovery, deterministic
+  controller-evidence and plant-result producers, exclusive output creation,
+  and one multi-batch verifier process. The verifier admits the controller proof
+  exactly once, rejects controller or boundary drift across batches, replays
+  every complete ordered obligation, emits per-batch timings and an aggregate,
+  and returns no aggregate on malformed, stale, mutated, or incomplete input.
+  Hosted amd64 run 29773273695 reproduces the arm64 split controller and
+  replacement artifact SHA-256 values, structural byte accounting, ten SAFE
+  results, unchanged-member identity, and all three independently checked
+  replacement-witness hashes. Timing observations differ by host and are not
+  represented as reproducible measurements. Add the typed shell-free
+  `ControllerSplitEvidenceTool` with strict contract discovery, bounded process
+  execution, deterministic artifact-production summaries, one-admission
+  multi-batch verification, stable invocation metrics, checked aggregation,
+  and complete cross-row reconciliation. Reject empty or excessive sets before
+  invocation and reject malformed, inconsistent, overflowing, or changed
+  helper responses without returning a verified summary. Add canonical
+  caller-selected split resource policy v1, discovery, governed multi-batch CLI,
+  and typed `ControllerSplitResourceTool`. Bound controller and proof evidence,
+  per-batch composition work, batch count, and complete-set bytes, members, and
+  conservative transitions. Preflight the entire request before replay, bind
+  manifest semantics and source/model/result snapshots across both passes,
+  buffer output until every batch succeeds, and return no logical answer or
+  verified row for eleven typed exit-code-3 refusal classes. Add deterministic
+  self-service acceptance over two independent public washing-controller plant
+  batches, three resource refusals, malformed-policy and corrupt-evidence
+  controls, stable structural aggregation, and frozen SHA-256 fingerprints for
+  both manifests plus controller and plant artifacts. Reproduce the retained
+  CSV in ordinary Linux CI without treating timing as portable evidence. Hosted
+  run 29776279270 passes the real governed CLI and typed-client integration at
+  exact commit `1227d50`. Hosted Linux run 29777543062 reproduces the retained
+  CSV on exact commit `e74828f` and passes every companion CI job.
+  Add a cross-platform whole-process resource harness that separately measures
+  controller certification, both independently replaceable plant-result
+  producers, and one-admission governed verification. Retain three Darwin arm64
+  trials with exact answer agreement, portable evidence bytes, wall time, and
+  peak RSS. Require ordinary Linux CI to exercise the same complete operation
+  set while treating timings and memory as architecture-labelled observations,
+  not reproducible values or routing inputs. Hosted run 29778509796 passes every
+  job at exact commit `1960cd3`; retain its three Linux x86_64 trials separately
+  with identical evidence sizes and answers.
+  Add an explicit compatibility and migration policy for the first production
+  line, including strict contract-version semantics, a minimum support window,
+  fail-closed unsupported-version behavior, immutable upgrade and rollback
+  rules, and registry SemVer expectations. Promote the deterministic split-v1
+  self-service fixture into an executable release-compatibility gate while
+  retaining the honest distinction between a candidate baseline and later-tag
+  compatibility history. Reconcile the readiness register with the already
+  implemented operations runbook and executable Linux qualification evidence.
+  Add bounded process-client metrics aggregation schema v1. Use checked totals,
+  a one-million-job cap, canonical operation and failure distributions, and
+  explicit process-group and memory-limit coverage without changing the
+  existing per-invocation metrics schema. Exercise the public API against real
+  split resource discovery, successful governed verification, and a typed
+  resource refusal, retaining all three jobs in the aggregate. Internal cache,
+  allocation, and phase-resource counters remain open.
+
 - Add experimental controller/plant verification resource envelope v1 through
   the public Rust API. Preflight artifact bytes, members, horizons, product
   states, external-input branches, and direct-backend controller evaluations

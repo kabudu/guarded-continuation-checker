@@ -1,0 +1,2 @@
+schema_version,scope,before_model_bytes,after_model_bytes,models_identical,before_safe_witness_bytes,after_unsafe_trace_bytes,cross_revision_evidence_reusable,before_safe_verified,after_unsafe_verified,before_evidence_rejected_by_after,after_evidence_rejected_by_before,revision_regenerated_bytes,status
+1,opentitan-prim-count-semantic-revision,252,252,false,192,13,false,true,true,true,true,13,qualified-no-gcc-byte-win

@@ -1,0 +1,13 @@
+controller_split_resource_policy_version=1
+max_controller_artifact_bytes=16777216
+max_unsat_proof_bytes=1048576
+max_batches=4
+max_plant_artifact_bytes_per_batch=16777216
+max_members_per_batch=64
+max_member_horizon=1024
+max_product_states_per_member=4096
+max_transition_evaluations_per_batch=250000000
+max_total_plant_artifact_bytes=67108864
+max_total_members=256
+max_total_transition_evaluations=1000000000
+status=complete

@@ -1,5 +1,9 @@
 # BTOR2 bounded search certificate v1
 
+Status: retained experimental format. Input-dependent bad properties use the
+additive [v2 format](BTOR2_BOUNDED_SEARCH_V2.md); v1 encoding and verification
+remain unchanged.
+
 This experimental layer answers an actual bounded reachability question:
 
 > Does any sequence of the admitted Boolean input make the selected bad

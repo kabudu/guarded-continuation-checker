@@ -1,0 +1,10 @@
+word_interface_version=2
+wire_count=1
+wire=right,13,2
+external_count=5
+external=right,2
+external=right,3
+external=right,4
+external=right,5
+external=right,6
+status=complete

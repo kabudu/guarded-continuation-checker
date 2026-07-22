@@ -64,6 +64,12 @@ website repository once its deployment lifecycle diverges. Automate link,
 accessibility, spelling, and build checks. Pin release links to GitHub and show
 the exact version wherever behaviour or schema is described.
 
+After the first production release passes every applicable gate, reuse the
+repository's canonical, accessible SVG architecture diagram on the website.
+Embed the same optimised asset in the project README so the platform boundary,
+CQ-SAT engine, verification path, proof artifacts, and integration paths cannot
+drift between the two surfaces.
+
 The first public version is ready only when:
 
 - the repository rename and redirects are verified;

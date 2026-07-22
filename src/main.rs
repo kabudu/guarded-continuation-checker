@@ -1,10 +1,27 @@
+#![cfg_attr(
+    feature = "production-firmware",
+    allow(
+        clippy::clone_on_copy,
+        clippy::collapsible_if,
+        clippy::manual_is_multiple_of,
+        clippy::needless_range_loop,
+        clippy::ptr_arg,
+        clippy::question_mark,
+        clippy::too_many_arguments,
+        clippy::type_complexity
+    )
+)]
+
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
-    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_motion, btor2_phase, btor2_region,
-    btor2_search, controller_mtbdd,
+    btor2, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain, btor2_motion,
+    btor2_phase, btor2_predicate_set, btor2_region, btor2_search, composed_witness,
+    controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
+    revision_local,
+    source_model_attestation::{self, SourceModelBindingInput},
     unsat_proof::{self, CnfClause as Clause},
 };
 use sha2::{Digest, Sha256};
@@ -26,6 +43,8 @@ use std::thread;
 use std::time::Instant;
 use varisat::{ExtendFormula, Lit, Solver, Var};
 
+mod observed_allocator;
+
 const RTL_ARTIFACT_SCHEMA_VERSION: usize = 4;
 const FIRMWARE_CLI_CONTRACT_VERSION: usize = 2;
 const AAG_INPUT_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
@@ -36,12 +55,26 @@ const BTOR2_COMPONENT_BATCH_MANIFEST_VERSION: u32 = 1;
 const BTOR2_COMPONENT_BATCH_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const CONTROLLER_MTBDD_CLI_VERSION: u32 = 1;
 const CONTROLLER_PROOF_MTBDD_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_RESOURCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_PHASE_METRICS_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_CACHE_OBSERVABILITY_CLI_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION: u32 = 1;
+const CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
 const CONTROLLER_PLANT_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_CLI_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_POLICY_VERSION: u32 = 1;
 const CONTROLLER_PLANT_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
+const CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION: u32 = 1;
+const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION: u32 = 1;
+const CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES: usize = 4096;
+const CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION: u32 = 1;
 const CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES: usize = 64 * 1024;
+const SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION: u32 = 1;
+const SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
 #[derive(Debug)]
 struct ComponentBatchManifestMember {
@@ -50,7 +83,7 @@ struct ComponentBatchManifestMember {
     horizon: u32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ControllerMtbddPlantManifestMember {
     plant_source_path: PathBuf,
     plant_aiger_path: PathBuf,
@@ -61,7 +94,7 @@ struct ControllerMtbddPlantManifestMember {
     horizon: usize,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ControllerMtbddPlantManifest {
     controller_source_path: PathBuf,
     controller_aiger_path: PathBuf,
@@ -70,9 +103,93 @@ struct ControllerMtbddPlantManifest {
     members: Vec<ControllerMtbddPlantManifestMember>,
 }
 
+#[derive(Debug)]
+struct SourceModelProvenanceMember {
+    source_path: PathBuf,
+    recipe_path: PathBuf,
+    model_path: PathBuf,
+}
+
+#[derive(Debug)]
+struct SourceModelProvenanceManifest {
+    tool: String,
+    tool_revision: String,
+    members: Vec<SourceModelProvenanceMember>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LoadedSourceModelSubject {
+    source_path: PathBuf,
+    model_path: PathBuf,
+    source_sha256: [u8; 32],
+    model_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LoadedSourceModelSnapshot {
+    subjects: Vec<LoadedSourceModelSubject>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ControllerPlantResourcePolicy {
     envelope: controller_plant_artifact::ControllerPlantResourceEnvelope,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ControllerProofMtbddResourcePolicy {
+    envelope: controller_plant_artifact::ControllerProofMtbddResourceEnvelope,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ControllerSplitResourcePolicy {
+    controller: controller_plant_artifact::ControllerProofEvidenceResourceEnvelope,
+    plant: controller_plant_artifact::ControllerPlantResourceEnvelope,
+    max_batches: usize,
+    max_total_plant_artifact_bytes: usize,
+    max_total_members: usize,
+    max_total_transition_evaluations: usize,
+}
+
+fn controller_split_resource_capability_line() -> String {
+    format!(
+        "controller_split_resource_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} controller_envelope_version={} plant_envelope_version={} controller_artifact_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_policy_bytes={CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES} max_controller_artifact_bytes={} max_unsat_proof_bytes={} max_plant_artifact_bytes={} max_batches={} max_members_per_batch={} max_horizon={} max_product_states={} refusal_exit=3 admission=once verification=unsat-miter exhaustive_replay=no accounting=conservative-static-per-batch-and-total timing_calibration=none result_on_refusal=none refusal_schema=split-reason-v1 unsupported=fail-closed",
+        controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_RESOURCE_ENVELOPE_VERSION,
+        controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+        controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+        controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+        guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+        guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+        guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+    )
+}
+
+fn controller_split_observability_capability_line() -> String {
+    format!(
+        "controller_split_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} base_cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} phases=policy-and-input,controller-admission,complete-set-preflight,semantic-replay counters=controller-admissions,manifest-loads,plant-artifact-reads,resource-assessments,batch-verifications,buffered-result-rows,prepared-batches,prepared-members,controller-evidence-bytes,total-plant-artifact-bytes,total-transition-evaluation-bound timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    )
+}
+
+fn controller_split_allocation_observability_capability_line() -> String {
+    format!(
+        "controller_split_allocation_observability_cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} base_observability_cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} allocator=system scope=policy-through-replay counters=allocation-calls,allocated-bytes,deallocation-calls,deallocated-bytes,reallocation-calls,reallocated-bytes overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    )
+}
+
+fn controller_split_cache_observability_capability_line() -> String {
+    format!(
+        "controller_split_cache_observability_cli_version={CONTROLLER_SPLIT_CACHE_OBSERVABILITY_CLI_VERSION} base_allocation_observability_cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} scope=semantic-replay key=manifest-snapshot,resource-assessment,result-sha256 counters=lookups,hits,misses,entries integrity_preflight=required overflow=fail-closed timing_calibration=none partial_metrics_on_failure=none result_on_refusal=none unsupported=fail-closed"
+    )
+}
+
+fn increment_controller_split_observation(counter: &mut usize, name: &str) -> Result<(), String> {
+    *counter = counter
+        .checked_add(1)
+        .ok_or_else(|| format!("controller split observability {name} count overflow"))?;
+    Ok(())
 }
 
 fn synthesis_memory_limit_kind() -> &'static str {
@@ -23263,6 +23380,24 @@ fn firmware_rtl_config_safety_gate(
 
 fn run_firmware_gate_cli(args: &[String]) -> Result<Option<bool>, String> {
     match args.first().map(String::as_str) {
+        Some("production-profile-version") => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker production-profile-version".to_string(),
+                );
+            }
+            #[cfg(feature = "production-firmware")]
+            {
+                println!(
+                    "production_support_profile=firmware-rtl-v1 firmware_cli_version={FIRMWARE_CLI_CONTRACT_VERSION} artifact_schema_version={RTL_ARTIFACT_SCHEMA_VERSION}"
+                );
+                Ok(Some(true))
+            }
+            #[cfg(not(feature = "production-firmware"))]
+            {
+                Err("this binary is not a production support-profile build".to_string())
+            }
+        }
         Some("firmware-cli-version") => {
             if args.len() != 1 {
                 return Err("usage: guarded-continuation-checker firmware-cli-version".to_string());
@@ -24773,6 +24908,251 @@ fn parse_component_batch_manifest(
     Ok(members)
 }
 
+fn parse_source_model_provenance_manifest(
+    manifest_path: &Path,
+) -> Result<SourceModelProvenanceManifest, String> {
+    use std::path::Component;
+
+    let bytes = read_bounded_regular_file(
+        manifest_path,
+        SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES,
+        "source-model provenance manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "source-model provenance manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "source-model provenance manifest must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("source-model provenance manifest expected {key}"))
+    };
+    let version = take("source_model_provenance_manifest_version")?;
+    if version != SOURCE_MODEL_PROVENANCE_MANIFEST_VERSION.to_string() {
+        return Err("unsupported source-model provenance manifest version".to_string());
+    }
+    let tool = take("tool")?;
+    if tool != "yosys" {
+        return Err("source-model provenance manifest tool is unsupported".to_string());
+    }
+    let tool_revision = take("tool_revision")?;
+    if tool_revision.len() != 40
+        || !tool_revision
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("source-model provenance manifest tool revision is invalid".to_string());
+    }
+    let count_text = take("member_count")?;
+    let count = count_text
+        .parse::<usize>()
+        .map_err(|_| "source-model provenance member count is invalid".to_string())?;
+    if count.to_string() != count_text
+        || count == 0
+        || count > source_model_attestation::MAX_ATTESTATION_MEMBERS
+    {
+        return Err("source-model provenance member count is outside limits".to_string());
+    }
+    let base = fs::canonicalize(manifest_path.parent().unwrap_or_else(|| Path::new(".")))
+        .map_err(|error| format!("resolve source-model provenance directory: {error}"))?;
+    let resolve = |workdir: &str, value: &str, label: &str| -> Result<PathBuf, String> {
+        if value.is_empty() || value.len() > 4096 || workdir.is_empty() || workdir.len() > 4096 {
+            return Err(format!(
+                "source-model provenance {label} path length is invalid"
+            ));
+        }
+        let workdir_path = Path::new(workdir);
+        let value_path = Path::new(value);
+        let workdir_valid = workdir == "."
+            || (!workdir_path.is_absolute()
+                && workdir_path
+                    .components()
+                    .all(|component| matches!(component, Component::Normal(_))));
+        if !workdir_valid
+            || value_path.is_absolute()
+            || value_path
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(format!(
+                "source-model provenance {label} path must be normalized and relative"
+            ));
+        }
+        let mut resolved = base.clone();
+        if workdir != "." {
+            resolved.push(workdir_path);
+        }
+        resolved.push(value_path);
+        let relative = resolved
+            .strip_prefix(&base)
+            .map_err(|_| format!("source-model provenance {label} escapes its directory"))?;
+        let mut checked = base.clone();
+        for component in relative.components() {
+            let Component::Normal(component) = component else {
+                return Err(format!("source-model provenance {label} path is invalid"));
+            };
+            checked.push(component);
+            let metadata = fs::symlink_metadata(&checked).map_err(|error| {
+                format!(
+                    "inspect source-model provenance {label} path {}: {error}",
+                    checked.display()
+                )
+            })?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "source-model provenance {label} path must not contain symlinks"
+                ));
+            }
+        }
+        Ok(checked)
+    };
+
+    let mut canonical = format!(
+        "source_model_provenance_manifest_version={version}\ntool={tool}\ntool_revision={tool_revision}\nmember_count={count_text}\n"
+    );
+    let mut members = Vec::with_capacity(count);
+    for _ in 0..count {
+        let workdir = take("workdir")?;
+        let source = take("source_path")?;
+        let recipe = take("recipe_path")?;
+        let model = take("model_path")?;
+        members.push(SourceModelProvenanceMember {
+            source_path: resolve(workdir, source, "source")?,
+            recipe_path: resolve(workdir, recipe, "recipe")?,
+            model_path: resolve(workdir, model, "model")?,
+        });
+        canonical.push_str(&format!(
+            "workdir={workdir}\nsource_path={source}\nrecipe_path={recipe}\nmodel_path={model}\n"
+        ));
+    }
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "source-model provenance manifest is incomplete or has trailing fields".to_string(),
+        );
+    }
+    canonical.push_str("status=complete\n");
+    if canonical != text {
+        return Err("source-model provenance manifest is not canonical".to_string());
+    }
+    Ok(SourceModelProvenanceManifest {
+        tool: tool.to_string(),
+        tool_revision: tool_revision.to_string(),
+        members,
+    })
+}
+
+fn verify_bound_source_model_provenance(
+    query: &ControllerMtbddPlantManifest,
+    loaded: &LoadedSourceModelSnapshot,
+    provenance_path: &Path,
+    evidence_path: &Path,
+) -> Result<source_model_attestation::SourceModelAttestationSummary, String> {
+    let provenance = parse_source_model_provenance_manifest(provenance_path)?;
+    let mut expected_pairs = vec![(
+        query.controller_source_path.clone(),
+        query.controller_aiger_path.clone(),
+    )];
+    for member in &query.members {
+        let pair = (
+            member.plant_source_path.clone(),
+            member.plant_aiger_path.clone(),
+        );
+        if !expected_pairs.contains(&pair) {
+            expected_pairs.push(pair);
+        }
+    }
+    if loaded.subjects.len() != expected_pairs.len()
+        || loaded
+            .subjects
+            .iter()
+            .zip(&expected_pairs)
+            .any(|(subject, expected)| {
+                subject.source_path != expected.0 || subject.model_path != expected.1
+            })
+        || provenance.members.len() != expected_pairs.len()
+        || provenance
+            .members
+            .iter()
+            .zip(&expected_pairs)
+            .any(|(member, expected)| {
+                member.source_path != expected.0 || member.model_path != expected.1
+            })
+    {
+        return Err(
+            "source-model provenance subjects do not exactly match the portfolio query".to_string(),
+        );
+    }
+
+    let mut owned = Vec::with_capacity(provenance.members.len());
+    for member in &provenance.members {
+        owned.push((
+            read_bounded_regular_file(
+                &member.source_path,
+                AAG_INPUT_LIMIT_BYTES as usize,
+                "attested source",
+            )?,
+            read_bounded_regular_file(
+                &member.recipe_path,
+                SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES,
+                "attested synthesis recipe",
+            )?,
+            read_bounded_regular_file(
+                &member.model_path,
+                AAG_INPUT_LIMIT_BYTES as usize,
+                "attested model",
+            )?,
+        ));
+    }
+    let inputs = owned
+        .iter()
+        .map(|(source, recipe, model)| SourceModelBindingInput {
+            source,
+            recipe,
+            model,
+        })
+        .collect::<Vec<_>>();
+    verify_loaded_source_model_snapshot(&owned, loaded)?;
+    let evidence = read_bounded_regular_file(
+        evidence_path,
+        source_model_attestation::MAX_ATTESTATION_BYTES,
+        "source-model attestation evidence",
+    )?;
+    let summary = source_model_attestation::verify_source_model_attestation(&evidence, &inputs)
+        .map_err(|error| error.to_string())?;
+    if summary.tool != provenance.tool || summary.tool_revision != provenance.tool_revision {
+        return Err(
+            "source-model attestation tool identity does not match its provenance manifest"
+                .to_string(),
+        );
+    }
+    Ok(summary)
+}
+
+fn verify_loaded_source_model_snapshot(
+    subjects: &[(Vec<u8>, Vec<u8>, Vec<u8>)],
+    loaded: &LoadedSourceModelSnapshot,
+) -> Result<(), String> {
+    if subjects.len() != loaded.subjects.len() {
+        return Err("source-model subject count changed after the query snapshot".to_string());
+    }
+    for (index, ((source, _, model), snapshot)) in subjects.iter().zip(&loaded.subjects).enumerate()
+    {
+        if <[u8; 32]>::from(Sha256::digest(source)) != snapshot.source_sha256
+            || <[u8; 32]>::from(Sha256::digest(model)) != snapshot.model_sha256
+        {
+            return Err(format!(
+                "source-model provenance subject {index} changed after the query snapshot"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn parse_controller_mtbdd_plant_manifest(
     manifest_path: &Path,
     max_controller_inputs: usize,
@@ -25033,6 +25413,224 @@ fn parse_controller_plant_resource_policy(
     Ok(ControllerPlantResourcePolicy { envelope })
 }
 
+fn parse_controller_proof_mtbdd_resource_policy(
+    path: &Path,
+) -> Result<ControllerProofMtbddResourcePolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES,
+        "controller proof MTBDD resource policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller proof MTBDD resource policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller proof MTBDD resource policy must be canonical LF text without NUL"
+                .to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller proof MTBDD resource policy expected {key}"))
+    };
+    let version = take("controller_proof_mtbdd_resource_policy_version")?;
+    if version != CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION.to_string() {
+        return Err("unsupported controller proof MTBDD resource policy version".to_string());
+    }
+    let parse = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller proof MTBDD resource policy {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!(
+                "controller proof MTBDD resource policy {label} is noncanonical"
+            ));
+        }
+        Ok(parsed)
+    };
+    let artifact_text = take("max_artifact_bytes")?;
+    let equivalence_text = take("max_equivalence_artifact_bytes")?;
+    let proof_text = take("max_unsat_proof_bytes")?;
+    let members_text = take("max_members")?;
+    let horizon_text = take("max_member_horizon")?;
+    let states_text = take("max_product_states_per_member")?;
+    let transitions_text = take("max_transition_evaluations")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller proof MTBDD resource policy is incomplete or has trailing fields"
+                .to_string(),
+        );
+    }
+    let canonical = format!(
+        "controller_proof_mtbdd_resource_policy_version={version}\nmax_artifact_bytes={artifact_text}\nmax_equivalence_artifact_bytes={equivalence_text}\nmax_unsat_proof_bytes={proof_text}\nmax_members={members_text}\nmax_member_horizon={horizon_text}\nmax_product_states_per_member={states_text}\nmax_transition_evaluations={transitions_text}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("controller proof MTBDD resource policy is not canonical".to_string());
+    }
+    let composition = controller_plant_artifact::ControllerPlantResourceEnvelope::new(
+        parse(artifact_text, "artifact bytes")?,
+        parse(members_text, "members")?,
+        parse(horizon_text, "member horizon")?,
+        parse(states_text, "product states")?,
+        parse(transitions_text, "transition evaluations")?,
+    )
+    .map_err(|error| error.to_string())?;
+    let envelope = controller_plant_artifact::ControllerProofMtbddResourceEnvelope::new(
+        composition,
+        parse(equivalence_text, "equivalence artifact bytes")?,
+        parse(proof_text, "UNSAT proof bytes")?,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(ControllerProofMtbddResourcePolicy { envelope })
+}
+
+fn parse_controller_split_resource_policy(
+    path: &Path,
+) -> Result<ControllerSplitResourcePolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        CONTROLLER_SPLIT_RESOURCE_POLICY_MAX_BYTES,
+        "controller split resource policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "controller split resource policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "controller split resource policy must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("controller split resource policy expected {key}"))
+    };
+    let version = take("controller_split_resource_policy_version")?;
+    if version != CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION.to_string() {
+        return Err("unsupported controller split resource policy version".to_string());
+    }
+    let parse = |value: &str, label: &str| -> Result<usize, String> {
+        let parsed = value
+            .parse::<usize>()
+            .map_err(|_| format!("controller split resource policy {label} is invalid"))?;
+        if parsed.to_string() != value {
+            return Err(format!(
+                "controller split resource policy {label} is noncanonical"
+            ));
+        }
+        Ok(parsed)
+    };
+    let controller_artifact_text = take("max_controller_artifact_bytes")?;
+    let proof_text = take("max_unsat_proof_bytes")?;
+    let batches_text = take("max_batches")?;
+    let plant_artifact_text = take("max_plant_artifact_bytes_per_batch")?;
+    let members_text = take("max_members_per_batch")?;
+    let horizon_text = take("max_member_horizon")?;
+    let states_text = take("max_product_states_per_member")?;
+    let transitions_text = take("max_transition_evaluations_per_batch")?;
+    let total_artifact_text = take("max_total_plant_artifact_bytes")?;
+    let total_members_text = take("max_total_members")?;
+    let total_transitions_text = take("max_total_transition_evaluations")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "controller split resource policy is incomplete or has trailing fields".to_string(),
+        );
+    }
+    let canonical = format!(
+        "controller_split_resource_policy_version={version}\nmax_controller_artifact_bytes={controller_artifact_text}\nmax_unsat_proof_bytes={proof_text}\nmax_batches={batches_text}\nmax_plant_artifact_bytes_per_batch={plant_artifact_text}\nmax_members_per_batch={members_text}\nmax_member_horizon={horizon_text}\nmax_product_states_per_member={states_text}\nmax_transition_evaluations_per_batch={transitions_text}\nmax_total_plant_artifact_bytes={total_artifact_text}\nmax_total_members={total_members_text}\nmax_total_transition_evaluations={total_transitions_text}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("controller split resource policy is not canonical".to_string());
+    }
+    let controller_artifact_bytes = parse(controller_artifact_text, "controller artifact bytes")?;
+    let proof_bytes = parse(proof_text, "UNSAT proof bytes")?;
+    let max_batches = parse(batches_text, "batches")?;
+    let plant_artifact_bytes = parse(plant_artifact_text, "plant artifact bytes")?;
+    let max_members = parse(members_text, "members")?;
+    let max_horizon = parse(horizon_text, "member horizon")?;
+    let max_states = parse(states_text, "product states")?;
+    let max_transitions = parse(transitions_text, "transition evaluations")?;
+    let max_total_plant_artifact_bytes = parse(total_artifact_text, "total plant artifact bytes")?;
+    let max_total_members = parse(total_members_text, "total members")?;
+    let max_total_transition_evaluations =
+        parse(total_transitions_text, "total transition evaluations")?;
+    if max_batches == 0
+        || max_batches > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+        || max_total_plant_artifact_bytes == 0
+        || max_total_members == 0
+        || max_total_transition_evaluations == 0
+        || plant_artifact_bytes
+            .checked_mul(max_batches)
+            .is_some_and(|maximum| max_total_plant_artifact_bytes > maximum)
+        || max_members
+            .checked_mul(max_batches)
+            .is_some_and(|maximum| max_total_members > maximum)
+        || max_transitions
+            .checked_mul(max_batches)
+            .is_some_and(|maximum| max_total_transition_evaluations > maximum)
+    {
+        return Err(
+            "controller split resource policy totals are outside static limits".to_string(),
+        );
+    }
+    let controller = controller_plant_artifact::ControllerProofEvidenceResourceEnvelope::new(
+        controller_artifact_bytes,
+        proof_bytes,
+    )
+    .map_err(|error| error.to_string())?;
+    let plant = controller_plant_artifact::ControllerPlantResourceEnvelope::new(
+        plant_artifact_bytes,
+        max_members,
+        max_horizon,
+        max_states,
+        max_transitions,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(ControllerSplitResourcePolicy {
+        controller,
+        plant,
+        max_batches,
+        max_total_plant_artifact_bytes,
+        max_total_members,
+        max_total_transition_evaluations,
+    })
+}
+
+fn controller_proof_mtbdd_resource_refusal(error: &str) -> Option<&'static str> {
+    if error.contains("resource artifact-byte limit exceeded")
+        || (error.starts_with("proof-carrying controller MTBDD governed artifact exceeds ")
+            && error.ends_with(" bytes"))
+        || (error.starts_with("proof-carrying controller MTBDD governed portfolio exceeds ")
+            && error.ends_with(" bytes"))
+    {
+        Some("artifact-bytes")
+    } else if error.contains("resource equivalence-artifact limit exceeded") {
+        Some("equivalence-artifact-bytes")
+    } else if error.contains("resource UNSAT-proof limit exceeded") {
+        Some("unsat-proof-bytes")
+    } else if error.contains("resource member limit exceeded") {
+        Some("members")
+    } else if error.contains("resource horizon limit exceeded") {
+        Some("horizon")
+    } else if error.contains("resource product-state limit exceeded") {
+        Some("product-states")
+    } else if error.contains("resource transition limit exceeded") {
+        Some("transition-evaluations")
+    } else {
+        None
+    }
+}
+
+fn classify_controller_proof_mtbdd_resource_error(error: String) -> String {
+    controller_proof_mtbdd_resource_refusal(&error).map_or(error, |reason| {
+        format!("controller-proof-mtbdd-resource refusal={reason} result=none")
+    })
+}
+
 fn controller_plant_resource_refusal(error: &str) -> Option<&'static str> {
     if error.contains("resource envelope artifact-byte limit exceeded")
         || (error.starts_with("controller plant governed portfolio exceeds ")
@@ -25058,12 +25656,47 @@ fn classify_controller_plant_resource_error(error: String) -> String {
     })
 }
 
+fn controller_split_resource_refusal(error: &str) -> Option<&'static str> {
+    if error.contains("controller proof evidence resource artifact-byte limit exceeded") {
+        Some("controller-artifact-bytes")
+    } else if error.contains("controller proof evidence resource UNSAT-proof limit exceeded") {
+        Some("unsat-proof-bytes")
+    } else if error == "controller split resource batch limit exceeded" {
+        Some("batches")
+    } else if error.contains("bound plant result resource artifact-byte limit exceeded") {
+        Some("plant-artifact-bytes")
+    } else if error.contains("bound plant result resource member limit exceeded") {
+        Some("members-per-batch")
+    } else if error.contains("bound plant result resource horizon limit exceeded") {
+        Some("horizon")
+    } else if error.contains("bound plant result resource product-state limit exceeded") {
+        Some("product-states")
+    } else if error.contains("bound plant result resource transition limit exceeded") {
+        Some("transitions-per-batch")
+    } else if error == "controller split resource total plant artifact-byte limit exceeded" {
+        Some("total-plant-artifact-bytes")
+    } else if error == "controller split resource total member limit exceeded" {
+        Some("total-members")
+    } else if error == "controller split resource total transition limit exceeded" {
+        Some("total-transition-evaluations")
+    } else {
+        None
+    }
+}
+
+fn classify_controller_split_resource_error(error: String) -> String {
+    controller_split_resource_refusal(&error).map_or(error, |reason| {
+        format!("controller-split-resource refusal={reason} result=none")
+    })
+}
+
 type LoadedControllerPlantManifest = (
     ControllerMtbddPlantManifest,
     AigerTransition,
     [u8; 32],
     Vec<AigerTransition>,
     Vec<[u8; 32]>,
+    LoadedSourceModelSnapshot,
 );
 
 fn load_controller_plant_manifest(
@@ -25086,6 +25719,12 @@ fn load_controller_plant_manifest(
     let controller = aiger_obligation::parse_ascii_aiger_transition(&controller_aiger)
         .map_err(|error| error.to_string())?;
     let controller_digest: [u8; 32] = Sha256::digest(&controller_source).into();
+    let mut source_model_subjects = vec![LoadedSourceModelSubject {
+        source_path: manifest.controller_source_path.clone(),
+        model_path: manifest.controller_aiger_path.clone(),
+        source_sha256: controller_digest,
+        model_sha256: Sha256::digest(&controller_aiger).into(),
+    }];
     let mut plant_digests = Vec::with_capacity(manifest.members.len());
     let mut plants = Vec::with_capacity(manifest.members.len());
     for member in &manifest.members {
@@ -25100,6 +25739,17 @@ fn load_controller_plant_manifest(
             "plant AIGER model",
         )?;
         plant_digests.push(<[u8; 32]>::from(Sha256::digest(&plant_source)));
+        if !source_model_subjects.iter().any(|subject| {
+            subject.source_path == member.plant_source_path
+                && subject.model_path == member.plant_aiger_path
+        }) {
+            source_model_subjects.push(LoadedSourceModelSubject {
+                source_path: member.plant_source_path.clone(),
+                model_path: member.plant_aiger_path.clone(),
+                source_sha256: Sha256::digest(&plant_source).into(),
+                model_sha256: Sha256::digest(&plant_aiger).into(),
+            });
+        }
         plants.push(
             aiger_obligation::parse_ascii_aiger_transition(&plant_aiger)
                 .map_err(|error| error.to_string())?,
@@ -25111,6 +25761,9 @@ fn load_controller_plant_manifest(
         controller_digest,
         plants,
         plant_digests,
+        LoadedSourceModelSnapshot {
+            subjects: source_model_subjects,
+        },
     ))
 }
 
@@ -25152,11 +25805,94 @@ fn write_new_certificate(output: &Path, encoded: &[u8]) -> Result<(), String> {
         .map_err(|error| format!("write certificate {}: {error}", output.display()))
 }
 
+fn parse_btor2_property_set(value: &str) -> Result<Vec<btor2::NodeId>, String> {
+    let properties = value
+        .split(',')
+        .map(|item| {
+            item.parse::<u64>()
+                .map_err(|_| "BAD_PROPERTIES must be comma-separated unsigned node identifiers")
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if properties.is_empty()
+        || properties.len() > btor2_predicate_set::MAX_PREDICATE_SET_MEMBERS
+        || !properties.windows(2).all(|pair| pair[0] < pair[1])
+    {
+        return Err(
+            "BAD_PROPERTIES must contain 1..=64 strictly increasing node identifiers".to_string(),
+        );
+    }
+    Ok(properties)
+}
+
+fn parse_revision_output_nodes(value: &str, label: &str) -> Result<Vec<btor2::NodeId>, String> {
+    let nodes = value
+        .split(',')
+        .map(|item| {
+            item.parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| format!("{label} must be comma-separated nonzero node identifiers"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if nodes.is_empty() || nodes.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(format!(
+            "{label} must be nonempty, unique, and strictly increasing"
+        ));
+    }
+    Ok(nodes)
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
     };
     match command {
+        "composed-witness-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker composed-witness-cli-version".to_string(),
+                );
+            }
+            println!(
+                "composed_witness_cli_version={} format=ascii-aiger-1.9 scope=safety baseline=fm-2026 max_witnesses={} max_input_bytes={} liveness=unsupported comment_mapping=unsupported unsupported=fail-closed",
+                composed_witness::COMPOSED_WITNESS_BASELINE_VERSION,
+                composed_witness::MAX_COMPOSED_WITNESSES,
+                composed_witness::MAX_COMPOSED_AIGER_BYTES,
+            );
+            Ok(true)
+        }
+        "compose-safety-witnesses-v1" => {
+            if args.len() < 5 || args.len() - 3 > composed_witness::MAX_COMPOSED_WITNESSES {
+                return Err("usage: guarded-continuation-checker compose-safety-witnesses-v1 MODEL.aag OUTPUT.aag WITNESS.aag WITNESS.aag [...]".to_string());
+            }
+            let model = read_bounded_regular_file(
+                Path::new(&args[1]),
+                composed_witness::MAX_COMPOSED_AIGER_BYTES,
+                "composed-witness model",
+            )?;
+            let witnesses = args[3..]
+                .iter()
+                .map(|path| {
+                    read_bounded_regular_file(
+                        Path::new(path),
+                        composed_witness::MAX_COMPOSED_AIGER_BYTES,
+                        "composed-witness member",
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let references = witnesses.iter().map(Vec::as_slice).collect::<Vec<_>>();
+            let encoded = composed_witness::compose_safety_witnesses_v1(&model, &references)
+                .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[2]), &encoded)?;
+            println!(
+                "composed-witness status=CREATED cli_version={} baseline=fm-2026 witnesses={} artifact_bytes={} output={}",
+                composed_witness::COMPOSED_WITNESS_BASELINE_VERSION,
+                references.len(),
+                encoded.len(),
+                Path::new(&args[2]).display(),
+            );
+            Ok(true)
+        }
         "controller-mtbdd-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -25204,6 +25940,652 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "controller-split-evidence-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-split-evidence-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_split_evidence_cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} controller_artifact_version={} plant_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} max_manifest_bytes={CONTROLLER_MTBDD_PLANT_MANIFEST_MAX_BYTES} max_artifact_bytes={} max_batches={} admission=once verification=unsat-miter exhaustive_replay=no source_binding=sha256 obligation_binding=complete-ordered unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+                controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+            );
+            Ok(true)
+        }
+        "controller-split-resource-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-split-resource-cli-version"
+                        .to_string(),
+                );
+            }
+            println!("{}", controller_split_resource_capability_line());
+            Ok(true)
+        }
+        "controller-split-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker controller-split-observability-cli-version".to_string());
+            }
+            println!("{}", controller_split_resource_capability_line());
+            println!("{}", controller_split_observability_capability_line());
+            Ok(true)
+        }
+        "controller-split-allocation-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker controller-split-allocation-observability-cli-version".to_string());
+            }
+            println!("{}", controller_split_resource_capability_line());
+            println!("{}", controller_split_observability_capability_line());
+            println!(
+                "{}",
+                controller_split_allocation_observability_capability_line()
+            );
+            Ok(true)
+        }
+        "controller-split-cache-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err("usage: guarded-continuation-checker controller-split-cache-observability-cli-version".to_string());
+            }
+            println!("{}", controller_split_resource_capability_line());
+            println!("{}", controller_split_observability_capability_line());
+            println!(
+                "{}",
+                controller_split_allocation_observability_capability_line()
+            );
+            println!("{}", controller_split_cache_observability_capability_line());
+            Ok(true)
+        }
+        "certify-controller-proof-evidence-v1" => {
+            if args.len() != 3 {
+                return Err("usage: guarded-continuation-checker certify-controller-proof-evidence-v1 MANIFEST.txt OUTPUT.controller-evidence".to_string());
+            }
+            let started = Instant::now();
+            let (manifest, controller, controller_digest, _plants, _plant_digests, _snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let mtbdd = controller_mtbdd::produce_controller_mtbdd(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+            )
+            .map_err(|error| error.to_string())?;
+            let artifact = controller_plant_artifact::produce_controller_proof_evidence_artifact(
+                &controller,
+                controller_digest,
+                &mtbdd,
+            )
+            .map_err(|error| error.to_string())?;
+            let encoded =
+                controller_plant_artifact::encode_controller_proof_evidence_artifact(&artifact)
+                    .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[2]), &encoded)?;
+            println!(
+                "controller-split-evidence status=CREATED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} artifact_version={} mtbdd_nodes={} mtbdd_terminals={} artifact_bytes={} elapsed_micros={} output={}",
+                controller_plant_artifact::CONTROLLER_PROOF_EVIDENCE_VERSION,
+                mtbdd.nodes.len(),
+                mtbdd.terminals.len(),
+                encoded.len(),
+                started.elapsed().as_micros(),
+                Path::new(&args[2]).display(),
+            );
+            Ok(true)
+        }
+        "certify-bound-plant-results-v1" => {
+            if args.len() != 4 {
+                return Err("usage: guarded-continuation-checker certify-bound-plant-results-v1 MANIFEST.txt INPUT.controller-evidence OUTPUT.plant-results".to_string());
+            }
+            let started = Instant::now();
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let evidence = read_bounded_regular_file(
+                Path::new(&args[2]),
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                "controller proof evidence",
+            )?;
+            let admitted = controller_plant_artifact::admit_controller_proof_evidence(
+                &controller,
+                controller_digest,
+                &evidence,
+            )
+            .map_err(|error| error.to_string())?;
+            if admitted.relevant_inputs() != manifest.relevant_inputs
+                || admitted.observed_outputs() != manifest.observed_outputs
+            {
+                return Err(
+                    "controller proof evidence does not match manifest boundary".to_string()
+                );
+            }
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact =
+                controller_plant_artifact::produce_bound_plant_results_with_admitted_controller(
+                    &admitted, &inputs,
+                )
+                .map_err(|error| error.to_string())?;
+            let encoded = controller_plant_artifact::encode_bound_plant_results_artifact(&artifact)
+                .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[3]), &encoded)?;
+            println!(
+                "controller-split-plant status=CREATED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} artifact_version={} members={} artifact_bytes={} elapsed_micros={} output={}",
+                controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                inputs.len(),
+                encoded.len(),
+                started.elapsed().as_micros(),
+                Path::new(&args[3]).display(),
+            );
+            Ok(true)
+        }
+        "verify-bound-plant-result-set-v1" => {
+            if args.len() < 4
+                || !(args.len() - 2).is_multiple_of(2)
+                || (args.len() - 2) / 2
+                    > controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS
+            {
+                return Err("usage: guarded-continuation-checker verify-bound-plant-result-set-v1 INPUT.controller-evidence MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]".to_string());
+            }
+            let started = Instant::now();
+            let evidence = read_bounded_regular_file(
+                Path::new(&args[1]),
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                "controller proof evidence",
+            )?;
+            let (_, admitted_controller, admitted_digest, _, _, _) =
+                load_controller_plant_manifest(
+                    Path::new(&args[2]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let admission_started = Instant::now();
+            let admitted = controller_plant_artifact::admit_controller_proof_evidence(
+                &admitted_controller,
+                admitted_digest,
+                &evidence,
+            )
+            .map_err(|error| error.to_string())?;
+            let admission_micros = admission_started.elapsed().as_micros();
+            let mut total_members = 0usize;
+            let mut total_safe = 0usize;
+            let mut total_unsafe = 0usize;
+            let mut total_reachable = 0usize;
+            let mut total_transitions = 0usize;
+            for (batch_index, pair) in args[2..].chunks_exact(2).enumerate() {
+                let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
+                    load_controller_plant_manifest(
+                        Path::new(&pair[0]),
+                        controller_mtbdd::MAX_MTBDD_INPUTS,
+                        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                    )?;
+                if controller != admitted_controller
+                    || controller_digest != admitted_digest
+                    || admitted.relevant_inputs() != manifest.relevant_inputs
+                    || admitted.observed_outputs() != manifest.observed_outputs
+                {
+                    return Err(format!(
+                        "controller split evidence batch {batch_index} does not match admitted controller"
+                    ));
+                }
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let encoded = read_bounded_regular_file(
+                    Path::new(&pair[1]),
+                    controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                    "bound plant results",
+                )?;
+                let batch_started = Instant::now();
+                let summary =
+                    controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
+                        &admitted, &inputs, &encoded,
+                    )
+                    .map_err(|error| error.to_string())?;
+                println!(
+                    "controller-split-batch index={batch_index} status=VERIFIED members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} verification_micros={}",
+                    summary.members.len(),
+                    summary.safe,
+                    summary.unsafe_count,
+                    summary.reachable_product_states,
+                    summary.explored_transitions,
+                    encoded.len(),
+                    batch_started.elapsed().as_micros(),
+                );
+                total_members = total_members
+                    .checked_add(summary.members.len())
+                    .ok_or_else(|| "controller split member count overflow".to_string())?;
+                total_safe = total_safe
+                    .checked_add(summary.safe)
+                    .ok_or_else(|| "controller split SAFE count overflow".to_string())?;
+                total_unsafe = total_unsafe
+                    .checked_add(summary.unsafe_count)
+                    .ok_or_else(|| "controller split UNSAFE count overflow".to_string())?;
+                total_reachable = total_reachable
+                    .checked_add(summary.reachable_product_states)
+                    .ok_or_else(|| "controller split reachable count overflow".to_string())?;
+                total_transitions = total_transitions
+                    .checked_add(summary.explored_transitions)
+                    .ok_or_else(|| "controller split transition count overflow".to_string())?;
+            }
+            println!(
+                "controller-split-set status=VERIFIED cli_version={CONTROLLER_SPLIT_EVIDENCE_CLI_VERSION} controller_admissions=1 batches={} members={total_members} safe={total_safe} unsafe={total_unsafe} reachable_product_states={total_reachable} explored_transitions={total_transitions} controller_evidence_bytes={} admission_micros={admission_micros} elapsed_micros={}",
+                (args.len() - 2) / 2,
+                evidence.len(),
+                started.elapsed().as_micros(),
+            );
+            Ok(true)
+        }
+        "verify-bound-plant-result-set-with-resources-v1"
+        | "verify-bound-plant-result-set-with-resources-observed-v1"
+        | "verify-bound-plant-result-set-with-resources-allocation-observed-v1"
+        | "verify-bound-plant-result-set-with-resources-cache-observed-v1" => {
+            if args.len() < 5 || !(args.len() - 3).is_multiple_of(2) {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {} INPUT.controller-evidence POLICY.txt MANIFEST.txt INPUT.plant-results [MANIFEST.txt INPUT.plant-results ...]",
+                    args[0]
+                ));
+            }
+            let emit_cache_observability =
+                args[0] == "verify-bound-plant-result-set-with-resources-cache-observed-v1";
+            let emit_allocation_observability = emit_cache_observability
+                || args[0] == "verify-bound-plant-result-set-with-resources-allocation-observed-v1";
+            let emit_observability = emit_allocation_observability
+                || args[0] == "verify-bound-plant-result-set-with-resources-observed-v1";
+            let allocation_observation = emit_allocation_observability
+                .then(observed_allocator::AllocationObservationGuard::start)
+                .transpose()?;
+            let started = Instant::now();
+            let mut manifest_loads = 0usize;
+            let mut plant_artifact_reads = 0usize;
+            let mut resource_assessments = 0usize;
+            let mut batch_verifications = 0usize;
+            let mut buffered_result_rows = 0usize;
+            let mut prepared_batch_count = 0usize;
+            let mut cache_lookups = 0usize;
+            let mut cache_hits = 0usize;
+            let mut cache_misses = 0usize;
+            let policy = parse_controller_split_resource_policy(Path::new(&args[2]))?;
+            let batch_count = (args.len() - 3) / 2;
+            if batch_count > policy.max_batches {
+                return Err(classify_controller_split_resource_error(
+                    "controller split resource batch limit exceeded".to_string(),
+                ));
+            }
+            let evidence = read_bounded_regular_file(
+                Path::new(&args[1]),
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                "controller proof evidence",
+            )?;
+            let (_, admitted_controller, admitted_digest, _, _, _) =
+                load_controller_plant_manifest(
+                    Path::new(&args[3]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            increment_controller_split_observation(&mut manifest_loads, "manifest-load")?;
+            let policy_and_input_micros = started.elapsed().as_micros();
+            let admission_started = Instant::now();
+            let governed_admission =
+                controller_plant_artifact::admit_controller_proof_evidence_with_resources(
+                    &admitted_controller,
+                    admitted_digest,
+                    &evidence,
+                    policy.controller,
+                )
+                .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+            let admission_micros = admission_started.elapsed().as_micros();
+            let mut total_plant_artifact_bytes = 0usize;
+            let mut total_members = 0usize;
+            let mut total_transition_bound = 0usize;
+            struct PreparedSplitBatch {
+                manifest: ControllerMtbddPlantManifest,
+                snapshot: LoadedSourceModelSnapshot,
+                resources: controller_plant_artifact::ControllerPlantResourceAssessment,
+                results_sha256: [u8; 32],
+            }
+            let mut prepared_batches = Vec::with_capacity(batch_count);
+            let preflight_started = Instant::now();
+            for (batch_index, pair) in args[3..].chunks_exact(2).enumerate() {
+                let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
+                    load_controller_plant_manifest(
+                        Path::new(&pair[0]),
+                        controller_mtbdd::MAX_MTBDD_INPUTS,
+                        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                    )?;
+                increment_controller_split_observation(&mut manifest_loads, "manifest-load")?;
+                if controller != admitted_controller
+                    || controller_digest != admitted_digest
+                    || governed_admission.admitted.relevant_inputs() != manifest.relevant_inputs
+                    || governed_admission.admitted.observed_outputs() != manifest.observed_outputs
+                {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} does not match admitted controller"
+                    ));
+                }
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let encoded = read_bounded_regular_file(
+                    Path::new(&pair[1]),
+                    controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                    "bound plant results",
+                )?;
+                increment_controller_split_observation(&mut plant_artifact_reads, "artifact-read")?;
+                let resources = controller_plant_artifact::assess_bound_plant_results_resources(
+                    &controller,
+                    &inputs,
+                    &encoded,
+                    policy.plant,
+                )
+                .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+                increment_controller_split_observation(
+                    &mut resource_assessments,
+                    "resource-assessment",
+                )?;
+                total_plant_artifact_bytes = total_plant_artifact_bytes
+                    .checked_add(resources.artifact_bytes)
+                    .ok_or_else(|| {
+                        classify_controller_split_resource_error(
+                            "controller split resource total plant artifact-byte limit exceeded"
+                                .to_string(),
+                        )
+                    })?;
+                total_members = total_members
+                    .checked_add(resources.members)
+                    .ok_or_else(|| {
+                        classify_controller_split_resource_error(
+                            "controller split resource total member limit exceeded".to_string(),
+                        )
+                    })?;
+                total_transition_bound = total_transition_bound
+                    .checked_add(resources.transition_evaluation_bound)
+                    .ok_or_else(|| {
+                        classify_controller_split_resource_error(
+                            "controller split resource total transition limit exceeded".to_string(),
+                        )
+                    })?;
+                if total_plant_artifact_bytes > policy.max_total_plant_artifact_bytes {
+                    return Err(classify_controller_split_resource_error(
+                        "controller split resource total plant artifact-byte limit exceeded"
+                            .to_string(),
+                    ));
+                }
+                if total_members > policy.max_total_members {
+                    return Err(classify_controller_split_resource_error(
+                        "controller split resource total member limit exceeded".to_string(),
+                    ));
+                }
+                if total_transition_bound > policy.max_total_transition_evaluations {
+                    return Err(classify_controller_split_resource_error(
+                        "controller split resource total transition limit exceeded".to_string(),
+                    ));
+                }
+                prepared_batches.push(PreparedSplitBatch {
+                    manifest,
+                    snapshot,
+                    resources,
+                    results_sha256: Sha256::digest(&encoded).into(),
+                });
+                increment_controller_split_observation(
+                    &mut prepared_batch_count,
+                    "prepared-batch",
+                )?;
+            }
+            let complete_set_preflight_micros = preflight_started.elapsed().as_micros();
+            let mut total_safe = 0usize;
+            let mut total_unsafe = 0usize;
+            let mut total_reachable = 0usize;
+            let mut total_explored = 0usize;
+            let mut verified_batches = Vec::with_capacity(batch_count);
+            struct VerifiedSplitCacheEntry {
+                manifest: ControllerMtbddPlantManifest,
+                snapshot: LoadedSourceModelSnapshot,
+                resources: controller_plant_artifact::ControllerPlantResourceAssessment,
+                results_sha256: [u8; 32],
+                verification: controller_plant_artifact::ControllerMtbddPlantBatchSummary,
+            }
+            let cache_capacity = if emit_cache_observability {
+                batch_count
+            } else {
+                0
+            };
+            let mut verification_cache =
+                Vec::<VerifiedSplitCacheEntry>::with_capacity(cache_capacity);
+            let replay_started = Instant::now();
+            for (batch_index, (pair, prepared)) in
+                args[3..].chunks_exact(2).zip(&prepared_batches).enumerate()
+            {
+                let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
+                    load_controller_plant_manifest(
+                        Path::new(&pair[0]),
+                        controller_mtbdd::MAX_MTBDD_INPUTS,
+                        controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                    )?;
+                increment_controller_split_observation(&mut manifest_loads, "manifest-load")?;
+                if manifest != prepared.manifest
+                    || snapshot != prepared.snapshot
+                    || controller != admitted_controller
+                    || controller_digest != admitted_digest
+                {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} changed after preflight"
+                    ));
+                }
+                let inputs = manifest
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(index, member)| ControllerPlantArtifactInput {
+                        plant: &plants[index],
+                        plant_source_sha256: plant_digests[index],
+                        wiring: &member.wiring,
+                        initial_controller_state: member.initial_controller_state,
+                        initial_plant_state: member.initial_plant_state,
+                        bad_plant_output: member.bad_plant_output,
+                        horizon: member.horizon,
+                    })
+                    .collect::<Vec<_>>();
+                let encoded = read_bounded_regular_file(
+                    Path::new(&pair[1]),
+                    controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                    "bound plant results",
+                )?;
+                increment_controller_split_observation(&mut plant_artifact_reads, "artifact-read")?;
+                if <[u8; 32]>::from(Sha256::digest(&encoded)) != prepared.results_sha256 {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} changed after preflight"
+                    ));
+                }
+                let resources = controller_plant_artifact::assess_bound_plant_results_resources(
+                    &controller,
+                    &inputs,
+                    &encoded,
+                    policy.plant,
+                )
+                .map_err(|error| classify_controller_split_resource_error(error.to_string()))?;
+                increment_controller_split_observation(
+                    &mut resource_assessments,
+                    "resource-assessment",
+                )?;
+                if resources != prepared.resources {
+                    return Err(format!(
+                        "controller split resource batch {batch_index} changed after preflight"
+                    ));
+                }
+                let batch_started = Instant::now();
+                let verification = if emit_cache_observability {
+                    increment_controller_split_observation(&mut cache_lookups, "cache-lookup")?;
+                    let cached = verification_cache.iter().find(|entry| {
+                        entry.manifest == manifest
+                            && entry.snapshot == snapshot
+                            && entry.resources == resources
+                            && entry.results_sha256 == prepared.results_sha256
+                    });
+                    if let Some(entry) = cached {
+                        increment_controller_split_observation(&mut cache_hits, "cache-hit")?;
+                        entry.verification.clone()
+                    } else {
+                        increment_controller_split_observation(&mut cache_misses, "cache-miss")?;
+                        let verification = controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
+                                &governed_admission.admitted,
+                                &inputs,
+                                &encoded,
+                            )
+                            .map_err(|error| error.to_string())?;
+                        verification_cache.push(VerifiedSplitCacheEntry {
+                            manifest: manifest.clone(),
+                            snapshot: snapshot.clone(),
+                            resources: resources.clone(),
+                            results_sha256: prepared.results_sha256,
+                            verification: verification.clone(),
+                        });
+                        verification
+                    }
+                } else {
+                    controller_plant_artifact::verify_bound_plant_results_with_admitted_controller(
+                        &governed_admission.admitted,
+                        &inputs,
+                        &encoded,
+                    )
+                    .map_err(|error| error.to_string())?
+                };
+                increment_controller_split_observation(
+                    &mut batch_verifications,
+                    "batch-verification",
+                )?;
+                let verification_micros = batch_started.elapsed().as_micros();
+                total_safe = total_safe
+                    .checked_add(verification.safe)
+                    .ok_or_else(|| "controller split resource SAFE count overflow".to_string())?;
+                total_unsafe = total_unsafe
+                    .checked_add(verification.unsafe_count)
+                    .ok_or_else(|| "controller split resource UNSAFE count overflow".to_string())?;
+                total_reachable = total_reachable
+                    .checked_add(verification.reachable_product_states)
+                    .ok_or_else(|| {
+                        "controller split resource reachable count overflow".to_string()
+                    })?;
+                total_explored = total_explored
+                    .checked_add(verification.explored_transitions)
+                    .ok_or_else(|| {
+                        "controller split resource transition count overflow".to_string()
+                    })?;
+                verified_batches.push((
+                    batch_index,
+                    controller_plant_artifact::GovernedBoundPlantResultsSummary {
+                        resources,
+                        verification,
+                    },
+                    verification_micros,
+                ));
+                increment_controller_split_observation(
+                    &mut buffered_result_rows,
+                    "buffered-result-row",
+                )?;
+            }
+            let semantic_replay_micros = replay_started.elapsed().as_micros();
+            let total_micros = started.elapsed().as_micros();
+            increment_controller_split_observation(
+                &mut buffered_result_rows,
+                "buffered-result-row",
+            )?;
+            let allocation_observation = allocation_observation
+                .map(observed_allocator::AllocationObservationGuard::finish)
+                .transpose()?;
+            for (batch_index, governed, verification_micros) in &verified_batches {
+                println!(
+                    "controller-split-resource-batch index={batch_index} status=VERIFIED policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} verification_micros={verification_micros}",
+                    governed.resources.version,
+                    controller_plant_artifact::BOUND_PLANT_RESULTS_VERSION,
+                    governed.resources.members,
+                    governed.resources.maximum_member_horizon,
+                    governed.resources.maximum_product_states,
+                    governed.resources.transition_evaluation_bound,
+                    governed.verification.safe,
+                    governed.verification.unsafe_count,
+                    governed.verification.reachable_product_states,
+                    governed.verification.explored_transitions,
+                    governed.resources.artifact_bytes,
+                );
+            }
+            println!(
+                "controller-split-resource-set status=VERIFIED cli_version={CONTROLLER_SPLIT_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_SPLIT_RESOURCE_POLICY_VERSION} controller_envelope_version={} plant_envelope_version={} controller_admissions=1 batches={batch_count} members={total_members} safe={total_safe} unsafe={total_unsafe} reachable_product_states={total_reachable} explored_transitions={total_explored} controller_evidence_bytes={} controller_mtbdd_bytes={} equivalence_artifact_bytes={} unsat_proof_bytes={} total_plant_artifact_bytes={total_plant_artifact_bytes} total_transition_evaluation_bound={total_transition_bound} admission_micros={admission_micros} elapsed_micros={}",
+                governed_admission.resources.version,
+                controller_plant_artifact::CONTROLLER_PLANT_RESOURCE_ENVELOPE_VERSION,
+                governed_admission.resources.artifact_bytes,
+                governed_admission.resources.mtbdd_bytes,
+                governed_admission.resources.equivalence_artifact_bytes,
+                governed_admission.resources.unsat_proof_bytes,
+                total_micros,
+            );
+            if emit_observability {
+                println!(
+                    "controller-split-resource-observability status=MEASURED cli_version={CONTROLLER_SPLIT_OBSERVABILITY_CLI_VERSION} phase_metrics_version={CONTROLLER_SPLIT_PHASE_METRICS_VERSION} policy_and_input_micros={policy_and_input_micros} controller_admission_micros={admission_micros} complete_set_preflight_micros={complete_set_preflight_micros} semantic_replay_micros={semantic_replay_micros} total_micros={total_micros} controller_admissions=1 manifest_loads={manifest_loads} plant_artifact_reads={plant_artifact_reads} resource_assessments={resource_assessments} batch_verifications={batch_verifications} buffered_result_rows={buffered_result_rows} prepared_batches={prepared_batch_count} prepared_members={total_members} controller_evidence_bytes={} total_plant_artifact_bytes={total_plant_artifact_bytes} total_transition_evaluation_bound={total_transition_bound} timing_calibration=none",
+                    governed_admission.resources.artifact_bytes,
+                );
+            }
+            if let Some(allocation) = allocation_observation {
+                println!(
+                    "controller-split-allocation-observability status=MEASURED cli_version={CONTROLLER_SPLIT_ALLOCATION_OBSERVABILITY_CLI_VERSION} allocator=system scope=policy-through-replay allocation_calls={} allocated_bytes={} deallocation_calls={} deallocated_bytes={} reallocation_calls={} reallocated_bytes={} overflow=none timing_calibration=none",
+                    allocation.allocation_calls,
+                    allocation.allocated_bytes,
+                    allocation.deallocation_calls,
+                    allocation.deallocated_bytes,
+                    allocation.reallocation_calls,
+                    allocation.reallocated_bytes,
+                );
+            }
+            if emit_cache_observability {
+                println!(
+                    "controller-split-cache-observability status=MEASURED cli_version={CONTROLLER_SPLIT_CACHE_OBSERVABILITY_CLI_VERSION} scope=semantic-replay key=manifest-snapshot,resource-assessment,result-sha256 lookups={cache_lookups} hits={cache_hits} misses={cache_misses} entries={} integrity_preflight=required overflow=none timing_calibration=none",
+                    verification_cache.len(),
+                );
+            }
+            Ok(true)
+        }
         "controller-plant-portfolio-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -25237,6 +26619,355 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "controller-proof-mtbdd-resource-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-proof-mtbdd-resource-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_proof_mtbdd_resource_cli_version={CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} artifact_version={} max_policy_bytes={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_horizon={} max_product_states={} refusal_exit=3 verification=unsat-miter exhaustive_replay=no accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+            );
+            Ok(true)
+        }
+        "controller-proof-mtbdd-portfolio-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker controller-proof-mtbdd-portfolio-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "controller_proof_mtbdd_portfolio_cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} proof_artifact_version={} direct_artifact_version={} manifest_version={CONTROLLER_MTBDD_PLANT_MANIFEST_VERSION} source_model_attestation_version={} max_policy_bytes={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_MAX_BYTES} max_artifact_bytes={} max_equivalence_artifact_bytes={} max_unsat_proof_bytes={} max_members={} max_horizon={} max_product_states={} max_attestation_bytes={} refusal_exit=3 backends=proof-mtbdd,direct-exact routing=static fallback=exact proof_failure=fail-closed attested_verification=required accounting=conservative-static timing_calibration=none result_on_refusal=none refusal_schema=proof-reason-v1 unsupported=fail-closed",
+                controller_plant_artifact::CONTROLLER_PROOF_MTBDD_RESOURCE_ENVELOPE_VERSION,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                controller_plant_artifact::DIRECT_PLANT_ARTIFACT_VERSION,
+                source_model_attestation::SOURCE_MODEL_ATTESTATION_VERSION,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                guarded_continuation_checker::controller_mtbdd_proof::MAX_EQUIVALENCE_ARTIFACT_BYTES,
+                guarded_continuation_checker::unsat_proof::MAX_UNSAT_PROOF_BYTES,
+                controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_MEMBERS,
+                guarded_continuation_checker::controller_plant::MAX_COMPOSITION_HORIZON,
+                guarded_continuation_checker::controller_plant::MAX_PRODUCT_STATES,
+                source_model_attestation::MAX_ATTESTATION_BYTES,
+            );
+            Ok(true)
+        }
+        "certify-controller-proof-mtbdd-portfolio" | "verify-controller-proof-mtbdd-portfolio" => {
+            if args.len() != 3 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MANIFEST.txt {}",
+                    if command == "certify-controller-proof-mtbdd-portfolio" {
+                        "OUTPUT.proof-mtbdd-portfolio"
+                    } else {
+                        "INPUT.proof-mtbdd-portfolio"
+                    }
+                ));
+            }
+            let started = Instant::now();
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let (encoded, action) = if command == "certify-controller-proof-mtbdd-portfolio" {
+                let encoded =
+                    controller_plant_artifact::produce_controller_proof_mtbdd_plant_portfolio(
+                        &controller,
+                        controller_digest,
+                        &manifest.relevant_inputs,
+                        &manifest.observed_outputs,
+                        &inputs,
+                    )
+                    .map_err(|error| error.to_string())?;
+                write_new_certificate(Path::new(&args[2]), &encoded)?;
+                (encoded, "CREATED")
+            } else {
+                (
+                    read_bounded_regular_file(
+                        Path::new(&args[2]),
+                        controller_plant_artifact::MAX_CONTROLLER_PLANT_ARTIFACT_BYTES,
+                        "proof-carrying controller MTBDD portfolio",
+                    )?,
+                    "VERIFIED",
+                )
+            };
+            let summary = controller_plant_artifact::verify_controller_proof_mtbdd_plant_portfolio(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+                &inputs,
+                &encoded,
+            )
+            .map_err(|error| error.to_string())?;
+            println!(
+                "controller-proof-mtbdd-portfolio status={action} cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} artifact_version={} backend={} reason={} members={} safe={} unsafe={} reachable_product_states={} explored_transitions={} assignments_checked={} artifact_bytes={} elapsed_micros={}{}",
+                controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+                match summary.backend {
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => "PROOF_MTBDD",
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::DirectExact => "DIRECT_EXACT",
+                },
+                match summary.reason {
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::MtbddAdmitted => "MTBDD_ADMITTED",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::BoundaryLimit => "BOUNDARY_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::TerminalLimit => "TERMINAL_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::NodeLimit => "NODE_LIMIT",
+                },
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                summary.assignments_checked,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if action == "CREATED" { format!(" output={}", args[2]) } else { String::new() },
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-portfolio-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe => "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe => "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
+        "verify-controller-proof-mtbdd-portfolio-resources"
+        | "verify-controller-proof-mtbdd-portfolio-resources-attested" => {
+            let attested = command.ends_with("-attested");
+            let expected_args = if attested { 6 } else { 4 };
+            if args.len() != expected_args {
+                return Err(if attested {
+                    "usage: guarded-continuation-checker verify-controller-proof-mtbdd-portfolio-resources-attested MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-portfolio PROVENANCE.txt ATTESTATION.csv"
+                        .to_string()
+                } else {
+                    "usage: guarded-continuation-checker verify-controller-proof-mtbdd-portfolio-resources MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-portfolio"
+                        .to_string()
+                });
+            }
+            let invocation_started = Instant::now();
+            let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
+            let (manifest, controller, controller_digest, plants, plant_digests, snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let provenance = if attested {
+                Some(verify_bound_source_model_provenance(
+                    &manifest,
+                    &snapshot,
+                    Path::new(&args[4]),
+                    Path::new(&args[5]),
+                )?)
+            } else {
+                None
+            };
+            let load_micros = invocation_started.elapsed().as_micros();
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact_started = Instant::now();
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[3]),
+                policy.envelope.composition().max_artifact_bytes(),
+                "proof-carrying controller MTBDD governed portfolio",
+            )
+            .map_err(classify_controller_proof_mtbdd_resource_error)?;
+            let artifact_micros = artifact_started.elapsed().as_micros();
+            let verification_started = Instant::now();
+            let governed = controller_plant_artifact::verify_controller_proof_mtbdd_plant_portfolio_with_resources(
+                &controller,
+                controller_digest,
+                &manifest.relevant_inputs,
+                &manifest.observed_outputs,
+                &inputs,
+                &encoded,
+                policy.envelope,
+            )
+            .map_err(|error| classify_controller_proof_mtbdd_resource_error(error.to_string()))?;
+            let verification_micros = verification_started.elapsed().as_micros();
+            let resources = governed.resources;
+            let summary = governed.verification;
+            println!(
+                "controller-proof-mtbdd-portfolio-resource status=VERIFIED cli_version={CONTROLLER_PROOF_MTBDD_PORTFOLIO_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} backend={} reason={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} equivalence_artifact_bytes={} unsat_proof_bytes={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} assignments_checked={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}{}",
+                resources.version,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_PORTFOLIO_VERSION,
+                match summary.backend {
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::ProofMtbdd => "PROOF_MTBDD",
+                    controller_plant_artifact::ControllerProofMtbddPlantPortfolioBackend::DirectExact => "DIRECT_EXACT",
+                },
+                match summary.reason {
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::MtbddAdmitted => "MTBDD_ADMITTED",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::BoundaryLimit => "BOUNDARY_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::TerminalLimit => "TERMINAL_LIMIT",
+                    controller_plant_artifact::ControllerMtbddPlantSelectionReason::NodeLimit => "NODE_LIMIT",
+                },
+                resources.members,
+                resources.maximum_member_horizon,
+                resources.maximum_product_states,
+                resources.transition_evaluation_bound,
+                resources.equivalence_artifact_bytes,
+                resources.unsat_proof_bytes,
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                resources.artifact_bytes,
+                summary.assignments_checked,
+                invocation_started.elapsed().as_micros(),
+                provenance.map_or_else(String::new, |summary| format!(
+                    " source_model_attestation_version={} source_model_members={} source_model_tool={} source_model_tool_revision={} provenance=BOUND",
+                    summary.version,
+                    summary.member_count,
+                    summary.tool,
+                    summary.tool_revision,
+                )),
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-portfolio-resource-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe => "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe => "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
+        "verify-controller-proof-mtbdd-plant-resources" => {
+            if args.len() != 4 {
+                return Err(
+                    "usage: guarded-continuation-checker verify-controller-proof-mtbdd-plant-resources MANIFEST.txt POLICY.txt INPUT.proof-mtbdd-plant"
+                        .to_string(),
+                );
+            }
+            let invocation_started = Instant::now();
+            let policy = parse_controller_proof_mtbdd_resource_policy(Path::new(&args[2]))?;
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
+                load_controller_plant_manifest(
+                    Path::new(&args[1]),
+                    controller_mtbdd::MAX_MTBDD_INPUTS,
+                    controller_mtbdd::MAX_MTBDD_OUTPUTS,
+                )?;
+            let load_micros = invocation_started.elapsed().as_micros();
+            let inputs = manifest
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, member)| ControllerPlantArtifactInput {
+                    plant: &plants[index],
+                    plant_source_sha256: plant_digests[index],
+                    wiring: &member.wiring,
+                    initial_controller_state: member.initial_controller_state,
+                    initial_plant_state: member.initial_plant_state,
+                    bad_plant_output: member.bad_plant_output,
+                    horizon: member.horizon,
+                })
+                .collect::<Vec<_>>();
+            let artifact_started = Instant::now();
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[3]),
+                policy.envelope.composition().max_artifact_bytes(),
+                "proof-carrying controller MTBDD governed artifact",
+            )
+            .map_err(classify_controller_proof_mtbdd_resource_error)?;
+            let artifact_micros = artifact_started.elapsed().as_micros();
+            let verification_started = Instant::now();
+            let governed = controller_plant_artifact::verify_controller_proof_mtbdd_plant_artifact_with_resources(
+                &controller,
+                controller_digest,
+                &inputs,
+                &encoded,
+                policy.envelope,
+            )
+            .map_err(|error| classify_controller_proof_mtbdd_resource_error(error.to_string()))?;
+            let verification_micros = verification_started.elapsed().as_micros();
+            let resources = governed.resources;
+            let summary = governed.verification;
+            println!(
+                "controller-proof-mtbdd-resource status=VERIFIED cli_version={CONTROLLER_PROOF_MTBDD_RESOURCE_CLI_VERSION} policy_version={CONTROLLER_PROOF_MTBDD_RESOURCE_POLICY_VERSION} envelope_version={} artifact_version={} members={} maximum_member_horizon={} maximum_product_states={} transition_evaluation_bound={} equivalence_artifact_bytes={} unsat_proof_bytes={} safe={} unsafe={} reachable_product_states={} explored_transitions={} artifact_bytes={} assignments_checked={} load_micros={load_micros} artifact_micros={artifact_micros} verification_micros={verification_micros} elapsed_micros={}",
+                resources.version,
+                controller_plant_artifact::PROOF_MTBDD_PLANT_ARTIFACT_VERSION,
+                resources.members,
+                resources.maximum_member_horizon,
+                resources.maximum_product_states,
+                resources.transition_evaluation_bound,
+                resources.equivalence_artifact_bytes,
+                resources.unsat_proof_bytes,
+                summary.safe,
+                summary.unsafe_count,
+                summary.reachable_product_states,
+                summary.explored_transitions,
+                resources.artifact_bytes,
+                summary.assignments_checked,
+                invocation_started.elapsed().as_micros(),
+            );
+            for (index, member) in summary.members.iter().enumerate() {
+                println!(
+                    "controller-proof-mtbdd-resource-member index={index} answer={} horizon={} bad_frame={} trace_steps={} reachable_product_states={} explored_transitions={}",
+                    match member.answer {
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Safe => "SAFE",
+                        guarded_continuation_checker::controller_plant::ControllerPlantAnswer::Unsafe => "UNSAFE",
+                    },
+                    member.horizon,
+                    member.bad_frame.map_or_else(|| "none".to_string(), |frame| frame.to_string()),
+                    member.trace.len(),
+                    member.reachable_product_states,
+                    member.explored_transitions,
+                );
+            }
+            Ok(true)
+        }
         "verify-controller-plant-portfolio-resources" => {
             if args.len() != 4 {
                 return Err(
@@ -25246,7 +26977,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             }
             let invocation_started = Instant::now();
             let policy = parse_controller_plant_resource_policy(Path::new(&args[2]))?;
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
@@ -25341,7 +27072,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 ));
             }
             let invocation_started = Instant::now();
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     guarded_continuation_checker::controller_plant::MAX_DIRECT_CONTROLLER_INPUTS,
@@ -25464,7 +27195,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     }
                 ));
             }
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -25617,7 +27348,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     }
                 ));
             }
-            let (manifest, controller, controller_digest, plants, plant_digests) =
+            let (manifest, controller, controller_digest, plants, plant_digests, _snapshot) =
                 load_controller_plant_manifest(
                     Path::new(&args[1]),
                     controller_mtbdd::MAX_MTBDD_INPUTS,
@@ -25804,6 +27535,62 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
+        "btor2-search-v5-capabilities" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-search-v5-capabilities".to_string(),
+                );
+            }
+            println!(
+                "btor2_search_capability_version=1 search_certificate_version={} min_inputs=1 max_inputs={} max_input_width={} max_total_input_bits={} max_horizon={} max_states_per_layer={} max_total_states={} max_node_steps={} max_certificate_bytes={} constraints=exact-all-frame-ordered-or-none valuation_order=input-node-ascending-then-lsb-first terminal_valuation=distinct dead_end_layers=empty-with-constraints unsafe=admissible-trace safe=complete-admissible-layers work_accounting=all-valuations resource_refusal=no-answer unsupported=fail-closed",
+                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                btor2_search::MAX_SEARCH_INPUTS,
+                btor2_search::MAX_SEARCH_INPUT_BITS,
+                btor2_search::MAX_SEARCH_INPUT_BITS,
+                btor2_search::MAX_SEARCH_HORIZON,
+                btor2_search::MAX_STATES_PER_LAYER,
+                btor2_search::MAX_TOTAL_STATES,
+                btor2_search::MAX_SEARCH_NODE_STEPS,
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
+        "btor2-search-v3-capabilities" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-search-v3-capabilities".to_string(),
+                );
+            }
+            println!(
+                "btor2_search_capability_version=1 search_certificate_version={} min_inputs=1 max_inputs={} input_width=1 max_horizon={} max_states_per_layer={} max_total_states={} max_node_steps={} max_certificate_bytes={} constraints=unsupported valuation_order=input-node-ascending valuation_bit=i-maps-input-i terminal_valuation=distinct unsafe=trace safe=complete-layers resource_refusal=no-answer unsupported=fail-closed",
+                btor2_search::SEARCH_CERTIFICATE_V3_VERSION,
+                btor2_search::MAX_SEARCH_INPUTS,
+                btor2_search::MAX_SEARCH_HORIZON,
+                btor2_search::MAX_STATES_PER_LAYER,
+                btor2_search::MAX_TOTAL_STATES,
+                btor2_search::MAX_SEARCH_NODE_STEPS,
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
+        "btor2-search-v4-capabilities" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-search-v4-capabilities".to_string(),
+                );
+            }
+            println!(
+                "btor2_search_capability_version=1 search_certificate_version={} min_inputs=1 max_inputs={} input_width=1 min_constraints=1 max_horizon={} max_states_per_layer={} max_total_states={} max_node_steps={} max_certificate_bytes={} constraints=exact-all-frame-ordered valuation_order=input-node-ascending valuation_bit=i-maps-input-i terminal_valuation=distinct dead_end_layers=empty unsafe=admissible-trace safe=complete-admissible-layers work_accounting=all-valuations resource_refusal=no-answer unsupported=fail-closed",
+                btor2_search::SEARCH_CERTIFICATE_V4_VERSION,
+                btor2_search::MAX_SEARCH_INPUTS,
+                btor2_search::MAX_SEARCH_HORIZON,
+                btor2_search::MAX_STATES_PER_LAYER,
+                btor2_search::MAX_TOTAL_STATES,
+                btor2_search::MAX_SEARCH_NODE_STEPS,
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
         "certify-btor2-controller-obligation" => {
             if args.len() != 4 {
                 return Err("usage: guarded-continuation-checker certify-btor2-controller-obligation CONTROLLER.btor2 CONTRACT.txt OUTPUT.controller-obligation".to_string());
@@ -25863,6 +27650,363 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 obligation.brake_velocity,
                 encoded.len(),
                 started.elapsed().as_micros()
+            );
+            Ok(true)
+        }
+        "check-btor2-revision-portfolio" | "verify-btor2-revision-portfolio" => {
+            if args.len() != 10 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} LEFT.btor2 LEFT_OUTPUTS RIGHT.btor2 RIGHT_OUTPUTS INTERFACE.txt HORIZON BAD_SIDE BAD_OUTPUT {}",
+                    if command == "check-btor2-revision-portfolio" {
+                        "OUTPUT.revision-proof"
+                    } else {
+                        "INPUT.revision-proof"
+                    }
+                ));
+            }
+            let left = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "left BTOR2 input",
+            )?;
+            let left_outputs = parse_revision_output_nodes(&args[2], "LEFT_OUTPUTS")?;
+            let right = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2::MAX_BTOR2_BYTES,
+                "right BTOR2 input",
+            )?;
+            let right_outputs = parse_revision_output_nodes(&args[4], "RIGHT_OUTPUTS")?;
+            let interface = read_bounded_regular_file(
+                Path::new(&args[5]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "word interface contract",
+            )?;
+            let horizon = args[6]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let bad_side = match args[7].as_str() {
+                "left" => revision_local::ComponentSide::Left,
+                "right" => revision_local::ComponentSide::Right,
+                _ => return Err("BAD_SIDE must be left or right".to_string()),
+            };
+            let bad_output = args[8]
+                .parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| "BAD_OUTPUT must be a nonzero node identifier".to_string())?;
+            let query = revision_local::BoundedQuery {
+                horizon,
+                bad_side,
+                bad_output,
+            };
+            let started = Instant::now();
+            let (production, encoded) = if command == "check-btor2-revision-portfolio" {
+                let production = revision_local::produce_revision_portfolio(
+                    &left,
+                    &left_outputs,
+                    &right,
+                    &right_outputs,
+                    &interface,
+                    &query,
+                )
+                .map_err(|error| error.to_string())?;
+                let encoded = revision_local::encode_revision_portfolio(&production)
+                    .map_err(|error| error.to_string())?;
+                (production, encoded)
+            } else {
+                let encoded = read_bounded_regular_file(
+                    Path::new(&args[9]),
+                    revision_local::MAX_REVISION_PORTFOLIO_BYTES,
+                    "revision proof portfolio",
+                )?;
+                let production = revision_local::decode_revision_portfolio(&encoded)
+                    .map_err(|error| error.to_string())?;
+                (production, encoded)
+            };
+            let embedded_query = match &production.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    revision_local::decode_bounded_answer_certificate(&certificate.final_evidence)
+                        .map_err(|error| error.to_string())?
+                        .query
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(certificate) => {
+                    certificate.query.clone()
+                }
+            };
+            if embedded_query != query {
+                return Err("revision proof query does not match CLI query".to_string());
+            }
+            let summary = revision_local::verify_revision_portfolio(
+                &left,
+                &left_outputs,
+                &right,
+                &right_outputs,
+                &interface,
+                &production,
+            )
+            .map_err(|error| error.to_string())?;
+            if command == "check-btor2-revision-portfolio" {
+                write_new_certificate(Path::new(&args[9]), &encoded)?;
+            }
+            let status = if command == "check-btor2-revision-portfolio" {
+                "CREATED"
+            } else {
+                "VERIFIED"
+            };
+            let backend = match summary.backend {
+                revision_local::RevisionPortfolioBackend::RevisionLocal => "revision-local",
+                revision_local::RevisionPortfolioBackend::DirectExact => "direct-exact",
+            };
+            let result = match summary.result {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = summary
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-revision-portfolio status={status} portfolio_version={} backend={backend} reason={} result={result} horizon={horizon} bad_frame={bad_frame} certificate_bytes={} elapsed_micros={}{}",
+                revision_local::REVISION_PORTFOLIO_CERTIFICATE_VERSION,
+                summary.reason.as_str(),
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if command == "check-btor2-revision-portfolio" {
+                    format!(" output={}", args[9])
+                } else {
+                    String::new()
+                }
+            );
+            Ok(true)
+        }
+        "check-btor2-revision-retained-left" => {
+            if args.len() != 10 {
+                return Err("usage: guarded-continuation-checker check-btor2-revision-retained-left LEFT.btor2 PREVIOUS.revision-proof RIGHT.btor2 RIGHT_OUTPUTS INTERFACE.txt HORIZON BAD_SIDE BAD_OUTPUT OUTPUT.revision-proof".to_string());
+            }
+            let left = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "retained left BTOR2 input",
+            )?;
+            let previous_bytes = read_bounded_regular_file(
+                Path::new(&args[2]),
+                revision_local::MAX_REVISION_PORTFOLIO_BYTES,
+                "previous revision proof portfolio",
+            )?;
+            let previous = revision_local::decode_revision_portfolio(&previous_bytes)
+                .map_err(|error| error.to_string())?;
+            let previous_local = match &previous.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    certificate
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(_) => {
+                    return Err(
+                        "previous revision proof does not contain reusable local evidence"
+                            .to_string(),
+                    );
+                }
+            };
+            let retained = revision_local::validate_local_artifact(
+                &left,
+                &previous_local.left.evidence,
+                revision_local::EvidenceSection::Left,
+            )
+            .map_err(|error| error.to_string())?;
+            let right = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2::MAX_BTOR2_BYTES,
+                "changed right BTOR2 input",
+            )?;
+            let right_outputs = parse_revision_output_nodes(&args[4], "RIGHT_OUTPUTS")?;
+            let interface = read_bounded_regular_file(
+                Path::new(&args[5]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "word interface contract",
+            )?;
+            let horizon = args[6]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let bad_side = match args[7].as_str() {
+                "left" => revision_local::ComponentSide::Left,
+                "right" => revision_local::ComponentSide::Right,
+                _ => return Err("BAD_SIDE must be left or right".to_string()),
+            };
+            let bad_output = args[8]
+                .parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| "BAD_OUTPUT must be a nonzero node identifier".to_string())?;
+            let query = revision_local::BoundedQuery {
+                horizon,
+                bad_side,
+                bad_output,
+            };
+            let started = Instant::now();
+            let (certificate, produced, production_work) =
+                revision_local::produce_revision_with_retained_left(
+                    &retained,
+                    &right,
+                    &right_outputs,
+                    &interface,
+                    &query,
+                )
+                .map_err(|error| error.to_string())?;
+            let production = revision_local::RevisionPortfolioProduction {
+                certificate: revision_local::RevisionPortfolioCertificate::RevisionLocal(
+                    certificate,
+                ),
+                backend: revision_local::RevisionPortfolioBackend::RevisionLocal,
+                reason: revision_local::RevisionSelectionReason::ExactLocalRelationAdmitted,
+            };
+            let encoded = revision_local::encode_revision_portfolio(&production)
+                .map_err(|error| error.to_string())?;
+            let certificate = match &production.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    certificate
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(_) => unreachable!(),
+            };
+            let (_, verification_work) = revision_local::verify_revision_with_retained_left(
+                &retained,
+                &right,
+                &interface,
+                certificate,
+            )
+            .map_err(|error| error.to_string())?;
+            write_new_certificate(Path::new(&args[9]), &encoded)?;
+            let result = match produced.answer.result {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = produced
+                .answer
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-revision-retained-left status=CREATED portfolio_version={} backend=revision-local reason=exact-local-relation-admitted result={result} horizon={horizon} bad_frame={bad_frame} produced_local_sections={} production_reused_local_sections={} changed_candidate_valuations={} verified_local_sections={} verification_reused_local_sections={} composed_pair_checks={} final_transition_checks={} certificate_bytes={} elapsed_micros={} output={}",
+                revision_local::REVISION_PORTFOLIO_CERTIFICATE_VERSION,
+                production_work.produced_local_sections,
+                production_work.reused_local_sections,
+                production_work.changed_candidate_valuations,
+                verification_work.semantically_verified_local_sections,
+                verification_work.reused_local_sections,
+                production_work.composed_pair_checks,
+                production_work.final_transition_checks,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                args[9],
+            );
+            Ok(true)
+        }
+        "verify-btor2-revision-retained-left" => {
+            if args.len() != 9 {
+                return Err("usage: guarded-continuation-checker verify-btor2-revision-retained-left LEFT.btor2 PREVIOUS.revision-proof RIGHT.btor2 INTERFACE.txt HORIZON BAD_SIDE BAD_OUTPUT INPUT.revision-proof".to_string());
+            }
+            let left = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "retained left BTOR2 input",
+            )?;
+            let previous_bytes = read_bounded_regular_file(
+                Path::new(&args[2]),
+                revision_local::MAX_REVISION_PORTFOLIO_BYTES,
+                "previous revision proof portfolio",
+            )?;
+            let previous = revision_local::decode_revision_portfolio(&previous_bytes)
+                .map_err(|error| error.to_string())?;
+            let previous_local = match &previous.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    certificate
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(_) => {
+                    return Err(
+                        "previous revision proof does not contain reusable local evidence"
+                            .to_string(),
+                    );
+                }
+            };
+            let retained = revision_local::validate_local_artifact(
+                &left,
+                &previous_local.left.evidence,
+                revision_local::EvidenceSection::Left,
+            )
+            .map_err(|error| error.to_string())?;
+            let right = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2::MAX_BTOR2_BYTES,
+                "changed right BTOR2 input",
+            )?;
+            let interface = read_bounded_regular_file(
+                Path::new(&args[4]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "word interface contract",
+            )?;
+            let horizon = args[5]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let bad_side = match args[6].as_str() {
+                "left" => revision_local::ComponentSide::Left,
+                "right" => revision_local::ComponentSide::Right,
+                _ => return Err("BAD_SIDE must be left or right".to_string()),
+            };
+            let bad_output = args[7]
+                .parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| "BAD_OUTPUT must be a nonzero node identifier".to_string())?;
+            let query = revision_local::BoundedQuery {
+                horizon,
+                bad_side,
+                bad_output,
+            };
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[8]),
+                revision_local::MAX_REVISION_PORTFOLIO_BYTES,
+                "revision proof portfolio",
+            )?;
+            let production = revision_local::decode_revision_portfolio(&encoded)
+                .map_err(|error| error.to_string())?;
+            let certificate = match &production.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    certificate
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(_) => {
+                    return Err(
+                        "revision proof does not contain reusable local evidence".to_string()
+                    );
+                }
+            };
+            let embedded_query =
+                revision_local::decode_bounded_answer_certificate(&certificate.final_evidence)
+                    .map_err(|error| error.to_string())?
+                    .query;
+            if embedded_query != query {
+                return Err("revision proof query does not match CLI query".to_string());
+            }
+            let started = Instant::now();
+            let (summary, work) = revision_local::verify_revision_with_retained_left(
+                &retained,
+                &right,
+                &interface,
+                certificate,
+            )
+            .map_err(|error| error.to_string())?;
+            let result = match summary.answer.result {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = summary
+                .answer
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-revision-retained-left status=VERIFIED portfolio_version={} backend=revision-local reason=exact-local-relation-admitted result={result} horizon={horizon} bad_frame={bad_frame} verified_local_sections={} reused_local_sections={} composed_pair_checks={} final_transition_checks={} certificate_bytes={} elapsed_micros={}",
+                revision_local::REVISION_PORTFOLIO_CERTIFICATE_VERSION,
+                work.semantically_verified_local_sections,
+                work.reused_local_sections,
+                work.composed_pair_checks,
+                work.final_transition_checks,
+                encoded.len(),
+                started.elapsed().as_micros(),
             );
             Ok(true)
         }
@@ -26324,14 +28468,30 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             let bad_frame = certificate
                 .bad_frame
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
-            println!(
-                "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_inputs={} output={}",
-                btor2_search::SEARCH_CERTIFICATE_VERSION,
-                certificate.query_horizon,
-                certificate.layers.len(),
-                certificate.witness_inputs.len(),
-                output.display()
-            );
+            if matches!(
+                certificate.certificate_version,
+                btor2_search::SEARCH_CERTIFICATE_V3_VERSION
+                    | btor2_search::SEARCH_CERTIFICATE_V4_VERSION
+                    | btor2_search::SEARCH_CERTIFICATE_VERSION
+            ) {
+                println!(
+                    "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_valuations={} output={}",
+                    certificate.certificate_version,
+                    certificate.query_horizon,
+                    certificate.layers.len(),
+                    certificate.witness_valuations.len(),
+                    output.display()
+                );
+            } else {
+                println!(
+                    "btor2-search status=CREATED version={} result={result} horizon={} bad_frame={bad_frame} layers={} witness_inputs={} output={}",
+                    certificate.certificate_version,
+                    certificate.query_horizon,
+                    certificate.layers.len(),
+                    certificate.witness_inputs.len(),
+                    output.display()
+                );
+            }
             Ok(true)
         }
         "verify-btor2-search" => {
@@ -26361,7 +28521,7 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 .map_or_else(|| "none".to_string(), |frame| frame.to_string());
             println!(
                 "btor2-search status=VERIFIED version={} result={result} horizon={} bad_frame={bad_frame} reachable_states={} certificate_bytes={} elapsed_micros={}",
-                btor2_search::SEARCH_CERTIFICATE_VERSION,
+                certificate.certificate_version,
                 summary.query_horizon,
                 summary.reachable_states,
                 encoded.len(),
@@ -26455,6 +28615,142 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 "btor2-bounded status=VERIFIED portfolio_version={} backend={backend} result={result} horizon={} bad_frame={bad_frame} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
                 btor2_bounded::BOUNDED_PORTFOLIO_VERSION,
                 summary.query_horizon,
+                summary.logical_reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros()
+            );
+            Ok(true)
+        }
+        "btor2-predicate-set-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-predicate-set-version".to_string(),
+                );
+            }
+            println!(
+                "btor2_predicate_set_cli_version={} certificate_versions={},{},{} portfolio_versions={},{},{} current_certificate_version={} current_portfolio_version={} max_members={} max_chain_states={} max_horizon={} max_source_bytes={} max_certificate_bytes={} property_order=strictly-increasing",
+                btor2_predicate_set::PREDICATE_SET_CLI_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_V1_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_V2_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_V1_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_V2_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                btor2_predicate_set::PREDICATE_SET_CERTIFICATE_VERSION,
+                btor2_predicate_set::PREDICATE_SET_PORTFOLIO_VERSION,
+                btor2_predicate_set::MAX_PREDICATE_SET_MEMBERS,
+                btor2_invariant_chain::MAX_CHAIN_STATES,
+                btor2_region::MAX_REGION_HORIZON,
+                btor2::MAX_BTOR2_BYTES,
+                btor2_predicate_set::MAX_PREDICATE_SET_CERTIFICATE_BYTES,
+            );
+            Ok(true)
+        }
+        "check-btor2-predicate-set" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker check-btor2-predicate-set INPUT.btor2 BAD_PROPERTIES HORIZON OUTPUT.btor2-set-cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let properties = parse_btor2_property_set(&args[2])?;
+            let horizon = args[3]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let started = Instant::now();
+            let production = btor2_predicate_set::produce(&source, &properties, horizon)
+                .map_err(|error| error.to_string())?;
+            let reason = production.selection_reason;
+            let certificate = production.certificate;
+            let encoded =
+                btor2_predicate_set::encode(&certificate).map_err(|error| error.to_string())?;
+            let summary = btor2_predicate_set::verify(&source, &properties, horizon, &certificate)
+                .map_err(|error| error.to_string())?;
+            let output = Path::new(&args[4]);
+            write_new_certificate(output, encoded.as_bytes())?;
+            let answers = summary
+                .members
+                .iter()
+                .map(|member| {
+                    let result = match member.result {
+                        btor2_search::SearchResult::Safe => "SAFE",
+                        btor2_search::SearchResult::Unsafe => "UNSAFE",
+                    };
+                    let frame = member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |value| value.to_string());
+                    format!("{}:{result}:{frame}", member.bad_property)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "btor2-predicate-set status=CREATED certificate_version={} portfolio_version={} route={} reason={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={} output={}",
+                btor2_predicate_set::certificate_version(&certificate),
+                btor2_predicate_set::portfolio_version(&certificate),
+                summary.route.as_str(),
+                reason.as_str(),
+                summary.query_horizon,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                answers,
+                summary.logical_reachable_states,
+                encoded.len(),
+                started.elapsed().as_micros(),
+                output.display()
+            );
+            Ok(true)
+        }
+        "verify-btor2-predicate-set" => {
+            if args.len() != 5 {
+                return Err("usage: guarded-continuation-checker verify-btor2-predicate-set INPUT.btor2 BAD_PROPERTIES HORIZON CERTIFICATE.btor2-set-cert".to_string());
+            }
+            let source = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 input",
+            )?;
+            let properties = parse_btor2_property_set(&args[2])?;
+            let horizon = args[3]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let encoded = read_bounded_regular_file(
+                Path::new(&args[4]),
+                btor2_predicate_set::MAX_PREDICATE_SET_CERTIFICATE_BYTES,
+                "BTOR2 predicate-set certificate",
+            )?;
+            let certificate =
+                btor2_predicate_set::decode(&encoded).map_err(|error| error.to_string())?;
+            let started = Instant::now();
+            let summary = btor2_predicate_set::verify(&source, &properties, horizon, &certificate)
+                .map_err(|error| error.to_string())?;
+            let answers = summary
+                .members
+                .iter()
+                .map(|member| {
+                    let result = match member.result {
+                        btor2_search::SearchResult::Safe => "SAFE",
+                        btor2_search::SearchResult::Unsafe => "UNSAFE",
+                    };
+                    let frame = member
+                        .bad_frame
+                        .map_or_else(|| "none".to_string(), |value| value.to_string());
+                    format!("{}:{result}:{frame}", member.bad_property)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "btor2-predicate-set status=VERIFIED certificate_version={} portfolio_version={} route={} horizon={} members={} safe={} unsafe={} answers={} logical_reachable_states={} certificate_bytes={} elapsed_micros={}",
+                btor2_predicate_set::certificate_version(&certificate),
+                btor2_predicate_set::portfolio_version(&certificate),
+                summary.route.as_str(),
+                summary.query_horizon,
+                summary.members.len(),
+                summary.safe,
+                summary.unsafe_count,
+                answers,
                 summary.logical_reachable_states,
                 encoded.len(),
                 started.elapsed().as_micros()
@@ -28167,16 +30463,25 @@ fn main() {
             std::process::exit(2);
         }
     }
+    if cfg!(feature = "production-firmware") {
+        eprintln!("error: command is outside production support profile firmware-rtl-v1");
+        std::process::exit(2);
+    }
     match run_artifact_cli(&args[1..]) {
         Ok(true) => return,
         Ok(false) => {}
         Err(error) => {
             eprintln!("error: {error}");
-            std::process::exit(if error.starts_with("controller-plant-resource refusal=") {
-                3
-            } else {
-                2
-            });
+            std::process::exit(
+                if error.starts_with("controller-plant-resource refusal=")
+                    || error.starts_with("controller-proof-mtbdd-resource refusal=")
+                    || error.starts_with("controller-split-resource refusal=")
+                {
+                    3
+                } else {
+                    2
+                },
+            );
         }
     }
     let vars = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(16);
@@ -36289,6 +38594,30 @@ mod tests {
     #[test]
     fn btor2_cli_v1_inspects_word_level_fixture_and_rejects_bad_arguments() {
         assert!(run_artifact_cli(&["btor2-cli-version".to_string()]).unwrap());
+        assert!(run_artifact_cli(&["btor2-search-v3-capabilities".to_string()]).unwrap());
+        assert!(run_artifact_cli(&["btor2-search-v4-capabilities".to_string()]).unwrap());
+        assert!(run_artifact_cli(&["btor2-search-v5-capabilities".to_string()]).unwrap());
+        assert!(
+            run_artifact_cli(&[
+                "btor2-search-v3-capabilities".to_string(),
+                "unexpected".to_string(),
+            ])
+            .is_err()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "btor2-search-v4-capabilities".to_string(),
+                "unexpected".to_string(),
+            ])
+            .is_err()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "btor2-search-v5-capabilities".to_string(),
+                "unexpected".to_string(),
+            ])
+            .is_err()
+        );
         assert!(
             run_artifact_cli(&["btor2-cli-version".to_string(), "unexpected".to_string(),])
                 .is_err()
@@ -36389,6 +38718,52 @@ mod tests {
             .unwrap()
         );
         fs::remove_file(&certificate).unwrap();
+
+        let word_source = certificate.with_extension("word-input.btor2");
+        fs::write(
+            &word_source,
+            b"1 sort bitvec 1\n2 sort bitvec 3\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 next 2 4 3\n8 constd 2 5\n9 eq 1 4 8\n10 bad 9 reached_five\n",
+        )
+        .unwrap();
+        assert!(
+            run_artifact_cli(&[
+                "search-btor2".to_string(),
+                word_source.display().to_string(),
+                "10".to_string(),
+                "1".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        let word_certificate = fs::read(&certificate).unwrap();
+        assert!(word_certificate.starts_with(b"search_certificate_version=5\n"));
+        assert!(
+            word_certificate
+                .windows(b"input_widths=3\n".len())
+                .any(|window| window == b"input_widths=3\n")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-search".to_string(),
+                word_source.display().to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "search-btor2".to_string(),
+                word_source.display().to_string(),
+                "10".to_string(),
+                "1".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap_err()
+            .contains("create certificate")
+        );
+        assert_eq!(fs::read(&certificate).unwrap(), word_certificate);
+        fs::remove_file(&certificate).unwrap();
+        fs::remove_file(word_source).unwrap();
 
         for (horizon, expected) in [(2, "SAFE"), (3, "UNSAFE")] {
             assert!(
@@ -36577,6 +38952,227 @@ mod tests {
             );
             fs::remove_file(&certificate).unwrap();
         }
+    }
+
+    #[test]
+    fn revision_portfolio_cli_routes_verifies_and_rejects_query_drift() {
+        let scratch =
+            std::env::temp_dir().join(format!("gcc-revision-portfolio-cli-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let left = scratch.join("left.btor2");
+        let right = scratch.join("right.btor2");
+        let interface = scratch.join("interface.txt");
+        let certificate = scratch.join("answer.revision-proof");
+        fs::write(
+            &left,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 sort bitvec 9\n4 input 2 command\n5 state 3 wide_state\n6 zero 3\n7 init 3 5 6\n8 uext 3 4 7\n9 next 3 5 8\n10 zero 1\n11 bad 10 never\n",
+        )
+        .unwrap();
+        fs::write(
+            &right,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n",
+        )
+        .unwrap();
+        fs::write(
+            &interface,
+            b"word_interface_version=1\nwire_count=1\nwire=left,4,3\nstatus=complete\n",
+        )
+        .unwrap();
+        let base = vec![
+            left.display().to_string(),
+            "4".to_string(),
+            right.display().to_string(),
+            "7,10".to_string(),
+            interface.display().to_string(),
+            "1".to_string(),
+            "right".to_string(),
+            "10".to_string(),
+            certificate.display().to_string(),
+        ];
+        let mut check = vec!["check-btor2-revision-portfolio".to_string()];
+        check.extend(base.clone());
+        assert!(run_artifact_cli(&check).unwrap());
+        assert!(fs::read(&certificate).unwrap().starts_with(b"GCCRPF01"));
+        assert!(run_artifact_cli(&check).is_err());
+
+        let mut verify = vec!["verify-btor2-revision-portfolio".to_string()];
+        verify.extend(base.clone());
+        assert!(run_artifact_cli(&verify).unwrap());
+        verify[6] = "0".to_string();
+        assert_eq!(
+            run_artifact_cli(&verify).unwrap_err(),
+            "revision proof query does not match CLI query"
+        );
+        fs::remove_dir_all(&scratch).unwrap();
+    }
+
+    #[test]
+    fn revision_portfolio_cli_accepts_strict_property_free_components() {
+        let scratch = std::env::temp_dir().join(format!(
+            "gcc-revision-property-free-cli-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&scratch).unwrap();
+        let left = scratch.join("left.btor2");
+        let right = scratch.join("right.btor2");
+        let interface = scratch.join("interface.txt");
+        let certificate = scratch.join("answer.revision-proof");
+        fs::write(
+            &left,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 redor 1 7\n10 output 7 projected\n11 output 9 property\n",
+        )
+        .unwrap();
+        fs::write(
+            &right,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 output 7 projected\n",
+        )
+        .unwrap();
+        fs::write(
+            &interface,
+            b"word_interface_version=2\nwire_count=1\nwire=left,7,3\nexternal_count=1\nexternal=left,3\nstatus=complete\n",
+        )
+        .unwrap();
+        let arguments = vec![
+            left.display().to_string(),
+            "7,9".to_string(),
+            right.display().to_string(),
+            "7".to_string(),
+            interface.display().to_string(),
+            "1".to_string(),
+            "left".to_string(),
+            "9".to_string(),
+            certificate.display().to_string(),
+        ];
+        let mut check = vec!["check-btor2-revision-portfolio".to_string()];
+        check.extend(arguments.clone());
+        assert!(run_artifact_cli(&check).unwrap());
+        let mut verify = vec!["verify-btor2-revision-portfolio".to_string()];
+        verify.extend(arguments);
+        assert!(run_artifact_cli(&verify).unwrap());
+        fs::remove_dir_all(&scratch).unwrap();
+    }
+
+    #[test]
+    fn revision_retained_cli_produces_only_changed_side_and_remains_ordinarily_verifiable() {
+        let scratch =
+            std::env::temp_dir().join(format!("gcc-revision-retained-cli-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let left = scratch.join("left.btor2");
+        let right_v1 = scratch.join("right-v1.btor2");
+        let right_v2 = scratch.join("right-v2.btor2");
+        let interface = scratch.join("interface.txt");
+        let previous = scratch.join("previous.revision-proof");
+        let next = scratch.join("next.revision-proof");
+        fs::write(
+            &left,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n",
+        )
+        .unwrap();
+        fs::write(
+            &right_v1,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n",
+        )
+        .unwrap();
+        fs::write(
+            &right_v2,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 xor 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n",
+        )
+        .unwrap();
+        fs::write(
+            &interface,
+            b"word_interface_version=1\nwire_count=1\nwire=left,7,3\nstatus=complete\n",
+        )
+        .unwrap();
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-portfolio".to_string(),
+                left.display().to_string(),
+                "7".to_string(),
+                right_v1.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                previous.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-retained-left".to_string(),
+                left.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-revision-portfolio".to_string(),
+                left.display().to_string(),
+                "7".to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-revision-retained-left".to_string(),
+                left.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-retained-left".to_string(),
+                right_v1.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                scratch.join("drift.revision-proof").display().to_string(),
+            ])
+            .is_err()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "check-btor2-revision-retained-left".to_string(),
+                left.display().to_string(),
+                previous.display().to_string(),
+                right_v2.display().to_string(),
+                "7,10".to_string(),
+                interface.display().to_string(),
+                "1".to_string(),
+                "right".to_string(),
+                "10".to_string(),
+                next.display().to_string(),
+            ])
+            .is_err()
+        );
+        fs::remove_dir_all(&scratch).unwrap();
     }
 
     #[test]
@@ -38382,6 +40978,25 @@ mod tests {
                 .unwrap_err()
                 .contains("usage:")
         );
+        #[cfg(feature = "production-firmware")]
+        assert_eq!(
+            run_firmware_gate_cli(&["production-profile-version".to_string()]).unwrap(),
+            Some(true)
+        );
+        #[cfg(not(feature = "production-firmware"))]
+        assert!(
+            run_firmware_gate_cli(&["production-profile-version".to_string()])
+                .unwrap_err()
+                .contains("not a production support-profile build")
+        );
+        assert!(
+            run_firmware_gate_cli(&[
+                "production-profile-version".to_string(),
+                "unexpected".to_string(),
+            ])
+            .unwrap_err()
+            .contains("usage:")
+        );
     }
 
     #[test]
@@ -39308,5 +41923,208 @@ mod tests {
                 invalid
             );
         }
+    }
+
+    #[test]
+    fn controller_proof_mtbdd_resource_refusal_reasons_are_stable_and_narrow() {
+        for (message, reason) in [
+            (
+                "proof-carrying controller MTBDD resource artifact-byte limit exceeded",
+                "artifact-bytes",
+            ),
+            (
+                "proof-carrying controller MTBDD resource equivalence-artifact limit exceeded",
+                "equivalence-artifact-bytes",
+            ),
+            (
+                "proof-carrying controller MTBDD resource UNSAT-proof limit exceeded",
+                "unsat-proof-bytes",
+            ),
+            (
+                "proof-carrying controller MTBDD resource member limit exceeded",
+                "members",
+            ),
+            (
+                "proof-carrying controller MTBDD resource horizon limit exceeded",
+                "horizon",
+            ),
+            (
+                "proof-carrying controller MTBDD resource product-state limit exceeded",
+                "product-states",
+            ),
+            (
+                "proof-carrying controller MTBDD resource transition limit exceeded",
+                "transition-evaluations",
+            ),
+        ] {
+            assert_eq!(
+                controller_proof_mtbdd_resource_refusal(message),
+                Some(reason)
+            );
+            assert_eq!(
+                classify_controller_proof_mtbdd_resource_error(message.to_string()),
+                format!("controller-proof-mtbdd-resource refusal={reason} result=none")
+            );
+        }
+        for invalid in [
+            "proof-carrying controller MTBDD plant artifact integrity mismatch",
+            "proof-carrying transition bound overflow",
+            "controller proof MTBDD resource policy is not canonical",
+        ] {
+            assert_eq!(controller_proof_mtbdd_resource_refusal(invalid), None);
+            assert_eq!(
+                classify_controller_proof_mtbdd_resource_error(invalid.to_string()),
+                invalid
+            );
+        }
+    }
+
+    #[test]
+    fn controller_split_resource_refusal_reasons_are_stable_and_narrow() {
+        for (message, reason) in [
+            (
+                "controller proof evidence resource artifact-byte limit exceeded",
+                "controller-artifact-bytes",
+            ),
+            (
+                "controller proof evidence resource UNSAT-proof limit exceeded",
+                "unsat-proof-bytes",
+            ),
+            ("controller split resource batch limit exceeded", "batches"),
+            (
+                "bound plant result resource artifact-byte limit exceeded",
+                "plant-artifact-bytes",
+            ),
+            (
+                "bound plant result resource member limit exceeded",
+                "members-per-batch",
+            ),
+            (
+                "bound plant result resource horizon limit exceeded",
+                "horizon",
+            ),
+            (
+                "bound plant result resource product-state limit exceeded",
+                "product-states",
+            ),
+            (
+                "bound plant result resource transition limit exceeded",
+                "transitions-per-batch",
+            ),
+            (
+                "controller split resource total plant artifact-byte limit exceeded",
+                "total-plant-artifact-bytes",
+            ),
+            (
+                "controller split resource total member limit exceeded",
+                "total-members",
+            ),
+            (
+                "controller split resource total transition limit exceeded",
+                "total-transition-evaluations",
+            ),
+        ] {
+            assert_eq!(controller_split_resource_refusal(message), Some(reason));
+            assert_eq!(
+                classify_controller_split_resource_error(message.to_string()),
+                format!("controller-split-resource refusal={reason} result=none")
+            );
+        }
+        for invalid in [
+            "bound plant result mismatch",
+            "bound plant result resource transition bound overflow",
+            "controller split resource policy is not canonical",
+        ] {
+            assert_eq!(controller_split_resource_refusal(invalid), None);
+            assert_eq!(
+                classify_controller_split_resource_error(invalid.to_string()),
+                invalid
+            );
+        }
+    }
+
+    #[test]
+    fn source_model_attestation_rejects_post_snapshot_replacement() {
+        let source = b"module controller; endmodule\n".to_vec();
+        let recipe = b"read_verilog controller.v\n".to_vec();
+        let model = b"aag 0 0 0 0 0\n".to_vec();
+        let snapshot = LoadedSourceModelSnapshot {
+            subjects: vec![LoadedSourceModelSubject {
+                source_path: PathBuf::from("controller.v"),
+                model_path: PathBuf::from("controller.aag"),
+                source_sha256: Sha256::digest(&source).into(),
+                model_sha256: Sha256::digest(&model).into(),
+            }],
+        };
+        let original = vec![(source.clone(), recipe.clone(), model.clone())];
+        verify_loaded_source_model_snapshot(&original, &snapshot).unwrap();
+
+        let replaced_source = vec![(b"replacement source\n".to_vec(), recipe.clone(), model)];
+        assert_eq!(
+            verify_loaded_source_model_snapshot(&replaced_source, &snapshot).unwrap_err(),
+            "source-model provenance subject 0 changed after the query snapshot"
+        );
+        let replaced_model = vec![(source, recipe, b"aag 1 0 0 0 0\n".to_vec())];
+        assert_eq!(
+            verify_loaded_source_model_snapshot(&replaced_model, &snapshot).unwrap_err(),
+            "source-model provenance subject 0 changed after the query snapshot"
+        );
+        assert_eq!(
+            verify_loaded_source_model_snapshot(&[], &snapshot).unwrap_err(),
+            "source-model subject count changed after the query snapshot"
+        );
+    }
+
+    #[test]
+    fn btor2_predicate_set_cli_preserves_query_binding_and_output_immutability() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("corpus/rtl/opentitan-aon-timer/generated/watchdog-predicate-set-small.btor2");
+        let certificate = std::env::temp_dir().join(format!(
+            "gcc-btor2-predicate-set-{}.cert",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&certificate);
+        assert!(run_artifact_cli(&["btor2-predicate-set-version".to_string()]).unwrap());
+        let check = vec![
+            "check-btor2-predicate-set".to_string(),
+            source.display().to_string(),
+            "18,22".to_string(),
+            "4".to_string(),
+            certificate.display().to_string(),
+        ];
+        assert!(run_artifact_cli(&check).unwrap());
+        assert!(
+            fs::read_to_string(&certificate)
+                .unwrap()
+                .starts_with("predicate_set_certificate_version=2\nroute=shared_exact_region\n")
+        );
+        assert!(
+            run_artifact_cli(&check)
+                .unwrap_err()
+                .contains("create certificate")
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-predicate-set".to_string(),
+                source.display().to_string(),
+                "18,22".to_string(),
+                "4".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap()
+        );
+        assert!(
+            run_artifact_cli(&[
+                "verify-btor2-predicate-set".to_string(),
+                source.display().to_string(),
+                "18,22".to_string(),
+                "5".to_string(),
+                certificate.display().to_string(),
+            ])
+            .unwrap_err()
+            .contains("query binding mismatch")
+        );
+        assert!(parse_btor2_property_set("22,18").is_err());
+        fs::remove_file(certificate).unwrap();
     }
 }

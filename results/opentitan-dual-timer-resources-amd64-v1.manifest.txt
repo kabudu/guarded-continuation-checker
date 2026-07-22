@@ -1,0 +1,10 @@
+schema_version=1
+scope=opentitan-dual-timer-h4-h5-complete-evidence
+trials=3
+sequential_invocations_per_sample=10
+source_to_model_setup=excluded-common-pinned-yosys
+model_serialization_profile=canonical-yosys-revision-v1
+external_producer_policy=static-ic3-safe-bmc-earliest-unsafe-race
+runlim_wall_limit_seconds=300
+runlim_sample_rate_microseconds=1000
+status=measured

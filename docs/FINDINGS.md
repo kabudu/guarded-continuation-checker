@@ -635,6 +635,32 @@ deleting one source clause may incorrectly remove a constraint still contributed
 by another clause. The implementation now rebuilds from the root on deletion.
 Only insertion repair is claimed as local and exact.
 
+## Shared multi-predicate recurrence evidence
+
+The OpenTitan AON watchdog follow-up tests whether expansion into more observed
+properties can reduce proof duplication without hiding the answer to any
+property. Two bark and bite predicates share the same exact reset-add reachable
+region. At horizon 4, one 324-byte certificate proves both SAFE, compared with
+598 bytes for two separate region certificates. At horizon 1,000,000,000, one
+360-byte certificate replaces 652 separate bytes while representing
+500,000,001,500,000,001 logical reachable states.
+
+The important control is horizon 5. Bark becomes UNSAFE while bite remains
+SAFE. The shared route is then inapplicable and the static portfolio emits one
+explicit counterexample plus one region proof. That envelope is 1,172 bytes,
+larger than the 517-byte sum of loose member evidence because canonical hex
+embedding and query binding have a cost. This refutes any universal compression
+claim while validating exact mixed-answer preservation.
+
+The practical result is a production-shaped batching primitive for related
+firmware or RTL alarms: share structural evidence when every predicate admits
+the same exact proof, otherwise retain each answer through exact fallback.
+Multi-property model checking, shared exploration, and compositional
+certification already exist, so the result is not evidence of a broad new
+algorithm. The specific size-gated, source-bound, downgrade-detecting contract
+remains only a candidate contribution pending fuller prior-art and expert
+review.
+
 ## Appropriate interpretation
 
 This work identifies a useful specialized knowledge-compilation regime:
@@ -644,3 +670,25 @@ This work identifies a useful specialized knowledge-compilation regime:
 3. many partial-assignment queries require complete witnesses.
 
 It is not a general SAT breakthrough and makes no P-versus-NP claim.
+
+## Invariant-chained public timer predicates
+
+The pinned OpenTitan dual-timer follow-up moves beyond sharing predicates over
+one counter. Predicate-set v3 first proves the prescaler remains zero, uses that
+fact to simplify the guarded wake-up counter, and combines it with the direct
+watchdog counter. One source-bound artifact preserves bark, wake-up, and bite
+results, including exact earliest bad frames 5, 7, and 9.
+
+Five retained horizons agree with the predeclared boundary table. Artifact size
+grows from 445 bytes at horizon 4 to 472 bytes at horizon 9 and 515 bytes at one
+billion frames. The separate GCC baseline remains unavailable for the
+input-dependent wake-up property, so this cycle makes no compression or speed
+claim against separate evidence. It establishes that exact invariant chaining
+can expand the admitted public RTL structure without hiding mixed results or
+weakening refusal semantics.
+
+This is still a narrow post-reset model with one shared reset input. A valid
+same-width cross-coupled near-neighbour is rejected, but maintained solver
+agreement beyond pinned BTOR2Tools witness replay, hosted resource gates, and
+focused prior-art review remain open. No
+broad novelty claim follows from this result.

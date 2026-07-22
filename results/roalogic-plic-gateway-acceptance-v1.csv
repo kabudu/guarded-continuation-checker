@@ -1,0 +1,6 @@
+schema_version,horizon,properties,answers,portfolio_status,route,logical_reachable_states,certificate_bytes,model_deterministic,evidence_deterministic,verified,maintained_oracle,status
+1,0,25+33,25:SAFE:none+33:SAFE:none,accepted,ordinary-exact,2,1494,true,true,true,true,validated
+1,4,25+33,25:SAFE:none+33:SAFE:none,accepted,ordinary-exact,98,11614,true,true,true,true,validated
+1,8,25+33,25:SAFE:none+33:SAFE:none,accepted,ordinary-exact,370,40014,true,true,true,true,validated
+1,16,25+33,25:SAFE:none+33:SAFE:none,accepted,ordinary-exact,1138,121491,true,true,true,true,validated
+1,64,25+33,not-applicable,refused,search-node-step-limit,0,0,true,true,true,true,retained-negative

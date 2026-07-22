@@ -72,6 +72,8 @@ pub enum UnaryOp {
     Inc,
     Dec,
     Neg,
+    Redor,
+    Redand,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -106,6 +108,10 @@ pub enum NodeKind {
     Uext {
         value: NodeId,
         amount: u32,
+    },
+    Concat {
+        high: NodeId,
+        low: NodeId,
     },
 }
 
@@ -240,6 +246,11 @@ impl Btor2Model {
                         UnaryOp::Inc => value.wrapping_add(1),
                         UnaryOp::Dec => value.wrapping_sub(1),
                         UnaryOp::Neg => 0u64.wrapping_sub(value),
+                        UnaryOp::Redor => u64::from(value != 0),
+                        UnaryOp::Redand => {
+                            let operand_width = model.nodes[&operand].width;
+                            u64::from(value == width_mask(operand_width))
+                        }
                     }
                 }
                 NodeKind::Binary(operator, left, right) => {
@@ -274,6 +285,12 @@ impl Btor2Model {
                     lower,
                 } => visit(model, value, state, inputs, memo)? >> lower,
                 NodeKind::Uext { value, amount: _ } => visit(model, value, state, inputs, memo)?,
+                NodeKind::Concat { high, low } => {
+                    let high_value = visit(model, high, state, inputs, memo)?;
+                    let low_value = visit(model, low, state, inputs, memo)?;
+                    let low_width = model.nodes[&low].width;
+                    (high_value << low_width) | low_value
+                }
             } & mask;
             memo.insert(id, value);
             Ok(value)
@@ -318,7 +335,11 @@ fn expect_end<T: Iterator<Item = String> + ?Sized>(
     }
 }
 
-pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
+fn parse_with_roots(
+    input: &str,
+    additional_semantic_roots: &[NodeId],
+    require_bad_property: bool,
+) -> Result<Btor2Model, ParseError> {
     if input.len() > MAX_BTOR2_BYTES {
         return Err(ParseError::new(0, "input exceeds the 8 MiB limit"));
     }
@@ -399,6 +420,22 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
             continue;
         }
 
+        // BTOR2 outputs are named observation roots, not transition-system
+        // semantics. Accept and validate them so standard Yosys `write_btor`
+        // output can be consumed without treating an output as a property.
+        if operation == "output" {
+            let expression = parse_u64(tokens.next().as_deref(), line, "output expression")?;
+            if !nodes.contains_key(&expression) {
+                return Err(ParseError::new(
+                    line,
+                    format!("unknown or non-prior output expression {expression}"),
+                ));
+            }
+            let _symbol = tokens.next();
+            expect_end(&mut tokens, line)?;
+            continue;
+        }
+
         let sort = parse_u64(tokens.next().as_deref(), line, "sort identifier")?;
         let width = *sorts
             .get(&sort)
@@ -440,11 +477,22 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
         nodes.insert(id, node);
     }
 
-    if states.is_empty() || bad.is_empty() {
+    if states.is_empty() {
+        return Err(ParseError::new(0, "model requires at least one state"));
+    }
+    if require_bad_property && bad.is_empty() {
         return Err(ParseError::new(
             0,
             "model requires at least one state and one bad property",
         ));
+    }
+    for root in additional_semantic_roots {
+        if !nodes.contains_key(root) {
+            return Err(ParseError::new(
+                0,
+                format!("unknown component semantic root {root}"),
+            ));
+        }
     }
     for state in &states {
         if !initialisers.contains_key(state) || !next_values.contains_key(state) {
@@ -460,6 +508,16 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
             ));
         }
     }
+    let semantic_inputs = semantic_input_support(
+        &nodes,
+        next_values
+            .values()
+            .copied()
+            .chain(constraints.iter().map(|(_, expression)| *expression))
+            .chain(bad.iter().map(|(_, expression, _)| *expression))
+            .chain(additional_semantic_roots.iter().copied()),
+    );
+    inputs.retain(|input| semantic_inputs.contains(input));
     Ok(Btor2Model {
         nodes,
         inputs,
@@ -469,6 +527,57 @@ pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
         constraints,
         bad,
     })
+}
+
+pub fn parse(input: &str) -> Result<Btor2Model, ParseError> {
+    parse_with_roots(input, &[], true)
+}
+
+pub fn parse_component(input: &str, semantic_roots: &[NodeId]) -> Result<Btor2Model, ParseError> {
+    if semantic_roots.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(ParseError::new(
+            0,
+            "component semantic roots must be unique and strictly ordered",
+        ));
+    }
+    parse_with_roots(input, semantic_roots, false)
+}
+
+fn semantic_input_support(
+    nodes: &BTreeMap<NodeId, Node>,
+    roots: impl IntoIterator<Item = NodeId>,
+) -> BTreeSet<NodeId> {
+    let mut stack = roots.into_iter().collect::<Vec<_>>();
+    let mut visited = BTreeSet::new();
+    let mut inputs = BTreeSet::new();
+    while let Some(id) = stack.pop() {
+        if !visited.insert(id) {
+            continue;
+        }
+        match &nodes[&id].kind {
+            NodeKind::Input => {
+                inputs.insert(id);
+            }
+            NodeKind::State | NodeKind::Constant(_) => {}
+            NodeKind::Unary(_, value)
+            | NodeKind::Slice { value, .. }
+            | NodeKind::Uext { value, .. } => stack.push(*value),
+            NodeKind::Binary(_, left, right) => {
+                stack.push(*left);
+                stack.push(*right);
+            }
+            NodeKind::Concat { high, low } => {
+                stack.push(*high);
+                stack.push(*low);
+            }
+            NodeKind::Ite(condition, then_value, else_value) => {
+                stack.push(*condition);
+                stack.push(*then_value);
+                stack.push(*else_value);
+            }
+        }
+    }
+    inputs
 }
 
 fn is_constant_expression(nodes: &BTreeMap<NodeId, Node>, root: NodeId) -> bool {
@@ -489,6 +598,7 @@ fn is_constant_expression(nodes: &BTreeMap<NodeId, Node>, root: NodeId) -> bool 
             NodeKind::Binary(_, left, right) => {
                 visit(nodes, *left, memo) && visit(nodes, *right, memo)
             }
+            NodeKind::Concat { high, low } => visit(nodes, *high, memo) && visit(nodes, *low, memo),
             NodeKind::Ite(condition, then_value, else_value) => {
                 visit(nodes, *condition, memo)
                     && visit(nodes, *then_value, memo)
@@ -508,6 +618,18 @@ pub fn parse_bytes(input: &[u8]) -> Result<Btor2Model, ParseError> {
     let text = std::str::from_utf8(input)
         .map_err(|_| ParseError::new(0, "input must contain valid UTF-8"))?;
     parse(text)
+}
+
+pub fn parse_component_bytes(
+    input: &[u8],
+    semantic_roots: &[NodeId],
+) -> Result<Btor2Model, ParseError> {
+    if input.len() > MAX_BTOR2_BYTES {
+        return Err(ParseError::new(0, "input exceeds the 8 MiB limit"));
+    }
+    let text = std::str::from_utf8(input)
+        .map_err(|_| ParseError::new(0, "input must contain valid UTF-8"))?;
+    parse_component(text, semantic_roots)
 }
 
 #[derive(Clone, Copy)]
@@ -598,6 +720,29 @@ fn parse_node_kind(
             };
             NodeKind::Unary(operator, operand)
         }
+        "redor" | "redand" => {
+            if width != 1 {
+                return Err(ParseError::new(
+                    line,
+                    "reduction result sort must be bit-vector 1",
+                ));
+            }
+            let operand = parse_u64(tokens.next().as_deref(), line, "reduction operand")?;
+            if !nodes.contains_key(&operand) {
+                return Err(ParseError::new(
+                    line,
+                    "unknown or non-prior reduction operand",
+                ));
+            }
+            NodeKind::Unary(
+                if operation == "redor" {
+                    UnaryOp::Redor
+                } else {
+                    UnaryOp::Redand
+                },
+                operand,
+            )
+        }
         "and" | "or" | "xor" | "add" | "sub" | "mul" => {
             let left = parse_u64(tokens.next().as_deref(), line, "left operand")?;
             let right = parse_u64(tokens.next().as_deref(), line, "right operand")?;
@@ -687,6 +832,25 @@ fn parse_node_kind(
                 amount: amount as u32,
             }
         }
+        "concat" => {
+            let high = parse_u64(tokens.next().as_deref(), line, "high operand")?;
+            let low = parse_u64(tokens.next().as_deref(), line, "low operand")?;
+            let high_width = nodes
+                .get(&high)
+                .ok_or_else(|| ParseError::new(line, "unknown high concat operand"))?
+                .width;
+            let low_width = nodes
+                .get(&low)
+                .ok_or_else(|| ParseError::new(line, "unknown low concat operand"))?
+                .width;
+            if high_width.checked_add(low_width) != Some(width) {
+                return Err(ParseError::new(
+                    line,
+                    "concat operand widths disagree with result width",
+                ));
+            }
+            NodeKind::Concat { high, low }
+        }
         _ => {
             return Err(ParseError::new(
                 line,
@@ -694,8 +858,9 @@ fn parse_node_kind(
             ));
         }
     };
+    let symbol = tokens.next();
     expect_end(tokens, line)?;
-    Ok((kind, None))
+    Ok((kind, symbol))
 }
 
 fn parse_constant(
@@ -761,6 +926,64 @@ mod tests {
     }
 
     #[test]
+    fn accepts_yosys_outputs_and_prunes_unused_clock_inputs() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 8\n3 input 1 reset\n4 input 1 clk\n5 zero 2\n6 state 2 count\n7 init 2 6 5\n8 one 2\n9 add 2 6 8\n10 ite 2 3 5 9\n11 next 2 6 10\n12 constd 2 9\n13 ugte 1 6 12\n14 output 13 bad\n15 bad 13 watchdog\n";
+        let model = parse(source).unwrap();
+        assert_eq!(model.inputs(), &[3]);
+        assert_eq!(model.states(), &[6]);
+        assert_eq!(
+            model.bad_properties(),
+            &[(15, 13, Some("watchdog".to_string()))]
+        );
+
+        for hostile in [
+            source.replace("14 output 13 bad", "14 output 99 bad"),
+            source.replace("14 output 13 bad", "14 output 13 bad extra"),
+            source.replace("14 output 13 bad", "14 output"),
+        ] {
+            assert!(parse(&hostile).is_err());
+        }
+    }
+
+    #[test]
+    fn component_parser_accepts_property_free_sources_and_binds_selected_roots() {
+        let source = "1 sort bitvec 1\n2 input 1 command\n3 state 1 state\n4 zero 1\n5 init 1 3 4\n6 next 1 3 3\n7 xor 1 3 2\n8 output 7 projected\n";
+        assert_eq!(
+            parse(source).unwrap_err().message,
+            "model requires at least one state and one bad property"
+        );
+        let component = parse_component(source, &[7]).unwrap();
+        assert_eq!(component.states(), &[3]);
+        assert_eq!(component.inputs(), &[2]);
+        assert!(component.bad_properties().is_empty());
+
+        assert_eq!(
+            parse_component(source, &[99]).unwrap_err().message,
+            "unknown component semantic root 99"
+        );
+        assert_eq!(
+            parse_component(source, &[7, 7]).unwrap_err().message,
+            "component semantic roots must be unique and strictly ordered"
+        );
+    }
+
+    #[test]
+    fn semantic_input_support_is_iterative_for_deep_valid_graphs() {
+        let mut source = String::from("1 sort bitvec 1\n2 input 1 signal\n");
+        let mut previous = 2;
+        for id in 3..20_003 {
+            source.push_str(&format!("{id} not 1 {previous}\n"));
+            previous = id;
+        }
+        source.push_str(&format!(
+            "20003 state 1 held\n20004 zero 1\n20005 init 1 20003 20004\n20006 next 1 20003 20003\n20007 bad {previous} deep\n"
+        ));
+
+        let model = parse(&source).unwrap();
+        assert_eq!(model.inputs(), &[2]);
+    }
+
+    #[test]
     fn arithmetic_wraps_at_declared_word_width() {
         let model = parse(WATCHDOG).unwrap();
         let state = BTreeMap::from([(5, 255)]);
@@ -772,8 +995,66 @@ mod tests {
     fn rejects_unsupported_arrays_and_operations() {
         let error = parse("1 sort array 2 2\n").unwrap_err();
         assert!(error.message.contains("only bit-vector"));
-        let error = parse("1 sort bitvec 1\n2 state 1 s\n3 zero 1\n4 init 1 2 3\n5 next 1 2 3\n6 redor 1 2\n7 bad 6\n").unwrap_err();
+        let error = parse("1 sort bitvec 1\n2 state 1 s\n3 zero 1\n4 init 1 2 3\n5 next 1 2 3\n6 sll 1 2 2\n7 bad 6\n").unwrap_err();
         assert!(error.message.contains("unsupported operation"));
+    }
+
+    #[test]
+    fn reduction_or_matches_standard_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 12\n3 state 2 word\n4 zero 2\n5 init 2 3 4\n6 next 2 3 3\n7 redor 1 3 any_bit\n8 bad 7 reduced\n";
+        let model = parse(source).unwrap();
+        assert!(
+            model
+                .active_bad(&BTreeMap::from([(3, 0)]), &BTreeMap::new())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            model
+                .active_bad(&BTreeMap::from([(3, 8)]), &BTreeMap::new())
+                .unwrap(),
+            vec![8]
+        );
+        assert_eq!(model.nodes()[&7].symbol.as_deref(), Some("any_bit"));
+        assert!(parse(&source.replace("7 redor 1", "7 redor 2")).is_err());
+        assert!(parse(&source.replace("7 redor 1 3", "7 redor 1 99")).is_err());
+    }
+
+    #[test]
+    fn reduction_and_matches_standard_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 4\n3 state 2 word\n4 zero 2\n5 init 2 3 4\n6 next 2 3 3\n7 redand 1 3 all_bits\n8 bad 7 reduced\n";
+        let model = parse(source).unwrap();
+        assert!(
+            model
+                .active_bad(&BTreeMap::from([(3, 7)]), &BTreeMap::new())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            model
+                .active_bad(&BTreeMap::from([(3, 15)]), &BTreeMap::new())
+                .unwrap(),
+            vec![8]
+        );
+        assert_eq!(model.nodes()[&7].symbol.as_deref(), Some("all_bits"));
+        assert!(parse(&source.replace("7 redand 1", "7 redand 2")).is_err());
+        assert!(parse(&source.replace("7 redand 1 3", "7 redand 1 99")).is_err());
+    }
+
+    #[test]
+    fn concat_matches_standard_high_low_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 3\n3 sort bitvec 5\n4 sort bitvec 8\n5 state 4 word\n6 zero 4\n7 init 4 5 6\n8 next 4 5 5\n9 const 2 101\n10 const 3 10011\n11 concat 4 9 10 joined\n12 consth 4 b3\n13 eq 1 11 12\n14 bad 13 concat_ok\n";
+        let model = parse(source).unwrap();
+        assert_eq!(
+            model
+                .active_bad(&model.initial_state().unwrap(), &BTreeMap::new())
+                .unwrap(),
+            vec![14]
+        );
+        assert_eq!(model.nodes()[&11].symbol.as_deref(), Some("joined"));
+        assert!(parse(&source.replace("11 concat 4 9 10", "11 concat 3 9 10")).is_err());
+        assert!(parse(&source.replace("11 concat 4 9 10", "11 concat 4 99 10")).is_err());
+        assert!(parse(&source.replace("11 concat 4 9 10", "11 concat 4 9 99")).is_err());
     }
 
     #[test]

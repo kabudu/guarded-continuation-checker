@@ -85,7 +85,33 @@ close either register by itself.
    an exact compact batch, and a measured local win for fully admitted batches.
    Mixed fallback batches do not win, and public-product validity remains open.
    A pinned Bitwuzla 0.9.1 gate agrees on counter, motion, and braking
-   boundaries.
+   boundaries. The first production-tagged public target now carries
+   [OpenTitan's AON watchdog](OPENTITAN_AON_WATCHDOG_EXPERIMENT_V1.md) through
+   pinned Yosys export, a compact billion-frame proof, exact unsafe fallback,
+   deterministic certificates, and hostile controls. This is one configured
+   watchdog path, so broader public-product and independent acceptance remain
+   open.
+   The next fallback boundary is now predeclared as
+   [bounded search certificate v3](BTOR2_BOUNDED_SEARCH_V3.md). A pinned
+   public PLIC gateway exposes five independent control inputs and is refused
+   by the one-input search contract. V3 must retain complete packed transition
+   and terminal valuations, preserve v1/v2 bytes, and pass an independent
+   generated-model oracle before it can support the
+   [public PLIC experiment](ROALOGIC_PLIC_GATEWAY_EXPERIMENT_V1.md).
+   The next interoperability boundary is
+   [bounded search v4](BTOR2_BOUNDED_SEARCH_V4.md) now preserves exact BTOR2
+   environment constraints, admissible terminal valuations, and assumption
+   dead ends without changing retained v1 through v3 evidence. A constrained
+   public PLIC workflow agrees with maintained Yosys plus Z3 through horizon
+   16. Hosted amd64 run 29872388711 reproduces the pinned model, retained
+   evidence, maintained-tool baseline, Linux suite, and downstream API matrix.
+   The next predeclared fallback boundary is
+   [bounded search v5](BTOR2_BOUNDED_SEARCH_V5.md), which preserves
+   small word-valued register and sensor inputs without flattening away source
+   widths, while retaining every v1 through v4 artifact. Its local core and
+   pinned Caliptra public-design validation pass, including maintained Yosys
+   plus Z3 agreement. Hosted amd64 run 29874337371 closes every predeclared v5
+   gate.
 
 6. **Assume/guarantee component quotients.** Compose independently checked
    contracts for drivers, control loops, communication stacks, and redundant
@@ -148,6 +174,38 @@ closes local aggregation and simulated self-service mechanics. Linux
 process enforcement now passes locally for every governed verification in the
 pipeline and is reproduced in hosted Linux CI. An independently sourced
 constrained workflow and external suitability assessment remain open.
+
+The next proof-delivery cycle now has a first
+[governed proof-carrying MTBDD API](GOVERNED_PROOF_MTBDD_PORTFOLIO_V1.md).
+It separately preflights the equivalence artifact and embedded UNSAT proof,
+then preserves exact proof verification and plant composition under the
+existing conservative work envelope. Canonical self-service policy and typed
+process integration are now implemented. The first library portfolio selects
+proof-carrying MTBDD or direct exact replay from the existing structural
+admission result and rejects forced downgrade. Versioned portfolio file commands
+and a strict typed process client now cover the admitted proof route, governed
+proof refusal, and exact direct fallback. A deterministic six-job acceptance pipeline
+now passes the public washing-controller proof route and exact fallback on macOS
+and Linux, including typed refusal and hostile-input controls. Hosted Linux
+reproduction and compatibility history remain open.
+
+The pinned public controller and physical plant now have deterministic
+source-to-model attestation through their exact Yosys revision, canonical
+synthesis recipes, and byte-identical regenerated AIGER models. This closes the
+public benchmark's local provenance mechanism gap. General signed partner build
+provenance, independent synthesis equivalence, and compatibility history remain
+open.
+
+The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
+9. Compositional certification from BDD engines, arbitrary witness-circuit
+composition, and shared multi-property checking already exist in the closest
+published systems. The next experiment must therefore compare reusable
+controller-local quotient evidence directly with a composed whole-circuit
+witness. It must test whether a changed plant can be admitted and checked
+without rebuilding controller evidence, while preserving both answers,
+deterministic artifacts, low checker memory, and exact fail-closed behavior.
+If that distinction does not survive the baseline, the algorithmic novelty
+hypothesis is rejected and work continues as production engineering.
 
 The order can change when evidence falsifies an assumption. Cycles are not
 marked complete by scaffolding or a single favourable benchmark.
