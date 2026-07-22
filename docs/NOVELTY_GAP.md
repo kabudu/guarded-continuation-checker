@@ -94,6 +94,13 @@ next source-bound conditional-equivalence certificate is product research only
 unless it demonstrates a semantic capability absent from those systems and
 passes a maintained equivalent-scope baseline plus independent review.
 
+The first symbolic PWM property portfolio stores one bounded proof per admitted
+class and replays UNSAFE inputs against target channels. Its 43.07% six-channel
+evidence reduction is the expected consequence of representative sharing, not
+a new invariant. The horizon-2 resource refusal and absence of an outer codec,
+maintained-tool comparison, and independent review leave this as an engineering
+mechanism only.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

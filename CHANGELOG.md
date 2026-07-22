@@ -15,6 +15,14 @@
   class. Retained artifacts occupy 232 to 460 bytes, about 1.3% of their source
   models, and hostile truncation, mutation, source, class, and signature drift
   tests fail closed.
+- Add a typed both-answer property portfolio driven only by the opaque verified
+  structural admission capability. It stores one exact bounded certificate per
+  class and property shape, keeps singleton classes on direct exact checking,
+  replays derived UNSAFE input valuations against every target channel, and
+  rejects admission, query, backend, evidence, or source drift. Horizon-1
+  retained evidence falls 43.07% on six channels but grows 12.61% on the
+  two-channel negative control. The six-channel SAFE case is honestly refused
+  at horizon 2 by the existing resource guard.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

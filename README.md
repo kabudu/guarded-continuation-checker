@@ -385,6 +385,14 @@ the separately supplied source and rejects all tested mutation and truncation
 cases before returning an opaque capability. The verifier is independent of
 artifact claims, but not a separately implemented or formally verified checker.
 
+The first [symbolic property portfolio](docs/OPENTITAN_PWM_SYMBOLIC_PROPERTY_PORTFOLIO_V1.md)
+uses that verified capability for both-answer bounded proofs. At horizon 1, the
+six-channel workload stores six proof members for twelve logical properties,
+replays every UNSAFE input against its target channel, and reduces retained
+evidence by 43.07%. The two-channel negative control grows by 12.61%. The
+six-channel SAFE case is refused at horizon 2 by the frozen exact-search guard,
+so this is a bounded mechanism result, not production support or novelty.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies

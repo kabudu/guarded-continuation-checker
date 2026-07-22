@@ -1,0 +1,4 @@
+schema_version,channels,logical_queries,proof_members,reused_queries,direct_evidence_bytes,retained_evidence_bytes,evidence_reduction_pct,answers_agree,unsafe_assignments_replayed,horizon2_safe_refused,status
+1,2,4,4,0,1840,2072,-12.608696,true,2,false,accepted
+1,4,8,6,2,4056,3390,16.420118,true,4,false,accepted
+1,6,12,6,6,6636,3778,43.068113,true,6,true,accepted

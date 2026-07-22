@@ -19,6 +19,7 @@ pub mod btor2_predicate_set;
 pub mod btor2_region;
 pub mod btor2_region_equivalence;
 pub mod btor2_region_extract;
+pub mod btor2_region_property;
 pub mod btor2_search;
 pub mod composed_witness;
 pub mod controller_mtbdd;
