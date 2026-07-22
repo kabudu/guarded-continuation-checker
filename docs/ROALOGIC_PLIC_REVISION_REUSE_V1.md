@@ -70,7 +70,9 @@ The retained-left file command consumes the old revision portfolio, validates
 the unchanged monitor once, produces only the new PLIC section, and emits a
 normal portfolio. Its observations report one produced and one reused section;
 the ordinary from-scratch verifier then accepts the resulting artifact against
-the new sources.
+the new sources. The retained file verifier also accepts it while semantically
+checking only the changed section after independently validating the previous
+artifact's retained monitor.
 
 Reproduce after building the release binary and example:
 

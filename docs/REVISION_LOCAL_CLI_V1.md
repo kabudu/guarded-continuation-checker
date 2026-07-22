@@ -53,6 +53,22 @@ from scratch. Stable observations distinguish produced and reused local
 sections, changed-side candidate valuations, composition checks, and final
 transition checks.
 
+Retained verification is also available without rebuilding the unchanged
+relation:
+
+```sh
+guarded-continuation-checker verify-btor2-revision-retained-left \
+  LEFT.btor2 PREVIOUS.revision-proof \
+  RIGHT.btor2 INTERFACE.txt \
+  HORIZON BAD_SIDE BAD_OUTPUT INPUT.revision-proof
+```
+
+This command independently validates the previous artifact's left relation
+against `LEFT.btor2`, checks that the new artifact retains those exact bytes,
+then decodes and semantically verifies only the changed right relation before
+reconstructing composition and the final answer. It reports one verified and
+one reused section. Query or source drift fails closed.
+
 This optimised command fails closed if the previous artifact used direct
 fallback or the new pair is outside revision-local admission. Operators can
 then use `check-btor2-revision-portfolio`, which retains the exact direct
