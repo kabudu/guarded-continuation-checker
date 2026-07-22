@@ -35,7 +35,9 @@
   resource refusal, and source-replayed per-query output. Replace direct
   certificate writes with same-directory temporary files and atomic no-clobber
   hard-link publication. Retain collision preservation, temporary cleanup,
-  query drift, mutation, invalid-pattern, oversize, and symlink controls.
+  query drift, mutation, invalid-pattern, oversize, and symlink controls. Inject
+  a failure after a partial temporary-file write and prove that no destination
+  or temporary debris becomes visible.
   Add a portable whole-process resource harness and retain three macOS arm64
   production and verification trials with one artifact digest. Extend the
   Linux, macOS, and Windows downstream matrix to exercise the trace CLI and

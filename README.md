@@ -438,9 +438,10 @@ horizon-wide SAT witness is not necessarily the earliest counterexample. GCC
 now couples each first-frame witness with a checked UNSAT certificate for the
 preceding horizon. The stronger evidence grows the retained artifacts to 2.14
 through 4.90 MB, so this is a correctness and workflow result with a negative
-proof-size result. File integration, cross-platform identity, process-resource
-evidence, compatibility history, and independent operator acceptance remain
-open. It is not yet part of the production support profile.
+proof-size result. The bounded file integration and atomic partial-write failure
+gate now pass locally. Hosted cross-platform identity, hosted Linux
+process-resource evidence, compatibility history, and independent operator
+acceptance remain open. It is not yet part of the production support profile.
 
 The trace candidate now has a bounded self-service file interface:
 

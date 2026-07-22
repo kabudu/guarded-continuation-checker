@@ -102,13 +102,13 @@ the current mechanism fixture, not the still-open authentic retained cohort.
 
 ## Current gate state
 
-The mechanism currently closes the local portions of gates 1 through 11. Gate
-12 now has a create-new hard-link publication mechanism, collision preservation,
-and temporary-file cleanup, but still requires an injected pre-publication I/O
-failure. Gate 13 requires external
-consumer jobs on Linux, macOS, and Windows. Gate 14 requires retained local and
-hosted Linux whole-process evidence. No experiment pass or production claim is
-made while those gates remain open.
+The mechanism currently closes the local portions of gates 1 through 12. Gate
+12 has a create-new hard-link publication mechanism, collision preservation,
+temporary-file cleanup, and an injected failure after a partial temporary-file
+write. The failure exposes no destination and leaves no temporary file. Gate 13
+requires external consumer jobs on Linux, macOS, and Windows. Gate 14 requires
+retained local and hosted Linux whole-process evidence. No experiment pass or
+production claim is made while those gates remain open.
 
 ## Predeclared cohort
 
@@ -180,8 +180,9 @@ contract. The initial integration test covers production, independent
 verification, stable per-query output, exact work refusal with no output,
 query drift, artifact mutation, invalid patterns, oversized manifests,
 symlinked input refusal, collision preservation, and temporary-file cleanup.
-An injected write or sync failure remains required before acceptance gate 12
-is fully closed.
+The unit-level publication test injects an error after writing partial bytes to
+the temporary file, then proves that the destination does not exist and the
+temporary directory is empty. This closes acceptance gate 12 locally.
 
 ## Whole-process resource evidence
 

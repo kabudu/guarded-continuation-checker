@@ -30,7 +30,7 @@ use std::env;
 #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
 use std::ffi::CString;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -25824,6 +25824,13 @@ fn parse_btor2_phase_specs(raw: &str) -> Result<Vec<btor2_phase::PhaseSpec>, Str
 }
 
 fn write_new_certificate(output: &Path, encoded: &[u8]) -> Result<(), String> {
+    write_new_certificate_with(output, |file| file.write_all(encoded))
+}
+
+fn write_new_certificate_with<F>(output: &Path, write: F) -> Result<(), String>
+where
+    F: FnOnce(&mut fs::File) -> io::Result<()>,
+{
     if fs::symlink_metadata(output).is_ok() {
         return Err(format!(
             "create certificate {}: output already exists",
@@ -25851,7 +25858,7 @@ fn write_new_certificate(output: &Path, encoded: &[u8]) -> Result<(), String> {
                 temporary.display()
             )
         })?;
-        file.write_all(encoded)
+        write(&mut file)
             .and_then(|_| file.sync_all())
             .map_err(|error| {
                 format!(
@@ -43197,5 +43204,31 @@ mod tests {
         );
         assert!(parse_btor2_property_set("22,18").is_err());
         fs::remove_file(certificate).unwrap();
+    }
+
+    #[test]
+    fn certificate_publication_hides_and_cleans_a_failed_partial_write() {
+        let directory = std::env::temp_dir().join(format!(
+            "gcc-certificate-publication-failure-{}-{}",
+            std::process::id(),
+            CERTIFICATE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        let output = directory.join("result.certificate");
+
+        let error = write_new_certificate_with(&output, |file| {
+            file.write_all(b"partial-certificate")?;
+            Err(io::Error::new(
+                io::ErrorKind::StorageFull,
+                "injected pre-publication failure",
+            ))
+        })
+        .unwrap_err();
+
+        assert!(error.contains("injected pre-publication failure"));
+        assert!(!output.exists());
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
+        fs::remove_dir(directory).unwrap();
     }
 }
