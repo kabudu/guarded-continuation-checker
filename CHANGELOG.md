@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add the canonical accessible platform architecture SVG and embed it in the
+  project README. The diagram separates authenticated inputs, GCC governance,
+  CQ-SAT specialisation, exact fallback, canonical evidence and independent
+  verification, and makes refusal with no logical answer a first-class terminal
+  outcome. Add the accompanying trust-boundary documentation and brand reuse
+  rule for the public website.
+
 - Add the first channel trace-monitor foundation: a strict public masked-pattern
   contract and canonical source-bound BTOR2 history monitor with explicit
   prefix validity. Length-one controls agree exactly with the retained high and

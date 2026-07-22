@@ -63,12 +63,19 @@ colours, padlocks, circuit-board decoration, or a standalone “GCC” monogram.
 - [`logo-horizontal.svg`](../assets/brand/logo-horizontal.svg): default project,
   repository and website signature; and
 - [`social-card.svg`](../assets/brand/social-card.svg): repository, release and
-  website social-preview source.
+  website social-preview source; and
+- [`platform-architecture.svg`](../assets/brand/platform-architecture.svg):
+  canonical accessible platform architecture for the README, website and
+  technical presentations.
 
 Keep clear space around the mark equal to the diameter of its centre aperture.
 Do not rotate, stretch, recolour individual paths, add effects, or place the
 full-colour mark on visually noisy backgrounds. At sizes below 24 CSS pixels,
 use the monochrome mark.
+
+The architecture diagram must be reused byte-for-byte across public surfaces.
+Do not edit a website copy independently. Its outcome labels and claim boundary
+are part of the technical meaning, not optional decoration.
 
 ## Colour
 
