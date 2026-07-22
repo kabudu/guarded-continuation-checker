@@ -6,10 +6,13 @@ Predeclared before implementation. The first bounded certificate core is now
 implemented as a public Rust module. It validates a canonical dependency DAG,
 complete mask-major counterfactual table, support isolation, and exhaustive
 inclusion-minimal invalidating sets. Its verifier requires a caller-supplied
-independent semantic evaluator for every observation. Real revision-local
-semantic integration and the remaining gates are still open. This is a
-falsification experiment, not a novelty claim or production-supported
-interface.
+independent semantic evaluator for every observation. The first exact adapter
+now produces every old/new combination through the existing two-component
+revision engine, binds each observation to the SHA-256 of its canonical
+revision-local evidence, and independently decodes and verifies every retained
+artifact. The public OpenTitan cohort and the remaining gates are still open.
+This is a falsification experiment, not a novelty claim or
+production-supported interface.
 
 ## Product question
 
@@ -54,7 +57,7 @@ maintained baseline does not provide.
 
 ## Frozen v1 boundary
 
-V1 admits two to eight named components and one to 32 bounded safety queries.
+V1 admits one to eight named changed atoms and one to 32 bounded safety queries.
 Inputs are canonical component sources, validated local relation artifacts,
 strict interface contracts, queries, and an old-to-new revision mapping. Every
 name, digest, dependency edge, query support, limit, and ordering rule is bound
@@ -74,7 +77,7 @@ accepted as minimal.
 
 ## Resource policy
 
-- at most eight components;
+- one to eight changed component, interface, or property atoms;
 - at most eight changed source or interface atoms;
 - at most 256 counterfactual combinations;
 - at most 32 queries;

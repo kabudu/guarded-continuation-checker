@@ -19,6 +19,13 @@
   truncation, mutation, trailing data and missing or extra minimal sets. This
   closes the certificate-mechanics slice only; exact revision-local integration
   remains open.
+- Bind every impact observation to the SHA-256 of canonical revision-local
+  evidence. Add an exact two-component adapter that enumerates every old/new
+  source combination, produces its bounded answer, independently decodes and
+  verifies each semantic artifact, and rejects query, boundary, source,
+  evidence, digest or result drift. A both-answer mechanism test preserves an
+  UNSAFE-to-SAFE semantic revision and an unchanged SAFE query. Public-product
+  integration and the complete four-transition answer cohort remain open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

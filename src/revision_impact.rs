@@ -4,7 +4,12 @@
 //! semantics. [`verify_revision_impact_with`] requires an independent evaluator
 //! for every admitted counterfactual observation.
 
-use crate::revision_local::BoundedResult;
+use crate::revision_local::{
+    BoundedQuery, BoundedResult, RevisionLocalCertificate, decode_bounded_answer_certificate,
+    decode_revision_local_certificate, encode_revision_local_certificate,
+    produce_revision_local_certificate, source_digest, verify_revision_local_certificate,
+};
+use sha2::{Digest, Sha256};
 use std::{error::Error, fmt};
 
 pub const REVISION_IMPACT_CERTIFICATE_VERSION: u32 = 1;
@@ -48,6 +53,7 @@ pub struct ImpactObservation {
     pub query_index: u8,
     pub result: BoundedResult,
     pub reusable: bool,
+    pub evidence_sha256: [u8; 32],
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -73,6 +79,27 @@ pub struct RevisionImpactSummary {
     pub reusable_observations: usize,
     pub invalidated_observations: usize,
     pub minimal_invalidating_sets: usize,
+}
+
+/// Old and new sources for one exact two-component revision cohort.
+pub struct TwoComponentRevisionImpactInput<'a> {
+    pub left_old: &'a [u8],
+    pub left_new: &'a [u8],
+    pub left_outputs: &'a [u64],
+    pub right_old: &'a [u8],
+    pub right_new: &'a [u8],
+    pub right_outputs: &'a [u64],
+    pub interface_old: &'a [u8],
+    pub interface_new: &'a [u8],
+    pub queries: &'a [BoundedQuery],
+}
+
+/// Impact certificate plus one independently checkable semantic artifact per
+/// mask-major observation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TwoComponentRevisionImpactBundle {
+    pub impact: RevisionImpactCertificate,
+    pub revision_evidence: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,12 +144,18 @@ pub fn verify_revision_impact_with<F>(
     mut evaluator: F,
 ) -> Result<RevisionImpactSummary, RevisionImpactError>
 where
-    F: FnMut(u16, usize) -> Result<(BoundedResult, bool), RevisionImpactError>,
+    F: FnMut(u16, usize) -> Result<(BoundedResult, bool, [u8; 32]), RevisionImpactError>,
 {
     validate_certificate(certificate)?;
     for observation in &certificate.observations {
         let actual = evaluator(observation.changed_mask, observation.query_index as usize)?;
-        if actual != (observation.result, observation.reusable) {
+        if actual
+            != (
+                observation.result,
+                observation.reusable,
+                observation.evidence_sha256,
+            )
+        {
             return Err(reject(format!(
                 "independent observation mismatch at mask {} query {}",
                 observation.changed_mask, observation.query_index
@@ -130,6 +163,117 @@ where
         }
     }
     Ok(summary(certificate))
+}
+
+/// Produce every admitted old/new combination through the existing exact
+/// revision-local producer and retain its canonical evidence for independent
+/// checking.
+pub fn produce_two_component_revision_impact(
+    input: &TwoComponentRevisionImpactInput<'_>,
+) -> Result<TwoComponentRevisionImpactBundle, RevisionImpactError> {
+    if input.queries.is_empty() || input.queries.len() > MAX_IMPACT_QUERIES {
+        return Err(reject("query count must be between one and 32"));
+    }
+    let roles = changed_roles(input);
+    if roles.is_empty() {
+        return Err(reject("revision does not change any bound source"));
+    }
+    let atoms = impact_atoms(input, &roles);
+    let queries = impact_queries(atoms.len(), input.queries.len());
+    let combinations = 1usize << atoms.len();
+    let mut observations = Vec::with_capacity(combinations * queries.len());
+    let mut revision_evidence = Vec::with_capacity(combinations * queries.len());
+    for mask in 0..combinations {
+        let selected = select_sources(input, &roles, mask as u16);
+        for (query_index, query) in input.queries.iter().enumerate() {
+            let (certificate, produced) = produce_revision_local_certificate(
+                selected.left,
+                input.left_outputs,
+                selected.right,
+                input.right_outputs,
+                selected.interface,
+                query,
+            )
+            .map_err(|error| reject(format!("exact producer rejected scenario: {error}")))?;
+            let checked = verify_revision_local_certificate(
+                selected.left,
+                selected.right,
+                selected.interface,
+                &certificate,
+            )
+            .map_err(|error| reject(format!("independent checker rejected scenario: {error}")))?;
+            if checked.answer.result != produced.answer.result
+                || checked.answer.horizon != produced.answer.horizon
+                || checked.answer.bad_frame != produced.answer.bad_frame
+                || checked.answer.reachable_states != produced.answer.reachable_states
+            {
+                return Err(reject(
+                    "producer and independent checker logical summaries differ",
+                ));
+            }
+            let evidence = encode_revision_local_certificate(&certificate)
+                .map_err(|error| reject(format!("encode scenario evidence: {error}")))?;
+            observations.push(ImpactObservation {
+                changed_mask: mask as u16,
+                query_index: query_index as u8,
+                result: checked.answer.result,
+                reusable: mask == 0,
+                evidence_sha256: Sha256::digest(&evidence).into(),
+            });
+            revision_evidence.push(evidence);
+        }
+    }
+    let impact = produce_revision_impact_certificate(atoms, queries, observations)?;
+    Ok(TwoComponentRevisionImpactBundle {
+        impact,
+        revision_evidence,
+    })
+}
+
+/// Independently decode and verify every retained revision-local artifact,
+/// then validate its result and digest against the impact certificate.
+pub fn verify_two_component_revision_impact(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    bundle: &TwoComponentRevisionImpactBundle,
+) -> Result<RevisionImpactSummary, RevisionImpactError> {
+    let roles = changed_roles(input);
+    if roles.is_empty() || bundle.revision_evidence.len() != bundle.impact.observations.len() {
+        return Err(reject("revision evidence table is incomplete"));
+    }
+    let expected_atoms = impact_atoms(input, &roles);
+    let expected_queries = impact_queries(expected_atoms.len(), input.queries.len());
+    if bundle.impact.atoms != expected_atoms || bundle.impact.queries != expected_queries {
+        return Err(reject("impact boundary differs from supplied revision"));
+    }
+    verify_revision_impact_with(&bundle.impact, |mask, query_index| {
+        let index = mask as usize * input.queries.len() + query_index;
+        let evidence = bundle
+            .revision_evidence
+            .get(index)
+            .ok_or_else(|| reject("revision evidence index is missing"))?;
+        let certificate: RevisionLocalCertificate = decode_revision_local_certificate(evidence)
+            .map_err(|error| reject(format!("decode scenario evidence: {error}")))?;
+        let selected = select_sources(input, &roles, mask);
+        let checked = verify_revision_local_certificate(
+            selected.left,
+            selected.right,
+            selected.interface,
+            &certificate,
+        )
+        .map_err(|error| reject(format!("independent checker rejected scenario: {error}")))?;
+        if checked.answer.horizon != input.queries[query_index].horizon
+            || certificate_query(&certificate)? != input.queries[query_index]
+        {
+            return Err(reject(
+                "scenario evidence query differs from supplied query",
+            ));
+        }
+        Ok((
+            checked.answer.result,
+            mask == 0,
+            Sha256::digest(evidence).into(),
+        ))
+    })
 }
 
 pub fn encode_revision_impact_certificate(
@@ -169,6 +313,7 @@ pub fn encode_revision_impact_certificate(
             BoundedResult::Unsafe => 1,
         });
         output.push(u8::from(observation.reusable));
+        output.extend_from_slice(&observation.evidence_sha256);
     }
     for set in &certificate.minimal_invalidating_sets {
         output.push(set.query_index);
@@ -257,11 +402,13 @@ pub fn decode_revision_impact_certificate(
             1 => true,
             _ => return Err(reject("invalid reusable flag")),
         };
+        let evidence_sha256 = decoder.digest()?;
         observations.push(ImpactObservation {
             changed_mask,
             query_index,
             result,
             reusable,
+            evidence_sha256,
         });
     }
     let mut minimal_invalidating_sets = Vec::with_capacity(set_count);
@@ -313,8 +460,8 @@ fn validate_inputs(
     queries: &[ImpactQuery],
     observations: &[ImpactObservation],
 ) -> Result<(), RevisionImpactError> {
-    if atoms.len() < 2 || atoms.len() > MAX_IMPACT_ATOMS {
-        return Err(reject("atom count must be between two and eight"));
+    if atoms.is_empty() || atoms.len() > MAX_IMPACT_ATOMS {
+        return Err(reject("atom count must be between one and eight"));
     }
     if queries.is_empty() || queries.len() > MAX_IMPACT_QUERIES {
         return Err(reject("query count must be between one and 32"));
@@ -322,6 +469,9 @@ fn validate_inputs(
     let mut dependency_total = 0usize;
     for (index, atom) in atoms.iter().enumerate() {
         validate_name(&atom.name)?;
+        if atom.old_sha256 == atom.new_sha256 {
+            return Err(reject("impact atom does not change its bound source"));
+        }
         if index > 0 && atoms[index - 1].name >= atom.name {
             return Err(reject("atom names must be unique and strictly ordered"));
         }
@@ -426,6 +576,118 @@ fn support_closure(atoms: &[ImpactAtom], support: &[u8]) -> usize {
             return closure;
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ChangedRole {
+    Left,
+    Right,
+    Interface,
+}
+
+struct SelectedSources<'a> {
+    left: &'a [u8],
+    right: &'a [u8],
+    interface: &'a [u8],
+}
+
+fn changed_roles(input: &TwoComponentRevisionImpactInput<'_>) -> Vec<ChangedRole> {
+    let mut roles = Vec::new();
+    if input.left_old != input.left_new {
+        roles.push(ChangedRole::Left);
+    }
+    if input.right_old != input.right_new {
+        roles.push(ChangedRole::Right);
+    }
+    if input.interface_old != input.interface_new {
+        roles.push(ChangedRole::Interface);
+    }
+    roles
+}
+
+fn impact_atoms(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    roles: &[ChangedRole],
+) -> Vec<ImpactAtom> {
+    roles
+        .iter()
+        .enumerate()
+        .map(|(index, role)| {
+            let (name, kind, old, new) = match role {
+                ChangedRole::Left => (
+                    "component-left",
+                    ImpactAtomKind::Component,
+                    input.left_old,
+                    input.left_new,
+                ),
+                ChangedRole::Right => (
+                    "component-right",
+                    ImpactAtomKind::Component,
+                    input.right_old,
+                    input.right_new,
+                ),
+                ChangedRole::Interface => (
+                    "interface",
+                    ImpactAtomKind::Interface,
+                    input.interface_old,
+                    input.interface_new,
+                ),
+            };
+            let depends_on = if matches!(role, ChangedRole::Interface) {
+                (0..index).map(|dependency| dependency as u8).collect()
+            } else {
+                Vec::new()
+            };
+            ImpactAtom {
+                name: name.to_string(),
+                kind,
+                old_sha256: source_digest(old),
+                new_sha256: source_digest(new),
+                depends_on,
+            }
+        })
+        .collect()
+}
+
+fn impact_queries(atom_count: usize, query_count: usize) -> Vec<ImpactQuery> {
+    let support = (0..atom_count).map(|index| index as u8).collect::<Vec<_>>();
+    (0..query_count)
+        .map(|index| ImpactQuery {
+            name: format!("query-{index:02}"),
+            support: support.clone(),
+        })
+        .collect()
+}
+
+fn select_sources<'a>(
+    input: &TwoComponentRevisionImpactInput<'a>,
+    roles: &[ChangedRole],
+    mask: u16,
+) -> SelectedSources<'a> {
+    let mut selected = SelectedSources {
+        left: input.left_old,
+        right: input.right_old,
+        interface: input.interface_old,
+    };
+    for (index, role) in roles.iter().enumerate() {
+        if mask & (1_u16 << index) == 0 {
+            continue;
+        }
+        match role {
+            ChangedRole::Left => selected.left = input.left_new,
+            ChangedRole::Right => selected.right = input.right_new,
+            ChangedRole::Interface => selected.interface = input.interface_new,
+        }
+    }
+    selected
+}
+
+fn certificate_query(
+    certificate: &RevisionLocalCertificate,
+) -> Result<BoundedQuery, RevisionImpactError> {
+    decode_bounded_answer_certificate(&certificate.final_evidence)
+        .map(|answer| answer.query)
+        .map_err(|error| reject(format!("decode scenario query: {error}")))
 }
 
 fn validate_indices(indices: &[u8], upper: usize, label: &str) -> Result<(), RevisionImpactError> {
