@@ -1,0 +1,3 @@
+schema_version,property,old_result,new_result,old_bad_frame,new_bad_frame,retained_bytes,retained_byte_identical,decoded_local_sections,verified_local_sections,reused_local_sections,composed_pair_checks,final_transition_checks,status
+1,repeated-pending,UNSAFE,UNSAFE,2,2,272,true,1,1,1,16384,448,accepted
+1,impossible,SAFE,SAFE,none,none,272,true,1,1,1,16384,448,accepted

@@ -190,5 +190,9 @@ tool.
 4. Add hostile controls and every-prefix plus bounded mutation testing.
 5. Run repository-authored SAFE and UNSAFE fixtures.
 6. Import the revision-pinned public cohort and maintained-tool controls.
+   The first local Roa Logic PLIC pair now passes both-answer, retained-section,
+   hostile-control, and maintained Yosys/Z3 checks as documented in
+   [Roa Logic PLIC revision reuse v1](ROALOGIC_PLIC_REVISION_REUSE_V1.md).
+   Hosted and cross-platform evidence remains open.
 7. Run strong baselines and cross-platform packaging.
 8. Reject or retain the candidate strictly from the predeclared gates.

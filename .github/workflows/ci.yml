@@ -82,6 +82,8 @@ jobs:
             scripts/run-roalogic-plic-gateway-acceptance-v1.sh \
             scripts/build-roalogic-plic-gateway-constrained-btor2-v1.sh \
             scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
+            scripts/build-roalogic-plic-revision-component-v1.sh \
+            scripts/run-roalogic-plic-revision-reuse-v1.sh \
             scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
             scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
@@ -377,6 +379,8 @@ jobs:
             /tmp/opentitan-aon-watchdog-acceptance.csv
       - name: Reproduce Caliptra and Roa Logic PLIC search acceptance
         run: |
+          cargo build --release --locked \
+            --example roalogic_plic_revision_reuse
           scripts/run-caliptra-wdt-word-probe-v2.sh \
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             /tmp/yosys-attestation/build/yosys \
@@ -404,6 +408,15 @@ jobs:
             /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
           diff -u results/roalogic-plic-gateway-constrained-acceptance-v1.csv \
             /tmp/roalogic-plic-gateway-constrained-acceptance-v1.csv
+          mkdir /tmp/roalogic-plic-revision-work
+          scripts/run-roalogic-plic-revision-reuse-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            "$(command -v yosys-smtbmc)" \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/roalogic-plic-revision-reuse-v1.csv \
+            /tmp/roalogic-plic-revision-work
+          diff -u results/roalogic-plic-revision-reuse-v1.csv \
+            /tmp/roalogic-plic-revision-reuse-v1.csv
       - name: Reproduce OpenTitan AON predicate-set acceptance
         run: |
           scripts/run-opentitan-aon-predicate-set-acceptance.sh \

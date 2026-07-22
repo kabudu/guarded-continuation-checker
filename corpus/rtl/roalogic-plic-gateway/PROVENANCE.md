@@ -13,6 +13,15 @@ licence_sha256=919790362f3dfbb5f921e0b31e0104e97d8ded413ea3f73238ab2d22ae1c628f
 The retained licence requires preservation of its copyright statement and
 disclaimer. `UPSTREAM_LICENSE.txt` is byte-identical to that upstream file.
 
+The revision-local cohort also covers the earlier path revision
+`e3483ddb06687799e2df81144659c3ec5eff3278`, whose source SHA-256 is
+`a7f01fdf58c3bab4597b26a2c54784add31a2fa897a61bc7e59af872de284933`, and the
+later path revision `2e8dc667f6ab69befaebdc30de7a9a53e925dbcc`, whose bytes
+match the retained upstream file. An exact reverse patch reconstructs the
+earlier source and the builder verifies both digests before synthesis. Files
+under `revision-cohort/` other than that reconstructed upstream source are GCC
+test infrastructure.
+
 `wrapper-predicate-set.sv` is GCC-authored Apache-2.0 verification
 instrumentation. It fixes `MAX_PENDING_COUNT=3`, exposes the five independent
 control inputs, and adds two bounded protocol-integrity requirements. It does

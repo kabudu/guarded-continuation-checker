@@ -254,6 +254,14 @@ routing, and are available through the bounded
 repository-authored experimental evidence. Public revision, maintained-tool,
 performance, and cross-platform gates remain open.
 
+The first public revision pair now uses both authentic revisions of the small
+Roa Logic RISC-V PLIC gateway. The retained local result preserves SAFE and
+earliest-frame UNSAFE answers, reuses the unchanged monitor relation
+byte-for-byte, and agrees with maintained Yosys/Z3. See the
+[Roa Logic PLIC revision-local result](docs/ROALOGIC_PLIC_REVISION_REUSE_V1.md).
+Hosted, strong-baseline, complete-hostile-matrix, and portable certificate
+evidence remain open.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual
