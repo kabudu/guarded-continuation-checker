@@ -34,6 +34,11 @@
   for every channel root, and independently verifies those representatives
   before deriving each isomorphic instance result. Distinct bindings,
   incomplete roots, source drift, mutation, and truncation fail closed.
+- Retain five complete orbit-versus-direct trials at 2, 4, and 6 channels. All
+  logical answers and earliest bad frames agree. At 6 channels, five
+  representatives cover 30 logical properties, reducing exact evidence by
+  83.35% and the complete artifact by 80.35%. The result applies only to the
+  identical-binding preliminary fixture and is not a novelty claim.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

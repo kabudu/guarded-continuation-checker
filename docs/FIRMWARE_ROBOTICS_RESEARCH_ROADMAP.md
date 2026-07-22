@@ -244,6 +244,17 @@ exact evidence. This is a retained negative control. The authentic independent
 channel fixture, representative-proof experiment, maintained baseline, process
 resource evidence, portability, and self-service acceptance gates remain open.
 
+The follow-up
+[representative channel-orbit probe](OPENTITAN_PWM_CHANNEL_FAMILY_ORBIT_PROBE_V1.md)
+passes the identical-binding mechanism gate. Five exact representative
+certificates cover 10, 20, and 30 logical properties at 2, 4, and 6 channels.
+At 6 channels this reduces retained exact evidence by 83.35% and the complete
+artifact by 80.35%, while preserving every result and earliest bad frame over
+five deterministic trials. This is established symmetry reduction, not a
+novelty result. Authentic independent channel bindings, hidden-coupling
+refusal, maintained evidence, process resources, portability, and self-service
+acceptance remain open.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest

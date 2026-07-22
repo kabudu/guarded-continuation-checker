@@ -61,3 +61,6 @@ independently validates every instance-to-representative map. Symmetry reduction
 is established prior art, so success would be an engineering optimisation, not
 a novelty result. The route must refuse distinct bindings or hidden coupling
 and preserve exact monolithic fallback.
+
+That candidate is evaluated in the
+[channel-family orbit probe v1](OPENTITAN_PWM_CHANNEL_FAMILY_ORBIT_PROBE_V1.md).

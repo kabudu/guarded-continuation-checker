@@ -1,0 +1,23 @@
+schema_version=1
+scope=opentitan-pwm-identical-binding-channel-family-orbit-preliminary-probe
+status=complete-mechanism-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=8b69c6fd4c69c243932cfb49636d87317de18304
+trials_per_channel_count=5
+channel_counts=2,4,6
+process_scope=single-process-release
+timing_scope=in-process-production-or-verification
+memory_scope=not-measured
+selection=none
+discarded_trials=0
+sha256=9b164951bfcc0d6fa592b2735b91f3ac43905c13b8bffb7c4d4737532806a080 file=corpus/rtl/opentitan-pwm-crosstalk-impact/generated/core-after.btor2
+sha256=73e059ffe900313fe3b6e80ffcb53d5232ed8c80cdc8ce00f65b41d27df90534 file=corpus/rtl/opentitan-pwm-crosstalk-impact/generated/channel-after.btor2
+sha256=46be18e3540694fd2579df9a2d31f620629a75f1f56078770fb6308a540ba45e file=corpus/rtl/opentitan-pwm-crosstalk-impact/family-parameters-v1.txt
+sha256=e9d3b1b01e631d4ee7eccf6c34ed82f2ea5d1e355f44e998986ac3cbacf0af87 file=src/btor2_family_orbit.rs
+sha256=014be7992c2fb50f1105e830239867a85e8cb808ae3e3af7d2fd30dade2108b8 file=examples/btor2_family_orbit_probe.rs
+sha256=983c900bd058d1ab01db14dde8b9a2d84cf466baa768504dca5b1ece7bbec8bb file=scripts/run-btor2-family-orbit-probe-v1.sh
+sha256=34a882c9781f53794574759f65cd88bf111fbabc228996d9ae1bdb9c418df478 file=scripts/check-btor2-family-orbit-probe-v1.sh
+sha256=6b2937a4372e257c52d1124cf4d6e7a4e7701c444b232eb21299a8028f7fac48 file=Cargo.lock
+sha256=055ea9106b1fcfd96db37fb28e065d542e199d824b13c018524c92d9ef24488e file=results/opentitan-pwm-channel-family-orbit-probe-arm64-v1.csv
