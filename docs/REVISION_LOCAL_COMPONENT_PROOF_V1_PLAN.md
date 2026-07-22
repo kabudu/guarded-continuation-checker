@@ -78,7 +78,10 @@ binary codec that binds backend, stable selection reason, payload
 length, and the nested revision-local or direct certificate. Decoding applies
 the selected backend's byte cap before copying or parsing the payload, rejects
 every truncation, and round-trips through the public API. CLI integration
-remains incomplete.
+now provides bounded produce and verify commands, no-overwrite output creation,
+explicit query binding, stable observations, and a focused end-to-end test. The
+operator contract is documented in
+[revision-local proof portfolio CLI v1](REVISION_LOCAL_CLI_V1.md).
 
 ## Hypothesis
 

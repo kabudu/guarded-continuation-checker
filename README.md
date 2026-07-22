@@ -242,6 +242,18 @@ fallback batches, where the reuse hypothesis did not win. Public-product,
 external-tool, and cross-platform evidence remain open, so this is not yet a
 novelty or production-readiness claim.
 
+The newer [revision-local component proof experiment](docs/REVISION_LOCAL_COMPONENT_PROOF_V1_PLAN.md)
+tests a narrower capability: retain one canonical, independently validated
+word-level component relation byte-for-byte while the opposite component
+changes. Its static portfolio now produces a complete four-section
+revision-local proof when bounded local composition is admitted and otherwise
+uses exact source-separated search without generating a merged BTOR2 model.
+Both routes preserve SAFE and earliest-frame UNSAFE evidence, reject forced
+routing, and are available through the bounded
+[CLI v1 workflow](docs/REVISION_LOCAL_CLI_V1.md). Current results are
+repository-authored experimental evidence. Public revision, maintained-tool,
+performance, and cross-platform gates remain open.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

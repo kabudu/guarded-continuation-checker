@@ -6,6 +6,7 @@ use guarded_continuation_checker::{
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
+    revision_local,
     source_model_attestation::{self, SourceModelBindingInput},
     unsat_proof::{self, CnfClause as Clause},
 };
@@ -25791,6 +25792,24 @@ fn parse_btor2_property_set(value: &str) -> Result<Vec<btor2::NodeId>, String> {
     Ok(properties)
 }
 
+fn parse_revision_output_nodes(value: &str, label: &str) -> Result<Vec<btor2::NodeId>, String> {
+    let nodes = value
+        .split(',')
+        .map(|item| {
+            item.parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| format!("{label} must be comma-separated nonzero node identifiers"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if nodes.is_empty() || nodes.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(format!(
+            "{label} must be nonempty, unique, and strictly increasing"
+        ));
+    }
+    Ok(nodes)
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
@@ -27599,6 +27618,131 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 obligation.brake_velocity,
                 encoded.len(),
                 started.elapsed().as_micros()
+            );
+            Ok(true)
+        }
+        "check-btor2-revision-portfolio" | "verify-btor2-revision-portfolio" => {
+            if args.len() != 10 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} LEFT.btor2 LEFT_OUTPUTS RIGHT.btor2 RIGHT_OUTPUTS INTERFACE.txt HORIZON BAD_SIDE BAD_OUTPUT {}",
+                    if command == "check-btor2-revision-portfolio" {
+                        "OUTPUT.revision-proof"
+                    } else {
+                        "INPUT.revision-proof"
+                    }
+                ));
+            }
+            let left = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "left BTOR2 input",
+            )?;
+            let left_outputs = parse_revision_output_nodes(&args[2], "LEFT_OUTPUTS")?;
+            let right = read_bounded_regular_file(
+                Path::new(&args[3]),
+                btor2::MAX_BTOR2_BYTES,
+                "right BTOR2 input",
+            )?;
+            let right_outputs = parse_revision_output_nodes(&args[4], "RIGHT_OUTPUTS")?;
+            let interface = read_bounded_regular_file(
+                Path::new(&args[5]),
+                revision_local::MAX_WORD_INTERFACE_CONTRACT_BYTES,
+                "word interface contract",
+            )?;
+            let horizon = args[6]
+                .parse::<u32>()
+                .map_err(|_| "HORIZON must be an unsigned integer".to_string())?;
+            let bad_side = match args[7].as_str() {
+                "left" => revision_local::ComponentSide::Left,
+                "right" => revision_local::ComponentSide::Right,
+                _ => return Err("BAD_SIDE must be left or right".to_string()),
+            };
+            let bad_output = args[8]
+                .parse::<btor2::NodeId>()
+                .ok()
+                .filter(|node| *node != 0)
+                .ok_or_else(|| "BAD_OUTPUT must be a nonzero node identifier".to_string())?;
+            let query = revision_local::BoundedQuery {
+                horizon,
+                bad_side,
+                bad_output,
+            };
+            let started = Instant::now();
+            let (production, encoded) = if command == "check-btor2-revision-portfolio" {
+                let production = revision_local::produce_revision_portfolio(
+                    &left,
+                    &left_outputs,
+                    &right,
+                    &right_outputs,
+                    &interface,
+                    &query,
+                )
+                .map_err(|error| error.to_string())?;
+                let encoded = revision_local::encode_revision_portfolio(&production)
+                    .map_err(|error| error.to_string())?;
+                (production, encoded)
+            } else {
+                let encoded = read_bounded_regular_file(
+                    Path::new(&args[9]),
+                    revision_local::MAX_REVISION_PORTFOLIO_BYTES,
+                    "revision proof portfolio",
+                )?;
+                let production = revision_local::decode_revision_portfolio(&encoded)
+                    .map_err(|error| error.to_string())?;
+                (production, encoded)
+            };
+            let embedded_query = match &production.certificate {
+                revision_local::RevisionPortfolioCertificate::RevisionLocal(certificate) => {
+                    revision_local::decode_bounded_answer_certificate(&certificate.final_evidence)
+                        .map_err(|error| error.to_string())?
+                        .query
+                }
+                revision_local::RevisionPortfolioCertificate::DirectExact(certificate) => {
+                    certificate.query.clone()
+                }
+            };
+            if embedded_query != query {
+                return Err("revision proof query does not match CLI query".to_string());
+            }
+            let summary = revision_local::verify_revision_portfolio(
+                &left,
+                &left_outputs,
+                &right,
+                &right_outputs,
+                &interface,
+                &production,
+            )
+            .map_err(|error| error.to_string())?;
+            if command == "check-btor2-revision-portfolio" {
+                write_new_certificate(Path::new(&args[9]), &encoded)?;
+            }
+            let status = if command == "check-btor2-revision-portfolio" {
+                "CREATED"
+            } else {
+                "VERIFIED"
+            };
+            let backend = match summary.backend {
+                revision_local::RevisionPortfolioBackend::RevisionLocal => "revision-local",
+                revision_local::RevisionPortfolioBackend::DirectExact => "direct-exact",
+            };
+            let result = match summary.result {
+                revision_local::BoundedResult::Safe => "SAFE",
+                revision_local::BoundedResult::Unsafe => "UNSAFE",
+            };
+            let bad_frame = summary
+                .bad_frame
+                .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+            println!(
+                "btor2-revision-portfolio status={status} portfolio_version={} backend={backend} reason={} result={result} horizon={horizon} bad_frame={bad_frame} certificate_bytes={} elapsed_micros={}{}",
+                revision_local::REVISION_PORTFOLIO_CERTIFICATE_VERSION,
+                summary.reason.as_str(),
+                encoded.len(),
+                started.elapsed().as_micros(),
+                if command == "check-btor2-revision-portfolio" {
+                    format!(" output={}", args[9])
+                } else {
+                    String::new()
+                }
             );
             Ok(true)
         }
@@ -38540,6 +38684,58 @@ mod tests {
             );
             fs::remove_file(&certificate).unwrap();
         }
+    }
+
+    #[test]
+    fn revision_portfolio_cli_routes_verifies_and_rejects_query_drift() {
+        let scratch =
+            std::env::temp_dir().join(format!("gcc-revision-portfolio-cli-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let left = scratch.join("left.btor2");
+        let right = scratch.join("right.btor2");
+        let interface = scratch.join("interface.txt");
+        let certificate = scratch.join("answer.revision-proof");
+        fs::write(
+            &left,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 sort bitvec 9\n4 input 2 command\n5 state 3 wide_state\n6 zero 3\n7 init 3 5 6\n8 uext 3 4 7\n9 next 3 5 8\n10 zero 1\n11 bad 10 never\n",
+        )
+        .unwrap();
+        fs::write(
+            &right,
+            b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n",
+        )
+        .unwrap();
+        fs::write(
+            &interface,
+            b"word_interface_version=1\nwire_count=1\nwire=left,4,3\nstatus=complete\n",
+        )
+        .unwrap();
+        let base = vec![
+            left.display().to_string(),
+            "4".to_string(),
+            right.display().to_string(),
+            "7,10".to_string(),
+            interface.display().to_string(),
+            "1".to_string(),
+            "right".to_string(),
+            "10".to_string(),
+            certificate.display().to_string(),
+        ];
+        let mut check = vec!["check-btor2-revision-portfolio".to_string()];
+        check.extend(base.clone());
+        assert!(run_artifact_cli(&check).unwrap());
+        assert!(fs::read(&certificate).unwrap().starts_with(b"GCCRPF01"));
+        assert!(run_artifact_cli(&check).is_err());
+
+        let mut verify = vec!["verify-btor2-revision-portfolio".to_string()];
+        verify.extend(base.clone());
+        assert!(run_artifact_cli(&verify).unwrap());
+        verify[6] = "0".to_string();
+        assert_eq!(
+            run_artifact_cli(&verify).unwrap_err(),
+            "revision proof query does not match CLI query"
+        );
+        fs::remove_dir_all(&scratch).unwrap();
     }
 
     #[test]
