@@ -33,8 +33,10 @@ earlier reachable transition is bad before replaying the terminal witness. The
 versioned final codec is bounded to horizon 32, 65,536 states per layer, 262,144
 total states, four million transition checks, and 16 MiB. Both answers, every
 truncation, source and interface drift, and witness mutation have local tests.
-Exact portfolio fallback, revision-work observations, public revision evidence,
-maintained controls, and cross-platform replication remain incomplete.
+Exact portfolio fallback and revision-work observations are implemented. The
+first local public revision cohort and maintained control pass. Strong
+baselines, the complete hostile matrix, hosted evidence, and cross-platform
+replication remain incomplete.
 
 The four-section envelope is now end-to-end executable through the public Rust
 API. Production embeds canonical left and right local relations, the exact
@@ -52,8 +54,17 @@ bytes and source digest to remain identical, validates the changed right side,
 and reports one decoded section, one semantic verification, one retained
 section, interface pair checks, and final transition checks. A right-side
 internal transition revision retains the left bytes and both answers in local
-tests. Whole-process timing, memory, artifact baselines, and public revision
-evidence are still required before the revision-reuse gate passes.
+tests. Whole-process timing, memory, artifact baselines, and hosted public
+revision evidence are still required before the revision-reuse gate passes.
+
+Revised proof production now has the same boundary. Given the opaque validated
+left artifact, `produce_revision_with_retained_left` constructs and
+independently validates only the changed right relation, composes the interface,
+and produces the final answer. Its observation reports one produced section,
+one reused section, changed-side candidate valuations, composition checks, and
+final transition checks. The public PLIC cohort exercises this path for both
+SAFE and UNSAFE properties. Hosted evidence and whole-process cost baselines
+remain open.
 
 The first exact source-separated fallback engine is now implemented. It parses
 both original BTOR2 sources, enumerates at most 12 joint semantic input bits,

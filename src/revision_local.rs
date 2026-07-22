@@ -217,6 +217,15 @@ pub struct RevisionWorkObservation {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionProductionObservation {
+    pub produced_local_sections: usize,
+    pub reused_local_sections: usize,
+    pub changed_candidate_valuations: usize,
+    pub composed_pair_checks: usize,
+    pub final_transition_checks: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectAnswerCertificate {
     pub left_sha256: [u8; 32],
     pub right_sha256: [u8; 32],
@@ -1589,6 +1598,70 @@ pub fn produce_revision_local_certificate(
             right: right.summary.clone(),
             answer: answer_summary,
             certificate_bytes,
+        },
+    ))
+}
+
+pub fn produce_revision_with_retained_left(
+    retained_left: &ValidatedLocalArtifact,
+    right_source: &[u8],
+    right_outputs: &[NodeId],
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<
+    (
+        RevisionLocalCertificate,
+        RevisionLocalSummary,
+        RevisionProductionObservation,
+    ),
+    RevisionLocalError,
+> {
+    let right_relation = produce_local_relation(right_source, right_outputs)
+        .map_err(|error| attribute(error, EvidenceSection::Right))?;
+    let right = verify_local_relation_for_composition(
+        right_source,
+        &right_relation,
+        EvidenceSection::Right,
+    )?;
+    let left = retained_left.verified();
+    let contract = decode_word_interface_contract(interface_source)?;
+    let composed_pair_checks = retained_left
+        .summary
+        .admissible_rows
+        .checked_mul(right.summary.admissible_rows)
+        .ok_or_else(|| reject(EvidenceSection::Interface, "pair check count overflows"))?;
+    let (answer, answer_summary) = bounded_certificate(&left, &right, &contract, query)?;
+    let certificate = RevisionLocalCertificate {
+        left: LocalEvidence {
+            source_sha256: *retained_left.source_sha256(),
+            evidence: retained_left.encoded().to_vec(),
+        },
+        right: LocalEvidence {
+            source_sha256: source_digest(right_source),
+            evidence: encode_local_relation_certificate(&right_relation)
+                .map_err(|error| attribute(error, EvidenceSection::Right))?,
+        },
+        interface: BoundEvidence {
+            source_sha256: source_digest(interface_source),
+            evidence: interface_source.to_vec(),
+        },
+        final_evidence: encode_bounded_answer_certificate(&answer)?,
+    };
+    let certificate_bytes = encode_revision_local_certificate(&certificate)?.len();
+    Ok((
+        certificate,
+        RevisionLocalSummary {
+            left: retained_left.summary.clone(),
+            right: right.summary.clone(),
+            answer: answer_summary.clone(),
+            certificate_bytes,
+        },
+        RevisionProductionObservation {
+            produced_local_sections: 1,
+            reused_local_sections: 1,
+            changed_candidate_valuations: right.summary.candidate_valuations,
+            composed_pair_checks,
+            final_transition_checks: answer_summary.transition_checks,
         },
     ))
 }

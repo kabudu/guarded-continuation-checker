@@ -1,7 +1,8 @@
 use guarded_continuation_checker::revision_local::{
     BoundedQuery, BoundedResult, ComponentSide, EvidenceSection,
-    produce_revision_local_certificate, unchanged_local_evidence, validate_local_artifact,
-    verify_revision_local_certificate, verify_revision_with_retained_left,
+    produce_revision_local_certificate, produce_revision_with_retained_left,
+    unchanged_local_evidence, validate_local_artifact, verify_revision_local_certificate,
+    verify_revision_with_retained_left,
 };
 use std::{env, fs, process};
 
@@ -19,7 +20,7 @@ fn run() -> Result<(), String> {
     let interface = fs::read(&args[4]).map_err(|error| format!("read interface: {error}"))?;
 
     println!(
-        "schema_version,property,old_result,new_result,old_bad_frame,new_bad_frame,retained_bytes,retained_byte_identical,decoded_local_sections,verified_local_sections,reused_local_sections,composed_pair_checks,final_transition_checks,status"
+        "schema_version,property,old_result,new_result,old_bad_frame,new_bad_frame,retained_bytes,retained_byte_identical,produced_local_sections,production_reused_local_sections,changed_candidate_valuations,decoded_local_sections,verified_local_sections,verification_reused_local_sections,composed_pair_checks,final_transition_checks,status"
     );
     for (property, bad_output, expected, expected_frame) in [
         ("repeated-pending", 7, BoundedResult::Unsafe, Some(2)),
@@ -41,15 +42,9 @@ fn run() -> Result<(), String> {
         .map_err(|error| error.to_string())?;
         let retained = validate_local_artifact(&monitor, &old.left.evidence, EvidenceSection::Left)
             .map_err(|error| error.to_string())?;
-        let (new, new_summary) = produce_revision_local_certificate(
-            &monitor,
-            &[7, 8],
-            &new_plic,
-            &[13],
-            &interface,
-            &query,
-        )
-        .map_err(|error| error.to_string())?;
+        let (new, new_summary, production_work) =
+            produce_revision_with_retained_left(&retained, &new_plic, &[13], &interface, &query)
+                .map_err(|error| error.to_string())?;
         let old_checked = verify_revision_local_certificate(&monitor, &old_plic, &interface, &old)
             .map_err(|error| error.to_string())?;
         let (new_checked, work) =
@@ -67,6 +62,8 @@ fn run() -> Result<(), String> {
             || work.decoded_local_sections != 1
             || work.semantically_verified_local_sections != 1
             || work.reused_local_sections != 1
+            || production_work.produced_local_sections != 1
+            || production_work.reused_local_sections != 1
         {
             return Err(format!("revision reuse acceptance failed for {property}"));
         }
@@ -76,8 +73,11 @@ fn run() -> Result<(), String> {
         };
         let frame = expected_frame.map_or_else(|| "none".to_string(), |value| value.to_string());
         println!(
-            "1,{property},{result},{result},{frame},{frame},{},true,{},{},{},{},{},accepted",
+            "1,{property},{result},{result},{frame},{frame},{},true,{},{},{},{},{},{},{},{},accepted",
             retained.encoded().len(),
+            production_work.produced_local_sections,
+            production_work.reused_local_sections,
+            production_work.changed_candidate_valuations,
             work.decoded_local_sections,
             work.semantically_verified_local_sections,
             work.reused_local_sections,

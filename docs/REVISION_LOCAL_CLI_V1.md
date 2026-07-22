@@ -72,7 +72,12 @@ an answer.
 
 ## Current limitations
 
-The workflow has repository-authored two-component evidence only. Public
-revision-pinned product evidence, maintained-tool agreement, whole-process
+The workflow now has local evidence from two authentic revisions of the public
+Roa Logic PLIC gateway and maintained Yosys/Z3 agreement. Whole-process
 baselines, broad hostile corpora, cross-platform hosted replication, and tagged
 compatibility remain open.
+
+The Rust API additionally supports in-process revised proof production and
+verification from an opaque validated unchanged component. The file CLI still
+lacks a persistent retained-artifact session, so self-service amortisation
+across several revisions remains an open integration gate.

@@ -52,6 +52,9 @@ records:
 
 - both expected answers and the earliest UNSAFE frame across both revisions;
 - a byte-identical 272-byte retained monitor relation for both properties;
+- one produced changed section and one reused unchanged section during revised
+  proof production;
+- 4,096 complete changed-component candidate valuations;
 - one decoded and semantically verified changed section per revision check;
 - one reused unchanged section;
 - 16,384 exact interface pair checks; and
