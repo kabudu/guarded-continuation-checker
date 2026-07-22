@@ -511,11 +511,14 @@ minimal semantic change sets, although it does not emit them in one
 source-bound aggregate. Its 15,479-byte model-plus-evidence package is about
 8.32 times smaller than GCC's current aggregate. Conversely, five matched
 arm64 trials put GCC's median source-through-answer time at 0.09 seconds versus
-4.84 seconds for 20 isolated maintained jobs, with about 20.0% lower
-producer-path peak RSS. This is evidence for a shared-model orchestration
-advantage, not yet a novel algorithm. Broader subsystem evidence, parallel and
-warm-service baselines, a tighter closest-system comparison, and independent
-review remain open.
+4.84 seconds for 20 isolated maintained jobs. A predeclared ten-trial control
+then removes per-job container startup. The maintained route falls to 0.89
+seconds sequentially and 0.81 seconds at fixed four-way parallelism, preserving
+GCC advantages of about 9.89 and 9.00 times but showing that most of the earlier
+ratio was infrastructure overhead. This is evidence for a narrower shared-model
+orchestration advantage, not a novel algorithm. A true persistent-service
+baseline, broader subsystem evidence, a tighter closest-system comparison, and
+independent review remain open.
 
 ## Production-tagged OpenTitan watchdog
 

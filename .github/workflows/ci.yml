@@ -113,6 +113,11 @@ jobs:
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
             scripts/opentitan-dual-timer-resource-container-v1.sh \
             scripts/benchmark-qatq-transport-v1.sh \
+            scripts/benchmark-opentitan-pwm-single-container-baseline-v1.sh \
+            scripts/run-opentitan-pwm-maintained-producer-container-v1.sh \
+            scripts/run-opentitan-pwm-maintained-checker-container-v1.sh \
+            scripts/run-opentitan-pwm-single-container-matrix-v1.sh \
+            scripts/check-opentitan-pwm-single-container-results-v1.sh \
             scripts/test-crate-package-v1.sh
           shellcheck -s sh \
             scripts/build-opentitan-aon-dual-timer-aiger.sh \
@@ -155,6 +160,8 @@ jobs:
         run: |
           shellcheck -s bash scripts/check-certified-evidence-retained-v1.sh
           scripts/check-certified-evidence-retained-v1.sh
+      - name: Check retained single-container baseline evidence
+        run: scripts/check-opentitan-pwm-single-container-results-v1.sh
       - name: Exercise proof-carrying MTBDD plant benchmark
         run: |
           scripts/benchmark-controller-proof-mtbdd-plant.sh \

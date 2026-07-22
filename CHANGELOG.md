@@ -5,6 +5,19 @@
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
+- Predeclare a controlled OpenTitan PWM maintained-tool baseline that replaces
+  40 isolated Docker launches with single-container sequential and fixed
+  four-way parallel orchestration while preserving independent evidence
+  checking, exact cohort hashes, and a threshold-free reporting rule.
+- Qualify all ten predeclared single-container trials without selective reruns.
+  Sequential and four-way parallel source-through-producer medians are 0.89
+  and 0.81 seconds versus GCC's matched 0.09 seconds, reducing the comparison
+  from 53.78 times against isolated containers to about 9.89 and 9.00 times.
+  Retain the identical model and evidence hashes and disclose that most of the
+  earlier ratio was container-launch overhead.
+- Add a CI gate that recomputes retained medians and verifies every result,
+  manifest, harness, and in-container runner hash without requiring the
+  qualified external toolchain.
 
 ## 0.30.0 - 2026-07-22
 

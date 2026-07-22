@@ -215,12 +215,16 @@ deterministic certificate for counterfactual evidence invalidation and complete
 inclusion-minimal semantic change sets across firmware revisions. A pinned
 full-rebuild proof-producing baseline agrees on all 20 answers and independently
 checks every artifact. GCC is faster at the matched shared-model orchestration
-scope but produces a larger artifact. Prior work already establishes
+scope but produces a larger artifact. The controlled single-container baseline
+removes per-job container startup and preserves a roughly 9.00 times advantage
+against fixed four-way maintained orchestration, down from 53.78 times against
+isolated containers. Prior work already establishes
 incremental IC3 proof reuse, abstraction-precision reuse, mutation-impact
 propagation, and hierarchical RTL lemma reuse, so the result remains a narrow
-candidate contribution rather than a novelty claim. The next comparison must
-remove isolated-process bias with warm-service and parallel maintained-tool
-baselines, then test a larger connected public subsystem.
+candidate contribution rather than a novelty claim. The isolated-container
+bias gate is now closed without claiming a warm service because tool processes
+remain fresh. The next experiment must test a larger connected public subsystem
+and compare against a persistent maintained service if one is available.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
