@@ -26,6 +26,7 @@ pub mod dense_relation;
 #[cfg(feature = "research-qatq-transport")]
 pub mod qatq_transport;
 pub mod revision_batch;
+pub mod revision_impact;
 pub mod revision_local;
 pub mod source_model_attestation;
 pub mod unsat_proof;

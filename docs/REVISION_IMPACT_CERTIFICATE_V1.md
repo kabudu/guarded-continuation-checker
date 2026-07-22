@@ -2,8 +2,14 @@
 
 ## Status
 
-Predeclared before implementation. This is a falsification experiment, not a
-novelty claim or production-supported interface.
+Predeclared before implementation. The first bounded certificate core is now
+implemented as a public Rust module. It validates a canonical dependency DAG,
+complete mask-major counterfactual table, support isolation, and exhaustive
+inclusion-minimal invalidating sets. Its verifier requires a caller-supplied
+independent semantic evaluator for every observation. Real revision-local
+semantic integration and the remaining gates are still open. This is a
+falsification experiment, not a novelty claim or production-supported
+interface.
 
 ## Product question
 

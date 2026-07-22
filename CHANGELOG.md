@@ -10,6 +10,15 @@
   identity gates. Record incremental IC3, precision reuse, mutation-impact
   propagation and hierarchical RTL lemma reuse as disconfirming prior art, so
   no broad incremental-verification novelty claim is permitted.
+- Implement the first public revision-impact certificate core. Canonical
+  bounded atoms, dependency edges, query support, complete counterfactual
+  observations and inclusion-minimal invalidating sets round-trip through a
+  strict binary format. Verification rederives every minimal set and requires
+  an independent semantic evaluator for every table entry. Five API tests cover
+  deterministic round trips, semantic disagreement, graph and support errors,
+  truncation, mutation, trailing data and missing or extra minimal sets. This
+  closes the certificate-mechanics slice only; exact revision-local integration
+  remains open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,
