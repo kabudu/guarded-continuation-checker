@@ -54,6 +54,29 @@ artifact.
 
 ## Remaining baseline work
 
-Hosted amd64 replication, whole-process peak resident memory, repeated process
+Hosted amd64 replication, cross-platform resource comparison, repeated process
 amortisation, and the closest composed-witness comparison remain open. The
 result does not yet close the predeclared strong-baseline or novelty gates.
+
+## Whole-process arm64 observation
+
+The three-trial
+[`roalogic-plic-revision-resources-arm64-v1.csv`](../results/roalogic-plic-revision-resources-arm64-v1.csv)
+run measures the two file producers and two file verifiers with macOS
+`/usr/bin/time -l`:
+
+- full creation is 0.03 seconds in all trials, while retained creation is
+  0.01 to 0.02 seconds;
+- full creation uses about 7.70 MB peak RSS, while retained creation uses about
+  8.83 MB;
+- both verification paths round to 0.01 seconds at this timer resolution;
+- full verification uses about 7.60 MB peak RSS, while retained verification
+  uses about 9.38 MB; and
+- every operation returns the same UNSAFE frame and 525,113-byte outer
+  portfolio artifact.
+
+The retained path therefore removes local proof work and improves creation
+latency in this run, but pays a 15% to 24% whole-process memory premium for
+holding the validated prior evidence. It is not an unconditional resource win.
+Hosted Linux results are required before deciding whether the operational
+tradeoff passes the strong baseline.

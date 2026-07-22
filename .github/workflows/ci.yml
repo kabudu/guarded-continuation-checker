@@ -84,6 +84,7 @@ jobs:
             scripts/run-roalogic-plic-gateway-constrained-acceptance-v1.sh \
             scripts/build-roalogic-plic-revision-component-v1.sh \
             scripts/run-roalogic-plic-revision-reuse-v1.sh \
+            scripts/benchmark-roalogic-plic-revision-resources-v1.sh \
             scripts/benchmark-opentitan-dual-timer-composed-witness-v1.sh \
             scripts/benchmark-caliptra-wdt-composed-witness-v1.sh \
             scripts/benchmark-opentitan-dual-timer-resources-v1.sh \
@@ -426,6 +427,21 @@ jobs:
             > /tmp/roalogic-plic-revision-cost-v1.csv
           grep -q '^1,21,525095,4100,4,1,1,.*true,true,measured$' \
             /tmp/roalogic-plic-revision-cost-v1.csv
+          mkdir /tmp/roalogic-plic-revision-resources
+          scripts/benchmark-roalogic-plic-revision-resources-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv \
+            /tmp/roalogic-plic-revision-resources 3
+          test "$(wc -l < /tmp/roalogic-plic-revision-resources-linux-v1.csv)" -eq 13
+          grep -q '^1,full-create,.*UNSAFE,2,0,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+          grep -q '^1,retained-create,.*UNSAFE,1,1,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+          grep -q '^1,full-verify,.*UNSAFE,2,0,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
+          grep -q '^1,retained-verify,.*UNSAFE,1,1,measured$' \
+            /tmp/roalogic-plic-revision-resources-linux-v1.csv
       - name: Reproduce OpenTitan AON predicate-set acceptance
         run: |
           scripts/run-opentitan-aon-predicate-set-acceptance.sh \
