@@ -21,8 +21,15 @@
   replays derived UNSAFE input valuations against every target channel, and
   rejects admission, query, backend, evidence, or source drift. Horizon-1
   retained evidence falls 43.07% on six channels but grows 12.61% on the
-  two-channel negative control. The six-channel SAFE case is honestly refused
-  at horizon 2 by the existing resource guard.
+  two-channel negative control. The six-channel `OutputHigh` case is honestly
+  refused at horizon 2 by the existing explicit-state resource guard.
+- Add bounded word-level BTOR2 bit-blasting with a canonical source-bound wire
+  certificate. SAFE answers carry Varisat proofs checked by the separate
+  `varisat-checker`; UNSAFE answers carry complete packed input valuations and
+  replay to the earliest bad frame. It agrees with explicit search where that
+  backend admits the workload and resolves the six-channel horizon-2 refusal as
+  a real frame-2 UNSAFE result. The horizon-1 SAFE certificate is 215,259 bytes,
+  so this backend is a scalable fallback rather than a universal evidence win.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

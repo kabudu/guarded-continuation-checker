@@ -1,0 +1,7 @@
+schema_version,channels,horizon,result,bad_frame,variables,clauses,proof_bytes,certificate_bytes,explicit_status,verified,status
+1,2,1,Safe,none,8971,27352,145121,145222,agreed,true,accepted
+1,2,2,Unsafe,2,13456,41027,0,125,agreed,true,accepted
+1,4,1,Safe,none,10937,33668,180005,180106,agreed,true,accepted
+1,4,2,Unsafe,2,16405,50501,0,125,agreed,true,accepted
+1,6,1,Safe,none,12903,39984,215158,215259,agreed,true,accepted
+1,6,2,Unsafe,2,19354,59975,0,125,resource-refused,true,accepted

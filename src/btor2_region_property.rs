@@ -110,7 +110,9 @@ fn maximum_statement_id(model_bytes: &[u8]) -> Result<NodeId, Btor2RegionError> 
         .try_fold(0, |maximum, id| id.map(|id| maximum.max(id)))
 }
 
-fn build_property_model(
+/// Reconstructs one canonical bad-property model from a property-free channel
+/// source. This is shared by explicit and bit-blasted exact backends.
+pub fn build_btor2_channel_property_model(
     model_bytes: &[u8],
     semantic_roots: &[NodeId],
     expected_channels: usize,
@@ -184,7 +186,7 @@ pub fn produce_btor2_channel_property_evidence(
     query: Btor2ChannelPropertyQuery,
     policy: Btor2RegionPolicy,
 ) -> Result<Btor2ChannelPropertyEvidence, Btor2RegionError> {
-    let (property_model, bad) = build_property_model(
+    let (property_model, bad) = build_btor2_channel_property_model(
         model_bytes,
         semantic_roots,
         expected_channels,
@@ -208,7 +210,7 @@ pub fn verify_btor2_channel_property_evidence(
     evidence: &Btor2ChannelPropertyEvidence,
     policy: Btor2RegionPolicy,
 ) -> Result<SearchSummary, Btor2RegionError> {
-    let (expected_model, bad) = build_property_model(
+    let (expected_model, bad) = build_btor2_channel_property_model(
         model_bytes,
         semantic_roots,
         expected_channels,
@@ -472,7 +474,7 @@ pub fn verify_btor2_channel_property_proof(
                 property: member.property,
                 horizon: member.horizon,
             },
-            property_model: build_property_model(
+            property_model: build_btor2_channel_property_model(
                 model_bytes,
                 &decoded.semantic_roots,
                 decoded.expected_channels,
@@ -502,7 +504,7 @@ pub fn verify_btor2_channel_property_proof(
         };
         let class = &admission.classes()[key.class_index];
         let (summary, certificate) = &verified[&key];
-        let (target_model, target_bad) = build_property_model(
+        let (target_model, target_bad) = build_btor2_channel_property_model(
             model_bytes,
             &decoded.semantic_roots,
             decoded.expected_channels,

@@ -390,8 +390,15 @@ uses that verified capability for both-answer bounded proofs. At horizon 1, the
 six-channel workload stores six proof members for twelve logical properties,
 replays every UNSAFE input against its target channel, and reduces retained
 evidence by 43.07%. The two-channel negative control grows by 12.61%. The
-six-channel SAFE case is refused at horizon 2 by the frozen exact-search guard,
-so this is a bounded mechanism result, not production support or novelty.
+six-channel `OutputHigh` case is refused at horizon 2 by the explicit-state
+guard, so this is a bounded mechanism result, not production support or novelty.
+
+The new [proof-carrying BTOR2 bitblast](docs/BTOR2_PWM_BITBLAST_V1.md) resolves
+that refusal without changing the source or resource guard. It finds and
+replays the actual frame-2 UNSAFE firmware trace. At horizon 1 it agrees with
+explicit search and carries independently checked Varisat UNSAT evidence. Its
+SAFE certificate is much larger than explicit-state evidence, so a static
+portfolio split is required rather than universal replacement.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

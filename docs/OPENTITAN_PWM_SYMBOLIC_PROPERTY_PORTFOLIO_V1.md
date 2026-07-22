@@ -52,15 +52,16 @@ only on the existence of a structural artifact.
 
 ## Resource refusal
 
-The exact explicit-state backend proves the horizon-2 `OutputHigh` query for the
-two- and four-channel models, but refuses the six-channel model under its frozen
-20-million node-step limit. The portfolio propagates that error. It does not
+The exact explicit-state backend answers the horizon-2 `OutputHigh` query for
+the two- and four-channel models, but refuses the six-channel model under its
+frozen 20-million node-step limit. The portfolio propagates that error. It does not
 raise the guard, return a partial batch, infer a SAFE answer from the horizon-1
 result, or silently replace invalid specialised evidence.
 
-This refusal is the next product blocker. A scalable exact word-level fallback,
-with proof evidence and equivalent-scope maintained-tool comparison, is required
-before the mechanism can support realistic PWM horizons.
+The subsequent proof-carrying bitblast resolves the refused query as UNSAFE at
+frame 2. It is not retroactively part of this v1 portfolio result. Static
+portfolio integration and equivalent-scope maintained-tool comparison remain
+required before the mechanism can support realistic PWM horizons.
 
 ## Reproduction
 

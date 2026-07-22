@@ -1,4 +1,8 @@
 use guarded_continuation_checker::btor2;
+use guarded_continuation_checker::btor2_bitblast::{
+    decode_btor2_bitblast_certificate, encode_btor2_bitblast_certificate,
+    produce_btor2_bitblast_certificate, verify_btor2_bitblast_certificate,
+};
 use guarded_continuation_checker::btor2_region_equivalence::derive_btor2_region_equivalence;
 use guarded_continuation_checker::btor2_region_equivalence::{
     MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES, admit_btor2_region_equivalence_artifact,
@@ -8,8 +12,8 @@ use guarded_continuation_checker::btor2_region_equivalence::{
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 use guarded_continuation_checker::btor2_region_property::{
     Btor2ChannelProperty, Btor2ChannelPropertyBackend, Btor2ChannelPropertyQuery,
-    produce_btor2_channel_property_evidence, produce_btor2_channel_property_proof,
-    verify_btor2_channel_property_proof,
+    build_btor2_channel_property_model, produce_btor2_channel_property_evidence,
+    produce_btor2_channel_property_proof, verify_btor2_channel_property_proof,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
 
@@ -259,4 +263,105 @@ fn property_proof_rejects_invalid_admission_query_and_member_drift() {
     assert!(
         verify_btor2_channel_property_proof(&source_drift, &queries, &artifact, policy).is_err()
     );
+}
+
+#[test]
+fn proof_carrying_bitblast_cross_checks_small_horizons_and_closes_horizon_two() {
+    let model = include_bytes!(
+        "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+    );
+    let policy = Btor2RegionPolicy::default();
+    for horizon in 0..=1 {
+        for property in [
+            Btor2ChannelProperty::OutputHigh,
+            Btor2ChannelProperty::OutputLow,
+        ] {
+            let (property_model, bad) =
+                build_btor2_channel_property_model(model, &[9, 39], 6, 0, property, policy)
+                    .unwrap();
+            let explicit = btor2_search::produce(&property_model, bad, horizon).unwrap();
+            let bitblast =
+                produce_btor2_bitblast_certificate(&property_model, bad, horizon).unwrap();
+            let encoded = encode_btor2_bitblast_certificate(&bitblast).unwrap();
+            let decoded = decode_btor2_bitblast_certificate(&encoded).unwrap();
+            assert_eq!(decoded, bitblast);
+            let summary = verify_btor2_bitblast_certificate(&property_model, &decoded).unwrap();
+            assert_eq!(summary.result, explicit.result);
+            assert_eq!(summary.bad_frame, explicit.bad_frame);
+        }
+    }
+
+    let (safe_model, safe_bad) = build_btor2_channel_property_model(
+        model,
+        &[9, 39],
+        6,
+        0,
+        Btor2ChannelProperty::OutputHigh,
+        policy,
+    )
+    .unwrap();
+    assert!(btor2_search::produce(&safe_model, safe_bad, 2).is_err());
+    let safe = produce_btor2_bitblast_certificate(&safe_model, safe_bad, 2).unwrap();
+    let safe_summary = verify_btor2_bitblast_certificate(&safe_model, &safe).unwrap();
+    assert_eq!(safe_summary.result, SearchResult::Unsafe);
+    assert_eq!(safe_summary.bad_frame, Some(2));
+    assert_eq!(safe_summary.proof_bytes, 0);
+
+    let (unsafe_model, unsafe_bad) = build_btor2_channel_property_model(
+        model,
+        &[9, 39],
+        6,
+        0,
+        Btor2ChannelProperty::OutputLow,
+        policy,
+    )
+    .unwrap();
+    let unsafe_certificate =
+        produce_btor2_bitblast_certificate(&unsafe_model, unsafe_bad, 2).unwrap();
+    let unsafe_summary =
+        verify_btor2_bitblast_certificate(&unsafe_model, &unsafe_certificate).unwrap();
+    assert_eq!(unsafe_summary.result, SearchResult::Unsafe);
+    assert_eq!(unsafe_summary.bad_frame, Some(0));
+}
+
+#[test]
+fn bitblast_wire_evidence_rejects_every_mutation_truncation_and_source_drift() {
+    let model = include_bytes!(
+        "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+    );
+    let (property_model, bad) = build_btor2_channel_property_model(
+        model,
+        &[9, 39],
+        6,
+        0,
+        Btor2ChannelProperty::OutputHigh,
+        Btor2RegionPolicy::default(),
+    )
+    .unwrap();
+    let certificate = produce_btor2_bitblast_certificate(&property_model, bad, 1).unwrap();
+    assert_eq!(certificate.result, SearchResult::Safe);
+    let encoded = encode_btor2_bitblast_certificate(&certificate).unwrap();
+    for end in [0, 1, 32, encoded.len() / 2, encoded.len() - 1] {
+        assert!(decode_btor2_bitblast_certificate(&encoded[..end]).is_err());
+    }
+    for offset in [0, 8, 44, encoded.len() / 2, encoded.len() - 1] {
+        let mut changed = encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_bitblast_certificate(&changed).is_err());
+    }
+    let mut source_drift = property_model.clone();
+    source_drift.push(b'\n');
+    assert!(verify_btor2_bitblast_certificate(&source_drift, &certificate).is_err());
+
+    let unsafe_certificate = produce_btor2_bitblast_certificate(&property_model, bad, 2).unwrap();
+    assert_eq!(unsafe_certificate.result, SearchResult::Unsafe);
+    let unsafe_encoded = encode_btor2_bitblast_certificate(&unsafe_certificate).unwrap();
+    for end in 0..unsafe_encoded.len() {
+        assert!(decode_btor2_bitblast_certificate(&unsafe_encoded[..end]).is_err());
+    }
+    for offset in 0..unsafe_encoded.len() {
+        let mut changed = unsafe_encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_bitblast_certificate(&changed).is_err());
+    }
 }

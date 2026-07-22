@@ -645,8 +645,9 @@ independent implementation review. It therefore closes no production row.
 The horizon-1 symbolic property portfolio adds exact SAFE and UNSAFE member
 certificates, direct singleton handling, target-channel UNSAFE input replay,
 and fail-closed query and backend binding. It still has no canonical outer wire
-format, and the six-channel SAFE workload is refused at horizon 2 by the exact
-search resource guard. Scalable exact fallback, realistic property horizons,
+format, and the six-channel `OutputHigh` workload is refused at horizon 2 by the
+explicit-state search resource guard. The bitblast follow-up resolves it as an
+UNSAFE trace but is not yet integrated into the portfolio. Realistic property horizons,
 cross-platform reproduction, maintained baseline evidence, compatibility, and
 independent review remain open. No production row closes.
 

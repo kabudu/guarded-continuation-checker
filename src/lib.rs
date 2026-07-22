@@ -6,6 +6,7 @@
 
 pub mod aiger_obligation;
 pub mod btor2;
+pub mod btor2_bitblast;
 pub mod btor2_bounded;
 pub mod btor2_braking;
 pub mod btor2_component;
