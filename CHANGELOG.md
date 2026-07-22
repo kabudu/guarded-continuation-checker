@@ -16,8 +16,11 @@
   components compose at the predeclared 2, 4, and 6-channel sizes. Add a
   checksummed, resource-bounded family artifact that stores each component
   digest and instance map once; verification reconstructs the expanded model
-  from separately supplied bytes and rejects source or wiring drift. Proof
-  replay, exact fallback, and benchmark gates remain open.
+  from separately supplied bytes and rejects source or wiring drift. Add a
+  second canonical artifact layer with exact bounded SAFE and UNSAFE evidence
+  for ordered family properties. Its checker independently reconstructs the
+  model and replays every certificate under total query, evidence, and artifact
+  limits. Exact fallback and benchmark gates remain open.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
