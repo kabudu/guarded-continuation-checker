@@ -14,6 +14,12 @@ artifact. The public OpenTitan cohort and the remaining gates are still open.
 This is a falsification experiment, not a novelty claim or
 production-supported interface.
 
+The exact adapter now also has a canonical aggregate bundle and explicit
+caller policy for total source bytes, per-scenario evidence bytes, aggregate
+bundle bytes, combinations, and queries. Production and verification apply the
+same limits, and the decoder validates lengths and counts before retaining
+scenario evidence.
+
 ## Product question
 
 After a firmware or robotics RTL revision, can GCC produce a deterministic,

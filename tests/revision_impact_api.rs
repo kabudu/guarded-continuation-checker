@@ -1,9 +1,11 @@
 use guarded_continuation_checker::revision_impact::{
     ImpactAtom, ImpactAtomKind, ImpactObservation, ImpactQuery, MinimalInvalidatingSet,
-    RevisionImpactError, TwoComponentRevisionImpactInput, decode_revision_impact_certificate,
-    encode_revision_impact_certificate, produce_revision_impact_certificate,
-    produce_two_component_revision_impact, verify_revision_impact_with,
-    verify_two_component_revision_impact,
+    RevisionImpactError, RevisionImpactPolicy, TwoComponentRevisionImpactInput,
+    decode_revision_impact_certificate, decode_two_component_revision_impact_bundle,
+    encode_revision_impact_certificate, encode_two_component_revision_impact_bundle,
+    produce_revision_impact_certificate, produce_two_component_revision_impact,
+    produce_two_component_revision_impact_with_policy, verify_revision_impact_with,
+    verify_two_component_revision_impact, verify_two_component_revision_impact_with_policy,
 };
 use guarded_continuation_checker::revision_local::{
     BoundedQuery, BoundedResult, ComponentSide, InterfaceWire, WordInterfaceContract,
@@ -245,6 +247,13 @@ fn exact_revision_local_evidence_drives_every_counterfactual() {
     assert_eq!(bundle.impact.observations[1].result, BoundedResult::Unsafe);
     assert_eq!(bundle.impact.observations[2].result, BoundedResult::Safe);
     assert_eq!(bundle.impact.observations[3].result, BoundedResult::Safe);
+    let bundle_bytes =
+        encode_two_component_revision_impact_bundle(&bundle, RevisionImpactPolicy::default())
+            .unwrap();
+    let decoded =
+        decode_two_component_revision_impact_bundle(&bundle_bytes, RevisionImpactPolicy::default())
+            .unwrap();
+    assert_eq!(decoded, bundle);
     let summary = verify_two_component_revision_impact(&input, &bundle).unwrap();
     assert_eq!(summary.combinations, 2);
     assert_eq!(summary.minimal_invalidating_sets, 2);
@@ -256,4 +265,119 @@ fn exact_revision_local_evidence_drives_every_counterfactual() {
     let mut hostile = bundle;
     hostile.revision_evidence[3][20] ^= 1;
     assert!(verify_two_component_revision_impact(&input, &hostile).is_err());
+
+    for end in 0..bundle_bytes.len() {
+        assert!(
+            decode_two_component_revision_impact_bundle(
+                &bundle_bytes[..end],
+                RevisionImpactPolicy::default()
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn every_aggregate_resource_dimension_is_governed() {
+    let left = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 command\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 zero 1\n10 bad 9 never\n";
+    let right_old = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 add 2 4 3\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    let right_new = b"1 sort bitvec 1\n2 sort bitvec 2\n3 input 2 sensed\n4 state 2 state\n5 zero 2\n6 init 2 4 5\n7 and 2 3 5\n8 next 2 4 7\n9 constd 2 2\n10 eq 1 4 9\n11 bad 10 reached_two\n";
+    let interface = encode_word_interface_contract(&WordInterfaceContract {
+        external_inputs: None,
+        wires: vec![InterfaceWire {
+            from: ComponentSide::Left,
+            output: 7,
+            to_input: 3,
+        }],
+    })
+    .unwrap();
+    let queries = [
+        BoundedQuery {
+            horizon: 0,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        },
+        BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        },
+    ];
+    let input = TwoComponentRevisionImpactInput {
+        left_old: left,
+        left_new: left,
+        left_outputs: &[7],
+        right_old,
+        right_new,
+        right_outputs: &[7, 10],
+        interface_old: interface.as_bytes(),
+        interface_new: interface.as_bytes(),
+        queries: &queries,
+    };
+    let default = RevisionImpactPolicy::default();
+    let bundle = produce_two_component_revision_impact_with_policy(&input, default).unwrap();
+    let bundle_bytes = encode_two_component_revision_impact_bundle(&bundle, default).unwrap();
+    let input_bytes = left.len() * 2 + right_old.len() + right_new.len() + interface.len() * 2;
+    assert!(
+        produce_two_component_revision_impact_with_policy(
+            &input,
+            RevisionImpactPolicy {
+                max_input_bytes: input_bytes - 1,
+                ..default
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        produce_two_component_revision_impact_with_policy(
+            &input,
+            RevisionImpactPolicy {
+                max_combinations: 1,
+                ..default
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        produce_two_component_revision_impact_with_policy(
+            &input,
+            RevisionImpactPolicy {
+                max_queries: 1,
+                ..default
+            }
+        )
+        .is_err()
+    );
+    let largest_evidence = bundle.revision_evidence.iter().map(Vec::len).max().unwrap();
+    assert!(
+        verify_two_component_revision_impact_with_policy(
+            &input,
+            &bundle,
+            RevisionImpactPolicy {
+                max_evidence_bytes: largest_evidence - 1,
+                ..default
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        decode_two_component_revision_impact_bundle(
+            &bundle_bytes,
+            RevisionImpactPolicy {
+                max_bundle_bytes: bundle_bytes.len() - 1,
+                ..default
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        encode_two_component_revision_impact_bundle(
+            &bundle,
+            RevisionImpactPolicy {
+                max_combinations: 3,
+                ..default
+            }
+        )
+        .is_err()
+    );
 }

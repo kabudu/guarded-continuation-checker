@@ -26,6 +26,12 @@
   evidence, digest or result drift. A both-answer mechanism test preserves an
   UNSAFE-to-SAFE semantic revision and an unchanged SAFE query. Public-product
   integration and the complete four-transition answer cohort remain open.
+- Add a canonical aggregate impact bundle and symmetric production,
+  verification, encode and decode policies for total input bytes, per-scenario
+  evidence, total bundle bytes, counterfactual combinations and query count.
+  Seven focused tests now include every aggregate policy dimension and every
+  bundle truncation. Resource refusal occurs before retaining or decoding an
+  over-limit artifact.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

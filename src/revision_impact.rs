@@ -21,7 +21,29 @@ pub const MAX_MINIMAL_INVALIDATING_SETS: usize = 64;
 pub const MAX_REVISION_IMPACT_CERTIFICATE_BYTES: usize = 64 * 1024 * 1024;
 
 const MAGIC: &[u8; 8] = b"GCCRIM01";
+const BUNDLE_MAGIC: &[u8; 8] = b"GCCRIB01";
 const MAX_NAME_BYTES: usize = 64;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RevisionImpactPolicy {
+    pub max_input_bytes: usize,
+    pub max_evidence_bytes: usize,
+    pub max_bundle_bytes: usize,
+    pub max_combinations: usize,
+    pub max_queries: usize,
+}
+
+impl Default for RevisionImpactPolicy {
+    fn default() -> Self {
+        Self {
+            max_input_bytes: 64 * 1024 * 1024,
+            max_evidence_bytes: 16 * 1024 * 1024,
+            max_bundle_bytes: MAX_REVISION_IMPACT_CERTIFICATE_BYTES,
+            max_combinations: MAX_IMPACT_COMBINATIONS,
+            max_queries: MAX_IMPACT_QUERIES,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ImpactAtomKind {
@@ -171,7 +193,16 @@ where
 pub fn produce_two_component_revision_impact(
     input: &TwoComponentRevisionImpactInput<'_>,
 ) -> Result<TwoComponentRevisionImpactBundle, RevisionImpactError> {
-    if input.queries.is_empty() || input.queries.len() > MAX_IMPACT_QUERIES {
+    produce_two_component_revision_impact_with_policy(input, RevisionImpactPolicy::default())
+}
+
+pub fn produce_two_component_revision_impact_with_policy(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    policy: RevisionImpactPolicy,
+) -> Result<TwoComponentRevisionImpactBundle, RevisionImpactError> {
+    validate_policy(policy)?;
+    validate_input_bytes(input, policy)?;
+    if input.queries.is_empty() || input.queries.len() > policy.max_queries {
         return Err(reject("query count must be between one and 32"));
     }
     let roles = changed_roles(input);
@@ -181,6 +212,9 @@ pub fn produce_two_component_revision_impact(
     let atoms = impact_atoms(input, &roles);
     let queries = impact_queries(atoms.len(), input.queries.len());
     let combinations = 1usize << atoms.len();
+    if combinations > policy.max_combinations {
+        return Err(reject("counterfactual combination count exceeds policy"));
+    }
     let mut observations = Vec::with_capacity(combinations * queries.len());
     let mut revision_evidence = Vec::with_capacity(combinations * queries.len());
     for mask in 0..combinations {
@@ -213,6 +247,19 @@ pub fn produce_two_component_revision_impact(
             }
             let evidence = encode_revision_local_certificate(&certificate)
                 .map_err(|error| reject(format!("encode scenario evidence: {error}")))?;
+            if evidence.len() > policy.max_evidence_bytes {
+                return Err(reject("scenario evidence exceeds policy"));
+            }
+            let retained_bytes = revision_evidence
+                .iter()
+                .try_fold(0usize, |total, bytes: &Vec<u8>| {
+                    total.checked_add(bytes.len())
+                })
+                .and_then(|total| total.checked_add(evidence.len()))
+                .ok_or_else(|| reject("revision evidence byte count overflow"))?;
+            if retained_bytes > policy.max_bundle_bytes {
+                return Err(reject("revision evidence total exceeds policy"));
+            }
             observations.push(ImpactObservation {
                 changed_mask: mask as u16,
                 query_index: query_index as u8,
@@ -224,10 +271,12 @@ pub fn produce_two_component_revision_impact(
         }
     }
     let impact = produce_revision_impact_certificate(atoms, queries, observations)?;
-    Ok(TwoComponentRevisionImpactBundle {
+    let bundle = TwoComponentRevisionImpactBundle {
         impact,
         revision_evidence,
-    })
+    };
+    encode_two_component_revision_impact_bundle(&bundle, policy)?;
+    Ok(bundle)
 }
 
 /// Independently decode and verify every retained revision-local artifact,
@@ -236,11 +285,40 @@ pub fn verify_two_component_revision_impact(
     input: &TwoComponentRevisionImpactInput<'_>,
     bundle: &TwoComponentRevisionImpactBundle,
 ) -> Result<RevisionImpactSummary, RevisionImpactError> {
+    verify_two_component_revision_impact_with_policy(input, bundle, RevisionImpactPolicy::default())
+}
+
+pub fn verify_two_component_revision_impact_with_policy(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    bundle: &TwoComponentRevisionImpactBundle,
+    policy: RevisionImpactPolicy,
+) -> Result<RevisionImpactSummary, RevisionImpactError> {
+    validate_policy(policy)?;
+    validate_input_bytes(input, policy)?;
+    encode_two_component_revision_impact_bundle(bundle, policy)?;
     let roles = changed_roles(input);
     if roles.is_empty() || bundle.revision_evidence.len() != bundle.impact.observations.len() {
         return Err(reject("revision evidence table is incomplete"));
     }
     let expected_atoms = impact_atoms(input, &roles);
+    let combinations = 1usize << expected_atoms.len();
+    if combinations > policy.max_combinations || input.queries.len() > policy.max_queries {
+        return Err(reject("revision impact dimensions exceed policy"));
+    }
+    let evidence_total = bundle
+        .revision_evidence
+        .iter()
+        .try_fold(0usize, |total, evidence| {
+            if evidence.len() > policy.max_evidence_bytes {
+                None
+            } else {
+                total.checked_add(evidence.len())
+            }
+        })
+        .ok_or_else(|| reject("revision evidence exceeds policy"))?;
+    if evidence_total > policy.max_bundle_bytes {
+        return Err(reject("revision evidence total exceeds policy"));
+    }
     let expected_queries = impact_queries(expected_atoms.len(), input.queries.len());
     if bundle.impact.atoms != expected_atoms || bundle.impact.queries != expected_queries {
         return Err(reject("impact boundary differs from supplied revision"));
@@ -274,6 +352,106 @@ pub fn verify_two_component_revision_impact(
             Sha256::digest(evidence).into(),
         ))
     })
+}
+
+pub fn encode_two_component_revision_impact_bundle(
+    bundle: &TwoComponentRevisionImpactBundle,
+    policy: RevisionImpactPolicy,
+) -> Result<Vec<u8>, RevisionImpactError> {
+    validate_policy(policy)?;
+    let impact = encode_revision_impact_certificate(&bundle.impact)?;
+    if bundle.revision_evidence.len() != bundle.impact.observations.len() {
+        return Err(reject("revision evidence table is incomplete"));
+    }
+    let mut total = BUNDLE_MAGIC.len() + 12 + impact.len();
+    for evidence in &bundle.revision_evidence {
+        if evidence.len() > policy.max_evidence_bytes {
+            return Err(reject("scenario evidence exceeds policy"));
+        }
+        total = total
+            .checked_add(4)
+            .and_then(|value| value.checked_add(evidence.len()))
+            .ok_or_else(|| reject("bundle byte count overflow"))?;
+    }
+    if total > policy.max_bundle_bytes {
+        return Err(reject("bundle bytes exceed policy"));
+    }
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(total)
+        .map_err(|_| reject("bundle allocation failed"))?;
+    output.extend_from_slice(BUNDLE_MAGIC);
+    output.extend_from_slice(&REVISION_IMPACT_CERTIFICATE_VERSION.to_be_bytes());
+    output.extend_from_slice(
+        &u32::try_from(impact.len())
+            .map_err(|_| reject("impact length overflow"))?
+            .to_be_bytes(),
+    );
+    output.extend_from_slice(
+        &u32::try_from(bundle.revision_evidence.len())
+            .map_err(|_| reject("evidence count overflow"))?
+            .to_be_bytes(),
+    );
+    output.extend_from_slice(&impact);
+    for evidence in &bundle.revision_evidence {
+        output.extend_from_slice(
+            &u32::try_from(evidence.len())
+                .map_err(|_| reject("evidence length overflow"))?
+                .to_be_bytes(),
+        );
+        output.extend_from_slice(evidence);
+    }
+    debug_assert_eq!(output.len(), total);
+    Ok(output)
+}
+
+pub fn decode_two_component_revision_impact_bundle(
+    bytes: &[u8],
+    policy: RevisionImpactPolicy,
+) -> Result<TwoComponentRevisionImpactBundle, RevisionImpactError> {
+    validate_policy(policy)?;
+    if bytes.len() > policy.max_bundle_bytes {
+        return Err(reject("bundle bytes exceed policy"));
+    }
+    let mut decoder = Decoder { bytes, offset: 0 };
+    if decoder.take(BUNDLE_MAGIC.len())? != BUNDLE_MAGIC {
+        return Err(reject("invalid bundle magic"));
+    }
+    if decoder.u32()? != REVISION_IMPACT_CERTIFICATE_VERSION {
+        return Err(reject("unsupported bundle version"));
+    }
+    let impact_len = decoder.bounded_u32(policy.max_bundle_bytes, "impact length")?;
+    let evidence_count = decoder.bounded_u32(
+        policy.max_combinations.saturating_mul(policy.max_queries),
+        "evidence count",
+    )?;
+    let impact = decode_revision_impact_certificate(decoder.take(impact_len)?)?;
+    let combinations = 1usize << impact.atoms.len();
+    if combinations > policy.max_combinations || impact.queries.len() > policy.max_queries {
+        return Err(reject("bundle dimensions exceed policy"));
+    }
+    if evidence_count != impact.observations.len() {
+        return Err(reject("bundle evidence count is not complete"));
+    }
+    let mut revision_evidence = Vec::new();
+    revision_evidence
+        .try_reserve_exact(evidence_count)
+        .map_err(|_| reject("evidence table allocation failed"))?;
+    for _ in 0..evidence_count {
+        let length = decoder.bounded_u32(policy.max_evidence_bytes, "evidence length")?;
+        revision_evidence.push(decoder.take(length)?.to_vec());
+    }
+    if decoder.offset != bytes.len() {
+        return Err(reject("bundle has trailing bytes"));
+    }
+    let bundle = TwoComponentRevisionImpactBundle {
+        impact,
+        revision_evidence,
+    };
+    if encode_two_component_revision_impact_bundle(&bundle, policy)? != bytes {
+        return Err(reject("bundle encoding is not canonical"));
+    }
+    Ok(bundle)
 }
 
 pub fn encode_revision_impact_certificate(
@@ -451,6 +629,43 @@ fn validate_certificate(
         return Err(reject(
             "minimal invalidating sets are incomplete or noncanonical",
         ));
+    }
+    Ok(())
+}
+
+fn validate_policy(policy: RevisionImpactPolicy) -> Result<(), RevisionImpactError> {
+    if policy.max_input_bytes == 0
+        || policy.max_evidence_bytes == 0
+        || policy.max_bundle_bytes < BUNDLE_MAGIC.len() + 12
+        || policy.max_bundle_bytes > MAX_REVISION_IMPACT_CERTIFICATE_BYTES
+        || policy.max_combinations == 0
+        || policy.max_combinations > MAX_IMPACT_COMBINATIONS
+        || !policy.max_combinations.is_power_of_two()
+        || policy.max_queries == 0
+        || policy.max_queries > MAX_IMPACT_QUERIES
+    {
+        return Err(reject("invalid revision impact policy"));
+    }
+    Ok(())
+}
+
+fn validate_input_bytes(
+    input: &TwoComponentRevisionImpactInput<'_>,
+    policy: RevisionImpactPolicy,
+) -> Result<(), RevisionImpactError> {
+    let total = [
+        input.left_old.len(),
+        input.left_new.len(),
+        input.right_old.len(),
+        input.right_new.len(),
+        input.interface_old.len(),
+        input.interface_new.len(),
+    ]
+    .into_iter()
+    .try_fold(0usize, |total, bytes| total.checked_add(bytes))
+    .ok_or_else(|| reject("input byte count overflow"))?;
+    if total > policy.max_input_bytes {
+        return Err(reject("input bytes exceed policy"));
     }
     Ok(())
 }
