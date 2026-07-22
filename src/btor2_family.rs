@@ -285,6 +285,8 @@ fn emit_node(
                 BinaryOp::Add => "add",
                 BinaryOp::Sub => "sub",
                 BinaryOp::Mul => "mul",
+                BinaryOp::Sll => "sll",
+                BinaryOp::Srl => "srl",
                 BinaryOp::Eq => "eq",
                 BinaryOp::Neq => "neq",
                 BinaryOp::Ult => "ult",
@@ -975,6 +977,55 @@ mod tests {
         let text = std::str::from_utf8(&first.expanded_model).unwrap();
         assert!(text.contains("channel0.state.0"));
         assert!(text.contains("channel1.state.0"));
+    }
+
+    #[test]
+    fn preserves_logical_shifts_during_family_composition() {
+        let core = br#"1 sort bitvec 1
+2 sort bitvec 4
+3 input 2 amount
+4 state 2 word
+5 zero 2
+6 init 2 4 5
+7 next 2 4 4
+8 srl 2 4 3 shifted
+9 output 8 shifted_out
+"#;
+        let channel = br#"1 sort bitvec 1
+2 sort bitvec 4
+3 input 2 shifted
+4 state 2 local
+5 zero 2
+6 init 2 4 5
+7 sll 2 3 4 restored
+8 next 2 4 7
+9 redor 1 4 active
+10 output 9 active_out
+"#;
+        let instance = Btor2FamilyInstance {
+            identifier: "channel0".to_string(),
+            parameter_sha256: Sha256::digest(PARAMETERS).into(),
+            input_bindings: vec![FamilyInputBinding::CoreRoot(0)],
+        };
+        let composition = compose_btor2_channel_family(
+            core,
+            &[8],
+            channel,
+            &[9],
+            &[instance],
+            Btor2FamilyPolicy::default(),
+        )
+        .unwrap();
+        let text = std::str::from_utf8(&composition.expanded_model).unwrap();
+        assert!(text.contains(" srl "));
+        assert!(text.contains(" sll "));
+        assert_eq!(
+            btor2::parse_bytes(&composition.expanded_model)
+                .unwrap()
+                .states()
+                .len(),
+            2
+        );
     }
 
     #[test]

@@ -84,6 +84,8 @@ pub enum BinaryOp {
     Add,
     Sub,
     Mul,
+    Sll,
+    Srl,
     Eq,
     Neq,
     Ult,
@@ -263,6 +265,14 @@ impl Btor2Model {
                         BinaryOp::Add => left.wrapping_add(right),
                         BinaryOp::Sub => left.wrapping_sub(right),
                         BinaryOp::Mul => left.wrapping_mul(right),
+                        BinaryOp::Sll => u32::try_from(right)
+                            .ok()
+                            .and_then(|amount| left.checked_shl(amount))
+                            .unwrap_or(0),
+                        BinaryOp::Srl => u32::try_from(right)
+                            .ok()
+                            .and_then(|amount| left.checked_shr(amount))
+                            .unwrap_or(0),
                         BinaryOp::Eq => u64::from(left == right),
                         BinaryOp::Neq => u64::from(left != right),
                         BinaryOp::Ult => u64::from(left < right),
@@ -446,6 +456,7 @@ fn parse_with_roots(
             require_kind(&nodes, state, NodeKindDiscriminant::State, line)?;
             require_width(&nodes, state, width, line)?;
             require_width(&nodes, value, width, line)?;
+            let _symbol = tokens.next();
             expect_end(&mut tokens, line)?;
             let target = if operation == "init" {
                 &mut initialisers
@@ -743,7 +754,7 @@ fn parse_node_kind(
                 operand,
             )
         }
-        "and" | "or" | "xor" | "add" | "sub" | "mul" => {
+        "and" | "or" | "xor" | "add" | "sub" | "mul" | "sll" | "srl" => {
             let left = parse_u64(tokens.next().as_deref(), line, "left operand")?;
             let right = parse_u64(tokens.next().as_deref(), line, "right operand")?;
             require_width(nodes, left, width, line)?;
@@ -754,7 +765,9 @@ fn parse_node_kind(
                 "xor" => BinaryOp::Xor,
                 "add" => BinaryOp::Add,
                 "sub" => BinaryOp::Sub,
-                _ => BinaryOp::Mul,
+                "mul" => BinaryOp::Mul,
+                "sll" => BinaryOp::Sll,
+                _ => BinaryOp::Srl,
             };
             NodeKind::Binary(operator, left, right)
         }
@@ -968,6 +981,14 @@ mod tests {
     }
 
     #[test]
+    fn accepts_one_yosys_symbol_on_state_edges_and_rejects_extra_tokens() {
+        let source = "1 sort bitvec 1\n2 state 1 held\n3 zero 1\n4 init 1 2 3 init_symbol\n5 next 1 2 2 next_symbol\n6 bad 2 property\n";
+        assert!(parse(source).is_ok());
+        assert!(parse(&source.replace("next_symbol", "next_symbol extra")).is_err());
+        assert!(parse(&source.replace("init_symbol", "init_symbol extra")).is_err());
+    }
+
+    #[test]
     fn semantic_input_support_is_iterative_for_deep_valid_graphs() {
         let mut source = String::from("1 sort bitvec 1\n2 input 1 signal\n");
         let mut previous = 2;
@@ -995,8 +1016,26 @@ mod tests {
     fn rejects_unsupported_arrays_and_operations() {
         let error = parse("1 sort array 2 2\n").unwrap_err();
         assert!(error.message.contains("only bit-vector"));
-        let error = parse("1 sort bitvec 1\n2 state 1 s\n3 zero 1\n4 init 1 2 3\n5 next 1 2 3\n6 sll 1 2 2\n7 bad 6\n").unwrap_err();
+        let error = parse("1 sort bitvec 1\n2 state 1 s\n3 zero 1\n4 init 1 2 3\n5 next 1 2 3\n6 udiv 1 2 2\n7 bad 6\n").unwrap_err();
         assert!(error.message.contains("unsupported operation"));
+    }
+
+    #[test]
+    fn logical_shifts_match_btor2_word_semantics() {
+        let source = "1 sort bitvec 1\n2 sort bitvec 4\n3 state 2 word\n4 state 2 amount\n5 zero 2\n6 init 2 3 5\n7 init 2 4 5\n8 next 2 3 3\n9 next 2 4 4\n10 sll 2 3 4 left\n11 srl 2 3 4 right\n12 redor 1 10\n13 bad 12 shifted\n";
+        let model = parse(source).unwrap();
+        let inputs = BTreeMap::new();
+        for (word, amount, left, right) in [
+            (0b0011, 1, 0b0110, 0b0001),
+            (0b1001, 3, 0b1000, 0b0001),
+            (0b1111, 4, 0, 0),
+            (0b1111, 15, 0, 0),
+        ] {
+            let state = BTreeMap::from([(3, word), (4, amount)]);
+            assert_eq!(model.evaluate(10, &state, &inputs).unwrap(), left);
+            assert_eq!(model.evaluate(11, &state, &inputs).unwrap(), right);
+        }
+        assert!(parse(&source.replace("10 sll 2 3 4", "10 sll 1 3 4")).is_err());
     }
 
     #[test]

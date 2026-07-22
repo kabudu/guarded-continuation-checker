@@ -43,6 +43,13 @@
   OpenTitan PWM core, channel, and generated register package. The checker must
   prove complete region boundaries and refuse hidden coupling before any mixed
   orbit can reuse evidence.
+- Retain deterministic 2, 4, and 6-channel models synthesised from the exact
+  pinned OpenTitan PWM core and complete channel RTL. A checked interface-only
+  lowering works around pinned-Yosys packed-structure limitations; model state
+  grows by five nodes per added channel rather than collapsing instances.
+- Extend the strict BTOR2 core and family composer with width-checked logical
+  left and right shifts, including defined oversized-shift behaviour, and
+  accept one optional Yosys symbol on state edges while rejecting extra tokens.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

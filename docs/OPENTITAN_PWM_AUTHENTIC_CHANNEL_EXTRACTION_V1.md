@@ -1,6 +1,6 @@
 # OpenTitan PWM authentic channel extraction v1
 
-Status: predeclared, not implemented or measured
+Status: authentic ingestion gate passes locally; extraction is not implemented
 
 ## Purpose
 
@@ -22,13 +22,21 @@ The retained sources are byte-identical files from OpenTitan child commit
   `618998be0948d1570e7bd5fc4db6332470f02dba9b7154aa71edc8929202d855`;
 - `hw/ip/pwm/rtl/pwm_chan.sv`, SHA-256
   `0b6a8cac19d1e8ae4b04ab63fd146a105b85e2ce690084beaa24aa950faca68a`;
-- `hw/ip/pwm/rtl/pwm_reg_pkg.sv`, whose digest must be frozen when retained;
+- `hw/ip/pwm/rtl/pwm_reg_pkg.sv`, SHA-256
+  `59651b3b72ea1862524935dc099fd6fdd3b5c2926c03b6d7d31b7785be3324a7`;
 - the existing exact Apache-2.0 licence and mail-formatted upstream patch; and
 - pinned Yosys commit `b8e7da6f40ae8f552c116bf6c359b07c6533e159`.
 
-An authored top-level harness may drive the generated register structure and
-declare properties. It may not copy, simplify, or replace the selected core or
-channel transition equations. Counter-width specialisation is allowed only
+Pinned Yosys rejects the package's unused unpacked `PWM_PERMIT` parameter and
+then aborts while simplifying the retained packed structure after the unused
+tail is removed. The build may therefore lower only the authenticated
+`reg2hw` interface references to width-equivalent flat ports. The lowering must
+reject any unrecognised `reg2hw` reference. It may not alter state or transition
+equations. The full generated package remains authoritative and retained.
+
+An authored top-level harness may drive that register structure and declare
+properties. It may not copy, simplify, or replace the selected core or channel
+transition equations. Counter-width specialisation is allowed only
 through existing module parameters and must preserve truncation, overflow,
 reset, duty-cycle, blink, heartbeat, phase-delay, wrap, enable, inversion, and
 registered-output semantics.
@@ -130,3 +138,28 @@ Passing is evidence for a source-attested product integration, not algorithmic
 novelty. Symmetry reduction, cone decomposition, and compositional model
 checking are established prior art. A separate prior-art audit and a genuinely
 distinct invariant would still be required before any novelty claim.
+
+## Retained frontend observation
+
+The first pre-measurement synthesis attempt failed before elaboration at the
+unpacked `PWM_PERMIT` declaration in the full generated package. A second
+attempt using only the exact required type declarations reached a pinned-Yosys
+assertion while simplifying the packed structure. These observations are the
+reason for the flat-interface lowering above. Neither is a discarded benchmark
+trial and neither supplies favourable product evidence.
+
+The deterministic flat-interface lowering then produced byte-identical 2, 4,
+and 6-channel BTOR2 models across two clean productions. Their SHA-256 values
+are respectively:
+
+- `57961a02fd4800063edcab72e66c525a345fdb69d1cf08891e70f58f8cc090ba`;
+- `c0c07ccb74753cfeaed4fb333d4c4d8169b5b448676bb336cc9ee2b1923a6316`;
+- `1a902e884d8c71ebfedd99cc6161c207278909c83c54bd327815c8743c17062e`.
+
+GCC initially refused the standard `sll` and `srl` operations and Yosys state
+edge symbols. The strict parser now supports both logical shifts with exact
+word semantics and accepts at most one state-edge symbol. All three models
+parse as property-free components and retain 16, 26, and 36 states. This closes
+only source ingestion and deterministic synthesis. Region ownership, hidden
+coupling refusal, mixed-orbit evidence, properties, baselines, and resource
+measurements remain open.
