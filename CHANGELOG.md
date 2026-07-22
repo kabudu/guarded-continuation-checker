@@ -5,6 +5,10 @@
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.
+- Predeclare a controlled OpenTitan PWM maintained-tool baseline that replaces
+  40 isolated Docker launches with single-container sequential and fixed
+  four-way parallel orchestration while preserving independent evidence
+  checking, exact cohort hashes, and a threshold-free reporting rule.
 
 ## 0.30.0 - 2026-07-22
 
