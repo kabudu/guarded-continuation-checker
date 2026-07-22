@@ -132,6 +132,8 @@ pub struct Btor2Model {
     states: Vec<NodeId>,
     initialisers: BTreeMap<NodeId, NodeId>,
     next_values: BTreeMap<NodeId, NodeId>,
+    initialiser_symbols: BTreeMap<NodeId, String>,
+    next_symbols: BTreeMap<NodeId, String>,
     constraints: Vec<(NodeId, NodeId)>,
     bad: Vec<(NodeId, NodeId, Option<String>)>,
 }
@@ -163,6 +165,14 @@ impl Btor2Model {
 
     pub fn next_value(&self, state: NodeId) -> Option<NodeId> {
         self.next_values.get(&state).copied()
+    }
+
+    pub fn initialiser_symbol(&self, state: NodeId) -> Option<&str> {
+        self.initialiser_symbols.get(&state).map(String::as_str)
+    }
+
+    pub fn next_symbol(&self, state: NodeId) -> Option<&str> {
+        self.next_symbols.get(&state).map(String::as_str)
     }
 
     pub fn max_width(&self) -> u32 {
@@ -369,6 +379,8 @@ fn parse_with_roots(
     let mut states = Vec::new();
     let mut initialisers = BTreeMap::new();
     let mut next_values = BTreeMap::new();
+    let mut initialiser_symbols = BTreeMap::new();
+    let mut next_symbols = BTreeMap::new();
     let mut constraints = Vec::new();
     let mut bad = Vec::new();
     let mut identifiers = BTreeSet::new();
@@ -456,7 +468,7 @@ fn parse_with_roots(
             require_kind(&nodes, state, NodeKindDiscriminant::State, line)?;
             require_width(&nodes, state, width, line)?;
             require_width(&nodes, value, width, line)?;
-            let _symbol = tokens.next();
+            let symbol = tokens.next();
             expect_end(&mut tokens, line)?;
             let target = if operation == "init" {
                 &mut initialisers
@@ -468,6 +480,14 @@ fn parse_with_roots(
                     line,
                     format!("duplicate {operation} for state {state}"),
                 ));
+            }
+            if let Some(symbol) = symbol {
+                let symbols = if operation == "init" {
+                    &mut initialiser_symbols
+                } else {
+                    &mut next_symbols
+                };
+                symbols.insert(state, symbol);
             }
             continue;
         }
@@ -535,6 +555,8 @@ fn parse_with_roots(
         states,
         initialisers,
         next_values,
+        initialiser_symbols,
+        next_symbols,
         constraints,
         bad,
     })
@@ -983,7 +1005,10 @@ mod tests {
     #[test]
     fn accepts_one_yosys_symbol_on_state_edges_and_rejects_extra_tokens() {
         let source = "1 sort bitvec 1\n2 state 1 held\n3 zero 1\n4 init 1 2 3 init_symbol\n5 next 1 2 2 next_symbol\n6 bad 2 property\n";
-        assert!(parse(source).is_ok());
+        let model = parse(source).unwrap();
+        assert_eq!(model.initialiser_symbol(2), Some("init_symbol"));
+        assert_eq!(model.next_symbol(2), Some("next_symbol"));
+        assert_eq!(model.next_symbol(99), None);
         assert!(parse(&source.replace("next_symbol", "next_symbol extra")).is_err());
         assert!(parse(&source.replace("init_symbol", "init_symbol extra")).is_err());
     }

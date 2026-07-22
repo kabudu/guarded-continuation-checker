@@ -50,6 +50,10 @@
 - Extend the strict BTOR2 core and family composer with width-checked logical
   left and right shifts, including defined oversized-shift behaviour, and
   accept one optional Yosys symbol on state edges while rejecting extra tokens.
+- Add a bounded, source-bound repeated-state region artifact. Its independent
+  verifier recomputes hierarchy ownership and every next-state dependency,
+  rejects shared-to-local feedback and cross-channel edges, and accepts the
+  authentic 2, 4, and 6-channel OpenTitan models deterministically.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

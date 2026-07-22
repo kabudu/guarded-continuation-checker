@@ -1,6 +1,7 @@
 # OpenTitan PWM authentic channel extraction v1
 
-Status: authentic ingestion gate passes locally; extraction is not implemented
+Status: authentic ingestion and state-cut extraction gates pass locally;
+complete region extraction is not implemented
 
 ## Purpose
 
@@ -160,6 +161,21 @@ GCC initially refused the standard `sll` and `srl` operations and Yosys state
 edge symbols. The strict parser now supports both logical shifts with exact
 word semantics and accepts at most one state-edge symbol. All three models
 parse as property-free components and retain 16, 26, and 36 states. This closes
-only source ingestion and deterministic synthesis. Region ownership, hidden
-coupling refusal, mixed-orbit evidence, properties, baselines, and resource
-measurements remain open.
+source ingestion and deterministic synthesis.
+
+The first bounded extraction artifact now source-binds the monolithic model,
+semantic roots, expected channel count, shared states, local states, and
+shared-state dependencies. The independent verifier recomputes the complete
+next-state support of every state rather than trusting hierarchy labels. It
+rejects shared state driven by a channel, a local state driven by another
+channel, malformed hierarchy symbols, mutation, truncation, model drift,
+non-canonical state partitions, and resource excess.
+
+The authentic models produce local state counts `[2, 6]`, `[2, 6, 2, 6]`, and
+`[2, 6, 2, 6, 2, 6]`. The two-state regions are the even-channel blink
+configuration and the six-state regions retain the odd-channel heartbeat
+configuration. All remaining state is shared, and the dependency cut passes at
+all sizes. This proves a state cut only. Complete combinational node and edge
+coverage, boundary-signal equivalence, properties, hidden-coupling synthesis
+fixture, mixed-orbit evidence, baselines, and resource measurements remain
+open.
