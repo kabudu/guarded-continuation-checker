@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- Add the first channel trace-monitor foundation: a strict public masked-pattern
+  contract and canonical source-bound BTOR2 history monitor with explicit
+  prefix validity. Length-one controls agree exactly with the retained high and
+  low probes, a two-frame monitor recovers the known frame-2 PWM transition,
+  and invalid patterns, property-bearing sources, out-of-range channels, and
+  zero-padded prefix matches fail closed. The full authentic cohort and
+  maintained comparison remain open. Add the separate trace proof types,
+  deterministic static preflight, explicit-state or bitblast selection, one
+  exact member per verified class and trace shape, and independent target
+  replay. Eighteen logical both-answer queries use nine proof members;
+  one-unit-under work refusal, query drift, forced backend, and evidence
+  mutation return no answer.
+  Add a canonical checksummed wire artifact that binds the source, structural
+  admission, ordered queries, static routes, and exact member evidence. Retain
+  a 4,808-byte compact codec fingerprint and reject every truncation, every
+  single-byte mutation, trailing data, source drift, ordered-query drift, and
+  outer or nested byte-budget exhaustion.
+  Retain the complete 2-, 4-, and 6-channel OpenTitan cohort with seven pattern
+  shapes per channel through horizon 8. All 84 composed answers and earliest
+  bad frames agree with separately constructed direct exact bitblast queries.
+  The cohort contains 12 SAFE and 72 UNSAFE answers, and the six-channel
+  artifact uses 21 proof members for 42 logical queries.
+  Add shortest-frame proof evidence after the maintained control falsifies the
+  assumption that a horizon-wide SAT witness is necessarily earliest. Every
+  UNSAFE bitblast member now binds a witness at the first bad frame and a SAFE
+  UNSAT certificate for the preceding horizon. Pinned Yosys plus Z3 agrees on
+  all 84 answers and earliest frames. Report the resulting 2.14 to 4.90 MB
+  artifacts as a negative proof-size result.
+  Add the versioned self-service trace manifest and policy, stable capability
+  discovery, create and verify commands, bounded no-follow reads, typed
+  resource refusal, and source-replayed per-query output. Replace direct
+  certificate writes with same-directory temporary files and atomic no-clobber
+  hard-link publication. Retain collision preservation, temporary cleanup,
+  query drift, mutation, invalid-pattern, oversize, and symlink controls. Inject
+  a failure after a partial temporary-file write and prove that no destination
+  or temporary debris becomes visible.
+  Add a portable whole-process resource harness and retain three macOS arm64
+  production and verification trials with one artifact digest. Extend the
+  Linux, macOS, and Windows downstream matrix to exercise the trace CLI and
+  frozen full-cohort artifact identities; hosted results remain pending. Add a
+  six-case simulated self-service run covering discovery, full production,
+  fresh verification, immutable output, query drift, and resource refusal from
+  clean copies without per-formula calibration. Hosted Ubuntu, macOS, and
+  Windows reproduce the frozen trace identities. Retain three hosted Linux
+  certification and verification resource trials with the same artifact digest
+  as macOS.
+
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
   v0.30.0 `BinaryOp` discriminant by appending the new shift operations after

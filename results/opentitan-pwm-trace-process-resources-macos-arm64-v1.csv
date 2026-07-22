@@ -1,0 +1,7 @@
+schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,artifact_bytes,time_backend,operating_system,architecture,artifact_sha256,logical_queries,status
+1,certify,1,2.23,88113152,4899434,bsd,Darwin,arm64,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,42,ok
+1,verify,1,0.39,51445760,4899434,bsd,Darwin,arm64,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,42,ok
+1,certify,2,2.70,92225536,4899434,bsd,Darwin,arm64,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,42,ok
+1,verify,2,0.74,56492032,4899434,bsd,Darwin,arm64,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,42,ok
+1,certify,3,2.46,91897856,4899434,bsd,Darwin,arm64,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,42,ok
+1,verify,3,0.43,51445760,4899434,bsd,Darwin,arm64,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,42,ok
