@@ -31,6 +31,15 @@ The one-line response freezes CLI, artifact, manifest, and policy versions;
 all static limits; the exact static route; fail-closed fallback semantics; and
 source-replay verification.
 
+Optional phase observations have an independent additive discovery contract:
+
+```console
+guarded-continuation-checker btor2-channel-property-observability-cli-version
+```
+
+It freezes phase schema v1 and states that timings use no calibration, never
+participate in correctness, and are unavailable on failure.
+
 ## Query manifest
 
 ```text
@@ -73,6 +82,12 @@ guarded-continuation-checker certify-btor2-channel-properties \
 
 guarded-continuation-checker verify-btor2-channel-properties \
   model.btor2 queries.txt policy.txt result.channel-properties
+
+guarded-continuation-checker certify-btor2-channel-properties-observed \
+  model.btor2 queries.txt policy.txt result.channel-properties
+
+guarded-continuation-checker verify-btor2-channel-properties-observed \
+  model.btor2 queries.txt policy.txt result.channel-properties
 ```
 
 Success emits one aggregate line and one result line per ordered query. Result
@@ -86,6 +101,15 @@ The producer opens output with create-new mode and restrictive Unix
 permissions. An existing path is never overwritten. All input reads are
 bounded, require ordinary files, and reject symlinks where the operating system
 provides `O_NOFOLLOW`.
+
+The observed commands preserve the base aggregate and ordered result rows, then
+append one strict phase-metrics row. Certification measures input loading,
+structural admission, aggregate preflight, proof construction, canonical
+encoding, artifact decoding, independent source replay, and publication.
+Verification reports the same schema and sets production-only phases to zero.
+The implementation tests that the measured phase sum does not exceed total
+time and that observed and unobserved production emit byte-identical evidence.
+No duration changes admission, routing, an answer, or certificate bytes.
 
 ## Executable acceptance
 
@@ -141,7 +165,8 @@ cargo test --release --locked --test btor2_channel_property_tool_api
 
 ## Remaining gates
 
-- Retain per-phase timings and measured process resources for the typed client.
+- Add strict typed-client parsing for phase metrics and retain measured process
+  resources separately.
 - Reproduce the complete workflow and artifact identity on supported hosts.
 - Run realistic independently sourced properties and obtain external operator
   review.

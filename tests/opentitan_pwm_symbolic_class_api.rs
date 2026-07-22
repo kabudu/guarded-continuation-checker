@@ -20,6 +20,7 @@ use guarded_continuation_checker::btor2_region_property::{
     produce_btor2_channel_property_evidence, produce_btor2_channel_property_proof,
     produce_btor2_channel_property_proof_bytes,
     produce_btor2_channel_property_proof_bytes_observed,
+    produce_btor2_channel_property_proof_bytes_phase_observed,
     produce_btor2_channel_property_proof_bytes_with_policy, verify_btor2_channel_property_proof,
     verify_btor2_channel_property_proof_bytes,
 };
@@ -428,6 +429,21 @@ fn aggregate_production_preflight_refuses_the_complete_batch_before_solving() {
     .unwrap();
     assert_eq!(observed_plan, plan);
     assert_eq!(observed_bytes.len(), 1_568);
+    let (phase_plan, phase_bytes, phases) =
+        produce_btor2_channel_property_proof_bytes_phase_observed(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            admitted,
+        )
+        .unwrap();
+    assert_eq!(phase_plan, observed_plan);
+    assert_eq!(phase_bytes, observed_bytes);
+    assert!(
+        phases.preflight_micros + phases.proof_construction_micros + phases.encoding_micros
+            <= phases.total_micros
+    );
     assert!(Btor2ChannelPropertyProductionPolicy::new(artifact_policy, 0).is_err());
     assert!(
         Btor2ChannelPropertyProductionPolicy::new(

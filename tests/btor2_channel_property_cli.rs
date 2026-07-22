@@ -59,6 +59,14 @@ fn invoke(root: &Path, command: &str, queries: &Path, policy: &Path, artifact: &
         .unwrap()
 }
 
+fn numeric_field(line: &str, key: &str) -> u128 {
+    line.split(' ')
+        .find_map(|field| field.strip_prefix(&format!("{key}=")))
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
 #[test]
 fn channel_property_cli_is_versioned_self_service_and_fail_closed() {
     let capabilities = Command::new(BINARY)
@@ -69,6 +77,15 @@ fn channel_property_cli_is_versioned_self_service_and_fail_closed() {
     assert_eq!(
         String::from_utf8(capabilities.stdout).unwrap(),
         "btor2_channel_property_cli_version=1 artifact_version=1 query_manifest_version=1 policy_version=1 max_query_manifest_bytes=262144 max_policy_bytes=4096 max_model_bytes=8388608 max_channels=64 max_queries=4096 max_evidence_bytes=67108864 max_artifact_bytes=69206016 max_projected_work=100000000000 refusal_exit=3 routing=static-explicit-or-bitblast fallback=exact result_on_refusal=none refusal_schema=reason-v1 unsupported=fail-closed verification=source-replay\n"
+    );
+    let observability = Command::new(BINARY)
+        .arg("btor2-channel-property-observability-cli-version")
+        .output()
+        .unwrap();
+    assert!(observability.status.success());
+    assert_eq!(
+        String::from_utf8(observability.stdout).unwrap(),
+        "btor2_channel_property_observability_cli_version=1 base_cli_version=1 phase_metrics_version=1 phases=input,structural-admission,preflight,proof-construction,encoding,artifact-decode,source-replay,publication timing_calibration=none correctness_dependency=none partial_metrics_on_failure=none unsupported=fail-closed\n"
     );
 
     let root = fixture();
@@ -95,6 +112,64 @@ fn channel_property_cli_is_versioned_self_service_and_fail_closed() {
         12
     );
     assert!(fs::read(&artifact).unwrap().starts_with(b"GCCBCP01"));
+
+    let observed_artifact = root.join("observed.channel-properties");
+    let observed = invoke(
+        &root,
+        "certify-btor2-channel-properties-observed",
+        &queries,
+        &policy,
+        &observed_artifact,
+    );
+    assert!(observed.status.success(), "{:?}", observed.stderr);
+    assert_eq!(
+        fs::read(&observed_artifact).unwrap(),
+        fs::read(&artifact).unwrap()
+    );
+    let observed_stdout = String::from_utf8(observed.stdout).unwrap();
+    let phases = observed_stdout.lines().last().unwrap();
+    assert!(phases.starts_with(
+        "btor2-channel-property-phases status=MEASURED observability_cli_version=1 phase_metrics_version=1 operation=certify "
+    ));
+    let phase_sum = [
+        "input_micros",
+        "structural_admission_micros",
+        "preflight_micros",
+        "proof_construction_micros",
+        "encoding_micros",
+        "artifact_decode_micros",
+        "source_replay_micros",
+        "publication_micros",
+    ]
+    .into_iter()
+    .map(|key| numeric_field(phases, key))
+    .sum::<u128>();
+    assert!(phase_sum <= numeric_field(phases, "total_micros"));
+
+    let observed_verify = invoke(
+        &root,
+        "verify-btor2-channel-properties-observed",
+        &queries,
+        &policy,
+        &observed_artifact,
+    );
+    assert!(
+        observed_verify.status.success(),
+        "{:?}",
+        observed_verify.stderr
+    );
+    let observed_verify_stdout = String::from_utf8(observed_verify.stdout).unwrap();
+    let verify_phases = observed_verify_stdout.lines().last().unwrap();
+    assert!(verify_phases.contains(" operation=verify "));
+    for key in [
+        "structural_admission_micros",
+        "preflight_micros",
+        "proof_construction_micros",
+        "encoding_micros",
+        "publication_micros",
+    ] {
+        assert_eq!(numeric_field(verify_phases, key), 0);
+    }
 
     let verified = invoke(
         &root,

@@ -79,6 +79,8 @@ const REVISION_IMPACT_CLI_VERSION: u32 = 2;
 const REVISION_IMPACT_QUERY_MANIFEST_VERSION: u32 = 1;
 const REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES: usize = 16 * 1024;
 const BTOR2_CHANNEL_PROPERTY_CLI_VERSION: u32 = 1;
+const BTOR2_CHANNEL_PROPERTY_OBSERVABILITY_CLI_VERSION: u32 = 1;
+const BTOR2_CHANNEL_PROPERTY_PHASE_METRICS_VERSION: u32 = 1;
 const BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_VERSION: u32 = 1;
 const BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES: usize = 256 * 1024;
 const BTOR2_CHANNEL_PROPERTY_POLICY_VERSION: u32 = 1;
@@ -26174,17 +26176,36 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             );
             Ok(true)
         }
-        "certify-btor2-channel-properties" | "verify-btor2-channel-properties" => {
+        "btor2-channel-property-observability-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-channel-property-observability-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "btor2_channel_property_observability_cli_version={BTOR2_CHANNEL_PROPERTY_OBSERVABILITY_CLI_VERSION} base_cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} phase_metrics_version={BTOR2_CHANNEL_PROPERTY_PHASE_METRICS_VERSION} phases=input,structural-admission,preflight,proof-construction,encoding,artifact-decode,source-replay,publication timing_calibration=none correctness_dependency=none partial_metrics_on_failure=none unsupported=fail-closed"
+            );
+            Ok(true)
+        }
+        "certify-btor2-channel-properties"
+        | "verify-btor2-channel-properties"
+        | "certify-btor2-channel-properties-observed"
+        | "verify-btor2-channel-properties-observed" => {
+            let certify = command.starts_with("certify-");
+            let observed = command.ends_with("-observed");
             if args.len() != 5 {
                 return Err(format!(
                     "usage: guarded-continuation-checker {command} MODEL.btor2 QUERIES.txt POLICY.txt {}",
-                    if command == "certify-btor2-channel-properties" {
+                    if certify {
                         "OUTPUT.channel-properties"
                     } else {
                         "INPUT.channel-properties"
                     }
                 ));
             }
+            let total_started = Instant::now();
+            let input_started = Instant::now();
             let model = read_bounded_regular_file(
                 Path::new(&args[1]),
                 btor2::MAX_BTOR2_BYTES,
@@ -26192,9 +26213,15 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
             )?;
             let manifest = parse_btor2_channel_property_query_manifest(Path::new(&args[2]))?;
             let production_policy = parse_btor2_channel_property_policy(Path::new(&args[3]))?;
+            let mut input_micros = input_started.elapsed().as_micros();
             let region_policy = btor2_region_extract::Btor2RegionPolicy::default();
             let started = Instant::now();
-            let (encoded, plan) = if command == "certify-btor2-channel-properties" {
+            let mut structural_admission_micros = 0;
+            let mut preflight_micros = 0;
+            let mut proof_construction_micros = 0;
+            let mut encoding_micros = 0;
+            let (encoded, plan) = if certify {
+                let structural_started = Instant::now();
                 let structural =
                     btor2_region_equivalence::encode_btor2_region_equivalence_artifact(
                         &btor2_region_equivalence::produce_btor2_region_equivalence_artifact(
@@ -26206,8 +26233,9 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         .map_err(|error| error.to_string())?,
                     )
                     .map_err(|error| error.to_string())?;
-                let (plan, encoded) =
-                    btor2_region_property::produce_btor2_channel_property_proof_bytes_observed(
+                structural_admission_micros = structural_started.elapsed().as_micros();
+                let (plan, encoded, phases) =
+                    btor2_region_property::produce_btor2_channel_property_proof_bytes_phase_observed(
                         &model,
                         &structural,
                         &manifest.queries,
@@ -26215,20 +26243,28 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                         production_policy,
                     )
                     .map_err(map_btor2_channel_property_production_error)?;
+                preflight_micros = phases.preflight_micros;
+                proof_construction_micros = phases.proof_construction_micros;
+                encoding_micros = phases.encoding_micros;
                 (encoded, Some(plan))
             } else {
+                let artifact_input_started = Instant::now();
                 let encoded = read_bounded_regular_file(
                     Path::new(&args[4]),
                     production_policy.artifact().max_artifact_bytes(),
                     "BTOR2 channel property artifact",
                 )?;
+                input_micros += artifact_input_started.elapsed().as_micros();
                 (encoded, None)
             };
+            let artifact_decode_started = Instant::now();
             let artifact = btor2_region_property::decode_btor2_channel_property_proof_artifact(
                 &encoded,
                 production_policy.artifact(),
             )
             .map_err(|error| error.to_string())?;
+            let artifact_decode_micros = artifact_decode_started.elapsed().as_micros();
+            let source_replay_started = Instant::now();
             let structural = btor2_region_equivalence::decode_btor2_region_equivalence_artifact(
                 &artifact.structural_admission,
             )
@@ -26248,14 +26284,13 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                 region_policy,
             )
             .map_err(|error| error.to_string())?;
-            if command == "certify-btor2-channel-properties" {
+            let source_replay_micros = source_replay_started.elapsed().as_micros();
+            let publication_started = Instant::now();
+            if certify {
                 write_new_certificate(Path::new(&args[4]), &encoded)?;
             }
-            let status = if command == "certify-btor2-channel-properties" {
-                "CREATED"
-            } else {
-                "VERIFIED"
-            };
+            let publication_micros = publication_started.elapsed().as_micros();
+            let status = if certify { "CREATED" } else { "VERIFIED" };
             println!(
                 "btor2-channel-properties status={status} cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} channels={} logical_queries={} proof_members={} reused_queries={} explicit_members={} bitblast_members={} evidence_bytes={} artifact_bytes={} projected_work={} elapsed_micros={}",
                 btor2_region_property::BTOR2_CHANNEL_PROPERTY_PROOF_VERSION,
@@ -26308,6 +26343,13 @@ fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
                     result.query.horizon,
                     result.representative_channel,
                     result.witness_valuations.len(),
+                );
+            }
+            if observed {
+                println!(
+                    "btor2-channel-property-phases status=MEASURED observability_cli_version={BTOR2_CHANNEL_PROPERTY_OBSERVABILITY_CLI_VERSION} phase_metrics_version={BTOR2_CHANNEL_PROPERTY_PHASE_METRICS_VERSION} operation={} input_micros={input_micros} structural_admission_micros={structural_admission_micros} preflight_micros={preflight_micros} proof_construction_micros={proof_construction_micros} encoding_micros={encoding_micros} artifact_decode_micros={artifact_decode_micros} source_replay_micros={source_replay_micros} publication_micros={publication_micros} total_micros={} timing_calibration=none correctness_dependency=none",
+                    if certify { "certify" } else { "verify" },
+                    total_started.elapsed().as_micros(),
                 );
             }
             Ok(true)

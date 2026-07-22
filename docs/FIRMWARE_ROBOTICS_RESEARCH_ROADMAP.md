@@ -280,9 +280,11 @@ no-clobber file CLI now runs production and independent verification from a
 canonical manifest and policy. Its typed governed process client now adds
 strict discovery and result parsing, deadline and stream controls, process
 containment, optional address-space enforcement, and refusal observations. The
-next product boundary is measured process resources and phase observability,
-followed by maintained-tool, realistic-property, portability, compatibility,
-and independent-review gates.
+additive observed CLI now preserves byte-identical evidence while reporting
+eight internal production and replay phases. The next product boundary is
+strict typed phase parsing and measured process resources, followed by
+maintained-tool, realistic-property, portability, compatibility, and
+independent-review gates.
 
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit

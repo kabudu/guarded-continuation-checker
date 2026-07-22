@@ -16,6 +16,7 @@ use crate::btor2_region_extract::{
 use crate::btor2_search::{self, SearchCertificate, SearchSummary};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 pub const MAX_CHANNEL_PROPERTY_QUERIES: usize = 4096;
 pub const MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES: usize = 64 * 1024 * 1024;
@@ -218,6 +219,16 @@ pub struct Btor2ChannelPropertyProductionPlan {
     pub explicit_state_members: usize,
     pub bitblast_members: usize,
     pub projected_work: u64,
+}
+
+/// Diagnostic production timings. These values never participate in
+/// admission, routing, certificate bytes, or verification.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPropertyProductionPhaseMetrics {
+    pub preflight_micros: u128,
+    pub proof_construction_micros: u128,
+    pub encoding_micros: u128,
+    pub total_micros: u128,
 }
 
 fn reject(message: impl Into<String>) -> Btor2RegionError {
@@ -1388,6 +1399,34 @@ pub fn produce_btor2_channel_property_proof_bytes_observed(
     region_policy: Btor2RegionPolicy,
     production_policy: Btor2ChannelPropertyProductionPolicy,
 ) -> Result<(Btor2ChannelPropertyProductionPlan, Vec<u8>), Btor2RegionError> {
+    produce_btor2_channel_property_proof_bytes_phase_observed(
+        model_bytes,
+        structural_admission,
+        queries,
+        region_policy,
+        production_policy,
+    )
+    .map(|(plan, bytes, _)| (plan, bytes))
+}
+
+/// Produces canonical bytes and reports diagnostic phase timings without
+/// changing the static admission decision or the resulting artifact.
+pub fn produce_btor2_channel_property_proof_bytes_phase_observed(
+    model_bytes: &[u8],
+    structural_admission: &[u8],
+    queries: &[Btor2ChannelPropertyQuery],
+    region_policy: Btor2RegionPolicy,
+    production_policy: Btor2ChannelPropertyProductionPolicy,
+) -> Result<
+    (
+        Btor2ChannelPropertyProductionPlan,
+        Vec<u8>,
+        Btor2ChannelPropertyProductionPhaseMetrics,
+    ),
+    Btor2RegionError,
+> {
+    let total_started = Instant::now();
+    let preflight_started = Instant::now();
     let plan = preflight_btor2_channel_property_proof(
         model_bytes,
         structural_admission,
@@ -1395,15 +1434,29 @@ pub fn produce_btor2_channel_property_proof_bytes_observed(
         region_policy,
         production_policy,
     )?;
+    let preflight_micros = preflight_started.elapsed().as_micros();
+    let proof_started = Instant::now();
     let artifact = produce_btor2_channel_property_proof_after_preflight(
         model_bytes,
         structural_admission,
         queries,
         region_policy,
     )?;
+    let proof_construction_micros = proof_started.elapsed().as_micros();
+    let encoding_started = Instant::now();
     let bytes =
         encode_btor2_channel_property_proof_artifact(&artifact, production_policy.artifact)?;
-    Ok((plan, bytes))
+    let encoding_micros = encoding_started.elapsed().as_micros();
+    Ok((
+        plan,
+        bytes,
+        Btor2ChannelPropertyProductionPhaseMetrics {
+            preflight_micros,
+            proof_construction_micros,
+            encoding_micros,
+            total_micros: total_started.elapsed().as_micros(),
+        },
+    ))
 }
 
 /// Decodes and independently verifies a complete source-bound property portfolio.

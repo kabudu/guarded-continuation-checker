@@ -28,7 +28,8 @@ The package provides:
 - an experimental source-replayed BTOR2 repeated-channel property portfolio
   with canonical query and policy files, exact explicit-state or proof-carrying
   bitblast routing, aggregate preflight, a no-clobber CLI, and a typed bounded
-  process client.
+  process client. An additive observed CLI exposes diagnostic phase timings
+  without making timing part of admission or correctness.
 
 ## Status and claim boundary
 

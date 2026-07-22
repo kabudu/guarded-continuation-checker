@@ -6,6 +6,12 @@
   frozen exact-byte envelope identity, and make the production-profile CI guard
   reject any QatQ version rather than one historical version.
 
+- Add diagnostic phase observation for channel-property production and
+  verification. The additive versioned CLI measures input, structural
+  admission, preflight, proof construction, encoding, decoding, source replay,
+  and publication while retaining byte-identical evidence and timing-free
+  correctness decisions.
+
 - Add an authenticated OpenTitan PWM boundary with six live symbolic firmware
   register bits and explicit even/odd equal-input classes. Retain deterministic
   2, 4, and 6-channel models, exact structural partitions, source digests, and
