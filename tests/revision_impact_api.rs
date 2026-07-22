@@ -12,9 +12,19 @@ use guarded_continuation_checker::revision_local::{
     BoundedQuery, BoundedResult, ComponentSide, InterfaceWire, WordInterfaceContract,
     encode_word_interface_contract,
 };
+use sha2::{Digest, Sha256};
 
 fn digest(byte: u8) -> [u8; 32] {
     [byte; 32]
+}
+
+fn digest_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut output = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(output, "{byte:02x}").unwrap();
+    }
+    output
 }
 
 fn fixture() -> (Vec<ImpactAtom>, Vec<ImpactQuery>, Vec<ImpactObservation>) {
@@ -125,6 +135,34 @@ fn downstream_client_can_produce_encode_decode_and_independently_verify() {
     assert_eq!(summary.atoms, 3);
     assert_eq!(summary.queries, 2);
     assert_eq!(summary.combinations, 8);
+    assert_eq!(summary.minimal_invalidating_sets, 3);
+}
+
+#[test]
+fn portable_certificate_fixture_has_frozen_identity_and_semantics() {
+    let (atoms, queries, observations) = fixture();
+    let certificate =
+        produce_revision_impact_certificate(atoms, queries, observations.clone()).unwrap();
+    let bytes = encode_revision_impact_certificate(&certificate).unwrap();
+    assert_eq!(bytes.len(), 888);
+    assert_eq!(
+        digest_hex(&bytes),
+        "63f65c7ee9c8a296af0f2dace3cea9f129f159bc70f2fafb33633f70724b12f0"
+    );
+    let decoded = decode_revision_impact_certificate(&bytes).unwrap();
+    let summary = verify_revision_impact_with(&decoded, |mask, query| {
+        let observation = observations[mask as usize * 2 + query];
+        Ok((
+            observation.result,
+            observation.reusable,
+            observation.evidence_sha256,
+        ))
+    })
+    .unwrap();
+    assert_eq!(
+        (summary.atoms, summary.queries, summary.combinations),
+        (3, 2, 8)
+    );
     assert_eq!(summary.minimal_invalidating_sets, 3);
 }
 
