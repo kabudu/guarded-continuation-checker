@@ -135,12 +135,12 @@
   run 29893368169 reproduces the frozen envelope on Linux, macOS and Windows;
   Linux records 456.823 ms median encode, 79.591 ms median decode and
   68,968,448-byte peak RSS.
-- Upstream and adopt QatQ 0.1.3's opaque exact `u32` container and bounded chunk
-  visitor APIs. Remove GCC's private QATC/QATQ framing parser and public
-  floating-point-labelled mapping without changing a frozen envelope byte.
-  Preserve chunk-bounded recovery, callback-before-validation exclusion,
-  resource policy, hostile rejection and the prior exact hash. Compatibility
-  history and independent review remain open promotion gates.
+- Upstream and adopt QatQ 0.1.4's exact-byte container and bounded byte-chunk
+  visitor APIs. Remove GCC's private byte-to-`u32` packing, QATC/QATQ framing
+  parser and public floating-point-labelled mapping without changing a frozen
+  envelope byte. Preserve chunk-bounded recovery, callback-before-validation
+  exclusion, resource policy, hostile rejection and the prior exact hash.
+  Compatibility history and independent review remain open promotion gates.
 
 ## 0.29.0 - 2026-07-22
 

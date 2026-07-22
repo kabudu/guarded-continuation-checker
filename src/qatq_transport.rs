@@ -4,8 +4,8 @@
 //! canonical bytes and pass them to the existing independent verifier.
 
 use qatq::{
-    QatcDecodeLimits, encode_qatq_exact_u32_container,
-    for_each_qatq_exact_u32_container_chunk_with_limits,
+    QatcDecodeLimits, encode_qatq_exact_bytes_container,
+    for_each_qatq_exact_bytes_container_chunk_with_limits,
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -17,8 +17,8 @@ use std::{
 
 const MAGIC: &[u8; 8] = b"GCCQATQ1";
 const VERSION: u16 = 1;
-// Wire value 1 is retained so envelopes produced through the former f32-bit
-// adapter remain byte-identical and decodable through QatQ's opaque u32 API.
+// Wire value 1 is retained because QatQ's byte API emits the same canonical
+// little-endian opaque-u32 QATC bytes as the former GCC adapter.
 const CODEC_QATQ_EXACT_U32_WORDS: u16 = 1;
 const HEADER_LEN: usize = 104;
 const SHA256_LEN: usize = 32;
@@ -114,22 +114,7 @@ pub fn encode_qatq_transport(
         return Err(QatqTransportError::LimitExceeded("values per chunk"));
     }
 
-    let value_count = canonical
-        .len()
-        .checked_add(3)
-        .ok_or(QatqTransportError::LimitExceeded("decoded bytes"))?
-        / 4;
-    let mut words = Vec::new();
-    words
-        .try_reserve_exact(value_count)
-        .map_err(|_| QatqTransportError::LimitExceeded("decoded allocation"))?;
-    for word in canonical.chunks(4) {
-        let mut bytes = [0_u8; 4];
-        bytes[..word.len()].copy_from_slice(word);
-        words.push(u32::from_le_bytes(bytes));
-    }
-
-    let encoded = encode_qatq_exact_u32_container(&words, max_values_per_chunk)
+    let encoded = encode_qatq_exact_bytes_container(canonical, max_values_per_chunk)
         .map_err(|error| QatqTransportError::Codec(error.to_string()))?;
     validate_encoded_lengths(canonical.len(), encoded.len(), policy)?;
     let envelope_len = HEADER_LEN
@@ -246,34 +231,20 @@ pub fn decode_qatq_transport_to_writer(
         max_encoded_bytes: metadata.encoded_bytes,
         max_chunk_bytes: policy.max_encoded_chunk_bytes,
     };
-    let mut remaining = metadata.canonical_bytes;
-    let mut decoded_values = 0_usize;
     let mut digest = Sha256::new();
     let encoded = &envelope[HEADER_LEN..];
     let mut writer_error = None;
-    let decoded = for_each_qatq_exact_u32_container_chunk_with_limits(
+    let decoded = for_each_qatq_exact_bytes_container_chunk_with_limits(
         encoded,
+        metadata.canonical_bytes,
         limits,
         metadata.max_values_per_chunk,
-        |words| {
-            decoded_values = decoded_values
-                .checked_add(words.len())
-                .ok_or(qatq::QatqError::InvalidContainer)?;
-            for word in words {
-                let bytes = word.to_le_bytes();
-                let take = remaining.min(4);
-                if take > 0 {
-                    if let Err(error) = writer.write_all(&bytes[..take]) {
-                        writer_error = Some(error);
-                        return Err(qatq::QatqError::InvalidContainer);
-                    }
-                    digest.update(&bytes[..take]);
-                    remaining -= take;
-                }
-                if take < 4 && bytes[take..].iter().any(|byte| *byte != 0) {
-                    return Err(qatq::QatqError::InvalidContainer);
-                }
+        |bytes| {
+            if let Err(error) = writer.write_all(bytes) {
+                writer_error = Some(error);
+                return Err(qatq::QatqError::InvalidContainer);
             }
+            digest.update(bytes);
             Ok(())
         },
     );
@@ -281,9 +252,6 @@ pub fn decode_qatq_transport_to_writer(
         return Err(QatqTransportError::Io(error));
     }
     decoded.map_err(|error| QatqTransportError::Codec(error.to_string()))?;
-    if remaining != 0 || decoded_values != total_values {
-        return Err(QatqTransportError::IntegrityMismatch("decoded length"));
-    }
     let actual: [u8; SHA256_LEN] = digest.finalize().into();
     if actual != metadata.canonical_sha256 {
         return Err(QatqTransportError::IntegrityMismatch("decoded SHA-256"));
