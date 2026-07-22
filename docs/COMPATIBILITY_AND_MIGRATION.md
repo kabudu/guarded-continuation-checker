@@ -43,6 +43,14 @@ Callers that need a raw declaration inventory must not infer it from this API.
 The change is covered by external-consumer tests on every hosted platform and
 will become part of the first tagged compatibility baseline.
 
+The 0.31.0 research candidate adds channel-property operations, typed resource
+refusal, and BTOR2 shift operations to the public `OperationKind`,
+`PredicateApiError`, and `BinaryOp` enums. Downstream exhaustive matches must
+add the new cases when moving from 0.30.0. Existing `BinaryOp` variants keep
+their 0.30.0 implicit discriminants; `Sll` and `Srl` are appended after them.
+This is an intentional pre-1.0 minor API transition, not a patch-compatible
+change. Artifact and CLI contract versions are unaffected.
+
 Property-free BTOR2 component ingestion is additive. The new component parser
 requires caller-selected semantic roots and does not change the retained
 whole-model parser, which still requires a bad property. Revision-local public

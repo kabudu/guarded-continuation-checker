@@ -1,6 +1,6 @@
 [package]
 name = "guarded-continuation-checker"
-version = "0.30.0"
+version = "0.31.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT"

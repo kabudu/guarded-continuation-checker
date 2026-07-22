@@ -84,14 +84,16 @@ pub enum BinaryOp {
     Add,
     Sub,
     Mul,
-    Sll,
-    Srl,
     Eq,
     Neq,
     Ult,
     Ulte,
     Ugt,
     Ugte,
+    // Keep new operations after the v0.30.0 variants so every existing
+    // implicit discriminant remains stable for downstream numeric casts.
+    Sll,
+    Srl,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

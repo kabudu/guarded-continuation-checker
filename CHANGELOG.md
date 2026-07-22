@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Advance the crate candidate to 0.31.0 because the research API adds public
+  `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
+  v0.30.0 `BinaryOp` discriminant by appending the new shift operations after
+  the existing variants, and document the exhaustive-match migration.
+
 - Upgrade the optional research transport to hardened QatQ 0.1.5, retain the
   frozen exact-byte envelope identity, and make the production-profile CI guard
   reject any QatQ version rather than one historical version.
