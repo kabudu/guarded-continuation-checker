@@ -1,0 +1,2 @@
+schema_version,trials,artifact_bytes,full_candidate_valuations,retained_candidate_valuations,retained_produced_sections,retained_reused_sections,full_produce_median_nanos,retained_produce_median_nanos,produce_ratio,full_verify_median_nanos,retained_verify_median_nanos,verify_ratio,answers_agree,artifacts_identical,status
+1,21,525095,4100,4,1,1,15529625,1105959,0.071216,9328708,1254875,0.134518,true,true,measured

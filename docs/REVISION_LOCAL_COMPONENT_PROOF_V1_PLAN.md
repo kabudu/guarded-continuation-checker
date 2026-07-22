@@ -206,4 +206,9 @@ tool.
    [Roa Logic PLIC revision reuse v1](ROALOGIC_PLIC_REVISION_REUSE_V1.md).
    Hosted and cross-platform evidence remains open.
 7. Run strong baselines and cross-platform packaging.
+   The first controlled local cost run reduces complete local candidate work
+   from 4,100 valuations to four while emitting byte-identical artifacts. See
+   [Roa Logic PLIC retained revision cost v1](ROALOGIC_PLIC_REVISION_COST_V1.md).
+   Hosted timing, peak memory, process amortisation, and closest-system evidence
+   remain open.
 8. Reject or retain the candidate strictly from the predeclared gates.

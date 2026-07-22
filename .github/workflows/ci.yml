@@ -380,7 +380,8 @@ jobs:
       - name: Reproduce Caliptra and Roa Logic PLIC search acceptance
         run: |
           cargo build --release --locked \
-            --example roalogic_plic_revision_reuse
+            --example roalogic_plic_revision_reuse \
+            --example roalogic_plic_revision_cost
           scripts/run-caliptra-wdt-word-probe-v2.sh \
             target/x86_64-unknown-linux-musl/release/guarded-continuation-checker \
             /tmp/yosys-attestation/build/yosys \
@@ -417,6 +418,14 @@ jobs:
             /tmp/roalogic-plic-revision-work
           diff -u results/roalogic-plic-revision-reuse-v1.csv \
             /tmp/roalogic-plic-revision-reuse-v1.csv
+          target/release/examples/roalogic_plic_revision_cost \
+            /tmp/roalogic-plic-revision-work/plic-new.btor2 \
+            corpus/rtl/roalogic-plic-gateway/revision-cohort/monitor.btor2 \
+            corpus/rtl/roalogic-plic-gateway/revision-cohort/monitor-v2.btor2 \
+            corpus/rtl/roalogic-plic-gateway/revision-cohort/interface-retained-plic.txt \
+            > /tmp/roalogic-plic-revision-cost-v1.csv
+          grep -q '^1,21,525095,4100,4,1,1,.*true,true,measured$' \
+            /tmp/roalogic-plic-revision-cost-v1.csv
       - name: Reproduce OpenTitan AON predicate-set acceptance
         run: |
           scripts/run-opentitan-aon-predicate-set-acceptance.sh \

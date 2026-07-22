@@ -262,6 +262,13 @@ byte-for-byte, and agrees with maintained Yosys/Z3. See the
 Hosted, strong-baseline, complete-hostile-matrix, and portable certificate
 evidence remain open.
 
+A separate controlled cost run retains the public PLIC relation while changing
+only a small monitor. It reduces complete local candidate work from 4,100
+valuations to four and emits a byte-identical final artifact. The local
+21-trial medians are recorded in the
+[retained revision cost report](docs/ROALOGIC_PLIC_REVISION_COST_V1.md), with
+hosted and peak-memory evidence still open.
+
 Validated findings:
 
 - A structural frontier gate safely rejects formulas whose conservative residual

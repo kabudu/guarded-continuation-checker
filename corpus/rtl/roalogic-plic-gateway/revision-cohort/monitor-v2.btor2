@@ -1,0 +1,11 @@
+; GCC-authored persistent monitor, not upstream Roa Logic RTL.
+1 sort bitvec 1
+2 input 1 pending
+3 state 1 pending_seen
+4 zero 1
+5 init 1 3 4
+6 or 1 3 2
+7 next 1 3 6
+8 and 1 3 2 repeated_pending
+9 and 1 4 2 impossible
+10 bad 8 repeated_pending_bad
