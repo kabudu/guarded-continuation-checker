@@ -32,6 +32,14 @@
   Seven focused tests now include every aggregate policy dimension and every
   bundle truncation. Resource refusal occurs before retaining or decoding an
   over-limit artifact.
+- Add the first self-service revision-impact file CLI. Strict old/new component
+  and interface inputs plus a canonical bounded-query manifest produce or
+  independently verify the aggregate certificate. The workflow uses bounded
+  non-symlink reads, exact query and source binding, atomic no-clobber output,
+  and fail-closed rejection of manifest drift, certificate mutation, and
+  noncanonical text. This closes the file-CLI portion of the integration gate;
+  the typed process client, capabilities, baselines, public cohort, and
+  portability evidence remain open.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

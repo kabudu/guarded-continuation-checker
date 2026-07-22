@@ -311,6 +311,16 @@ agrees on all 16 answers with about 12,738 times less model-plus-evidence data.
 The current container therefore has no artifact advantage. The measured result
 points to a shared-section batch certificate as the next experiment.
 
+The newer [revision-impact certificate v1 experiment](docs/REVISION_IMPACT_CERTIFICATE_V1.md)
+extends the exact revision-local path across every bounded old/new combination.
+It records which changed component or interface boundaries invalidate reuse,
+derives every inclusion-minimal invalidating set, and binds every observation
+to independently checkable revision-local evidence. A strict research CLI now
+creates and verifies the aggregate file without per-formula calibration. The
+four-transition public cohort, maintained baseline, process client, and
+cross-platform identity gates remain open, so this is not yet part of the
+production support profile.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies

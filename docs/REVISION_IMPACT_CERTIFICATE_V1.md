@@ -10,7 +10,11 @@ independent semantic evaluator for every observation. The first exact adapter
 now produces every old/new combination through the existing two-component
 revision engine, binds each observation to the SHA-256 of its canonical
 revision-local evidence, and independently decodes and verifies every retained
-artifact. The public OpenTitan cohort and the remaining gates are still open.
+artifact. The first strict file CLI now produces and independently verifies the
+aggregate bundle from old/new component sources, old/new interface contracts,
+and a canonical bounded-query manifest. It uses bounded non-symlink reads and
+atomic no-clobber publication. The public OpenTitan cohort and the remaining
+gates are still open.
 This is a falsification experiment, not a novelty claim or
 production-supported interface.
 
@@ -98,6 +102,47 @@ accepted as minimal.
 Exceeding any limit returns a typed refusal before certificate publication. The
 portfolio may then run the existing complete exact workflow, but must never
 present a fallback result as a revision-impact certificate.
+
+## Research file CLI
+
+The query manifest is canonical UTF-8 with LF endings, no NUL bytes, a required
+header, and one strictly ordered query per subsequent line:
+
+```text
+gcc-btor2-revision-impact-queries-v1
+0,right,10
+1,right,10
+```
+
+Each query uses `HORIZON,BAD_SIDE,BAD_OUTPUT`. The ordering key is horizon,
+then `left` before `right`, then the nonzero BTOR2 bad-output node identifier.
+The manifest contains one to 32 unique queries and must end with LF.
+
+Create an aggregate bundle:
+
+```console
+guarded-continuation-checker check-btor2-revision-impact \
+  LEFT_OLD.btor2 LEFT_NEW.btor2 LEFT_OUTPUTS \
+  RIGHT_OLD.btor2 RIGHT_NEW.btor2 RIGHT_OUTPUTS \
+  INTERFACE_OLD.txt INTERFACE_NEW.txt QUERIES.txt \
+  OUTPUT.revision-impact
+```
+
+Independently decode and verify the same bound inputs:
+
+```console
+guarded-continuation-checker verify-btor2-revision-impact \
+  LEFT_OLD.btor2 LEFT_NEW.btor2 LEFT_OUTPUTS \
+  RIGHT_OLD.btor2 RIGHT_NEW.btor2 RIGHT_OUTPUTS \
+  INTERFACE_OLD.txt INTERFACE_NEW.txt QUERIES.txt \
+  INPUT.revision-impact
+```
+
+`LEFT_OUTPUTS` and `RIGHT_OUTPUTS` are strictly increasing comma-separated
+nonzero node identifiers. Production verifies every retained scenario before
+creating the output. Verification binds every supplied source, interface, and
+query again. Existing output, malformed manifests, source drift, query drift,
+and certificate mutation fail closed; no fallback result is emitted.
 
 ## Predeclared gates
 
