@@ -255,6 +255,14 @@ novelty result. Authentic independent channel bindings, hidden-coupling
 refusal, maintained evidence, process resources, portability, and self-service
 acceptance remain open.
 
+The source-faithful continuation is predeclared as
+[authentic OpenTitan PWM channel extraction v1](OPENTITAN_PWM_AUTHENTIC_CHANNEL_EXTRACTION_V1.md).
+It retains the exact upstream core, channel, and generated register package,
+then asks whether complete repeated regions and mixed equivalence classes can
+be derived and independently checked from the source-attested monolithic
+model. This avoids treating the reduced behavioural boundary as product
+evidence. Static refusal and exact fallback remain required outcomes.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest

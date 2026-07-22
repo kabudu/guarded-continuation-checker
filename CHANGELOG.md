@@ -39,6 +39,10 @@
   representatives cover 30 logical properties, reducing exact evidence by
   83.35% and the complete artifact by 80.35%. The result applies only to the
   identical-binding preliminary fixture and is not a novelty claim.
+- Predeclare source-faithful repeated-region extraction from the exact pinned
+  OpenTitan PWM core, channel, and generated register package. The checker must
+  prove complete region boundaries and refuse hidden coupling before any mixed
+  orbit can reuse evidence.
 - Cancel superseded CI runs for the same pull request or manually dispatched
   ref. Rapid experiment commits no longer leave obsolete full test and public
   RTL corpus jobs consuming hosted runner time.

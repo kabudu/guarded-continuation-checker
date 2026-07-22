@@ -207,6 +207,14 @@ The mechanism advances only if all gates pass:
 No trial may be discarded selectively. A harness or provenance defect requires
 the complete affected matrix to be rerun and the reason to be documented.
 
+The reduced component grammar does not preserve the upstream fact that
+`pwm_core` instantiates `pwm_chan` internally. The next source-faithful stage is
+therefore the separately predeclared
+[authentic channel extraction experiment](OPENTITAN_PWM_AUTHENTIC_CHANNEL_EXTRACTION_V1.md),
+which derives and independently checks repeated regions from the exact
+source-attested monolithic model instead of substituting another behavioural
+wrapper.
+
 ## Decision rule
 
 The mechanism succeeds if one independently proved channel relation can be
