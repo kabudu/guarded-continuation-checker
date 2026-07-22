@@ -77,13 +77,22 @@ monolithic specialisation, so no performance or novelty claim follows.
 
 ## Installation
 
-After the first crate release:
+Install the complete research build:
 
 ```sh
 cargo install guarded-continuation-checker --locked
 ```
 
-Until then, install the reviewed repository revision directly:
+For the frozen `firmware-rtl-v1` command boundary, install with the production
+feature. This build rejects every research command before dispatch:
+
+```sh
+cargo install guarded-continuation-checker --locked \
+  --features production-firmware
+guarded-continuation-checker production-profile-version
+```
+
+To evaluate an unreleased reviewed repository revision instead:
 
 ```sh
 cargo install --git https://github.com/kabudu/guarded-continuation-checker \
@@ -91,10 +100,9 @@ cargo install --git https://github.com/kabudu/guarded-continuation-checker \
 ```
 
 For self-service Linux evaluation, prefer the repository's reproducible static
-bundle contract. It includes an SPDX SBOM, deterministic provenance, internal
-checksums, and optional GitHub Sigstore attestations. The first crate has not yet
-been published, and no binary should be treated as an authenticated release
-without verifying its attestation policy.
+`firmware-rtl-v1` candidate. It includes an SPDX SBOM, deterministic provenance,
+internal checksums, and GitHub Sigstore attestations. No binary should be
+treated as an authenticated release without verifying its attestation policy.
 
 Confirm the versioned interfaces before integrating:
 

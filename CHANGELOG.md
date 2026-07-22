@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.29.0 - 2026-07-22
+
+- Bound the crates.io source payload to the executable and library sources,
+  licence and user-facing READMEs. Add a 64-file and 768 KiB compressed package
+  gate that excludes CI, corpora, retained results, research examples, scripts
+  and tests from the installed product payload.
+
 - Freeze production support profile v1 around firmware CLI contract v2 and RTL
   artifact schema v4. Add a build feature and machine-readable capability that
   make the profiled binary reject every research command before dispatch. Add

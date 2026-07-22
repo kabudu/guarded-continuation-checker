@@ -1,0 +1,89 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Bind tag, package version and release notes
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
+          test "$GITHUB_REF_NAME" = "v$version"
+          test -f "docs/releases/v$version.md"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Install deterministic packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools jq binutils
+      - name: Test and package the exact crate payload
+        run: |
+          cargo test --locked
+          scripts/test-crate-package-v1.sh
+      - name: Build the reproducible Linux production candidate
+        run: |
+          scripts/test-linux-production-candidate.sh \
+            /tmp/gcc-linux-production-repro dist
+      - name: Resolve canonical artifact paths
+        id: bundle
+        run: |
+          archive=$(find dist -maxdepth 1 -type f -name '*.tar.gz')
+          sbom=$(find dist -maxdepth 1 -type f -name '*.spdx.json')
+          test -n "$archive"
+          test -n "$sbom"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "sbom=$sbom" >> "$GITHUB_OUTPUT"
+      - name: Attest the Linux archive
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.bundle.outputs.archive }}
+      - name: Attest its SPDX SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.bundle.outputs.archive }}
+          sbom-path: ${{ steps.bundle.outputs.sbom }}
+      - name: Publish crate exactly once
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if curl --fail --silent --show-error \
+            "https://crates.io/api/v1/crates/guarded-continuation-checker/$VERSION" \
+            --output /tmp/published-version.json 2>/dev/null; then
+            remote_checksum=$(jq -er '.version.checksum' /tmp/published-version.json)
+            local_checksum=$(sha256sum \
+              "target/package/guarded-continuation-checker-$VERSION.crate" \
+              | awk '{print $1}')
+            test "$remote_checksum" = "$local_checksum"
+            echo "identical crate version $VERSION is already published"
+          else
+            cargo publish --locked
+          fi
+      - name: Publish or refresh the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "GCC v$VERSION" \
+              --notes-file "docs/releases/v$VERSION.md" \
+              --latest
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --verify-tag \
+              --title "GCC v$VERSION" \
+              --notes-file "docs/releases/v$VERSION.md" \
+              --latest
+          fi

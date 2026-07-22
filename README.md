@@ -385,6 +385,14 @@ publishing a release. This is release-path hardening, not a production or
 novelty claim. The first [signed Linux candidate](results/linux-evaluation-candidate-v1.md)
 passes exact source, workflow, runner, SLSA, SPDX, and offline verification.
 
+Release `v0.29.0` adds a distinct
+[Linux `firmware-rtl-v1` production candidate](docs/LINUX_PRODUCTION_CANDIDATE_V1.md).
+It compiles only the eight commands in the frozen support profile, rejects
+research dispatch, ships only supported contracts, and binds its profile into
+the archive name, capability snapshot, build information and provenance. It is
+an evaluation-ready release, not a production-grade claim; independent review
+and partner evidence remain required.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
