@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Upgrade the optional research transport to hardened QatQ 0.1.5, retain the
+  frozen exact-byte envelope identity, and make the production-profile CI guard
+  reject any QatQ version rather than one historical version.
+
 - Add an authenticated OpenTitan PWM boundary with six live symbolic firmware
   register bits and explicit even/odd equal-input classes. Retain deterministic
   2, 4, and 6-channel models, exact structural partitions, source digests, and

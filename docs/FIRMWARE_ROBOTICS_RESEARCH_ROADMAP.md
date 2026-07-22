@@ -181,7 +181,7 @@ whether exact QatQ compression can sit behind a GCC-owned, fail-closed
 transport envelope for large proof-carrying revision batches. The experiment
 passes hostile-input rejection, explicit resource limits, cross-platform byte
 identity, Linux and macOS process resource measurements, semantic replay and a
-retained zstd baseline. QatQ 0.1.4 now owns the exact-byte container and bounded
+retained zstd baseline. QatQ 0.1.5 now owns the exact-byte container and bounded
 byte-chunk boundary, closing that promotion gate without changing the frozen
 envelope.
 Compatibility history and independent review remain open. It cannot change

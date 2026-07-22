@@ -81,7 +81,7 @@ jobs:
           cargo clippy --locked --bin guarded-continuation-checker \
             --features production-firmware -- -D warnings
           cargo build --release --locked --features production-firmware
-          if cargo tree --locked --features production-firmware | grep -Eq '(^| )qatq v0\.1\.1'; then
+          if cargo tree --locked --features production-firmware | grep -Eq '(^| )qatq v'; then
             echo "production-firmware unexpectedly includes QatQ"
             exit 1
           fi

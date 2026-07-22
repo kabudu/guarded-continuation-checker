@@ -35,7 +35,7 @@ debug = true
 
 [dependencies]
 libc = "0.2.186"
-qatq = { version = "=0.1.4", optional = true }
+qatq = { version = "=0.1.5", optional = true }
 sha2 = "0.11.0"
 varisat = "0.2.2"
 varisat-checker = "0.2.2"
