@@ -1,13 +1,13 @@
 # QatQ transport qualification v1
 
-Status: local and hosted qualification gates pass, and the upstream opaque-word
+Status: local and hosted qualification gates pass, and the upstream exact-byte
 API gate is closed. Compatibility history and independent review remain open.
 QatQ is not part of the supported
 `firmware-rtl-v1` profile or GCC's normative evidence semantics.
 
 ## Question
 
-Can a GCC-owned, fail-closed transport envelope use the exact QatQ 0.1.3
+Can a GCC-owned, fail-closed transport envelope use the exact QatQ 0.1.4
 container to reduce storage and transfer cost for large proof-carrying revision
 batches without weakening byte identity, independent semantic verification, or
 resource governance?
@@ -19,9 +19,9 @@ UNSAFE answer and cannot establish an algorithmic novelty claim.
 
 ## Frozen implementation boundary
 
-- QatQ crate version: exactly `0.1.3`.
-- QatQ source revision: release tag `v0.1.3`, commit
-  `8ad5369327cd9472e356fa00bfadb161108ae0bd`.
+- QatQ crate version: exactly `0.1.4`.
+- QatQ source revision: release tag `v0.1.4`, commit
+  `e99e39604dbbe731b8d62e40efb08b837c6d6aa8`.
 - GCC feature: additive research-only `research-qatq-transport`.
 - Opaque mapping: ordered little-endian 32-bit words through QatQ's public exact
   `u32` container API. Zero padding is permitted only in the final word and the
@@ -136,7 +136,7 @@ produced the same 82,428-byte envelope and both frozen hashes, with median
 encode and decode times of 456.823 ms and 79.591 ms and process peak resident
 memory of 68,968,448 bytes.
 
-All ten predeclared experiment gates pass. QatQ 0.1.3 closes the opaque-byte API
-gate through upstream PRs 9 and 12 without changing the frozen GCC envelope
-bytes. The remaining promotion gates are compatibility history across at least
-two GCC releases and independent review.
+All ten predeclared experiment gates pass. QatQ 0.1.4 closes the exact-byte API
+gate through upstream PR 14 and the release-qualified PR 15 without changing
+the frozen GCC envelope bytes. The remaining promotion gates are compatibility
+history across at least two GCC releases and independent review.
