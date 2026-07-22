@@ -1369,7 +1369,26 @@ pub fn produce_btor2_channel_property_proof_bytes_with_policy(
     region_policy: Btor2RegionPolicy,
     production_policy: Btor2ChannelPropertyProductionPolicy,
 ) -> Result<Vec<u8>, Btor2RegionError> {
-    let _ = preflight_btor2_channel_property_proof(
+    produce_btor2_channel_property_proof_bytes_observed(
+        model_bytes,
+        structural_admission,
+        queries,
+        region_policy,
+        production_policy,
+    )
+    .map(|(_, bytes)| bytes)
+}
+
+/// Produces canonical bytes and returns the exact pre-solve plan that admitted
+/// them. The plan is computed once and no property solver starts on refusal.
+pub fn produce_btor2_channel_property_proof_bytes_observed(
+    model_bytes: &[u8],
+    structural_admission: &[u8],
+    queries: &[Btor2ChannelPropertyQuery],
+    region_policy: Btor2RegionPolicy,
+    production_policy: Btor2ChannelPropertyProductionPolicy,
+) -> Result<(Btor2ChannelPropertyProductionPlan, Vec<u8>), Btor2RegionError> {
+    let plan = preflight_btor2_channel_property_proof(
         model_bytes,
         structural_admission,
         queries,
@@ -1382,7 +1401,9 @@ pub fn produce_btor2_channel_property_proof_bytes_with_policy(
         queries,
         region_policy,
     )?;
-    encode_btor2_channel_property_proof_artifact(&artifact, production_policy.artifact)
+    let bytes =
+        encode_btor2_channel_property_proof_artifact(&artifact, production_policy.artifact)?;
+    Ok((plan, bytes))
 }
 
 /// Decodes and independently verifies a complete source-bound property portfolio.

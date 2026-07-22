@@ -74,7 +74,8 @@ No timing or process-memory conclusion is drawn from it.
 
 ## Remaining gates
 
-- Add a strict, bounded, no-clobber file CLI and typed process client.
+- Preserve the strict, bounded, no-clobber
+  [file CLI](BTOR2_CHANNEL_PROPERTY_CLI_V1.md) and add a typed process client.
 - Enforce deadlines, process memory, output size, and process-tree containment
   around production and verification.
 - Retain per-phase observability and measured peak resources.

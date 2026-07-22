@@ -424,8 +424,13 @@ now authenticates and plans every representative model and exact backend before
 any property solver starts. Its inclusive caller ceiling refuses the complete
 batch one work unit below the retained plan without emitting partial evidence.
 Projected work is a deterministic admission token, not a runtime or memory
-estimate. A file CLI, process containment, observability, maintained comparison
-and portability evidence remain open.
+estimate. A strict
+[self-service file CLI](docs/BTOR2_CHANNEL_PROPERTY_CLI_V1.md) now accepts a
+canonical property manifest and caller resource policy, derives the structural
+admission, produces and independently verifies the complete portfolio, rejects
+symlinks and drift, and never overwrites an output. A typed process client,
+process containment, observability, maintained comparison and portability
+evidence remain open.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local

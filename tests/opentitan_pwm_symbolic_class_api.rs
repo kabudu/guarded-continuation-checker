@@ -19,6 +19,7 @@ use guarded_continuation_checker::btor2_region_property::{
     encode_btor2_channel_property_proof_artifact, preflight_btor2_channel_property_proof,
     produce_btor2_channel_property_evidence, produce_btor2_channel_property_proof,
     produce_btor2_channel_property_proof_bytes,
+    produce_btor2_channel_property_proof_bytes_observed,
     produce_btor2_channel_property_proof_bytes_with_policy, verify_btor2_channel_property_proof,
     verify_btor2_channel_property_proof_bytes,
 };
@@ -417,16 +418,16 @@ fn aggregate_production_preflight_refuses_the_complete_batch_before_solving() {
     );
     let admitted =
         Btor2ChannelPropertyProductionPolicy::new(artifact_policy, plan.projected_work).unwrap();
-    assert!(
-        produce_btor2_channel_property_proof_bytes_with_policy(
-            model,
-            &structural,
-            &queries,
-            region_policy,
-            admitted,
-        )
-        .is_ok()
-    );
+    let (observed_plan, observed_bytes) = produce_btor2_channel_property_proof_bytes_observed(
+        model,
+        &structural,
+        &queries,
+        region_policy,
+        admitted,
+    )
+    .unwrap();
+    assert_eq!(observed_plan, plan);
+    assert_eq!(observed_bytes.len(), 1_568);
     assert!(Btor2ChannelPropertyProductionPolicy::new(artifact_policy, 0).is_err());
     assert!(
         Btor2ChannelPropertyProductionPolicy::new(

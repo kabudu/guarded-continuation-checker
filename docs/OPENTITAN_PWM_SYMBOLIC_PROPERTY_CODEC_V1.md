@@ -67,8 +67,8 @@ cargo test --release --locked --test opentitan_pwm_symbolic_class_api outer_prop
 
 ## Remaining gates
 
-- Add a strict, no-clobber file CLI and typed process client around the byte
-  APIs for self-service embedded build integration.
+- Preserve the strict [file CLI](BTOR2_CHANNEL_PROPERTY_CLI_V1.md) and add a
+  typed process client for self-service embedded build integration.
 - Preserve the linked
   [aggregate production preflight](OPENTITAN_PWM_SYMBOLIC_PROPERTY_PREFLIGHT_V1.md)
   across the file and process boundaries.

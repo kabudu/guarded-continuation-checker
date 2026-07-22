@@ -15,8 +15,8 @@
 use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain, btor2_motion,
-    btor2_phase, btor2_predicate_set, btor2_region, btor2_search, composed_witness,
-    controller_mtbdd,
+    btor2_phase, btor2_predicate_set, btor2_region, btor2_region_equivalence, btor2_region_extract,
+    btor2_region_property, btor2_search, composed_witness, controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
@@ -78,6 +78,18 @@ const SOURCE_MODEL_PROVENANCE_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 const REVISION_IMPACT_CLI_VERSION: u32 = 2;
 const REVISION_IMPACT_QUERY_MANIFEST_VERSION: u32 = 1;
 const REVISION_IMPACT_QUERY_MANIFEST_MAX_BYTES: usize = 16 * 1024;
+const BTOR2_CHANNEL_PROPERTY_CLI_VERSION: u32 = 1;
+const BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_VERSION: u32 = 1;
+const BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES: usize = 256 * 1024;
+const BTOR2_CHANNEL_PROPERTY_POLICY_VERSION: u32 = 1;
+const BTOR2_CHANNEL_PROPERTY_POLICY_MAX_BYTES: usize = 4096;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Btor2ChannelPropertyQueryManifest {
+    expected_channels: usize,
+    semantic_roots: Vec<btor2::NodeId>,
+    queries: Vec<btor2_region_property::Btor2ChannelPropertyQuery>,
+}
 
 #[derive(Debug)]
 struct ComponentBatchManifestMember {
@@ -25918,11 +25930,393 @@ fn parse_revision_impact_queries(path: &Path) -> Result<Vec<revision_local::Boun
     Ok(queries)
 }
 
+fn parse_canonical_usize(value: &str, label: &str) -> Result<usize, String> {
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| format!("{label} is invalid"))?;
+    if parsed.to_string() != value {
+        return Err(format!("{label} is noncanonical"));
+    }
+    Ok(parsed)
+}
+
+fn parse_canonical_u64(value: &str, label: &str) -> Result<u64, String> {
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|_| format!("{label} is invalid"))?;
+    if parsed.to_string() != value {
+        return Err(format!("{label} is noncanonical"));
+    }
+    Ok(parsed)
+}
+
+fn parse_btor2_channel_property_query_manifest(
+    path: &Path,
+) -> Result<Btor2ChannelPropertyQueryManifest, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES,
+        "BTOR2 channel property query manifest",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "BTOR2 channel property query manifest is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "BTOR2 channel property query manifest must be canonical LF text without NUL"
+                .to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    if lines.next() != Some("gcc-btor2-channel-properties-v1") {
+        return Err("BTOR2 channel property query manifest has an unsupported header".to_string());
+    }
+    let channels_line = lines
+        .next()
+        .and_then(|line| line.strip_prefix("channels="))
+        .ok_or_else(|| "BTOR2 channel property query manifest expected channels".to_string())?;
+    let expected_channels = parse_canonical_usize(channels_line, "channel count")?;
+    if !(1..=btor2_region_extract::MAX_REGION_CHANNELS).contains(&expected_channels) {
+        return Err("BTOR2 channel property channel count is outside policy".to_string());
+    }
+    let roots_line = lines
+        .next()
+        .and_then(|line| line.strip_prefix("semantic_roots="))
+        .ok_or_else(|| {
+            "BTOR2 channel property query manifest expected semantic_roots".to_string()
+        })?;
+    let semantic_roots = roots_line
+        .split(',')
+        .map(|value| {
+            parse_canonical_u64(value, "semantic root").and_then(|root| {
+                (root != 0)
+                    .then_some(root)
+                    .ok_or_else(|| "semantic root must be nonzero".to_string())
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if semantic_roots.is_empty()
+        || semantic_roots.len() > btor2_region_property::MAX_CHANNEL_PROPERTY_QUERIES
+        || semantic_roots.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err("semantic roots must be nonempty, unique, and strictly increasing".to_string());
+    }
+    let mut queries = Vec::new();
+    let mut canonical = format!(
+        "gcc-btor2-channel-properties-v1\nchannels={expected_channels}\nsemantic_roots={roots_line}\n"
+    );
+    for (index, line) in lines.by_ref().enumerate() {
+        if line == "status=complete" {
+            if lines.next().is_some() {
+                return Err("BTOR2 channel property query manifest has trailing fields".to_string());
+            }
+            canonical.push_str("status=complete\n");
+            break;
+        }
+        let fields = line
+            .strip_prefix("query=")
+            .ok_or_else(|| format!("BTOR2 channel property query {} is malformed", index + 1))?
+            .split(',')
+            .collect::<Vec<_>>();
+        if fields.len() != 4 || fields.iter().any(|field| field.is_empty()) {
+            return Err(format!(
+                "BTOR2 channel property query {} must use ID,CHANNEL,PROPERTY,HORIZON syntax",
+                index + 1
+            ));
+        }
+        let query_id_u64 = parse_canonical_u64(fields[0], "query identifier")?;
+        let query_id = u32::try_from(query_id_u64)
+            .map_err(|_| "query identifier exceeds range".to_string())?;
+        let channel_index = parse_canonical_usize(fields[1], "query channel")?;
+        let property = match fields[2] {
+            "output-high" => btor2_region_property::Btor2ChannelProperty::OutputHigh,
+            "output-low" => btor2_region_property::Btor2ChannelProperty::OutputLow,
+            _ => return Err("query property must be output-high or output-low".to_string()),
+        };
+        let horizon_u64 = parse_canonical_u64(fields[3], "query horizon")?;
+        let horizon =
+            u32::try_from(horizon_u64).map_err(|_| "query horizon exceeds range".to_string())?;
+        if channel_index >= expected_channels
+            || horizon > btor2_search::MAX_SEARCH_HORIZON
+            || queries.last().is_some_and(
+                |previous: &btor2_region_property::Btor2ChannelPropertyQuery| {
+                    previous.query_id >= query_id
+                },
+            )
+        {
+            return Err("BTOR2 channel property query is outside policy or order".to_string());
+        }
+        queries.push(btor2_region_property::Btor2ChannelPropertyQuery {
+            query_id,
+            channel_index,
+            property,
+            horizon,
+        });
+        canonical.push_str(line);
+        canonical.push('\n');
+    }
+    if !canonical.ends_with("status=complete\n")
+        || queries.is_empty()
+        || queries.len() > btor2_region_property::MAX_CHANNEL_PROPERTY_QUERIES
+        || canonical != text
+    {
+        return Err(
+            "BTOR2 channel property query manifest is incomplete or noncanonical".to_string(),
+        );
+    }
+    Ok(Btor2ChannelPropertyQueryManifest {
+        expected_channels,
+        semantic_roots,
+        queries,
+    })
+}
+
+fn parse_btor2_channel_property_policy(
+    path: &Path,
+) -> Result<btor2_region_property::Btor2ChannelPropertyProductionPolicy, String> {
+    let bytes = read_bounded_regular_file(
+        path,
+        BTOR2_CHANNEL_PROPERTY_POLICY_MAX_BYTES,
+        "BTOR2 channel property policy",
+    )?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "BTOR2 channel property policy is not UTF-8".to_string())?;
+    if bytes.contains(&0) || text.contains('\r') || !text.ends_with('\n') {
+        return Err(
+            "BTOR2 channel property policy must be canonical LF text without NUL".to_string(),
+        );
+    }
+    let mut lines = text.lines();
+    let mut take = |key: &str| -> Result<&str, String> {
+        lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("{key}=")))
+            .ok_or_else(|| format!("BTOR2 channel property policy expected {key}"))
+    };
+    let version = take("channel_property_policy_version")?;
+    if version != BTOR2_CHANNEL_PROPERTY_POLICY_VERSION.to_string() {
+        return Err("unsupported BTOR2 channel property policy version".to_string());
+    }
+    let max_queries_text = take("max_queries")?;
+    let max_members_text = take("max_members")?;
+    let max_evidence_bytes_text = take("max_evidence_bytes")?;
+    let max_artifact_bytes_text = take("max_artifact_bytes")?;
+    let max_projected_work_text = take("max_projected_work")?;
+    if take("status")? != "complete" || lines.next().is_some() {
+        return Err(
+            "BTOR2 channel property policy is incomplete or has trailing fields".to_string(),
+        );
+    }
+    let canonical = format!(
+        "channel_property_policy_version={version}\nmax_queries={max_queries_text}\nmax_members={max_members_text}\nmax_evidence_bytes={max_evidence_bytes_text}\nmax_artifact_bytes={max_artifact_bytes_text}\nmax_projected_work={max_projected_work_text}\nstatus=complete\n"
+    );
+    if canonical != text {
+        return Err("BTOR2 channel property policy is not canonical".to_string());
+    }
+    let artifact = btor2_region_property::Btor2ChannelPropertyProofPolicy::new(
+        parse_canonical_usize(max_queries_text, "maximum query count")?,
+        parse_canonical_usize(max_members_text, "maximum member count")?,
+        parse_canonical_usize(max_evidence_bytes_text, "maximum evidence bytes")?,
+        parse_canonical_usize(max_artifact_bytes_text, "maximum artifact bytes")?,
+    )
+    .map_err(|error| error.to_string())?;
+    btor2_region_property::Btor2ChannelPropertyProductionPolicy::new(
+        artifact,
+        parse_canonical_u64(max_projected_work_text, "maximum projected work")?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn map_btor2_channel_property_production_error(
+    error: btor2_region_extract::Btor2RegionError,
+) -> String {
+    let message = error.to_string();
+    let reason = if message.contains("production query count exceeds policy") {
+        Some("query-count")
+    } else if message.contains("production member count exceeds policy") {
+        Some("member-count")
+    } else if message.contains("aggregate projected work exceeds policy") {
+        Some("projected-work")
+    } else if message.contains("evidence exceeds policy") {
+        Some("evidence-bytes")
+    } else if message.contains("artifact exceeds byte policy")
+        || message.contains("artifact is outside policy")
+    {
+        Some("artifact-bytes")
+    } else {
+        None
+    };
+    reason.map_or(message, |reason| {
+        format!("btor2-channel-property-resource refusal={reason} result=none")
+    })
+}
+
 fn run_artifact_cli(args: &[String]) -> Result<bool, String> {
     let Some(command) = args.first().map(String::as_str) else {
         return Ok(false);
     };
     match command {
+        "btor2-channel-property-cli-version" => {
+            if args.len() != 1 {
+                return Err(
+                    "usage: guarded-continuation-checker btor2-channel-property-cli-version"
+                        .to_string(),
+                );
+            }
+            println!(
+                "btor2_channel_property_cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} query_manifest_version={BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_VERSION} policy_version={BTOR2_CHANNEL_PROPERTY_POLICY_VERSION} max_query_manifest_bytes={BTOR2_CHANNEL_PROPERTY_QUERY_MANIFEST_MAX_BYTES} max_policy_bytes={BTOR2_CHANNEL_PROPERTY_POLICY_MAX_BYTES} max_model_bytes={} max_channels={} max_queries={} max_evidence_bytes={} max_artifact_bytes={} max_projected_work={} routing=static-explicit-or-bitblast fallback=exact unsupported=fail-closed verification=source-replay",
+                btor2_region_property::BTOR2_CHANNEL_PROPERTY_PROOF_VERSION,
+                btor2::MAX_BTOR2_BYTES,
+                btor2_region_extract::MAX_REGION_CHANNELS,
+                btor2_region_property::MAX_CHANNEL_PROPERTY_QUERIES,
+                btor2_region_property::MAX_CHANNEL_PROPERTY_EVIDENCE_BYTES,
+                btor2_region_property::MAX_CHANNEL_PROPERTY_ARTIFACT_BYTES,
+                btor2_region_property::MAX_CHANNEL_PROPERTY_PROJECTED_WORK,
+            );
+            Ok(true)
+        }
+        "certify-btor2-channel-properties" | "verify-btor2-channel-properties" => {
+            if args.len() != 5 {
+                return Err(format!(
+                    "usage: guarded-continuation-checker {command} MODEL.btor2 QUERIES.txt POLICY.txt {}",
+                    if command == "certify-btor2-channel-properties" {
+                        "OUTPUT.channel-properties"
+                    } else {
+                        "INPUT.channel-properties"
+                    }
+                ));
+            }
+            let model = read_bounded_regular_file(
+                Path::new(&args[1]),
+                btor2::MAX_BTOR2_BYTES,
+                "BTOR2 channel property model",
+            )?;
+            let manifest = parse_btor2_channel_property_query_manifest(Path::new(&args[2]))?;
+            let production_policy = parse_btor2_channel_property_policy(Path::new(&args[3]))?;
+            let region_policy = btor2_region_extract::Btor2RegionPolicy::default();
+            let started = Instant::now();
+            let (encoded, plan) = if command == "certify-btor2-channel-properties" {
+                let structural =
+                    btor2_region_equivalence::encode_btor2_region_equivalence_artifact(
+                        &btor2_region_equivalence::produce_btor2_region_equivalence_artifact(
+                            &model,
+                            &manifest.semantic_roots,
+                            manifest.expected_channels,
+                            region_policy,
+                        )
+                        .map_err(|error| error.to_string())?,
+                    )
+                    .map_err(|error| error.to_string())?;
+                let (plan, encoded) =
+                    btor2_region_property::produce_btor2_channel_property_proof_bytes_observed(
+                        &model,
+                        &structural,
+                        &manifest.queries,
+                        region_policy,
+                        production_policy,
+                    )
+                    .map_err(map_btor2_channel_property_production_error)?;
+                (encoded, Some(plan))
+            } else {
+                let encoded = read_bounded_regular_file(
+                    Path::new(&args[4]),
+                    production_policy.artifact().max_artifact_bytes(),
+                    "BTOR2 channel property artifact",
+                )?;
+                (encoded, None)
+            };
+            let artifact = btor2_region_property::decode_btor2_channel_property_proof_artifact(
+                &encoded,
+                production_policy.artifact(),
+            )
+            .map_err(|error| error.to_string())?;
+            let structural = btor2_region_equivalence::decode_btor2_region_equivalence_artifact(
+                &artifact.structural_admission,
+            )
+            .map_err(|error| error.to_string())?;
+            if structural.expected_channels != manifest.expected_channels
+                || structural.semantic_roots != manifest.semantic_roots
+            {
+                return Err(
+                    "BTOR2 channel property manifest does not match structural admission"
+                        .to_string(),
+                );
+            }
+            let summary = btor2_region_property::verify_btor2_channel_property_proof(
+                &model,
+                &manifest.queries,
+                &artifact,
+                region_policy,
+            )
+            .map_err(|error| error.to_string())?;
+            if command == "certify-btor2-channel-properties" {
+                write_new_certificate(Path::new(&args[4]), &encoded)?;
+            }
+            let status = if command == "certify-btor2-channel-properties" {
+                "CREATED"
+            } else {
+                "VERIFIED"
+            };
+            println!(
+                "btor2-channel-properties status={status} cli_version={BTOR2_CHANNEL_PROPERTY_CLI_VERSION} artifact_version={} channels={} logical_queries={} proof_members={} reused_queries={} explicit_members={} bitblast_members={} evidence_bytes={} artifact_bytes={} projected_work={} elapsed_micros={}{}",
+                btor2_region_property::BTOR2_CHANNEL_PROPERTY_PROOF_VERSION,
+                manifest.expected_channels,
+                summary.metrics.logical_queries,
+                summary.metrics.proof_members,
+                summary.metrics.reused_logical_queries,
+                summary.metrics.explicit_state_members,
+                summary.metrics.bitblast_members,
+                summary.metrics.evidence_bytes,
+                encoded.len(),
+                plan.map_or_else(
+                    || "not-applied".to_string(),
+                    |plan| plan.projected_work.to_string()
+                ),
+                started.elapsed().as_micros(),
+                if command == "certify-btor2-channel-properties" {
+                    format!(" output={}", args[4])
+                } else {
+                    String::new()
+                }
+            );
+            for (index, result) in summary.results.iter().enumerate() {
+                let property = match result.query.property {
+                    btor2_region_property::Btor2ChannelProperty::OutputHigh => "output-high",
+                    btor2_region_property::Btor2ChannelProperty::OutputLow => "output-low",
+                };
+                let answer = match result.result {
+                    btor2_search::SearchResult::Safe => "SAFE",
+                    btor2_search::SearchResult::Unsafe => "UNSAFE",
+                };
+                let backend = match result.backend {
+                    btor2_region_property::Btor2ChannelPropertyBackend::RepresentativeClass => {
+                        "representative-class"
+                    }
+                    btor2_region_property::Btor2ChannelPropertyBackend::DirectExact => {
+                        "direct-exact"
+                    }
+                };
+                let solver = match result.solver {
+                    btor2_region_property::Btor2ChannelPropertySolver::ExplicitState => {
+                        "explicit-state"
+                    }
+                    btor2_region_property::Btor2ChannelPropertySolver::BitblastCnf => {
+                        "bitblast-cnf"
+                    }
+                };
+                let bad_frame = result
+                    .bad_frame
+                    .map_or_else(|| "none".to_string(), |frame| frame.to_string());
+                println!(
+                    "btor2-channel-property index={index} query_id={} channel={} property={property} horizon={} answer={answer} bad_frame={bad_frame} backend={backend} solver={solver} representative_channel={} witness_valuations={}",
+                    result.query.query_id,
+                    result.query.channel_index,
+                    result.query.horizon,
+                    result.representative_channel,
+                    result.witness_valuations.len(),
+                );
+            }
+            Ok(true)
+        }
         "btor2-revision-impact-cli-version" => {
             if args.len() != 1 {
                 return Err(
@@ -30719,6 +31113,7 @@ fn main() {
                 if error.starts_with("controller-plant-resource refusal=")
                     || error.starts_with("controller-proof-mtbdd-resource refusal=")
                     || error.starts_with("controller-split-resource refusal=")
+                    || error.starts_with("btor2-channel-property-resource refusal=")
                 {
                     3
                 } else {

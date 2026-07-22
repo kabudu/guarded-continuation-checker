@@ -53,6 +53,13 @@
   evidence. Retained 2, 4, and 6-channel rows cover both explicit-state and
   bitblast routes. The projection is a static admission token, not elapsed time
   or peak-memory evidence. File and process integration remains open.
+- Add the versioned self-service channel-property file CLI. Canonical query and
+  policy manifests drive source-derived structural admission, exact batch
+  production, independent verification, stable aggregate and per-query output,
+  no-clobber publication, and typed resource refusal. The executable acceptance
+  test covers source and query drift, artifact mutation, CRLF and noncanonical
+  manifests, symlink substitution, one-unit work refusal, and output collision.
+  A typed bounded process client and process-resource evidence remain open.
 
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6

@@ -112,6 +112,11 @@ portfolios, and admission limits are established engineering. The retained
 threshold behavior therefore adds no novelty evidence and does not alter any
 claim gate.
 
+The versioned query and policy manifests, bounded file reads, no-clobber
+publication, stable process output, and typed resource refusal are conventional
+self-service integration controls. They strengthen reproducibility and product
+fitness but add no algorithmic novelty evidence.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

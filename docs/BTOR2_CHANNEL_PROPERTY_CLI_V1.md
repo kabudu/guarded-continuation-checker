@@ -1,0 +1,115 @@
+# BTOR2 channel property CLI v1
+
+Status: experimental self-service interface. Not a production-supported
+surface.
+
+## Purpose
+
+The v1 file boundary makes the canonical `GCCBCP01` property portfolio usable
+without linking GCC as a Rust library or preparing a structural certificate by
+hand. An operator supplies:
+
+- one separately retained BTOR2 model;
+- one canonical query manifest containing channel count, semantic roots, and
+  ordered properties;
+- one canonical resource policy; and
+- one output path for production or one existing artifact for verification.
+
+Production derives and authenticates the repeated-region partition, plans the
+complete solver batch, refuses an over-budget batch before any property solver
+starts, creates the exact proof portfolio, verifies it from source, and then
+publishes with no-clobber semantics. Verification reconstructs all structural
+and property semantics from the separately supplied model and manifest.
+
+## Version discovery
+
+```console
+guarded-continuation-checker btor2-channel-property-cli-version
+```
+
+The one-line response freezes CLI, artifact, manifest, and policy versions;
+all static limits; the exact static route; fail-closed fallback semantics; and
+source-replay verification.
+
+## Query manifest
+
+```text
+gcc-btor2-channel-properties-v1
+channels=6
+semantic_roots=9,39
+query=0,0,output-high,2
+query=1,1,output-high,2
+query=2,0,output-low,2
+status=complete
+```
+
+Query identifiers must be strictly increasing. Channels must be in range,
+roots must be nonzero and strictly increasing, and property names are exactly
+`output-high` or `output-low`. The file must be canonical UTF-8 LF text with a
+final newline and no NUL, CR, duplicate, missing, reordered, or trailing field.
+
+## Resource policy
+
+```text
+channel_property_policy_version=1
+max_queries=4096
+max_members=4096
+max_evidence_bytes=67108864
+max_artifact_bytes=69206016
+max_projected_work=100000000000
+status=complete
+```
+
+Every decimal is canonical and every value is bounded by the executable's
+advertised static maximum. `max_projected_work` governs production only.
+Verification reports `projected_work=not-applied`; it instead applies the
+policy's query, member, evidence, artifact, and nested certificate limits.
+
+## Commands
+
+```console
+guarded-continuation-checker certify-btor2-channel-properties \
+  model.btor2 queries.txt policy.txt result.channel-properties
+
+guarded-continuation-checker verify-btor2-channel-properties \
+  model.btor2 queries.txt policy.txt result.channel-properties
+```
+
+Success emits one aggregate line and one result line per ordered query. Result
+lines include the answer, earliest bad frame, exact backend, representative
+channel, and recovered witness valuation count. Production resource refusal
+uses exit code 3, a versioned reason, `result=none`, and creates no artifact.
+Malformed, stale, substituted, symlinked, noncanonical, or corrupt input uses
+exit code 2 and returns no verified aggregate.
+
+The producer opens output with create-new mode and restrictive Unix
+permissions. An existing path is never overwritten. All input reads are
+bounded, require ordinary files, and reject symlinks where the operating system
+provides `O_NOFOLLOW`.
+
+## Executable acceptance
+
+```console
+cargo test --release --locked --test btor2_channel_property_cli
+```
+
+The acceptance test runs a twelve-property six-channel horizon-2 production
+and independent verification workflow. It retains six exact bitblast members,
+returns all twelve UNSAFE results and writes the frozen 1,568-byte artifact. It
+also exercises exact-threshold production, one-unit resource refusal with no
+output, no-clobber publication, query and source drift, artifact mutation,
+CRLF and noncanonical manifests, and symlink substitution. This is simulated
+self-service evidence from the repository authorship boundary, not independent
+operator acceptance.
+
+## Remaining gates
+
+- Add a typed shell-free process client with deadline, output, file, memory,
+  and process-tree controls.
+- Retain per-phase timings and process resource measurements.
+- Reproduce the complete workflow and artifact identity on supported hosts.
+- Run realistic independently sourced properties and obtain external operator
+  review.
+
+The CLI productises established exact proof and symmetry mechanisms. It does
+not establish algorithmic novelty.
