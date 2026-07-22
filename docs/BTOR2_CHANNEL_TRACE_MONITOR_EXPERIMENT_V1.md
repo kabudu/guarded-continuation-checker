@@ -5,8 +5,9 @@ type, canonical monitor-model construction, in-memory proof composition, and
 canonical wire artifact now pass their first semantic and hostile-boundary
 tests. An eighteen-query both-answer control uses nine exact members, mixed
 static solver routing, aggregate work refusal, and target witness replay. The
-full retained cohort, maintained comparison, file workflow, cross-platform
-consumer evidence, and whole-process resource evidence remain open.
+full retained cohort and maintained comparison now pass locally. The file
+workflow, cross-platform consumer evidence, and whole-process resource evidence
+remain open.
 
 ## Product question
 
@@ -89,9 +90,9 @@ fingerprint. The new binary codec must bind:
 Decoding must preflight outer and nested counts and byte lengths before
 allocation, require canonical re-encoding, and reject trailing bytes.
 
-The first retained six-channel control encodes to exactly 4,700 bytes with
+The compact retained six-channel codec control encodes to exactly 4,808 bytes with
 SHA-256
-`c0c35ee274f3c1c8d1602bb1e556953a04400f744d45a6b56142e0736e973d72`.
+`bfc0cd4bed5b2b06d4bb3f08de9628c1add7cc05d6e3d54f1c76ddd12502d655`.
 Independent decoding and canonical re-encoding reproduce those bytes. The
 hostile test rejects every truncation, every single-byte mutation, trailing
 data, source drift, ordered-query drift, an artifact one byte over its declared
@@ -100,9 +101,8 @@ the current mechanism fixture, not the still-open authentic retained cohort.
 
 ## Current gate state
 
-The mechanism currently closes the local portions of gates 1, 2, 4, 5, 6, 7,
-8, 9, 10, and 11. Gate 3 remains open until the maintained equivalent-scope
-control exists. Gate 12 requires the file workflow. Gate 13 requires external
+The mechanism currently closes the local portions of gates 1 through 11. Gate
+12 requires the file workflow. Gate 13 requires external
 consumer jobs on Linux, macOS, and Windows. Gate 14 requires retained local and
 hosted Linux whole-process evidence. No experiment pass or production claim is
 made while those gates remain open.
@@ -134,14 +134,17 @@ bitblast query.
 
 | Model | Logical queries | Proof members | Reused queries | SAFE | UNSAFE | Artifact bytes | SHA-256 |
 |---|---:|---:|---:|---:|---:|---:|---|
-| symbolic-class-2 | 14 | 14 | 0 | 2 | 12 | 4,394 | `98142a3092badd0581b67334e1bf77770c59d70b923bc5dba58feb5e410c6117` |
-| symbolic-class-4 | 28 | 21 | 7 | 4 | 24 | 6,934 | `ca25534b9534a6871197dd59f814f1f3b045efde96d1b2894cba3a7ac819198c` |
-| symbolic-class-6 | 42 | 21 | 21 | 6 | 36 | 7,532 | `c7fa7fb040ae1351a46baf30d9678568052ef347e3776176e8fee121c9b684c1` |
+| symbolic-class-2 | 14 | 14 | 0 | 2 | 12 | 2,138,457 | `ae6f30429e1bb2f17aa28cd3b34d9b9d9b3f93b814d09edb43351d68e4f21541` |
+| symbolic-class-4 | 28 | 21 | 7 | 4 | 24 | 4,007,729 | `f58fb29c3ca2313a831aac4a55f63d830eab66dd651cbda945536768708a0134` |
+| symbolic-class-6 | 42 | 21 | 21 | 6 | 36 | 4,899,434 | `9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a` |
 
 The authentic retained cohort therefore contains 84 logical queries, 12 SAFE
 and 72 UNSAFE answers, and exact representative reuse on the four- and
 six-channel models. This closes the local direct-exact and both-answer gates.
-It does not close maintained-tool agreement.
+Pinned Yosys plus Z3 independently agrees on all 84 answers and earliest bad
+frames. The [retained maintained result](../results/opentitan-pwm-trace-maintained-v1.md)
+closes the local maintained-tool gate. It also records the negative proof-size
+result caused by proving that every reported bad frame is globally earliest.
 
 ## Maintained equivalent-scope control
 

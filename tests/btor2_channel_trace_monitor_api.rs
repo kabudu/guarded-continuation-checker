@@ -138,7 +138,7 @@ fn composed_queries() -> Vec<Btor2ChannelTraceQuery> {
     let shapes = [
         (Btor2ChannelTracePattern::new(1, 1, 1).unwrap(), 1),
         (Btor2ChannelTracePattern::new(1, 1, 0).unwrap(), 1),
-        (Btor2ChannelTracePattern::new(2, 0b11, 0b01).unwrap(), 2),
+        (Btor2ChannelTracePattern::new(1, 1, 0).unwrap(), 2),
     ];
     let mut queries = Vec::new();
     for (pattern, horizon) in shapes {
@@ -192,7 +192,7 @@ fn verified_classes_compose_both_answer_trace_proofs() {
     }
     for result in &summary.results[12..] {
         assert_eq!(result.result, SearchResult::Unsafe);
-        assert_eq!(result.bad_frame, Some(2));
+        assert_eq!(result.bad_frame, Some(0));
     }
     assert_eq!(
         summary.results[0].backend,
@@ -280,6 +280,38 @@ fn trace_proof_preflight_and_verifier_fail_closed() {
         )
         .is_err()
     );
+
+    let mut evidence_swap = produce_btor2_channel_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    let bitblast_members = evidence_swap
+        .members
+        .iter()
+        .enumerate()
+        .filter_map(|(index, member)| {
+            (member.solver == Btor2ChannelTraceSolver::BitblastCnf).then_some(index)
+        })
+        .collect::<Vec<_>>();
+    assert!(bitblast_members.len() >= 2);
+    let first_evidence = evidence_swap.members[bitblast_members[0]].evidence.clone();
+    evidence_swap.members[bitblast_members[0]].evidence =
+        evidence_swap.members[bitblast_members[1]].evidence.clone();
+    evidence_swap.members[bitblast_members[1]].evidence = first_evidence;
+    assert!(
+        verify_btor2_channel_trace_proof(
+            MODEL,
+            &queries,
+            &evidence_swap,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default()
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -297,12 +329,12 @@ fn trace_wire_artifact_is_canonical_deterministic_and_hostile_safe() {
         production_policy,
     )
     .unwrap();
-    assert_eq!(encoded.len(), 4_700);
+    assert_eq!(encoded.len(), 4_808);
     assert_eq!(
         <[u8; 32]>::from(Sha256::digest(&encoded)),
         [
-            192, 195, 94, 226, 116, 243, 193, 200, 209, 96, 43, 177, 229, 86, 149, 58, 4, 64, 15,
-            116, 77, 69, 166, 181, 97, 66, 224, 115, 110, 151, 61, 114,
+            191, 192, 205, 75, 237, 91, 43, 6, 212, 187, 63, 8, 222, 150, 40, 193, 173, 215, 204,
+            5, 214, 227, 213, 79, 28, 118, 221, 209, 37, 2, 214, 85,
         ]
     );
     assert_eq!(plan.logical_queries, 18);
@@ -425,6 +457,17 @@ fn retained_trace_shapes() -> [(Btor2ChannelTracePattern, u32); 7] {
     ]
 }
 
+fn direct_shortest_bitblast(model: &[u8], bad: u64, horizon: u32) -> (SearchResult, Option<u32>) {
+    for frame in 0..=horizon {
+        let certificate = produce_btor2_bitblast_certificate(model, bad, frame).unwrap();
+        let summary = verify_btor2_bitblast_certificate(model, &certificate).unwrap();
+        if summary.result == SearchResult::Unsafe {
+            return (summary.result, summary.bad_frame);
+        }
+    }
+    (SearchResult::Safe, None)
+}
+
 #[test]
 fn retained_open_titan_trace_cohort_agrees_with_direct_exact_queries() {
     let fixtures = [
@@ -438,10 +481,10 @@ fn retained_open_titan_trace_cohort_agrees_with_direct_exact_queries() {
             expected_members: 14,
             expected_reused: 0,
             expected_safe: 2,
-            expected_bytes: 4_394,
+            expected_bytes: 2_138_457,
             expected_sha256: [
-                152, 20, 42, 48, 146, 186, 221, 5, 129, 182, 115, 52, 225, 191, 119, 119, 12, 89,
-                215, 11, 146, 59, 197, 219, 165, 143, 235, 94, 65, 12, 97, 23,
+                174, 111, 48, 66, 158, 27, 178, 241, 122, 162, 140, 211, 179, 77, 155, 157, 155,
+                63, 147, 184, 20, 208, 158, 219, 67, 53, 29, 104, 228, 242, 21, 65,
             ],
         },
         TraceCohortFixture {
@@ -454,10 +497,10 @@ fn retained_open_titan_trace_cohort_agrees_with_direct_exact_queries() {
             expected_members: 21,
             expected_reused: 7,
             expected_safe: 4,
-            expected_bytes: 6_934,
+            expected_bytes: 4_007_729,
             expected_sha256: [
-                202, 37, 83, 75, 149, 52, 166, 135, 17, 151, 221, 89, 248, 20, 241, 243, 176, 69,
-                239, 222, 150, 209, 178, 137, 76, 186, 58, 122, 200, 25, 25, 140,
+                245, 143, 178, 156, 60, 162, 49, 58, 131, 26, 172, 74, 85, 246, 61, 131, 14, 171,
+                102, 221, 101, 28, 189, 169, 69, 83, 103, 104, 112, 138, 1, 52,
             ],
         },
         TraceCohortFixture {
@@ -468,10 +511,10 @@ fn retained_open_titan_trace_cohort_agrees_with_direct_exact_queries() {
             expected_members: 21,
             expected_reused: 21,
             expected_safe: 6,
-            expected_bytes: 7_532,
+            expected_bytes: 4_899_434,
             expected_sha256: [
-                199, 250, 127, 176, 64, 174, 19, 81, 164, 107, 175, 48, 217, 103, 133, 104, 5, 46,
-                243, 71, 227, 119, 97, 118, 232, 254, 225, 33, 201, 182, 132, 193,
+                156, 168, 214, 189, 176, 238, 16, 135, 122, 41, 113, 31, 187, 81, 136, 16, 178,
+                137, 8, 182, 75, 131, 18, 131, 219, 94, 45, 179, 104, 142, 207, 74,
             ],
         },
     ];
@@ -524,13 +567,9 @@ fn retained_open_titan_trace_cohort_agrees_with_direct_exact_queries() {
                 region_policy,
             )
             .unwrap();
-            let direct = verify_btor2_bitblast_certificate(
-                &model,
-                &produce_btor2_bitblast_certificate(&model, bad, query.horizon).unwrap(),
-            )
-            .unwrap();
-            assert_eq!(composed.result, direct.result);
-            assert_eq!(composed.bad_frame, direct.bad_frame);
+            let direct = direct_shortest_bitblast(&model, bad, query.horizon);
+            assert_eq!(composed.result, direct.0);
+            assert_eq!(composed.bad_frame, direct.1);
         }
         let safe = summary
             .results

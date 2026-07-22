@@ -2,8 +2,8 @@
 
 use crate::btor2::{self, NodeId};
 use crate::btor2_bitblast::{
-    MAX_BITBLAST_CERTIFICATE_BYTES, MAX_BITBLAST_HORIZON, MAX_BITBLAST_INPUT_BITS,
-    decode_btor2_bitblast_certificate, encode_btor2_bitblast_certificate,
+    Btor2BitblastCertificate, MAX_BITBLAST_CERTIFICATE_BYTES, MAX_BITBLAST_HORIZON,
+    MAX_BITBLAST_INPUT_BITS, decode_btor2_bitblast_certificate, encode_btor2_bitblast_certificate,
     produce_btor2_bitblast_certificate, verify_btor2_bitblast_certificate,
 };
 use crate::btor2_region_equivalence::{
@@ -31,6 +31,11 @@ pub const MAX_CHANNEL_TRACE_PROJECTED_WORK: u64 = 100_000_000_000;
 pub const BTOR2_CHANNEL_TRACE_PROOF_VERSION: u32 = 1;
 const CHANNEL_PROPERTY_MAGIC: &[u8; 8] = b"GCCBCP01";
 const CHANNEL_TRACE_MAGIC: &[u8; 8] = b"GCCTRC01";
+const TRACE_BITBLAST_MAGIC: &[u8; 8] = b"GCCTBE01";
+const TRACE_BITBLAST_EVIDENCE_VERSION: u32 = 1;
+const TRACE_BITBLAST_EVIDENCE_OVERHEAD: usize = 8 + 4 + 4 + 4 + 32;
+const MAX_TRACE_BITBLAST_EVIDENCE_BYTES: usize =
+    MAX_BITBLAST_CERTIFICATE_BYTES * 2 + TRACE_BITBLAST_EVIDENCE_OVERHEAD;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelPropertyProofPolicy {
@@ -842,6 +847,190 @@ fn trace_solver(solver: Btor2ChannelPropertySolver) -> Btor2ChannelTraceSolver {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct TraceBitblastEvidence {
+    terminal: Btor2BitblastCertificate,
+    safe_prefix: Option<Btor2BitblastCertificate>,
+}
+
+fn encode_trace_bitblast_evidence(
+    evidence: &TraceBitblastEvidence,
+) -> Result<Vec<u8>, Btor2RegionError> {
+    let terminal = encode_btor2_bitblast_certificate(&evidence.terminal)
+        .map_err(|error| reject(error.to_string()))?;
+    let safe_prefix = evidence
+        .safe_prefix
+        .as_ref()
+        .map(encode_btor2_bitblast_certificate)
+        .transpose()
+        .map_err(|error| reject(error.to_string()))?
+        .unwrap_or_default();
+    if terminal.len() > MAX_BITBLAST_CERTIFICATE_BYTES
+        || safe_prefix.len() > MAX_BITBLAST_CERTIFICATE_BYTES
+    {
+        return Err(reject(
+            "BTOR2 channel trace bitblast evidence exceeds policy",
+        ));
+    }
+    let encoded_len = TRACE_BITBLAST_EVIDENCE_OVERHEAD
+        .checked_add(terminal.len())
+        .and_then(|value| value.checked_add(safe_prefix.len()))
+        .filter(|value| *value <= MAX_TRACE_BITBLAST_EVIDENCE_BYTES)
+        .ok_or_else(|| reject("BTOR2 channel trace bitblast evidence exceeds policy"))?;
+    let mut bytes = Vec::with_capacity(encoded_len);
+    bytes.extend_from_slice(TRACE_BITBLAST_MAGIC);
+    bytes.extend_from_slice(&TRACE_BITBLAST_EVIDENCE_VERSION.to_le_bytes());
+    push_u32(&mut bytes, terminal.len(), "trace terminal evidence length")?;
+    push_u32(
+        &mut bytes,
+        safe_prefix.len(),
+        "trace safe-prefix evidence length",
+    )?;
+    bytes.extend_from_slice(&terminal);
+    bytes.extend_from_slice(&safe_prefix);
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    Ok(bytes)
+}
+
+fn decode_trace_bitblast_evidence(bytes: &[u8]) -> Result<TraceBitblastEvidence, Btor2RegionError> {
+    if bytes.len() < TRACE_BITBLAST_EVIDENCE_OVERHEAD
+        || bytes.len() > MAX_TRACE_BITBLAST_EVIDENCE_BYTES
+    {
+        return Err(reject(
+            "BTOR2 channel trace bitblast evidence size is outside policy",
+        ));
+    }
+    let payload_end = bytes.len() - 32;
+    let checksum: [u8; 32] = bytes[payload_end..].try_into().expect("fixed checksum");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_end])) != checksum {
+        return Err(reject(
+            "BTOR2 channel trace bitblast evidence checksum mismatch",
+        ));
+    }
+    let mut cursor = TraceArtifactCursor {
+        bytes: &bytes[..payload_end],
+        offset: 0,
+    };
+    if cursor.take(8)? != TRACE_BITBLAST_MAGIC {
+        return Err(reject(
+            "BTOR2 channel trace bitblast evidence magic mismatch",
+        ));
+    }
+    if cursor.u32()? != TRACE_BITBLAST_EVIDENCE_VERSION {
+        return Err(reject(
+            "unsupported BTOR2 channel trace bitblast evidence version",
+        ));
+    }
+    let terminal_len = usize::try_from(cursor.u32()?)
+        .map_err(|_| reject("trace terminal evidence length exceeds platform range"))?;
+    let safe_prefix_len = usize::try_from(cursor.u32()?)
+        .map_err(|_| reject("trace safe-prefix evidence length exceeds platform range"))?;
+    if terminal_len == 0
+        || terminal_len > MAX_BITBLAST_CERTIFICATE_BYTES
+        || safe_prefix_len > MAX_BITBLAST_CERTIFICATE_BYTES
+    {
+        return Err(reject(
+            "BTOR2 channel trace nested evidence is outside policy",
+        ));
+    }
+    let terminal = decode_btor2_bitblast_certificate(cursor.take(terminal_len)?)
+        .map_err(|error| reject(error.to_string()))?;
+    let safe_prefix = if safe_prefix_len == 0 {
+        None
+    } else {
+        Some(
+            decode_btor2_bitblast_certificate(cursor.take(safe_prefix_len)?)
+                .map_err(|error| reject(error.to_string()))?,
+        )
+    };
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject(
+            "trailing BTOR2 channel trace bitblast evidence bytes",
+        ));
+    }
+    let evidence = TraceBitblastEvidence {
+        terminal,
+        safe_prefix,
+    };
+    if encode_trace_bitblast_evidence(&evidence)? != bytes {
+        return Err(reject(
+            "BTOR2 channel trace bitblast evidence is not canonical",
+        ));
+    }
+    Ok(evidence)
+}
+
+fn produce_trace_bitblast_evidence(
+    property_model: &[u8],
+    bad: NodeId,
+    horizon: u32,
+) -> Result<Vec<u8>, Btor2RegionError> {
+    let full = produce_btor2_bitblast_certificate(property_model, bad, horizon)
+        .map_err(|error| reject(error.to_string()))?;
+    let full_summary = verify_btor2_bitblast_certificate(property_model, &full)
+        .map_err(|error| reject(error.to_string()))?;
+    if full_summary.result == btor2_search::SearchResult::Safe {
+        return encode_trace_bitblast_evidence(&TraceBitblastEvidence {
+            terminal: full,
+            safe_prefix: None,
+        });
+    }
+    let mut low = 0u32;
+    let mut high = full_summary
+        .bad_frame
+        .ok_or_else(|| reject("BTOR2 channel trace UNSAFE evidence lacks a bad frame"))?;
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let candidate = produce_btor2_bitblast_certificate(property_model, bad, middle)
+            .map_err(|error| reject(error.to_string()))?;
+        let summary = verify_btor2_bitblast_certificate(property_model, &candidate)
+            .map_err(|error| reject(error.to_string()))?;
+        if summary.result == btor2_search::SearchResult::Unsafe {
+            let candidate_bad = summary
+                .bad_frame
+                .ok_or_else(|| reject("BTOR2 channel trace UNSAFE evidence lacks a bad frame"))?;
+            if candidate_bad < low || candidate_bad > middle {
+                return Err(reject(
+                    "BTOR2 channel trace shortest witness search is inconsistent",
+                ));
+            }
+            high = candidate_bad;
+        } else {
+            low = middle + 1;
+        }
+    }
+    let terminal = produce_btor2_bitblast_certificate(property_model, bad, low)
+        .map_err(|error| reject(error.to_string()))?;
+    let terminal_summary = verify_btor2_bitblast_certificate(property_model, &terminal)
+        .map_err(|error| reject(error.to_string()))?;
+    if terminal_summary.result != btor2_search::SearchResult::Unsafe
+        || terminal_summary.bad_frame != Some(low)
+    {
+        return Err(reject(
+            "BTOR2 channel trace shortest witness production failed",
+        ));
+    }
+    let safe_prefix = if low == 0 {
+        None
+    } else {
+        let prefix = produce_btor2_bitblast_certificate(property_model, bad, low - 1)
+            .map_err(|error| reject(error.to_string()))?;
+        let prefix_summary = verify_btor2_bitblast_certificate(property_model, &prefix)
+            .map_err(|error| reject(error.to_string()))?;
+        if prefix_summary.result != btor2_search::SearchResult::Safe {
+            return Err(reject(
+                "BTOR2 channel trace shortest witness prefix is not SAFE",
+            ));
+        }
+        Some(prefix)
+    };
+    encode_trace_bitblast_evidence(&TraceBitblastEvidence {
+        terminal,
+        safe_prefix,
+    })
+}
+
 pub fn preflight_btor2_channel_trace_proof(
     model_bytes: &[u8],
     structural_admission: &[u8],
@@ -886,8 +1075,16 @@ pub fn preflight_btor2_channel_trace_proof(
             Btor2ChannelPropertySolver::ExplicitState => explicit_state_members += 1,
             Btor2ChannelPropertySolver::BitblastCnf => bitblast_members += 1,
         }
+        let solve_bound = match projection.solver {
+            Btor2ChannelPropertySolver::ExplicitState => 1,
+            Btor2ChannelPropertySolver::BitblastCnf => u64::from(key.horizon) + 2,
+        };
+        let member_work = projection
+            .work
+            .checked_mul(solve_bound)
+            .ok_or_else(|| reject("BTOR2 channel trace projected work overflow"))?;
         projected_work = projected_work
-            .checked_add(projection.work)
+            .checked_add(member_work)
             .filter(|work| *work <= production_policy.max_projected_work)
             .ok_or_else(|| reject("BTOR2 channel trace aggregate projected work exceeds policy"))?;
     }
@@ -945,11 +1142,9 @@ pub fn produce_btor2_channel_trace_proof(
             )
             .map_err(|error| reject(format!("BTOR2 channel trace encoding failed: {error}")))?
             .into_bytes(),
-            Btor2ChannelTraceSolver::BitblastCnf => encode_btor2_bitblast_certificate(
-                &produce_btor2_bitblast_certificate(&property_model, bad, key.horizon)
-                    .map_err(|error| reject(error.to_string()))?,
-            )
-            .map_err(|error| reject(error.to_string()))?,
+            Btor2ChannelTraceSolver::BitblastCnf => {
+                produce_trace_bitblast_evidence(&property_model, bad, key.horizon)?
+            }
         };
         evidence_bytes = evidence_bytes
             .checked_add(evidence.len())
@@ -1085,23 +1280,59 @@ pub fn verify_btor2_channel_trace_proof(
                 }
             }
             Btor2ChannelTraceSolver::BitblastCnf => {
-                if member.evidence.len() > MAX_BITBLAST_CERTIFICATE_BYTES {
+                if member.evidence.len() > MAX_TRACE_BITBLAST_EVIDENCE_BYTES {
                     return Err(reject(
                         "BTOR2 channel trace bitblast evidence exceeds policy",
                     ));
                 }
-                let certificate = decode_btor2_bitblast_certificate(&member.evidence)
-                    .map_err(|error| reject(error.to_string()))?;
-                if encode_btor2_bitblast_certificate(&certificate)
-                    .map_err(|error| reject(error.to_string()))?
-                    != member.evidence
-                {
-                    return Err(reject("BTOR2 channel trace evidence is not canonical"));
+                let evidence = decode_trace_bitblast_evidence(&member.evidence)?;
+                let summary =
+                    verify_btor2_bitblast_certificate(&property_model, &evidence.terminal)
+                        .map_err(|error| reject(error.to_string()))?;
+                match summary.result {
+                    btor2_search::SearchResult::Safe => {
+                        if evidence.terminal.horizon != member.horizon
+                            || evidence.safe_prefix.is_some()
+                        {
+                            return Err(reject("BTOR2 channel trace SAFE evidence scope mismatch"));
+                        }
+                    }
+                    btor2_search::SearchResult::Unsafe => {
+                        let bad_frame = summary.bad_frame.ok_or_else(|| {
+                            reject("BTOR2 channel trace UNSAFE evidence lacks a bad frame")
+                        })?;
+                        if bad_frame > member.horizon || evidence.terminal.horizon != bad_frame {
+                            return Err(reject(
+                                "BTOR2 channel trace UNSAFE evidence scope mismatch",
+                            ));
+                        }
+                        if bad_frame == 0 {
+                            if evidence.safe_prefix.is_some() {
+                                return Err(reject(
+                                    "BTOR2 channel trace frame-zero evidence has a prefix",
+                                ));
+                            }
+                        } else {
+                            let prefix = evidence.safe_prefix.as_ref().ok_or_else(|| {
+                                reject("BTOR2 channel trace shortest witness lacks a SAFE prefix")
+                            })?;
+                            let prefix_summary =
+                                verify_btor2_bitblast_certificate(&property_model, prefix)
+                                    .map_err(|error| reject(error.to_string()))?;
+                            if prefix.horizon != bad_frame - 1
+                                || prefix_summary.result != btor2_search::SearchResult::Safe
+                                || prefix_summary.bad_frame.is_some()
+                            {
+                                return Err(reject(
+                                    "BTOR2 channel trace shortest witness prefix mismatch",
+                                ));
+                            }
+                        }
+                    }
                 }
-                let summary = verify_btor2_bitblast_certificate(&property_model, &certificate)
-                    .map_err(|error| reject(error.to_string()))?;
                 let witness_valuations = if let Some(bad_frame) = summary.bad_frame {
-                    certificate
+                    evidence
+                        .terminal
                         .witness_valuations
                         .get(..=bad_frame as usize)
                         .ok_or_else(|| reject("BTOR2 channel trace witness is incomplete"))?
@@ -2253,21 +2484,12 @@ fn validate_trace_member_evidence(
             }
         }
         Btor2ChannelTraceSolver::BitblastCnf => {
-            if member.evidence.len() > MAX_BITBLAST_CERTIFICATE_BYTES {
+            if member.evidence.len() > MAX_TRACE_BITBLAST_EVIDENCE_BYTES {
                 return Err(reject(
                     "BTOR2 channel trace bitblast evidence exceeds policy",
                 ));
             }
-            let certificate = decode_btor2_bitblast_certificate(&member.evidence)
-                .map_err(|error| reject(error.to_string()))?;
-            if encode_btor2_bitblast_certificate(&certificate)
-                .map_err(|error| reject(error.to_string()))?
-                != member.evidence
-            {
-                return Err(reject(
-                    "BTOR2 channel trace bitblast evidence is not canonical",
-                ));
-            }
+            decode_trace_bitblast_evidence(&member.evidence)?;
         }
     }
     Ok(())
@@ -2561,7 +2783,7 @@ pub fn decode_btor2_channel_trace_proof_artifact(
         }
         let maximum_evidence = match solver {
             Btor2ChannelTraceSolver::ExplicitState => btor2_search::MAX_SEARCH_CERTIFICATE_BYTES,
-            Btor2ChannelTraceSolver::BitblastCnf => MAX_BITBLAST_CERTIFICATE_BYTES,
+            Btor2ChannelTraceSolver::BitblastCnf => MAX_TRACE_BITBLAST_EVIDENCE_BYTES,
         };
         let evidence_len = cursor.count(maximum_evidence, "trace evidence length")?;
         evidence_bytes = evidence_bytes
@@ -2761,8 +2983,17 @@ pub fn verify_btor2_channel_property_proof_bytes(
 
 #[cfg(test)]
 mod tests {
-    use super::{replay_unsafe_assignment, unpack_valuation};
+    use super::{
+        Btor2ChannelTracePattern, Btor2ChannelTraceProductionPolicy, Btor2ChannelTraceProofPolicy,
+        Btor2ChannelTraceQuery, TraceBitblastEvidence, decode_trace_bitblast_evidence,
+        encode_trace_bitblast_evidence, produce_btor2_channel_trace_proof,
+        replay_unsafe_assignment, unpack_valuation, verify_btor2_channel_trace_proof,
+    };
     use crate::btor2;
+    use crate::btor2_region_equivalence::{
+        encode_btor2_region_equivalence_artifact, produce_btor2_region_equivalence_artifact,
+    };
+    use crate::btor2_region_extract::Btor2RegionPolicy;
 
     #[test]
     fn witness_unpacking_preserves_the_full_bitblast_input_domain() {
@@ -2784,5 +3015,50 @@ mod tests {
     fn target_replay_rejects_an_inadmissible_bad_valuation() {
         let source = b"1 sort bitvec 1\n2 input 1 command\n3 state 1 held\n4 zero 1\n5 init 1 3 4\n6 next 1 3 3\n7 not 1 2\n8 constraint 7\n9 bad 2\n";
         assert!(replay_unsafe_assignment(source, 9, &[1], 0).is_err());
+    }
+
+    #[test]
+    fn shortest_trace_evidence_requires_the_safe_prefix_proof() {
+        let model = include_bytes!(
+            "../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2"
+        );
+        let region_policy = Btor2RegionPolicy::default();
+        let structural = encode_btor2_region_equivalence_artifact(
+            &produce_btor2_region_equivalence_artifact(model, &[9, 39], 6, region_policy).unwrap(),
+        )
+        .unwrap();
+        let queries = [Btor2ChannelTraceQuery {
+            query_id: 0,
+            channel_index: 0,
+            pattern: Btor2ChannelTracePattern::new(2, 0b11, 0b01).unwrap(),
+            horizon: 8,
+        }];
+        let mut artifact = produce_btor2_channel_trace_proof(
+            model,
+            &structural,
+            &queries,
+            region_policy,
+            Btor2ChannelTraceProductionPolicy::default(),
+        )
+        .unwrap();
+        let evidence = decode_trace_bitblast_evidence(&artifact.members[0].evidence).unwrap();
+        assert_eq!(evidence.terminal.horizon, 2);
+        assert_eq!(evidence.safe_prefix.as_ref().unwrap().horizon, 1);
+
+        artifact.members[0].evidence = encode_trace_bitblast_evidence(&TraceBitblastEvidence {
+            terminal: evidence.terminal,
+            safe_prefix: None,
+        })
+        .unwrap();
+        assert!(
+            verify_btor2_channel_trace_proof(
+                model,
+                &queries,
+                &artifact,
+                region_policy,
+                Btor2ChannelTraceProofPolicy::default(),
+            )
+            .is_err()
+        );
     }
 }

@@ -423,6 +423,24 @@ reduction. A timing-free
 now authenticates and plans every representative model and exact backend before
 any property solver starts. Its inclusive caller ceiling refuses the complete
 batch one work unit below the retained plan without emitting partial evidence.
+
+The newer [channel trace-monitor experiment](docs/BTOR2_CHANNEL_TRACE_MONITOR_EXPERIMENT_V1.md)
+extends that authenticated boundary from one-frame high and low probes to
+masked Boolean histories up to eight frames. Its 84-query OpenTitan cohort
+covers transitions, one-cycle pulses and gaps, and a three-frame pattern with a
+don't-care position. Representative proof reuse preserves 42 six-channel
+queries with 21 exact members. Every answer and earliest bad frame agrees with
+separate direct checking and with a pinned Yosys plus Z3
+[maintained baseline](results/opentitan-pwm-trace-maintained-v1.md).
+
+That baseline exposed and closed an important correctness gap: an arbitrary
+horizon-wide SAT witness is not necessarily the earliest counterexample. GCC
+now couples each first-frame witness with a checked UNSAT certificate for the
+preceding horizon. The stronger evidence grows the retained artifacts to 2.14
+through 4.90 MB, so this is a correctness and workflow result with a negative
+proof-size result. File integration, cross-platform identity, process-resource
+evidence, compatibility history, and independent operator acceptance remain
+open. It is not yet part of the production support profile.
 Projected work is a deterministic admission token, not a runtime or memory
 estimate. A strict
 [self-service file CLI](docs/BTOR2_CHANNEL_PROPERTY_CLI_V1.md) now accepts a

@@ -16,14 +16,20 @@
   mutation return no answer.
   Add a canonical checksummed wire artifact that binds the source, structural
   admission, ordered queries, static routes, and exact member evidence. Retain
-  a 4,700-byte fingerprint and reject every truncation, every single-byte
-  mutation, trailing data, source drift, ordered-query drift, and outer or
-  nested byte-budget exhaustion.
+  a 4,808-byte compact codec fingerprint and reject every truncation, every
+  single-byte mutation, trailing data, source drift, ordered-query drift, and
+  outer or nested byte-budget exhaustion.
   Retain the complete 2-, 4-, and 6-channel OpenTitan cohort with seven pattern
   shapes per channel through horizon 8. All 84 composed answers and earliest
   bad frames agree with separately constructed direct exact bitblast queries.
   The cohort contains 12 SAFE and 72 UNSAFE answers, and the six-channel
   artifact uses 21 proof members for 42 logical queries.
+  Add shortest-frame proof evidence after the maintained control falsifies the
+  assumption that a horizon-wide SAT witness is necessarily earliest. Every
+  UNSAFE bitblast member now binds a witness at the first bad frame and a SAFE
+  UNSAT certificate for the preceding horizon. Pinned Yosys plus Z3 agrees on
+  all 84 answers and earliest frames. Report the resulting 2.14 to 4.90 MB
+  artifacts as a negative proof-size result.
 
 - Advance the crate candidate to 0.31.0 because the research API adds public
   `OperationKind`, `PredicateApiError`, and `BinaryOp` variants. Preserve every
