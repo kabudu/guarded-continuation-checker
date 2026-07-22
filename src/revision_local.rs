@@ -1796,6 +1796,62 @@ pub fn produce_revision_with_retained_left(
     ))
 }
 
+pub fn produce_revision_with_retained_components(
+    retained_left: &ValidatedLocalArtifact,
+    retained_right: &ValidatedLocalArtifact,
+    interface_source: &[u8],
+    query: &BoundedQuery,
+) -> Result<
+    (
+        RevisionLocalCertificate,
+        RevisionLocalSummary,
+        RevisionProductionObservation,
+    ),
+    RevisionLocalError,
+> {
+    let left = retained_left.verified();
+    let right = retained_right.verified();
+    let contract = decode_word_interface_contract(interface_source)?;
+    let composed_pair_checks = retained_left
+        .summary
+        .admissible_rows
+        .checked_mul(retained_right.summary.admissible_rows)
+        .ok_or_else(|| reject(EvidenceSection::Interface, "pair check count overflows"))?;
+    let (answer, answer_summary) = bounded_certificate(&left, &right, &contract, query)?;
+    let certificate = RevisionLocalCertificate {
+        left: LocalEvidence {
+            source_sha256: *retained_left.source_sha256(),
+            evidence: retained_left.encoded().to_vec(),
+        },
+        right: LocalEvidence {
+            source_sha256: *retained_right.source_sha256(),
+            evidence: retained_right.encoded().to_vec(),
+        },
+        interface: BoundEvidence {
+            source_sha256: source_digest(interface_source),
+            evidence: interface_source.to_vec(),
+        },
+        final_evidence: encode_bounded_answer_certificate(&answer)?,
+    };
+    let certificate_bytes = encode_revision_local_certificate(&certificate)?.len();
+    Ok((
+        certificate,
+        RevisionLocalSummary {
+            left: retained_left.summary.clone(),
+            right: retained_right.summary.clone(),
+            answer: answer_summary.clone(),
+            certificate_bytes,
+        },
+        RevisionProductionObservation {
+            produced_local_sections: 0,
+            reused_local_sections: 2,
+            changed_candidate_valuations: 0,
+            composed_pair_checks,
+            final_transition_checks: answer_summary.transition_checks,
+        },
+    ))
+}
+
 pub fn verify_revision_local_certificate(
     left_source: &[u8],
     right_source: &[u8],
@@ -1904,6 +1960,60 @@ pub fn verify_revision_with_retained_left(
             decoded_local_sections: 1,
             semantically_verified_local_sections: 1,
             reused_local_sections: 1,
+            composed_pair_checks: composed.pair_checks,
+            final_transition_checks: answer_summary.transition_checks,
+        },
+    ))
+}
+
+pub fn verify_revision_with_retained_components(
+    retained_left: &ValidatedLocalArtifact,
+    retained_right: &ValidatedLocalArtifact,
+    interface_source: &[u8],
+    certificate: &RevisionLocalCertificate,
+) -> Result<(RevisionLocalSummary, RevisionWorkObservation), RevisionLocalError> {
+    if certificate.left.source_sha256 != *retained_left.source_sha256()
+        || certificate.left.evidence != retained_left.encoded()
+    {
+        return Err(reject(
+            EvidenceSection::Left,
+            "retained left evidence is not byte-identical",
+        ));
+    }
+    if certificate.right.source_sha256 != *retained_right.source_sha256()
+        || certificate.right.evidence != retained_right.encoded()
+    {
+        return Err(reject(
+            EvidenceSection::Right,
+            "retained right evidence is not byte-identical",
+        ));
+    }
+    if certificate.interface.source_sha256 != source_digest(interface_source)
+        || certificate.interface.evidence != interface_source
+    {
+        return Err(reject(
+            EvidenceSection::Interface,
+            "interface source binding is invalid",
+        ));
+    }
+    let left = retained_left.verified();
+    let right = retained_right.verified();
+    let contract = decode_word_interface_contract(interface_source)?;
+    let composed = compose_verified_local_relations(&left, &right, &contract)?;
+    let answer = decode_bounded_answer_certificate(&certificate.final_evidence)?;
+    let answer_summary = verify_bounded_answer(&left, &right, &contract, &answer)?;
+    let certificate_bytes = encode_revision_local_certificate(certificate)?.len();
+    Ok((
+        RevisionLocalSummary {
+            left: retained_left.summary.clone(),
+            right: retained_right.summary.clone(),
+            answer: answer_summary.clone(),
+            certificate_bytes,
+        },
+        RevisionWorkObservation {
+            decoded_local_sections: 0,
+            semantically_verified_local_sections: 0,
+            reused_local_sections: 2,
             composed_pair_checks: composed.pair_checks,
             final_transition_checks: answer_summary.transition_checks,
         },
@@ -4313,6 +4423,101 @@ mod tests {
         assert_eq!(
             error.message,
             "retained left evidence is not byte-identical"
+        );
+    }
+
+    #[test]
+    fn repeated_query_reuses_both_validated_components() {
+        let interface = encode_word_interface_contract(&WordInterfaceContract {
+            wires: vec![InterfaceWire {
+                from: ComponentSide::Left,
+                output: 7,
+                to_input: 3,
+            }],
+            external_inputs: None,
+        })
+        .unwrap();
+        let initial_query = BoundedQuery {
+            horizon: 1,
+            bad_side: ComponentSide::Right,
+            bad_output: 10,
+        };
+        let (initial, _) = produce_revision_local_certificate(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            interface.as_bytes(),
+            &initial_query,
+        )
+        .unwrap();
+        let retained_left = validate_local_artifact(
+            WORD_COMPONENT,
+            &initial.left.evidence,
+            EvidenceSection::Left,
+        )
+        .unwrap();
+        let retained_right = validate_local_artifact(
+            FINAL_RIGHT_COMPONENT,
+            &initial.right.evidence,
+            EvidenceSection::Right,
+        )
+        .unwrap();
+        let next_query = BoundedQuery {
+            horizon: 0,
+            ..initial_query
+        };
+        let (full, full_summary) = produce_revision_local_certificate(
+            WORD_COMPONENT,
+            &[7],
+            FINAL_RIGHT_COMPONENT,
+            &[7, 10],
+            interface.as_bytes(),
+            &next_query,
+        )
+        .unwrap();
+        let (retained, retained_summary, production) = produce_revision_with_retained_components(
+            &retained_left,
+            &retained_right,
+            interface.as_bytes(),
+            &next_query,
+        )
+        .unwrap();
+        assert_eq!(full_summary.answer, retained_summary.answer);
+        assert_eq!(
+            encode_revision_local_certificate(&full).unwrap(),
+            encode_revision_local_certificate(&retained).unwrap()
+        );
+        assert_eq!(production.produced_local_sections, 0);
+        assert_eq!(production.reused_local_sections, 2);
+        assert_eq!(production.changed_candidate_valuations, 0);
+        assert!(production.composed_pair_checks > 0);
+
+        let (checked, verification) = verify_revision_with_retained_components(
+            &retained_left,
+            &retained_right,
+            interface.as_bytes(),
+            &retained,
+        )
+        .unwrap();
+        assert_eq!(checked.answer.result, BoundedResult::Safe);
+        assert_eq!(verification.decoded_local_sections, 0);
+        assert_eq!(verification.semantically_verified_local_sections, 0);
+        assert_eq!(verification.reused_local_sections, 2);
+
+        let mut hostile = retained;
+        hostile.right.evidence.push(0);
+        let error = verify_revision_with_retained_components(
+            &retained_left,
+            &retained_right,
+            interface.as_bytes(),
+            &hostile,
+        )
+        .unwrap_err();
+        assert_eq!(error.section, EvidenceSection::Right);
+        assert_eq!(
+            error.message,
+            "retained right evidence is not byte-identical"
         );
     }
 

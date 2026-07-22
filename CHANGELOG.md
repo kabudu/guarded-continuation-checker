@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a typed repeated-query API that accepts two previously validated local
+  relation artifacts, produces no new local sections, reuses both sections
+  byte-for-byte, and regenerates only the query-specific bounded answer. Its
+  verifier performs no local decoding or semantic replay after validation,
+  recomposes the validated relations, and checks the final proof. Add exact
+  from-scratch artifact identity, SAFE result, work accounting, and right-side
+  substitution rejection tests.
 - Add the first authentic stable-interface revision cohort with a reachable
   semantic change. OpenTitan `prim_count` moves from SAFE to UNSAFE at reset
   across commit `369cffc8`; GCC reuses and reverifies the unchanged environment

@@ -543,10 +543,19 @@ whole-process verification time is unresolved at that resolution and also uses
 more peak memory. The tradeoff is therefore policy-dependent, not a universal
 performance win.
 
-The remaining gates include hosted Linux resource results, certificate-byte agreement across Linux, macOS, and Windows,
-long-lived multi-revision service amortisation, an equivalent-scope closest-system comparison on a semantic-changing public pair, tagged
-compatibility, and independent review. None of this evidence changes the
-top-level production status.
+The typed API now also accepts two previously validated component relations for
+repeated queries. Production reports zero produced and two reused local
+sections. Verification reports zero decoded and zero semantically replayed
+local sections while recomposing the validated relations and checking the new
+final proof. Exact byte identity and substitution rejection pass in unit tests.
+The larger repeated-query product workload and resource comparison remain open,
+so this does not yet change a production-readiness row.
+
+The remaining gates include hosted Linux resource results, certificate-byte
+agreement across Linux, macOS, and Windows, long-lived multi-revision service
+amortisation, hosted reproduction of the semantic-changing closest-system
+comparison, tagged compatibility, and independent review. None of this
+evidence changes the top-level production status.
 
 ## Post-production-release deliverables
 
