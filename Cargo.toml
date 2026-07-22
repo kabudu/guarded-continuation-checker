@@ -1,6 +1,6 @@
 [package]
 name = "guarded-continuation-checker"
-version = "0.29.0"
+version = "0.30.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Proof-carrying bounded verification for embedded firmware and RTL, powered by CQ-SAT"
@@ -18,6 +18,12 @@ include = [
     "/README.md",
     "/src/**",
 ]
+
+[package.metadata.cargo-semver-checks.lints]
+# Before 1.0, additive operation telemetry variants are permitted in a minor
+# release. Every other default major-change lint remains enforced by the
+# explicit minor compatibility check.
+enum_variant_added = { required-update = "minor" }
 
 [features]
 default = []

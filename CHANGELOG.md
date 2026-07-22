@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.30.0 - 2026-07-22
 
 - Predeclare revision impact certificate v1 for selective firmware regression.
   Freeze exact source-bound reuse, exhaustive bounded counterfactuals, complete
