@@ -15,6 +15,9 @@
   from 53.78 times against isolated containers to about 9.89 and 9.00 times.
   Retain the identical model and evidence hashes and disclose that most of the
   earlier ratio was container-launch overhead.
+- Add a CI gate that recomputes retained medians and verifies every result,
+  manifest, harness, and in-container runner hash without requiring the
+  qualified external toolchain.
 
 ## 0.30.0 - 2026-07-22
 
