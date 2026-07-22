@@ -490,9 +490,12 @@ source-bound artifact whose independent checker exhaustively proves complete
 inclusion-minimal invalidating change sets, both-answer replay, and exact
 fail-closed fallback. The first public OpenTitan aggregate now preserves all
 four old/new answer classes with byte-identical repeated production and exact
-independent replay. This strengthens the mechanism evidence but does not close
-a novelty row. The same-scope maintained baseline, broader prior-art
-comparison, portability, and independent review remain open.
+independent replay. The same-scope rIC3 and Certifaiger baseline agrees on every
+answer but is about 21,306.5 times smaller in model-plus-evidence bytes and uses
+far less peak memory. This strengthens the integrity mechanism while further
+weakening any product-efficiency distinction. Synthesis-inclusive timing,
+broader prior-art comparison, portability, and independent review remain open;
+no novelty row closes.
 
 ## Production-tagged OpenTitan watchdog
 

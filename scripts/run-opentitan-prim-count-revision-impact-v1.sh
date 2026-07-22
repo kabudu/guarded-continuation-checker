@@ -36,6 +36,35 @@ sha256_file() {
   fi
 }
 
+case $(uname -s) in
+  Darwin) time_style=bsd ;;
+  Linux) time_style=gnu ;;
+  *) echo "unsupported timing platform" >&2; exit 2 ;;
+esac
+
+run_timed() {
+  local stdout=$1
+  local metrics=$2
+  shift 2
+  if [[ $time_style == bsd ]]; then
+    /usr/bin/time -l "$@" >"$stdout" 2>"$metrics"
+  else
+    /usr/bin/time -f '%e %M' -o "$metrics" "$@" >"$stdout"
+  fi
+}
+
+read_timing() {
+  local metrics=$1
+  if [[ $time_style == bsd ]]; then
+    timing_elapsed=$(awk '$2 == "real" { print $1 }' "$metrics")
+    timing_peak_bytes=$(awk '$2 == "maximum" && $3 == "resident" { print $1 }' "$metrics")
+  else
+    read -r timing_elapsed timing_peak_kib <"$metrics"
+    timing_peak_bytes=$((timing_peak_kib * 1024))
+  fi
+  [[ -n $timing_elapsed && -n $timing_peak_bytes && $timing_peak_bytes -gt 0 ]]
+}
+
 environment=$workdir/environment.btor2
 before=$workdir/before.btor2
 after=$workdir/after.btor2
@@ -70,18 +99,20 @@ printf '%s\n' \
 run_check() {
   local artifact=$1
   local log=$2
-  "$binary" check-btor2-revision-impact \
+  local metrics=$3
+  run_timed "$log" "$metrics" "$binary" check-btor2-revision-impact \
     "$environment" "$environment" 2,3,4,9,12 \
     "$before" "$after" 1000,1001,1002,1003,1004,1005,1006,1007 \
     "$interface" "$interface" "$queries" "$artifact" >"$log"
 }
 
-run_check "$first" "$workdir/first.log"
-"$binary" verify-btor2-revision-impact \
+run_check "$first" "$workdir/first.log" "$workdir/first.time"
+run_timed "$workdir/verify.log" "$workdir/verify.time" \
+  "$binary" verify-btor2-revision-impact \
   "$environment" "$environment" 2,3,4,9,12 \
   "$before" "$after" 1000,1001,1002,1003,1004,1005,1006,1007 \
-  "$interface" "$interface" "$queries" "$first" >"$workdir/verify.log"
-run_check "$second" "$workdir/second.log"
+  "$interface" "$interface" "$queries" "$first"
+run_check "$second" "$workdir/second.log" "$workdir/second.time"
 
 cmp "$first" "$second"
 first_logical=$(sed -E '1s/ elapsed_micros=[0-9]+$//' "$workdir/first.log")
@@ -115,13 +146,19 @@ composed_pair_checks=$(field composed_pair_checks)
 final_transition_checks=$(field final_transition_checks)
 result_comparisons=$(field result_comparisons)
 certificate_sha256=$(sha256_file "$first")
+read_timing "$workdir/first.time"
+producer_elapsed_seconds=$timing_elapsed
+producer_peak_rss_bytes=$timing_peak_bytes
+read_timing "$workdir/verify.time"
+checker_elapsed_seconds=$timing_elapsed
+checker_peak_rss_bytes=$timing_peak_bytes
 
 {
-  printf '%s\n' 'schema_version,query_index,horizon,bad_side,bad_output,old_result,new_result,transition_class,certificate_bytes,parsed_evidence_bytes,semantic_replays,component_validations,composed_pair_checks,final_transition_checks,result_comparisons,certificate_sha256,deterministic,status'
-  printf '1,0,0,left,2,UNSAFE,UNSAFE,unchanged-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$certificate_sha256"
-  printf '1,1,0,right,1000,UNSAFE,SAFE,unsafe-to-safe,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$certificate_sha256"
-  printf '1,2,0,right,1001,SAFE,SAFE,unchanged-safe,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$certificate_sha256"
-  printf '1,3,0,right,1003,SAFE,UNSAFE,safe-to-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$certificate_sha256"
+  printf '%s\n' 'schema_version,query_index,horizon,bad_side,bad_output,old_result,new_result,transition_class,certificate_bytes,parsed_evidence_bytes,semantic_replays,component_validations,composed_pair_checks,final_transition_checks,result_comparisons,producer_elapsed_seconds,checker_elapsed_seconds,producer_peak_rss_bytes,checker_peak_rss_bytes,time_backend,certificate_sha256,deterministic,status'
+  printf '1,0,0,left,2,UNSAFE,UNSAFE,unchanged-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '1,1,0,right,1000,UNSAFE,SAFE,unsafe-to-safe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '1,2,0,right,1001,SAFE,SAFE,unchanged-safe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
+  printf '1,3,0,right,1003,SAFE,UNSAFE,safe-to-unsafe,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,accepted\n' "$certificate_bytes" "$parsed_evidence_bytes" "$semantic_replays" "$component_validations" "$composed_pair_checks" "$final_transition_checks" "$result_comparisons" "$producer_elapsed_seconds" "$checker_elapsed_seconds" "$producer_peak_rss_bytes" "$checker_peak_rss_bytes" "$time_style" "$certificate_sha256"
 } >"$workdir/result.csv"
 
 {

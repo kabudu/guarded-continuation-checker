@@ -526,8 +526,10 @@ Two clean productions are byte-identical, and the independent verifier repeats
 all eight scenario results plus deterministic parsing, validation, composition,
 transition, and comparison work. This closes the local four-transition
 mechanism prerequisite. It does not close production readiness: the
-identical-scope maintained baseline, hosted three-platform identity,
-release-build acceptance, and independent review remain open.
+identical-scope maintained baseline agrees semantically but is about 21,306.5
+times smaller and has substantially lower producer and checker peak RSS.
+Synthesis-inclusive timing, hosted three-platform identity, release-build
+acceptance, and independent review remain open.
 
 The equivalent-scope maintained rIC3 and Certifaiger baseline also passes
 locally. Both cross-revision evidence swaps fail, and the new model needs only

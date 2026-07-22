@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted local public-product mechanism evidence. The complete four-transition
-answer gate passes. The maintained same-scope baseline, hosted portability, and
-independent review remain open, so this is not a production or novelty claim.
+Accepted local public-product mechanism evidence with a disconfirming
+maintained baseline. The complete four-transition answer gate passes. Hosted
+portability and independent review remain open, so this is not a production or
+novelty claim.
 
 ## Question
 
@@ -78,11 +79,52 @@ The 56 MiB certificate is intentionally not committed. Its digest, both clean
 production digests, exact generated source digests, interface and query
 digests, tool versions, results, and deterministic work counts are retained.
 
+## Maintained-tool baseline
+
+Pinned Yosys emits eight same-scope AIGER scenario models. Qualified rIC3
+produces four SAFE witnesses and four UNSAFE traces. Qualified Certifaiger
+checks every witness or trace independently. All answers and all four
+transition classes agree with GCC.
+
+The eight models total 1,748 bytes and their evidence totals 910 bytes. The
+complete maintained package is therefore 2,658 bytes. GCC's 56,632,691-byte
+aggregate is about 21,306.5 times larger. GCC production peaks at 290,603,008
+bytes and independent checking at 273,956,864 bytes. The largest rIC3 producer
+job peaks at 7,806,976 bytes and the largest Certifaiger checker job at
+4,620,288 bytes, making the current GCC peaks about 37.2 and 59.3 times larger.
+
+The recorded one-second maintained producer and two-second checker observations
+include separate network-disabled Docker launches. GCC records 46.27 seconds
+for production and 12.40 seconds for verification in native arm64 processes.
+Neither timing includes pinned Yosys synthesis, and the process boundaries
+differ, so these values do not close the predeclared total source-to-answer
+timing slice and are not used for a speed claim.
+
+Retained baseline evidence:
+
+- [`opentitan-prim-count-revision-impact-baseline-arm64-v1.csv`](../results/opentitan-prim-count-revision-impact-baseline-arm64-v1.csv)
+- [`opentitan-prim-count-revision-impact-baseline-arm64-v1.manifest.txt`](../results/opentitan-prim-count-revision-impact-baseline-arm64-v1.manifest.txt)
+
+Reproduce it with the already qualified tool outputs and images:
+
+```console
+mkdir /tmp/gcc-prim-count-impact-baseline
+scripts/benchmark-opentitan-prim-count-revision-impact-baseline-v1.sh \
+  /path/to/pinned/yosys /path/to/ric3-output \
+  /path/to/certifaiger-output \
+  /tmp/baseline.csv /tmp/baseline.manifest.txt \
+  /tmp/gcc-prim-count-impact-baseline 1
+```
+
 ## Claim boundary
 
-This closes the four-transition public-product mechanism gate. It does not show
+This closes the four-transition public-product gate and the local maintained
+semantic, transfer-size, evidence-checking, and peak-RSS baseline slices. It
+does not show
 that exhaustive bounded counterfactuals, proof reuse, change impact, or minimal
 invalidating sets are novel individually. It also does not show a performance
-or artifact-size advantage. A pinned proof-producing maintained-tool baseline
-at the same four-query scope must be measured before any narrower distinction
-can advance.
+or artifact-size advantage. The baseline strongly falsifies artifact
+efficiency for the current duplicated-evidence container. A larger multi-atom
+public revision with nontrivial minimal invalidating sets, shared-section
+storage, total source-to-answer timing, hosted identity, and independent review
+remain necessary before any narrower distinction can advance.

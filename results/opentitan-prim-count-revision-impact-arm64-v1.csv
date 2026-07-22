@@ -1,5 +1,5 @@
-schema_version,query_index,horizon,bad_side,bad_output,old_result,new_result,transition_class,certificate_bytes,parsed_evidence_bytes,semantic_replays,component_validations,composed_pair_checks,final_transition_checks,result_comparisons,certificate_sha256,deterministic,status
-1,0,0,left,2,UNSAFE,UNSAFE,unchanged-unsafe,56632691,56632176,8,16,1310720,16,8,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
-1,1,0,right,1000,UNSAFE,SAFE,unsafe-to-safe,56632691,56632176,8,16,1310720,16,8,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
-1,2,0,right,1001,SAFE,SAFE,unchanged-safe,56632691,56632176,8,16,1310720,16,8,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
-1,3,0,right,1003,SAFE,UNSAFE,safe-to-unsafe,56632691,56632176,8,16,1310720,16,8,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
+schema_version,query_index,horizon,bad_side,bad_output,old_result,new_result,transition_class,certificate_bytes,parsed_evidence_bytes,semantic_replays,component_validations,composed_pair_checks,final_transition_checks,result_comparisons,producer_elapsed_seconds,checker_elapsed_seconds,producer_peak_rss_bytes,checker_peak_rss_bytes,time_backend,certificate_sha256,deterministic,status
+1,0,0,left,2,UNSAFE,UNSAFE,unchanged-unsafe,56632691,56632176,8,16,1310720,16,8,46.27,12.40,290603008,273956864,bsd,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
+1,1,0,right,1000,UNSAFE,SAFE,unsafe-to-safe,56632691,56632176,8,16,1310720,16,8,46.27,12.40,290603008,273956864,bsd,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
+1,2,0,right,1001,SAFE,SAFE,unchanged-safe,56632691,56632176,8,16,1310720,16,8,46.27,12.40,290603008,273956864,bsd,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted
+1,3,0,right,1003,SAFE,UNSAFE,safe-to-unsafe,56632691,56632176,8,16,1310720,16,8,46.27,12.40,290603008,273956864,bsd,8880f1ac6b8f62d8198b73d96adbf99469823358a104049b70564dd41b5dec76,true,accepted

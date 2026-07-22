@@ -13,10 +13,12 @@ revision-local evidence, and independently decodes and verifies every retained
 artifact. The first strict file CLI now produces and independently verifies the
 aggregate bundle from old/new component sources, old/new interface contracts,
 and a canonical bounded-query manifest. It uses bounded non-symlink reads and
-atomic no-clobber publication. The public OpenTitan cohort and the remaining
-gates are still open. The first public OpenTitan cohort now covers all four old
-and new answer transitions in one deterministic aggregate; its maintained
-same-scope baseline and hosted portability evidence remain open.
+atomic no-clobber publication. The first public OpenTitan cohort now covers all
+four old and new answer transitions in one deterministic aggregate. Its
+maintained baseline agrees semantically and independently checks every answer,
+while strongly disfavouring GCC on transfer bytes and peak RSS. Total
+source-to-answer timing, hosted portability, a larger multi-atom subsystem, and
+the remaining gates are still open.
 
 The public `RevisionImpactTool` adds a shell-free process boundary with runtime
 deadlines, output limits, file-size limits, process-group containment where
@@ -211,6 +213,9 @@ reordered, malformed, or noncanonical transition lines.
 10. **Maintained baseline:** compare total source-to-answer producer time,
     independent checking time, peak RSS, and transferred bytes with a pinned
     full-rebuild proof-producing route at identical query scope.
+    The first local comparison closes semantic agreement, evidence checking,
+    transfer bytes, and peak RSS with a negative GCC result. Timings currently
+    begin after synthesis, so total source-to-answer time remains open.
 11. **Public semantic revision:** reproduce the pinned OpenTitan `prim_count`
     behaviour-changing revision and then a larger upstream-derived subsystem
     whose whole transition semantics genuinely change.

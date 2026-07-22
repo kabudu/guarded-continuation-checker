@@ -62,6 +62,15 @@
   same 56,632,691-byte certificate and SHA-256, and independent verification
   repeats all eight semantic results and deterministic work counters. The
   identical-scope maintained-tool and portable-host gates remain open.
+- Qualify the identical four-query maintained baseline. Pinned Yosys plus rIC3
+  and Certifaiger agree on four SAFE and four UNSAFE scenario answers and
+  independently validate every witness or trace. Their complete 2,658-byte
+  model-plus-evidence package is about 21,306.5 times smaller than GCC's
+  56,632,691-byte aggregate. GCC producer and checker peak RSS are about 37.2
+  and 59.3 times larger than the largest maintained producer and checker jobs.
+  This closes the local semantic, transfer, evidence-checking, and peak-memory
+  slices with a strong negative result. Synthesis-inclusive source-to-answer
+  timing remains open; no speed or novelty claim is made.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

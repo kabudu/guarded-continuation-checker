@@ -321,8 +321,12 @@ without per-formula calibration. Machine-readable discovery pins the exact
 semantics, limits, fail-closed no-fallback contract, and typed old/new query
 transitions. The [public OpenTitan four-transition cohort](docs/OPENTITAN_PRIM_COUNT_REVISION_IMPACT_V1.md)
 now preserves unchanged UNSAFE, UNSAFE-to-SAFE, unchanged SAFE, and
-SAFE-to-UNSAFE in one byte-identical exact bundle. The maintained baseline and
-cross-platform identity gates remain open, so this is not yet part of the
+SAFE-to-UNSAFE in one byte-identical exact bundle. Qualified rIC3 and
+Certifaiger agree on all eight scenario answers, but their complete package is
+about 21,306.5 times smaller. The baseline therefore falsifies current artifact
+efficiency, and its producer/checker jobs also use substantially less peak
+memory. Synthesis-inclusive timing, cross-platform identity, and larger
+multi-atom product evidence remain open, so this is not yet part of the
 production support profile.
 
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
