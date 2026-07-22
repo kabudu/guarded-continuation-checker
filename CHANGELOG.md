@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Predeclare revision impact certificate v1 for selective firmware regression.
+  Freeze exact source-bound reuse, exhaustive bounded counterfactuals, complete
+  inclusion-minimal invalidating sets, both-answer replay, resource governance,
+  hostile-input rejection, exact fallback, maintained full-rebuild comparison,
+  public semantic-revision evidence, self-service integration and three-platform
+  identity gates. Record incremental IC3, precision reuse, mutation-impact
+  propagation and hierarchical RTL lemma reuse as disconfirming prior art, so
+  no broad incremental-verification novelty claim is permitted.
 - Predeclare QatQ transport qualification v1 as an additive research-only
   experiment. Freeze the exact QatQ 0.1.1 boundary and require a GCC-owned
   length, digest, codec and resource envelope, streaming exact recovery,

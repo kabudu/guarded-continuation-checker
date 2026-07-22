@@ -478,6 +478,18 @@ with the same proof-cache boundary, and a non-repository-authored changing plant
 remain open. The narrow hypothesis advances; every broader novelty or product
 superiority claim remains prohibited.
 
+A broader prior-art pass further constrains this direction. Incremental IC3
+already reuses and patches proofs and counterexamples after hardware changes;
+precision reuse has been evaluated across large software revision histories;
+mutation impact has been propagated to determine which model proofs remain
+valid; and machine-checked hierarchical RTL lemmas are reusable. GCC therefore
+cannot claim novelty for revision-local reuse or impact propagation. The next
+candidate is the narrower
+[revision impact certificate](REVISION_IMPACT_CERTIFICATE_V1.md): a portable,
+source-bound artifact whose independent checker exhaustively proves complete
+inclusion-minimal invalidating change sets, both-answer replay, and exact
+fail-closed fallback. Its claim remains open and unproven.
+
 ## Production-tagged OpenTitan watchdog
 
 The OpenTitan AON watchdog experiment demonstrates pinned public-source

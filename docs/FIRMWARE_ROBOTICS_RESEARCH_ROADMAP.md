@@ -206,6 +206,16 @@ public benchmark's local provenance mechanism gap. General signed partner build
 provenance, independent synthesis equivalence, and compatibility history remain
 open.
 
+The next semantic revision cycle is predeclared as
+[revision impact certificate v1](REVISION_IMPACT_CERTIFICATE_V1.md). It tests a
+bounded, deterministic certificate for exact component-evidence retention,
+counterfactual invalidation, and complete inclusion-minimal change sets across
+firmware revisions. Prior work already establishes incremental IC3 proof reuse,
+abstraction-precision reuse, mutation-impact propagation, and hierarchical RTL
+lemma reuse. The candidate is therefore deliberately narrow and must beat a
+pinned full-rebuild proof-producing baseline on a real semantic revision before
+it can advance any novelty hypothesis.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest
