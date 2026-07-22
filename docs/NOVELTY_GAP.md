@@ -84,6 +84,16 @@ not a systematic or professional patent search.
 Until all six gates close, repository and outbound language must say “candidate
 contribution” or “research prototype”, never “novel breakthrough”.
 
+The OpenTitan PWM symbolic-class boundary removes an input-free experimental
+fixture by retaining six live firmware-controlled bits under an explicit
+equal-input class contract. Its representative reduction is not a novelty
+candidate. Symmetry reduction, orbit representatives, guarded quotient
+structures, finite-state proof certificates, and 2026 guarded equivalence
+predicates for hardware self-composition are directly relevant prior art. The
+next source-bound conditional-equivalence certificate is product research only
+unless it demonstrates a semantic capability absent from those systems and
+passes a maintained equivalent-scope baseline plus independent review.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

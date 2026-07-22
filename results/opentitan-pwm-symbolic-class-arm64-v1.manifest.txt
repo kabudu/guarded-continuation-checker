@@ -1,0 +1,24 @@
+schema_version=1
+scope=opentitan-pwm-symbolic-firmware-class-boundary
+status=complete-source-boundary-gate
+platform=aarch64-apple-darwin
+rustc=1.97.0
+rustc_commit=2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+base_commit=3f5d4fe4de308214b924e4ac65ab156c4b5b88aa
+channel_counts=2,4,6
+live_input_bits=6
+selection=none
+discarded_rows=0
+timing_scope=not-measured
+memory_scope=not-measured
+sha256=ddf8746f51d521f17fadaab0a474c9faa59a50ecb0d4e914a027cf3175f03737 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2
+sha256=671136023f99b6bf9e21f140f267d770b42151738148d23f7f06162a2ebb86d1 file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-4.btor2
+sha256=9e83a25e30df82636d54781ae086f8a3a43a446d7128ca120cca166f7240872e file=corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2
+sha256=378dc5ad35d31331a9d40696c88ffe617072435fb06f80f0049c09ee86ba03bc file=corpus/rtl/opentitan-pwm-channel-family/symbolic-class-harness.sv
+sha256=cdd64d3bbefc6b9c14998d0380d5e823e96caefe9b052a01c1edd35e6f332c2f file=scripts/build-opentitan-pwm-authentic-channel-family-v1.sh
+sha256=e7b815e43e8f1b48ea60354757a9bd2571ca33a52b1f825da66799c6ebd62f08 file=scripts/build-opentitan-pwm-symbolic-class-family-v1.sh
+sha256=a5e257cd00aa15eeb821f662209e4f18171e24be353052f597f4ad759738fc21 file=examples/btor2_symbolic_class_probe.rs
+sha256=3e3e9b49ccd2ec6c1a597f11d00c849aac8ff1bd2ab27b4a848e8dba7304bc81 file=scripts/run-btor2-symbolic-class-probe-v1.sh
+sha256=522c086f3aadc89f2022729db9ec38638cfdf2a3d40566d1d8769ee72a4f25c3 file=scripts/check-btor2-symbolic-class-probe-v1.sh
+sha256=edb63d8c610601003670a0aa28e1277aa0e81f4e3e6d2d72ec92770757a85003 file=tests/opentitan_pwm_symbolic_class_api.rs
+sha256=ec4a2f59e66f7655be48c59373c5ab6a9246a0992561c2eb59af4ec184d984b4 file=results/opentitan-pwm-symbolic-class-arm64-v1.csv

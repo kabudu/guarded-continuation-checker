@@ -12,6 +12,9 @@ repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 fixture=$repo/corpus/rtl/opentitan-pwm-channel-family
 upstream=$fixture/upstream-child
 expected_yosys=b8e7da6f40ae8f552c116bf6c359b07c6533e159
+harness=${GCC_PWM_HARNESS:-$fixture/authentic-harness.sv}
+top=${GCC_PWM_TOP:-opentitan_pwm_authentic_harness}
+harness_name=$(basename "$harness")
 
 [[ -x "$yosys" ]] || { echo "Yosys must be executable" >&2; exit 2; }
 [[ $($yosys -V) == *"git sha1 $expected_yosys,"* ]] || {
@@ -42,10 +45,23 @@ check_digest() {
 check_digest 618998be0948d1570e7bd5fc4db6332470f02dba9b7154aa71edc8929202d855 "$upstream/pwm_core.sv"
 check_digest 0b6a8cac19d1e8ae4b04ab63fd146a105b85e2ce690084beaa24aa950faca68a "$upstream/pwm_chan.sv"
 check_digest 59651b3b72ea1862524935dc099fd6fdd3b5c2926c03b6d7d31b7785be3324a7 "$upstream/pwm_reg_pkg.sv"
+[[ -f "$harness" && ! -L "$harness" ]] || {
+  echo "PWM harness must be an ordinary file" >&2
+  exit 2
+}
+[[ $top =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || {
+  echo "PWM top module is invalid" >&2
+  exit 2
+}
+[[ $harness_name =~ ^[A-Za-z0-9_.-]+[.]sv$ ]] || {
+  echo "PWM harness filename is invalid" >&2
+  exit 2
+}
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-opentitan-pwm-family.XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
-cp "$upstream"/*.sv "$fixture/authentic-harness.sv" "$scratch/"
+cp "$upstream"/*.sv "$scratch/"
+cp "$harness" "$scratch/$harness_name"
 
 # Pinned Yosys aborts while simplifying the generated packed struct. Lower the
 # authenticated reg2hw interface to width-equivalent flat ports while leaving
@@ -110,9 +126,9 @@ build_one() {
   (
     cd "$scratch"
     "$yosys" -Q -q -p "
-      read_verilog -formal -sv pwm_chan.sv pwm_core_flat.sv authentic-harness.sv;
-      chparam -set NOutputs $channels opentitan_pwm_authentic_harness;
-      hierarchy -check -top opentitan_pwm_authentic_harness;
+      read_verilog -formal -sv pwm_chan.sv pwm_core_flat.sv $harness_name;
+      chparam -set NOutputs $channels $top;
+      hierarchy -check -top $top;
       proc; opt; flatten; opt; async2sync; dffunmap; setundef -zero -init;
       clean -purge; write_btor -x $raw
     "

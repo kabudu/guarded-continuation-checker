@@ -372,6 +372,14 @@ end-to-end medians remain between 0.996 and 1.005 times direct. This falsifies
 cheap trace scanning as the practical reuse target. The next candidate must
 share an expensive independently checked property obligation.
 
+The follow-up [symbolic firmware-class boundary](docs/OPENTITAN_PWM_SYMBOLIC_CLASS_BOUNDARY_V1.md)
+removes the input-free-fixture limitation. Six live bits control two declared
+firmware register classes through the complete authenticated PWM channel
+equations. The six-channel model exposes three exact structural representatives
+instead of six, while preserving a singleton that fails to match. This is an
+explicit equal-input integration contract and established symmetry reduction,
+not an inferred assumption, safety proof, or novelty claim.
+
 That [revision batch certificate](docs/REVISION_BATCH_CERTIFICATE_V1.md) is now
 implemented as a typed experimental API. It stores the three OpenTitan local
 relations once, removes 99,100,424 duplicated bytes across 16 queries, verifies

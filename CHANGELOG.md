@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an authenticated OpenTitan PWM boundary with six live symbolic firmware
+  register bits and explicit even/odd equal-input classes. Retain deterministic
+  2, 4, and 6-channel models, exact structural partitions, source digests, and
+  a strict result checker. The six-channel graph admits three representative
+  channels while preserving a structural singleton. This closes the previous
+  input-free-fixture weakness but is established symmetry engineering, not a
+  proof or novelty claim.
+
 - Predeclare a proof-carrying OpenTitan PWM channel-family experiment that
   verifies one repeated channel relation, instantiates it across 2, 4, and 6
   channels with disjoint state renaming, composes it with a shared core, and
