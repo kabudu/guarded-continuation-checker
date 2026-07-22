@@ -436,7 +436,17 @@ fn every_aggregate_resource_dimension_is_governed() {
         encode_two_component_revision_impact_bundle(
             &bundle,
             RevisionImpactPolicy {
-                max_combinations: 3,
+                max_combinations: 1,
+                ..default
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        encode_two_component_revision_impact_bundle(
+            &bundle,
+            RevisionImpactPolicy {
+                max_queries: 1,
                 ..default
             }
         )

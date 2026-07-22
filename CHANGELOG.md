@@ -30,8 +30,9 @@
   verification, encode and decode policies for total input bytes, per-scenario
   evidence, total bundle bytes, counterfactual combinations and query count.
   Seven focused tests now include every aggregate policy dimension and every
-  bundle truncation. Resource refusal occurs before retaining or decoding an
-  over-limit artifact.
+  bundle truncation. Production, encoding, decoding and verification enforce
+  the same caller-selected dimensions. Resource refusal occurs before retaining
+  or decoding an over-limit artifact.
 - Add the first self-service revision-impact file CLI. Strict old/new component
   and interface inputs plus a canonical bounded-query manifest produce or
   independently verify the aggregate certificate. The workflow uses bounded

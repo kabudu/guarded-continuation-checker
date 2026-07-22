@@ -460,6 +460,10 @@ pub fn encode_two_component_revision_impact_bundle(
 ) -> Result<Vec<u8>, RevisionImpactError> {
     validate_policy(policy)?;
     let impact = encode_revision_impact_certificate(&bundle.impact)?;
+    let combinations = 1usize << bundle.impact.atoms.len();
+    if combinations > policy.max_combinations || bundle.impact.queries.len() > policy.max_queries {
+        return Err(reject("bundle dimensions exceed policy"));
+    }
     if bundle.revision_evidence.len() != bundle.impact.observations.len() {
         return Err(reject("revision evidence table is incomplete"));
     }
