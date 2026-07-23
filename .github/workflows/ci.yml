@@ -12,8 +12,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Change scope
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Classify change scope
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch requests the complete matrix."
+            exit 0
+          fi
+
+          mapfile -t changed_files < <(
+            git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA"
+          )
+          full=false
+          for path in "${changed_files[@]}"; do
+            case "$path" in
+              README.md|CRATE_README.md|CHANGELOG.md|LICENSE|docs/*|assets/brand/*)
+                ;;
+              *)
+                full=true
+                ;;
+            esac
+          done
+
+          printf '%s\n' "${changed_files[@]}"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+
+  documentation:
+    name: Documentation
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Check repository writing style
+        run: scripts/check-style.sh
+      - name: Check changed lines for whitespace errors
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git diff --check "$BASE_SHA...$HEAD_SHA"
+
   certified-equivalent-evidence:
-    if: github.event_name == 'workflow_dispatch'
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -54,6 +112,8 @@ jobs:
           retention-days: 14
 
   test:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -364,6 +424,8 @@ jobs:
           test -f /tmp/sby-regression/FAIL
 
   portable-component-api:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -385,6 +447,8 @@ jobs:
           cargo test --release --locked --test btor2_channel_trace_monitor_api retained_open_titan_trace_cohort_agrees_with_direct_exact_queries
 
   revision-impact-public-release:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -393,6 +457,8 @@ jobs:
         run: cargo test --release --locked --test opentitan_pwm_revision_impact_api
 
   public-rtl-corpus:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -704,6 +770,8 @@ jobs:
           grep -qx 'result=UNSAFE' target/isolated-unsafe.isolation-report.txt
 
   dependency-audit:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -714,6 +782,8 @@ jobs:
         run: cargo audit
 
   public-api-semver:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -724,6 +794,8 @@ jobs:
         run: scripts/check-public-api-semver-v1.sh
 
   bitwuzla-phase-baseline:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -747,6 +819,8 @@ jobs:
             /tmp/bitwuzla/build/src/main/bitwuzla
 
   reproducible-linux-bundle:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -770,3 +844,70 @@ jobs:
         run: scripts/test-linux-evaluation-bundle.sh /tmp/gcc-linux-bundle-repro
       - name: Rebuild and verify the frozen production candidate twice
         run: scripts/test-linux-production-candidate.sh /tmp/gcc-linux-production-repro
+
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - changes
+      - documentation
+      - certified-equivalent-evidence
+      - test
+      - portable-component-api
+      - revision-impact-public-release
+      - public-rtl-corpus
+      - dependency-audit
+      - public-api-semver
+      - bitwuzla-phase-baseline
+      - reproducible-linux-bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every applicable check
+        shell: bash
+        env:
+          FULL: ${{ needs.changes.outputs.full }}
+          CHANGES: ${{ needs.changes.result }}
+          DOCUMENTATION: ${{ needs.documentation.result }}
+          CERTIFIED: ${{ needs.certified-equivalent-evidence.result }}
+          TEST: ${{ needs.test.result }}
+          PORTABLE: ${{ needs.portable-component-api.result }}
+          REVISION: ${{ needs.revision-impact-public-release.result }}
+          RTL: ${{ needs.public-rtl-corpus.result }}
+          AUDIT: ${{ needs.dependency-audit.result }}
+          SEMVER: ${{ needs.public-api-semver.result }}
+          BITWUZLA: ${{ needs.bitwuzla-phase-baseline.result }}
+          BUNDLE: ${{ needs.reproducible-linux-bundle.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          require_result() {
+            local name=$1
+            local actual=$2
+            local expected=$3
+            if [[ "$actual" != "$expected" ]]; then
+              echo "$name result was $actual, expected $expected"
+              exit 1
+            fi
+          }
+
+          require_result changes "$CHANGES" success
+          require_result documentation "$DOCUMENTATION" success
+
+          expected=skipped
+          if [[ "$FULL" == "true" ]]; then
+            expected=success
+          fi
+          require_result test "$TEST" "$expected"
+          require_result portable-component-api "$PORTABLE" "$expected"
+          require_result revision-impact-public-release "$REVISION" "$expected"
+          require_result public-rtl-corpus "$RTL" "$expected"
+          require_result dependency-audit "$AUDIT" "$expected"
+          require_result public-api-semver "$SEMVER" "$expected"
+          require_result bitwuzla-phase-baseline "$BITWUZLA" "$expected"
+          require_result reproducible-linux-bundle "$BUNDLE" "$expected"
+
+          certified_expected=skipped
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$FULL" == "true" ]]; then
+            certified_expected=success
+          fi
+          require_result certified-equivalent-evidence \
+            "$CERTIFIED" "$certified_expected"
