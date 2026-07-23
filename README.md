@@ -31,6 +31,24 @@ Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
 
+## Platform architecture
+
+Guarded Continuation Checker authenticates a bounded model and reviewed
+obligation, governs the complete workload before solving, and selects CQ-SAT
+only when a static structural gate admits it. Supported cases outside that
+regime remain on an exact portfolio backend. Both routes publish canonical
+evidence for a separate checker; resource refusal publishes no logical answer.
+
+<p align="center">
+  <a href="docs/ARCHITECTURE.md">
+    <img src="assets/brand/platform-architecture.svg" width="1200" alt="Guarded Continuation Checker architecture: firmware, RTL and transition models enter an authenticated bounded model; governed static routing selects CQ-SAT exact composition or exact portfolio fallback; canonical evidence is independently checked before returning bounded SAFE, replayable UNSAFE, or REFUSED with no answer.">
+  </a>
+</p>
+
+The [architecture boundary and trust model](docs/ARCHITECTURE.md) explain what
+each stage proves, what remains outside the claim, and why `REFUSED` is distinct
+from both `SAFE` and `UNSAFE`.
+
 The first release line now has a frozen
 [production support profile](docs/PRODUCTION_SUPPORT_PROFILE_V1.md): firmware
 CLI contract v2 and RTL artifact schema v4 only. A separately profiled build
