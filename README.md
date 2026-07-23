@@ -2,6 +2,15 @@
   <img src="assets/brand/logo-horizontal.svg" width="680" alt="Guarded Continuation Checker, powered by CQ-SAT">
 </p>
 
+<p align="center">
+  <a href="https://github.com/kabudu/guarded-continuation-checker/actions/workflows/ci.yml?query=branch%3Amaster"><img src="https://img.shields.io/github/actions/workflow/status/kabudu/guarded-continuation-checker/ci.yml?branch=master&amp;label=CI&amp;style=flat-square" alt="CI status"></a>
+  <a href="https://crates.io/crates/guarded-continuation-checker"><img src="https://img.shields.io/crates/v/guarded-continuation-checker?style=flat-square" alt="Latest crates.io version"></a>
+  <a href="https://docs.rs/guarded-continuation-checker"><img src="https://img.shields.io/docsrs/guarded-continuation-checker?label=docs.rs&amp;style=flat-square" alt="docs.rs documentation"></a>
+  <a href="https://github.com/kabudu/guarded-continuation-checker/blob/master/Cargo.toml"><img src="https://img.shields.io/badge/rust-1.97%2B-CE412B?style=flat-square&amp;logo=rust" alt="Rust 1.97 or newer"></a>
+  <a href="https://github.com/kabudu/guarded-continuation-checker/blob/master/LICENSE"><img src="https://img.shields.io/github/license/kabudu/guarded-continuation-checker?style=flat-square" alt="Apache-2.0 licence"></a>
+  <a href="https://www.guardedcontinuation.org"><img src="https://img.shields.io/badge/website-guardedcontinuation.org-0A9A92?style=flat-square" alt="Guarded Continuation Checker website"></a>
+</p>
+
 # Guarded Continuation Checker
 
 **Guarded Continuation Checker, powered by CQ-SAT**, is an evaluation-ready,
