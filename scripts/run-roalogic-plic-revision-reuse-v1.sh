@@ -185,7 +185,7 @@ for hostile in stale-proof hidden-coupling width-drift direction-drift \
     reordering) expected='Interface evidence: external inputs must be unique, strictly ordered, and bounded' ;;
     count) expected='Interface evidence: invalid external input count' ;;
     size) expected='word interface contract exceeds 4096 bytes' ;;
-    no-clobber) expected='File exists' ;;
+    no-clobber) expected='output already exists' ;;
   esac
   grep -Fq "$expected" "$workdir/$hostile.err" || {
     echo "hostile control had unexpected attribution: $hostile" >&2

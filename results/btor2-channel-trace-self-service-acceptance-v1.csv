@@ -1,0 +1,7 @@
+schema_version,case,expected_exit,actual_exit,artifact_present,artifact_sha256,status
+1,capability-discovery,0,0,false,none,accepted
+1,full-cohort-certification,0,0,true,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,accepted
+1,independent-verification,0,0,true,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,accepted
+1,existing-output-refusal,2,2,true,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,accepted
+1,query-drift-refusal,2,2,true,9ca8d6bdb0ee10877a29711fbb518810b28908b64b831283db5e2db3688ecf4a,accepted
+1,resource-refusal,3,3,false,none,accepted

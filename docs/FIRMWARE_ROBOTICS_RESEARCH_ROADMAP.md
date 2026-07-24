@@ -289,6 +289,13 @@ boundary is realistic trace properties and an equivalent-scope maintained-tool
 comparison, followed by portability, compatibility, and independent-review
 gates.
 
+The next cycle is predeclared in
+[`BTOR2_CHANNEL_TRACE_MONITOR_EXPERIMENT_V1.md`](BTOR2_CHANNEL_TRACE_MONITOR_EXPERIMENT_V1.md).
+It replaces neither the existing channel-property API nor its artifact. It
+tests a separate bounded masked-trace language with exact representative reuse,
+target witness replay, maintained-tool agreement, and both-answer authentic
+product evidence.
+
 The [bounded prior-art audit v1](PRIOR_ART_AUDIT_V1.md) materially narrows item
 9. Compositional certification from BDD engines, arbitrary witness-circuit
 composition, and shared multi-property checking already exist in the closest

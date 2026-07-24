@@ -2,6 +2,15 @@
   <img src="assets/brand/logo-horizontal.svg" width="680" alt="Guarded Continuation Checker, powered by CQ-SAT">
 </p>
 
+<p align="center">
+  <a href="https://github.com/kabudu/guarded-continuation-checker/actions/workflows/ci.yml?query=branch%3Amaster"><img src="https://img.shields.io/github/actions/workflow/status/kabudu/guarded-continuation-checker/ci.yml?branch=master&amp;label=CI&amp;style=flat-square" alt="CI workflow status"></a>
+  <a href="https://crates.io/crates/guarded-continuation-checker"><img src="https://img.shields.io/crates/v/guarded-continuation-checker?style=flat-square" alt="Latest crates.io version"></a>
+  <a href="https://docs.rs/guarded-continuation-checker"><img src="https://img.shields.io/docsrs/guarded-continuation-checker?label=docs.rs&amp;style=flat-square" alt="docs.rs documentation"></a>
+  <a href="https://github.com/kabudu/guarded-continuation-checker/blob/master/Cargo.toml"><img src="https://img.shields.io/badge/rust-1.97%2B-CE412B?style=flat-square&amp;logo=rust" alt="Rust 1.97 or newer"></a>
+  <a href="https://github.com/kabudu/guarded-continuation-checker/blob/master/LICENSE"><img src="https://img.shields.io/github/license/kabudu/guarded-continuation-checker?style=flat-square" alt="Apache-2.0 licence"></a>
+  <a href="https://www.guardedcontinuation.org"><img src="https://img.shields.io/badge/website-guardedcontinuation.org-0A9A92?style=flat-square" alt="Guarded Continuation Checker website"></a>
+</p>
+
 # Guarded Continuation Checker
 
 **Guarded Continuation Checker, powered by CQ-SAT**, is an evaluation-ready,
@@ -30,6 +39,24 @@ The project does not currently claim production readiness or scholarly novelty.
 Those higher bars are tracked explicitly in the
 [production-readiness](docs/PRODUCTION_READINESS_GAP.md) and
 [novelty](docs/NOVELTY_GAP.md) gap registers.
+
+## Platform architecture
+
+Guarded Continuation Checker authenticates a bounded model and reviewed
+obligation, governs the complete workload before solving, and selects CQ-SAT
+only when a static structural gate admits it. Supported cases outside that
+regime remain on an exact portfolio backend. Both routes publish canonical
+evidence for a separate checker; resource refusal publishes no logical answer.
+
+<p align="center">
+  <a href="docs/ARCHITECTURE.md">
+    <img src="assets/brand/platform-architecture.svg" width="1200" alt="Guarded Continuation Checker architecture: firmware, RTL and transition models enter an authenticated bounded model; governed static routing selects CQ-SAT exact composition or exact portfolio fallback; canonical evidence is independently checked before returning bounded SAFE, replayable UNSAFE, or REFUSED with no answer.">
+  </a>
+</p>
+
+The [architecture boundary and trust model](docs/ARCHITECTURE.md) explain what
+each stage proves, what remains outside the claim, and why `REFUSED` is distinct
+from both `SAFE` and `UNSAFE`.
 
 The first release line now has a frozen
 [production support profile](docs/PRODUCTION_SUPPORT_PROFILE_V1.md): firmware
@@ -423,6 +450,52 @@ reduction. A timing-free
 now authenticates and plans every representative model and exact backend before
 any property solver starts. Its inclusive caller ceiling refuses the complete
 batch one work unit below the retained plan without emitting partial evidence.
+
+The newer [channel trace-monitor experiment](docs/BTOR2_CHANNEL_TRACE_MONITOR_EXPERIMENT_V1.md)
+extends that authenticated boundary from one-frame high and low probes to
+masked Boolean histories up to eight frames. Its 84-query OpenTitan cohort
+covers transitions, one-cycle pulses and gaps, and a three-frame pattern with a
+don't-care position. Representative proof reuse preserves 42 six-channel
+queries with 21 exact members. Every answer and earliest bad frame agrees with
+separate direct checking and with a pinned Yosys plus Z3
+[maintained baseline](results/opentitan-pwm-trace-maintained-v1.md).
+
+That baseline exposed and closed an important correctness gap: an arbitrary
+horizon-wide SAT witness is not necessarily the earliest counterexample. GCC
+now couples each first-frame witness with a checked UNSAT certificate for the
+preceding horizon. The stronger evidence grows the retained artifacts to 2.14
+through 4.90 MB, so this is a correctness and workflow result with a negative
+proof-size result. The bounded file integration and atomic partial-write failure
+gate now pass locally. Hosted run
+[29956992935](https://github.com/kabudu/guarded-continuation-checker/actions/runs/29956992935)
+reproduces the trace identity on Ubuntu, macOS, and Windows, and retains three
+Linux production and verification resource trials. Tagged compatibility
+history and independent operator acceptance remain open. It is not yet part of
+the production support profile.
+
+The trace candidate now has a bounded self-service file interface:
+
+```console
+cargo build --release --locked
+target/release/guarded-continuation-checker \
+  certify-btor2-channel-traces \
+  corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2 \
+  corpus/rtl/opentitan-pwm-channel-family/trace-queries-v1.txt \
+  corpus/rtl/opentitan-pwm-channel-family/trace-policy-v1.txt \
+  /new/result.channel-traces
+```
+
+A retained
+[six-case simulated acceptance run](results/btor2-channel-trace-self-service-acceptance-v1.md)
+repeats capability discovery, the complete 42-query workflow, independent
+verification, collision preservation, query-drift rejection, and typed resource
+refusal from clean input copies without per-formula calibration. It is not
+partner evidence.
+
+Use `verify-btor2-channel-traces` with the same four paths to verify the saved
+artifact. Use `btor2-channel-trace-cli-version` for machine-readable limits and
+semantics. Output publication is create-new and no-clobber; existing files and
+symlinks are never replaced.
 Projected work is a deterministic admission token, not a runtime or memory
 estimate. A strict
 [self-service file CLI](docs/BTOR2_CHANNEL_PROPERTY_CLI_V1.md) now accepts a

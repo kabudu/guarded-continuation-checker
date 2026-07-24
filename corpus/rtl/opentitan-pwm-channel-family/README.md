@@ -44,3 +44,9 @@ scripts/build-opentitan-pwm-symbolic-class-family-v1.sh \
 
 The retained models are property-free source boundaries for extraction
 experiments. They are not proof artifacts or product-support evidence.
+
+`trace-queries-v1.txt` and `trace-policy-v1.txt` are the complete six-channel
+self-service input pair for the bounded channel trace-monitor experiment. The
+query rows use decimal `ID,CHANNEL,LENGTH,MASK,VALUE,HORIZON` fields and are
+strictly ordered by identifier. They cover the 42 retained six-channel rows;
+the policy admits exactly 42 logical queries and 21 proof members.

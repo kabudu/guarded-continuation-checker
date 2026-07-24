@@ -64,11 +64,12 @@ website repository once its deployment lifecycle diverges. Automate link,
 accessibility, spelling, and build checks. Pin release links to GitHub and show
 the exact version wherever behaviour or schema is described.
 
-After the first production release passes every applicable gate, reuse the
-repository's canonical, accessible SVG architecture diagram on the website.
-Embed the same optimised asset in the project README so the platform boundary,
-CQ-SAT engine, verification path, proof artifacts, and integration paths cannot
-drift between the two surfaces.
+Reuse the repository's canonical, accessible SVG architecture diagram on the
+website and in the project README. The diagram may describe the
+evaluation-ready architecture before production qualification only when its
+bounded claim and refusal outcome remain visible. Reuse the exact asset so the
+platform boundary, CQ-SAT engine, exact fallback, verification path, proof
+artifacts and integration paths cannot drift between the two surfaces.
 
 The first public version is ready only when:
 
