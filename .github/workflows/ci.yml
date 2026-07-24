@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
   workflow_dispatch:
 
@@ -32,6 +35,12 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             echo "full=true" >> "$GITHUB_OUTPUT"
             echo "Manual dispatch requests the complete matrix."
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            echo "full=false" >> "$GITHUB_OUTPUT"
+            echo "Protected master changes were validated before merge."
             exit 0
           fi
 
