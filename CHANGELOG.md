@@ -19,8 +19,14 @@
   artifacts and typed resource refusal. The fixed self-service artifact is 912
   bytes. Add a separately constructed pinned Yosys plus Z3 oracle that agrees
   on all twelve file-workflow answers and earliest bad frames. Cross-platform
-  identity, compatibility history, whole-process resources and independent
-  operator acceptance remain open.
+  identity, compatibility history and independent operator acceptance remain
+  open. Add five whole-process macOS arm64 trials: certification takes 0.05 to
+  0.06 seconds at 4.24 to 4.42 MB peak RSS, while fresh verification takes 0.04
+  seconds at 4.21 to 4.28 MB peak RSS. Every process retains the same 912-byte
+  artifact. Retain five hosted Linux x86-64 trials: certification takes 0.10 to
+  0.25 seconds at 6.34 to 6.64 MB peak RSS, while fresh verification takes 0.08
+  seconds at 6.32 to 6.52 MB peak RSS. All three hosted portability platforms
+  reproduce the canonical artifact identity.
 
 - Add the canonical accessible platform architecture SVG and embed it in the
   project README. The diagram separates authenticated inputs, GCC governance,

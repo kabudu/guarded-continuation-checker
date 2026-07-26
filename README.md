@@ -487,7 +487,9 @@ round-trip, exhaustive truncation and mutation rejection, source and query
 drift rejection, and atomic no-clobber publication. Mixed-class baselines,
 pinned Yosys plus Z3 independently agrees on all twelve file-workflow answers
 and earliest bad frames. Product-scale mixed fallback, cross-platform identity
-and independent acceptance remain open. Congruence and symmetry reasoning are
+and independent acceptance remain open. Five macOS arm64 whole-process trials
+retain the same 912-byte artifact, with certification at 0.05 to 0.06 seconds
+and fresh verification at 0.04 seconds. Congruence and symmetry reasoning are
 established prior art, so this is not a novelty claim.
 
 Run the fixed cross-channel workflow with:
