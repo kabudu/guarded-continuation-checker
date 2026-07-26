@@ -11,8 +11,14 @@
   constants, replays UNSAFE target pairs, and retains exact fallback elsewhere.
   The fixed six-channel probe answers 24 queries with eight one-byte members
   after the naive horizon-2 exact routes hit their governed proof and node-step
-  limits. Canonical wire format, maintained comparison and self-service
-  integration remain open.
+  limits. Add a canonical, checksummed, source-bound pair artifact with static
+  byte and evidence limits, exact round-trip identity, exhaustive truncation
+  and single-byte mutation rejection, and byte-level verification. Add a
+  versioned pair-query manifest, stable capability discovery, bounded
+  create/verify commands, atomic no-clobber publication, deterministic
+  artifacts and typed resource refusal. The fixed self-service artifact is 912
+  bytes. Maintained comparison, cross-platform identity, compatibility history
+  and independent operator acceptance remain open.
 
 - Add the canonical accessible platform architecture SVG and embed it in the
   project README. The diagram separates authenticated inputs, GCC governance,

@@ -481,10 +481,31 @@ six-channel OpenTitan cohort, an independently checked structural class turns
 24 logical pair queries into eight one-byte constant-relation members and
 replays every UNSAFE target pair. The naive exact horizon-2 routes hit their
 governed proof or node-step limits, so this closes a narrow capability rather
-than establishing a solver-performance comparison. Canonical wire evidence,
-mixed-class baselines, maintained-tool agreement and self-service integration
+than establishing a solver-performance comparison. The first 912-byte
+canonical pair artifact and bounded file interface now pass deterministic
+round-trip, exhaustive truncation and mutation rejection, source and query
+drift rejection, and atomic no-clobber publication. Mixed-class baselines,
+maintained-tool agreement, cross-platform identity and independent acceptance
 remain open. Congruence and symmetry reasoning are established prior art, so
 this is not a novelty claim.
+
+Run the fixed cross-channel workflow with:
+
+```console
+target/release/guarded-continuation-checker \
+  certify-btor2-channel-pair-traces \
+  corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2 \
+  corpus/rtl/opentitan-pwm-channel-family/pair-trace-queries-v1.txt \
+  corpus/rtl/opentitan-pwm-channel-family/trace-policy-v1.txt \
+  /new/result.channel-pair-traces
+```
+
+Use `verify-btor2-channel-pair-traces` with the same paths to independently
+decode and replay the saved artifact. Use
+`btor2-channel-pair-trace-cli-version` for the complete machine-readable
+contract. The retained
+[simulated self-service acceptance](results/btor2-channel-pair-trace-self-service-acceptance-v1.md)
+is local evidence, not partner validation.
 
 The trace candidate now has a bounded self-service file interface:
 

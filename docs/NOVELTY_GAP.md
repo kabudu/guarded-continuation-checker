@@ -139,6 +139,11 @@ techniques. The result does not alter the novelty gates. A distinct claim would
 require mixed-class obligations that reuse more than structural identity and a
 direct closest-system comparison.
 
+The pair artifact codec, bounded decoder, checksum, canonical manifest,
+create-new publication and stable command schema are conventional
+productisation controls. They close a self-service evidence gap without adding
+algorithmic novelty evidence.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

@@ -1,8 +1,9 @@
 # BTOR2 cross-channel trace composition experiment v1
 
-Status: first source-bound structural-constant mechanism passes. Canonical wire
-format, maintained temporal comparison, mixed exact fallback, file integration,
-whole-process resources and portability remain open.
+Status: source-bound structural-constant mechanism and bounded self-service wire
+workflow pass locally. Maintained temporal comparison, mixed exact fallback at
+product scale, whole-process resources, portability, compatibility history and
+independent acceptance remain open.
 
 ## Product question
 
@@ -62,10 +63,11 @@ The first implementation slice must:
 5. retain negative results if proof reuse does not reduce complete evidence or
    checking work.
 
-The complete product cycle additionally requires a canonical pair-query
-artifact, static aggregate preflight, exact fallback, target witness replay,
-hostile codec tests, maintained Yosys plus Z3 comparison, whole-process
-resources, cross-platform identity, and self-service file integration.
+The complete product cycle additionally requires maintained Yosys plus Z3
+comparison, whole-process resources, cross-platform identity, tagged
+compatibility and independent acceptance. Canonical pair-query evidence, static
+aggregate preflight, exact fallback, target witness replay, hostile codec tests
+and self-service file integration now pass locally.
 
 ## First retained result
 
@@ -91,6 +93,27 @@ against a successful baseline. The
 [complete retained rows](../results/opentitan-pwm-channel-pair-trace-probe-v1.md)
 also record the separate two-channel complement control and the remaining
 comparison gaps.
+
+## Self-service artifact result
+
+The fixed 12-query file cohort produces a 912-byte `GCCPTR01` version-1
+artifact with SHA-256
+`aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51`.
+It contains four one-byte structural members for twelve logical queries and
+reuses eight target queries. Certification and independent verification agree
+on every answer and earliest bad frame.
+
+The decoder enforces caller-supplied query, member, evidence and total-byte
+limits before allocation. It rejects every truncation, every single-byte
+mutation, trailing data, noncanonical ordering, source drift, query drift,
+invalid endpoints and unknown enum tags. Publication is atomic, create-new and
+no-clobber.
+
+The retained query manifest is
+`corpus/rtl/opentitan-pwm-channel-family/pair-trace-queries-v1.txt`. The
+commands are `certify-btor2-channel-pair-traces`,
+`verify-btor2-channel-pair-traces` and
+`btor2-channel-pair-trace-cli-version`.
 
 ## Claim boundary
 

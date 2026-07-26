@@ -32,6 +32,7 @@ pub const BTOR2_CHANNEL_TRACE_PROOF_VERSION: u32 = 1;
 pub const BTOR2_CHANNEL_PAIR_TRACE_PROOF_VERSION: u32 = 1;
 const CHANNEL_PROPERTY_MAGIC: &[u8; 8] = b"GCCBCP01";
 const CHANNEL_TRACE_MAGIC: &[u8; 8] = b"GCCTRC01";
+const CHANNEL_PAIR_TRACE_MAGIC: &[u8; 8] = b"GCCPTR01";
 const TRACE_BITBLAST_MAGIC: &[u8; 8] = b"GCCTBE01";
 const TRACE_BITBLAST_EVIDENCE_VERSION: u32 = 1;
 const TRACE_BITBLAST_EVIDENCE_OVERHEAD: usize = 8 + 4 + 4 + 4 + 32;
@@ -3629,6 +3630,446 @@ pub fn verify_btor2_channel_trace_proof_bytes(
 ) -> Result<Btor2ChannelTraceProofSummary, Btor2RegionError> {
     let artifact = decode_btor2_channel_trace_proof_artifact(bytes, proof_policy)?;
     verify_btor2_channel_trace_proof(
+        model_bytes,
+        expected_queries,
+        &artifact,
+        region_policy,
+        proof_policy,
+    )
+}
+
+fn validate_pair_trace_member_evidence(
+    member: &Btor2ChannelPairTraceProofMember,
+) -> Result<(), Btor2RegionError> {
+    if member.evidence.is_empty() {
+        return Err(reject("BTOR2 channel-pair trace proof evidence is empty"));
+    }
+    match member.solver {
+        Btor2ChannelPairTraceSolver::StructuralConstant => {
+            if member.evidence.len() != 1 || member.evidence[0] > 1 {
+                return Err(reject(
+                    "BTOR2 channel-pair structural evidence is noncanonical",
+                ));
+            }
+        }
+        Btor2ChannelPairTraceSolver::ExplicitState => {
+            if member.evidence.len() > btor2_search::MAX_SEARCH_CERTIFICATE_BYTES {
+                return Err(reject(
+                    "BTOR2 channel-pair explicit evidence exceeds policy",
+                ));
+            }
+            let certificate = btor2_search::decode(&member.evidence).map_err(|error| {
+                reject(format!(
+                    "BTOR2 channel-pair explicit evidence decode failed: {error}"
+                ))
+            })?;
+            if btor2_search::encode(&certificate)
+                .map_err(|error| {
+                    reject(format!(
+                        "BTOR2 channel-pair explicit evidence encode failed: {error}"
+                    ))
+                })?
+                .as_bytes()
+                != member.evidence
+            {
+                return Err(reject(
+                    "BTOR2 channel-pair explicit evidence is not canonical",
+                ));
+            }
+        }
+        Btor2ChannelPairTraceSolver::BitblastCnf => {
+            if member.evidence.len() > MAX_TRACE_BITBLAST_EVIDENCE_BYTES {
+                return Err(reject(
+                    "BTOR2 channel-pair bitblast evidence exceeds policy",
+                ));
+            }
+            decode_trace_bitblast_evidence(&member.evidence)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_pair_trace_artifact_shape(
+    artifact: &Btor2ChannelPairTraceProofArtifact,
+    policy: Btor2ChannelTraceProofPolicy,
+) -> Result<(), Btor2RegionError> {
+    if artifact.version != BTOR2_CHANNEL_PAIR_TRACE_PROOF_VERSION
+        || artifact.structural_admission.is_empty()
+        || artifact.structural_admission.len() > MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES
+        || artifact.queries.is_empty()
+        || artifact.queries.len() > policy.max_queries
+        || artifact.members.is_empty()
+        || artifact.members.len() > policy.max_members
+    {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof artifact is outside policy",
+        ));
+    }
+    let structural = decode_btor2_region_equivalence_artifact(&artifact.structural_admission)?;
+    if artifact.model_sha256 != structural.model_sha256 {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof structural binding mismatch",
+        ));
+    }
+    validate_pair_trace_queries(
+        &artifact.queries,
+        structural.expected_channels,
+        policy.max_queries,
+    )?;
+    let lookup = class_lookup(&structural.summary.classes)?;
+    let groups = expected_pair_trace_member_keys(&artifact.queries, &lookup);
+    if artifact.members.len() != groups.len() {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof member count is noncanonical",
+        ));
+    }
+    let mut evidence_bytes = 0usize;
+    for (member, key) in artifact.members.iter().zip(groups.keys()) {
+        let (left, right) = pair_trace_representatives(&structural.summary.classes, *key)?;
+        let backend = pair_trace_backend(&structural.summary.classes, *key);
+        if member.left_class_index != key.left_class_index
+            || member.right_class_index != key.right_class_index
+            || member.representative_left_channel != left
+            || member.representative_right_channel != right
+            || member.relation != key.relation
+            || member.pattern != key.pattern
+            || member.horizon != key.horizon
+            || member.backend != backend
+        {
+            return Err(reject(
+                "BTOR2 channel-pair trace proof member ordering is noncanonical",
+            ));
+        }
+        validate_pair_trace_member_evidence(member)?;
+        evidence_bytes = evidence_bytes
+            .checked_add(member.evidence.len())
+            .filter(|value| *value <= policy.max_evidence_bytes)
+            .ok_or_else(|| reject("BTOR2 channel-pair trace proof evidence exceeds policy"))?;
+    }
+    Ok(())
+}
+
+pub fn encode_btor2_channel_pair_trace_proof_artifact(
+    artifact: &Btor2ChannelPairTraceProofArtifact,
+    policy: Btor2ChannelTraceProofPolicy,
+) -> Result<Vec<u8>, Btor2RegionError> {
+    validate_pair_trace_artifact_shape(artifact, policy)?;
+    let evidence_bytes = artifact.members.iter().try_fold(0usize, |total, member| {
+        total.checked_add(member.evidence.len())
+    });
+    let encoded_bytes = (8usize + 4 + 32 + 4 + 4 + 4 + 32)
+        .checked_add(artifact.structural_admission.len())
+        .and_then(|total| {
+            artifact
+                .queries
+                .len()
+                .checked_mul(4 + 4 + 4 + 1 + 1 + 1 + 1 + 4)
+                .and_then(|query_bytes| total.checked_add(query_bytes))
+        })
+        .and_then(|total| {
+            artifact
+                .members
+                .len()
+                .checked_mul(4 + 4 + 4 + 4 + 1 + 1 + 1 + 1 + 4 + 1 + 1 + 4)
+                .and_then(|member_bytes| total.checked_add(member_bytes))
+        })
+        .and_then(|total| evidence_bytes.and_then(|value| total.checked_add(value)))
+        .filter(|total| *total <= policy.max_artifact_bytes)
+        .ok_or_else(|| reject("BTOR2 channel-pair trace proof artifact exceeds byte policy"))?;
+    let mut bytes = Vec::with_capacity(encoded_bytes);
+    bytes.extend_from_slice(CHANNEL_PAIR_TRACE_MAGIC);
+    bytes.extend_from_slice(&artifact.version.to_le_bytes());
+    bytes.extend_from_slice(&artifact.model_sha256);
+    push_u32(
+        &mut bytes,
+        artifact.structural_admission.len(),
+        "pair trace structural admission length",
+    )?;
+    bytes.extend_from_slice(&artifact.structural_admission);
+    push_u32(&mut bytes, artifact.queries.len(), "pair trace query count")?;
+    for query in &artifact.queries {
+        bytes.extend_from_slice(&query.query_id.to_le_bytes());
+        push_u32(
+            &mut bytes,
+            query.left_channel_index,
+            "pair trace left channel",
+        )?;
+        push_u32(
+            &mut bytes,
+            query.right_channel_index,
+            "pair trace right channel",
+        )?;
+        bytes.push(match query.relation {
+            Btor2ChannelPairRelation::Equal => 0,
+            Btor2ChannelPairRelation::Different => 1,
+        });
+        bytes.push(query.pattern.length);
+        bytes.push(query.pattern.mask);
+        bytes.push(query.pattern.value);
+        bytes.extend_from_slice(&query.horizon.to_le_bytes());
+    }
+    push_u32(
+        &mut bytes,
+        artifact.members.len(),
+        "pair trace member count",
+    )?;
+    for member in &artifact.members {
+        push_u32(&mut bytes, member.left_class_index, "pair trace left class")?;
+        push_u32(
+            &mut bytes,
+            member.right_class_index,
+            "pair trace right class",
+        )?;
+        push_u32(
+            &mut bytes,
+            member.representative_left_channel,
+            "pair trace representative left channel",
+        )?;
+        push_u32(
+            &mut bytes,
+            member.representative_right_channel,
+            "pair trace representative right channel",
+        )?;
+        bytes.push(match member.relation {
+            Btor2ChannelPairRelation::Equal => 0,
+            Btor2ChannelPairRelation::Different => 1,
+        });
+        bytes.push(member.pattern.length);
+        bytes.push(member.pattern.mask);
+        bytes.push(member.pattern.value);
+        bytes.extend_from_slice(&member.horizon.to_le_bytes());
+        bytes.push(match member.backend {
+            Btor2ChannelTraceBackend::RepresentativeClass => 0,
+            Btor2ChannelTraceBackend::DirectExact => 1,
+        });
+        bytes.push(match member.solver {
+            Btor2ChannelPairTraceSolver::StructuralConstant => 0,
+            Btor2ChannelPairTraceSolver::ExplicitState => 1,
+            Btor2ChannelPairTraceSolver::BitblastCnf => 2,
+        });
+        push_u32(
+            &mut bytes,
+            member.evidence.len(),
+            "pair trace evidence length",
+        )?;
+        bytes.extend_from_slice(&member.evidence);
+    }
+    let checksum: [u8; 32] = Sha256::digest(&bytes).into();
+    bytes.extend_from_slice(&checksum);
+    if bytes.len() != encoded_bytes {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof artifact length calculation mismatch",
+        ));
+    }
+    Ok(bytes)
+}
+
+pub fn decode_btor2_channel_pair_trace_proof_artifact(
+    bytes: &[u8],
+    policy: Btor2ChannelTraceProofPolicy,
+) -> Result<Btor2ChannelPairTraceProofArtifact, Btor2RegionError> {
+    const MINIMUM_BYTES: usize = 8 + 4 + 32 + 4 + 4 + 4 + 32;
+    if bytes.len() < MINIMUM_BYTES || bytes.len() > policy.max_artifact_bytes {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof artifact size is outside policy",
+        ));
+    }
+    let payload_end = bytes.len() - 32;
+    let checksum: [u8; 32] = bytes[payload_end..].try_into().expect("fixed checksum");
+    if <[u8; 32]>::from(Sha256::digest(&bytes[..payload_end])) != checksum {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof artifact checksum mismatch",
+        ));
+    }
+    let mut cursor = TraceArtifactCursor {
+        bytes: &bytes[..payload_end],
+        offset: 0,
+    };
+    if cursor.take(8)? != CHANNEL_PAIR_TRACE_MAGIC {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof artifact magic mismatch",
+        ));
+    }
+    let version = cursor.u32()?;
+    if version != BTOR2_CHANNEL_PAIR_TRACE_PROOF_VERSION {
+        return Err(reject(
+            "unsupported BTOR2 channel-pair trace proof artifact version",
+        ));
+    }
+    let model_sha256 = cursor.take(32)?.try_into().expect("fixed digest");
+    let structural_len = cursor.count(
+        MAX_REGION_EQUIVALENCE_ARTIFACT_BYTES,
+        "pair trace structural admission length",
+    )?;
+    let structural_slice = cursor.take(structural_len)?;
+    let structural = decode_btor2_region_equivalence_artifact(structural_slice)?;
+    if model_sha256 != structural.model_sha256 {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof structural binding mismatch",
+        ));
+    }
+    let structural_admission = structural_slice.to_vec();
+    let query_count = cursor.count(policy.max_queries, "pair trace query count")?;
+    let mut queries = Vec::with_capacity(query_count);
+    for _ in 0..query_count {
+        let query_id = cursor.u32()?;
+        let left_channel_index = usize::try_from(cursor.u32()?)
+            .map_err(|_| reject("pair trace left channel exceeds platform range"))?;
+        let right_channel_index = usize::try_from(cursor.u32()?)
+            .map_err(|_| reject("pair trace right channel exceeds platform range"))?;
+        let relation = match cursor.u8()? {
+            0 => Btor2ChannelPairRelation::Equal,
+            1 => Btor2ChannelPairRelation::Different,
+            _ => return Err(reject("unknown BTOR2 channel-pair trace relation")),
+        };
+        let pattern = Btor2ChannelTracePattern::new(cursor.u8()?, cursor.u8()?, cursor.u8()?)?;
+        let horizon = cursor.u32()?;
+        queries.push(Btor2ChannelPairTraceQuery {
+            query_id,
+            left_channel_index,
+            right_channel_index,
+            relation,
+            pattern,
+            horizon,
+        });
+    }
+    validate_pair_trace_queries(&queries, structural.expected_channels, policy.max_queries)?;
+    let lookup = class_lookup(&structural.summary.classes)?;
+    let groups = expected_pair_trace_member_keys(&queries, &lookup);
+    let expected_keys = groups.keys().copied().collect::<Vec<_>>();
+    let member_count = cursor.count(policy.max_members, "pair trace member count")?;
+    if member_count != expected_keys.len() {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof member count is noncanonical",
+        ));
+    }
+    let mut members = Vec::with_capacity(member_count);
+    let mut evidence_bytes = 0usize;
+    for expected_key in expected_keys {
+        let left_class_index = usize::try_from(cursor.u32()?)
+            .map_err(|_| reject("pair trace left class exceeds platform range"))?;
+        let right_class_index = usize::try_from(cursor.u32()?)
+            .map_err(|_| reject("pair trace right class exceeds platform range"))?;
+        let representative_left_channel = usize::try_from(cursor.u32()?)
+            .map_err(|_| reject("pair trace representative left channel exceeds range"))?;
+        let representative_right_channel = usize::try_from(cursor.u32()?)
+            .map_err(|_| reject("pair trace representative right channel exceeds range"))?;
+        let relation = match cursor.u8()? {
+            0 => Btor2ChannelPairRelation::Equal,
+            1 => Btor2ChannelPairRelation::Different,
+            _ => return Err(reject("unknown BTOR2 channel-pair trace relation")),
+        };
+        let pattern = Btor2ChannelTracePattern::new(cursor.u8()?, cursor.u8()?, cursor.u8()?)?;
+        let horizon = cursor.u32()?;
+        let backend = match cursor.u8()? {
+            0 => Btor2ChannelTraceBackend::RepresentativeClass,
+            1 => Btor2ChannelTraceBackend::DirectExact,
+            _ => return Err(reject("unknown BTOR2 channel-pair trace backend")),
+        };
+        let solver = match cursor.u8()? {
+            0 => Btor2ChannelPairTraceSolver::StructuralConstant,
+            1 => Btor2ChannelPairTraceSolver::ExplicitState,
+            2 => Btor2ChannelPairTraceSolver::BitblastCnf,
+            _ => return Err(reject("unknown BTOR2 channel-pair trace solver")),
+        };
+        let (expected_left, expected_right) =
+            pair_trace_representatives(&structural.summary.classes, expected_key)?;
+        let expected_backend = pair_trace_backend(&structural.summary.classes, expected_key);
+        if left_class_index != expected_key.left_class_index
+            || right_class_index != expected_key.right_class_index
+            || representative_left_channel != expected_left
+            || representative_right_channel != expected_right
+            || relation != expected_key.relation
+            || pattern != expected_key.pattern
+            || horizon != expected_key.horizon
+            || backend != expected_backend
+        {
+            return Err(reject(
+                "BTOR2 channel-pair trace proof member ordering is noncanonical",
+            ));
+        }
+        let maximum_evidence = match solver {
+            Btor2ChannelPairTraceSolver::StructuralConstant => 1,
+            Btor2ChannelPairTraceSolver::ExplicitState => {
+                btor2_search::MAX_SEARCH_CERTIFICATE_BYTES
+            }
+            Btor2ChannelPairTraceSolver::BitblastCnf => MAX_TRACE_BITBLAST_EVIDENCE_BYTES,
+        };
+        let evidence_len = cursor.count(maximum_evidence, "pair trace evidence length")?;
+        evidence_bytes = evidence_bytes
+            .checked_add(evidence_len)
+            .filter(|value| *value <= policy.max_evidence_bytes)
+            .ok_or_else(|| reject("BTOR2 channel-pair trace proof evidence exceeds policy"))?;
+        let member = Btor2ChannelPairTraceProofMember {
+            left_class_index,
+            right_class_index,
+            representative_left_channel,
+            representative_right_channel,
+            relation,
+            pattern,
+            horizon,
+            backend,
+            solver,
+            evidence: cursor.take(evidence_len)?.to_vec(),
+        };
+        validate_pair_trace_member_evidence(&member)?;
+        members.push(member);
+    }
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject(
+            "trailing BTOR2 channel-pair trace proof artifact bytes",
+        ));
+    }
+    let artifact = Btor2ChannelPairTraceProofArtifact {
+        version,
+        model_sha256,
+        structural_admission,
+        queries,
+        members,
+    };
+    if encode_btor2_channel_pair_trace_proof_artifact(&artifact, policy)? != bytes {
+        return Err(reject(
+            "BTOR2 channel-pair trace proof artifact is not canonical",
+        ));
+    }
+    Ok(artifact)
+}
+
+pub fn produce_btor2_channel_pair_trace_proof_bytes(
+    model_bytes: &[u8],
+    structural_admission: &[u8],
+    queries: &[Btor2ChannelPairTraceQuery],
+    region_policy: Btor2RegionPolicy,
+    production_policy: Btor2ChannelTraceProductionPolicy,
+) -> Result<(Btor2ChannelPairTraceProductionPlan, Vec<u8>), Btor2RegionError> {
+    let plan = preflight_btor2_channel_pair_trace_proof(
+        model_bytes,
+        structural_admission,
+        queries,
+        region_policy,
+        production_policy,
+    )?;
+    let artifact = produce_btor2_channel_pair_trace_proof(
+        model_bytes,
+        structural_admission,
+        queries,
+        region_policy,
+        production_policy,
+    )?;
+    let bytes =
+        encode_btor2_channel_pair_trace_proof_artifact(&artifact, production_policy.artifact)?;
+    Ok((plan, bytes))
+}
+
+pub fn verify_btor2_channel_pair_trace_proof_bytes(
+    model_bytes: &[u8],
+    expected_queries: &[Btor2ChannelPairTraceQuery],
+    bytes: &[u8],
+    region_policy: Btor2RegionPolicy,
+    proof_policy: Btor2ChannelTraceProofPolicy,
+) -> Result<Btor2ChannelPairTraceProofSummary, Btor2RegionError> {
+    let artifact = decode_btor2_channel_pair_trace_proof_artifact(bytes, proof_policy)?;
+    verify_btor2_channel_pair_trace_proof(
         model_bytes,
         expected_queries,
         &artifact,
