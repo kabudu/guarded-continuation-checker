@@ -129,6 +129,16 @@ publication, stable process output, and typed resource refusal are conventional
 self-service integration controls. They strengthen reproducibility and product
 fitness but add no algorithmic novelty evidence.
 
+The first cross-channel trace-composition probe derives a constant equality or
+difference observation when both endpoints belong to one independently checked
+structural class. Eight one-byte relation members answer 24 fixed OpenTitan
+queries after the naive governed SAT and explicit-state routes refuse the
+horizon-2 cohort. This is useful proof composition, but congruence,
+self-composition, symmetry classes and constant propagation are established
+techniques. The result does not alter the novelty gates. A distinct claim would
+require mixed-class obligations that reuse more than structural identity and a
+direct closest-system comparison.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

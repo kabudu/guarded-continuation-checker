@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Predeclare the cross-channel temporal-composition experiment and add its first
+  canonical model-building primitive. Two distinct authenticated channel
+  observations can be compared for exact equality or difference, then consumed
+  by the existing prefix-valid masked trace monitor without changing retained
+  single-channel semantics. Add an in-memory pair proof portfolio that groups
+  only ordered verified pair classes, independently rederives structural
+  constants, replays UNSAFE target pairs, and retains exact fallback elsewhere.
+  The fixed six-channel probe answers 24 queries with eight one-byte members
+  after the naive horizon-2 exact routes hit their governed proof and node-step
+  limits. Canonical wire format, maintained comparison and self-service
+  integration remain open.
+
 - Add the canonical accessible platform architecture SVG and embed it in the
   project README. The diagram separates authenticated inputs, GCC governance,
   CQ-SAT specialisation, exact fallback, canonical evidence and independent

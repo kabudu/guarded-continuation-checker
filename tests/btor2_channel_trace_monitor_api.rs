@@ -6,12 +6,15 @@ use guarded_continuation_checker::btor2_region_equivalence::{
 };
 use guarded_continuation_checker::btor2_region_extract::Btor2RegionPolicy;
 use guarded_continuation_checker::btor2_region_property::{
-    Btor2ChannelProperty, Btor2ChannelTraceBackend, Btor2ChannelTracePattern,
-    Btor2ChannelTraceProductionPolicy, Btor2ChannelTraceProofPolicy, Btor2ChannelTraceQuery,
-    Btor2ChannelTraceSolver, MAX_CHANNEL_TRACE_PATTERN_LENGTH, build_btor2_channel_property_model,
-    build_btor2_channel_trace_model, decode_btor2_channel_trace_proof_artifact,
-    encode_btor2_channel_trace_proof_artifact, preflight_btor2_channel_trace_proof,
-    produce_btor2_channel_trace_proof, produce_btor2_channel_trace_proof_bytes,
+    Btor2ChannelPairRelation, Btor2ChannelPairTraceQuery, Btor2ChannelProperty,
+    Btor2ChannelTraceBackend, Btor2ChannelTracePattern, Btor2ChannelTraceProductionPolicy,
+    Btor2ChannelTraceProofPolicy, Btor2ChannelTraceQuery, Btor2ChannelTraceSolver,
+    MAX_CHANNEL_TRACE_PATTERN_LENGTH, build_btor2_channel_pair_trace_model,
+    build_btor2_channel_property_model, build_btor2_channel_trace_model,
+    decode_btor2_channel_trace_proof_artifact, encode_btor2_channel_trace_proof_artifact,
+    preflight_btor2_channel_pair_trace_proof, preflight_btor2_channel_trace_proof,
+    produce_btor2_channel_pair_trace_proof, produce_btor2_channel_trace_proof,
+    produce_btor2_channel_trace_proof_bytes, verify_btor2_channel_pair_trace_proof,
     verify_btor2_channel_trace_proof, verify_btor2_channel_trace_proof_bytes,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
@@ -20,6 +23,9 @@ use sha2::{Digest, Sha256};
 const MODEL: &[u8] =
     include_bytes!("../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-6.btor2");
 const ROOTS: &[u64] = &[9, 39];
+const PAIR_MODEL: &[u8] =
+    include_bytes!("../corpus/rtl/opentitan-pwm-channel-family/generated/symbolic-class-2.btor2");
+const PAIR_ROOTS: &[u64] = &[9, 20];
 
 fn trace_query(length: u8, mask: u8, value: u8, horizon: u32) -> Btor2ChannelTraceQuery {
     Btor2ChannelTraceQuery {
@@ -36,6 +42,21 @@ fn solve_trace(query: Btor2ChannelTraceQuery) -> btor2_search::SearchSummary {
             .unwrap();
     let certificate = btor2_search::produce(&model, bad, query.horizon).unwrap();
     btor2_search::verify(&model, &certificate).unwrap()
+}
+
+fn solve_pair_trace(
+    query: Btor2ChannelPairTraceQuery,
+) -> guarded_continuation_checker::btor2_bitblast::Btor2BitblastSummary {
+    let (model, bad) = build_btor2_channel_pair_trace_model(
+        PAIR_MODEL,
+        PAIR_ROOTS,
+        2,
+        query,
+        Btor2RegionPolicy::default(),
+    )
+    .unwrap();
+    let certificate = produce_btor2_bitblast_certificate(&model, bad, query.horizon).unwrap();
+    verify_btor2_bitblast_certificate(&model, &certificate).unwrap()
 }
 
 #[test]
@@ -75,6 +96,344 @@ fn length_one_trace_controls_match_existing_property_semantics() {
         assert_eq!(trace.result, property_summary.result);
         assert_eq!(trace.bad_frame, property_summary.bad_frame);
     }
+}
+
+#[test]
+fn channel_pair_trace_rejects_invalid_endpoints_before_solving() {
+    let query = Btor2ChannelPairTraceQuery {
+        query_id: 11,
+        left_channel_index: 2,
+        right_channel_index: 2,
+        relation: Btor2ChannelPairRelation::Different,
+        pattern: Btor2ChannelTracePattern::new(1, 1, 1).unwrap(),
+        horizon: 8,
+    };
+    assert!(
+        build_btor2_channel_pair_trace_model(MODEL, ROOTS, 6, query, Btor2RegionPolicy::default())
+            .is_err()
+    );
+
+    let out_of_range = Btor2ChannelPairTraceQuery {
+        right_channel_index: 6,
+        ..query
+    };
+    assert!(
+        build_btor2_channel_pair_trace_model(
+            MODEL,
+            ROOTS,
+            6,
+            out_of_range,
+            Btor2RegionPolicy::default()
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn channel_pair_equal_and_different_relations_are_exact_complements() {
+    let patterns = [
+        Btor2ChannelTracePattern::new(1, 1, 0).unwrap(),
+        Btor2ChannelTracePattern::new(1, 1, 1).unwrap(),
+        Btor2ChannelTracePattern::new(2, 0b11, 0b01).unwrap(),
+        Btor2ChannelTracePattern::new(3, 0b111, 0b010).unwrap(),
+    ];
+    for (left, right) in [(0, 1)] {
+        for pattern in patterns {
+            let complement_value = pattern.value() ^ pattern.mask();
+            let equal = solve_pair_trace(Btor2ChannelPairTraceQuery {
+                query_id: 21,
+                left_channel_index: left,
+                right_channel_index: right,
+                relation: Btor2ChannelPairRelation::Equal,
+                pattern,
+                horizon: 2,
+            });
+            let different = solve_pair_trace(Btor2ChannelPairTraceQuery {
+                query_id: 22,
+                left_channel_index: left,
+                right_channel_index: right,
+                relation: Btor2ChannelPairRelation::Different,
+                pattern: Btor2ChannelTracePattern::new(
+                    pattern.length(),
+                    pattern.mask(),
+                    complement_value,
+                )
+                .unwrap(),
+                horizon: 2,
+            });
+            assert_eq!(equal.result, different.result);
+            assert_eq!(equal.bad_frame, different.bad_frame);
+        }
+    }
+}
+
+#[test]
+fn channel_pair_proof_reuses_only_ordered_verified_pair_classes() {
+    let region_policy = Btor2RegionPolicy::default();
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(MODEL, ROOTS, 6, region_policy).unwrap(),
+    )
+    .unwrap();
+    let true_pattern = Btor2ChannelTracePattern::new(1, 1, 1).unwrap();
+    let queries = [
+        (0, 2, Btor2ChannelPairRelation::Equal),
+        (2, 4, Btor2ChannelPairRelation::Equal),
+        (4, 0, Btor2ChannelPairRelation::Equal),
+        (0, 2, Btor2ChannelPairRelation::Different),
+        (2, 4, Btor2ChannelPairRelation::Different),
+        (4, 0, Btor2ChannelPairRelation::Different),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(
+        |(query_id, (left_channel_index, right_channel_index, relation))| {
+            Btor2ChannelPairTraceQuery {
+                query_id: u32::try_from(query_id).unwrap(),
+                left_channel_index,
+                right_channel_index,
+                relation,
+                pattern: true_pattern,
+                horizon: 0,
+            }
+        },
+    )
+    .collect::<Vec<_>>();
+    let production_policy = Btor2ChannelTraceProductionPolicy::default();
+    let plan = preflight_btor2_channel_pair_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        production_policy,
+    )
+    .unwrap();
+    assert_eq!(plan.logical_queries, 6);
+    assert_eq!(plan.proof_members, 2);
+
+    let artifact = produce_btor2_channel_pair_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        production_policy,
+    )
+    .unwrap();
+    let summary = verify_btor2_channel_pair_trace_proof(
+        MODEL,
+        &queries,
+        &artifact,
+        region_policy,
+        Btor2ChannelTraceProofPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.metrics.logical_queries, 6);
+    assert_eq!(summary.metrics.proof_members, 2);
+    assert_eq!(summary.metrics.reused_logical_queries, 4);
+    assert_eq!(
+        summary
+            .results
+            .iter()
+            .filter(|result| result.result == SearchResult::Unsafe)
+            .count(),
+        3
+    );
+    assert_eq!(
+        summary
+            .results
+            .iter()
+            .filter(|result| result.result == SearchResult::Safe)
+            .count(),
+        3
+    );
+    assert!(
+        summary
+            .results
+            .iter()
+            .all(|result| result.backend == Btor2ChannelTraceBackend::RepresentativeClass)
+    );
+    for result in &summary.results {
+        let (direct_model, direct_bad) =
+            build_btor2_channel_pair_trace_model(MODEL, ROOTS, 6, result.query, region_policy)
+                .unwrap();
+        let direct_certificate =
+            btor2_search::produce(&direct_model, direct_bad, result.query.horizon).unwrap();
+        let direct = btor2_search::verify(&direct_model, &direct_certificate).unwrap();
+        assert_eq!(result.result, direct.result);
+        assert_eq!(result.bad_frame, direct.bad_frame);
+    }
+
+    let mut endpoint_drift = artifact.clone();
+    endpoint_drift.queries[0].right_channel_index = 3;
+    assert!(
+        verify_btor2_channel_pair_trace_proof(
+            MODEL,
+            &queries,
+            &endpoint_drift,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default(),
+        )
+        .is_err()
+    );
+    let mut horizon_drift = artifact.clone();
+    horizon_drift.members[0].horizon = u32::MAX;
+    assert!(
+        verify_btor2_channel_pair_trace_proof(
+            MODEL,
+            &queries,
+            &horizon_drift,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default(),
+        )
+        .is_err()
+    );
+    let mut relation_drift = artifact;
+    relation_drift.members[0].relation = Btor2ChannelPairRelation::Different;
+    assert!(
+        verify_btor2_channel_pair_trace_proof(
+            MODEL,
+            &queries,
+            &relation_drift,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default(),
+        )
+        .is_err()
+    );
+
+    let artifact = produce_btor2_channel_pair_trace_proof(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        production_policy,
+    )
+    .unwrap();
+    let mut evidence_drift = artifact;
+    evidence_drift.members[0].evidence[0] ^= 1;
+    assert!(
+        verify_btor2_channel_pair_trace_proof(
+            MODEL,
+            &queries,
+            &evidence_drift,
+            region_policy,
+            Btor2ChannelTraceProofPolicy::default(),
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn channel_pair_mixed_classes_use_ordered_exact_fallback() {
+    let region_policy = Btor2RegionPolicy::default();
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(MODEL, ROOTS, 6, region_policy).unwrap(),
+    )
+    .unwrap();
+    let pattern = Btor2ChannelTracePattern::new(1, 1, 1).unwrap();
+    let forward = Btor2ChannelPairTraceQuery {
+        query_id: 41,
+        left_channel_index: 0,
+        right_channel_index: 1,
+        relation: Btor2ChannelPairRelation::Equal,
+        pattern,
+        horizon: 0,
+    };
+    let reverse = Btor2ChannelPairTraceQuery {
+        query_id: 42,
+        left_channel_index: 1,
+        right_channel_index: 0,
+        ..forward
+    };
+    let ordered_plan = preflight_btor2_channel_pair_trace_proof(
+        MODEL,
+        &structural,
+        &[forward, reverse],
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(ordered_plan.proof_members, 2);
+    assert_eq!(ordered_plan.structural_constant_members, 0);
+
+    let artifact = produce_btor2_channel_pair_trace_proof(
+        MODEL,
+        &structural,
+        &[forward],
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(artifact.members.len(), 1);
+    assert_eq!(
+        artifact.members[0].backend,
+        Btor2ChannelTraceBackend::RepresentativeClass
+    );
+    assert_ne!(
+        artifact.members[0].solver,
+        guarded_continuation_checker::btor2_region_property::Btor2ChannelPairTraceSolver::StructuralConstant
+    );
+    let summary = verify_btor2_channel_pair_trace_proof(
+        MODEL,
+        &[forward],
+        &artifact,
+        region_policy,
+        Btor2ChannelTraceProofPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.metrics.structural_constant_members, 0);
+    assert_eq!(
+        summary.metrics.explicit_state_members + summary.metrics.bitblast_members,
+        1
+    );
+}
+
+#[test]
+fn channel_pair_structural_constant_refuses_constrained_source_shortcut() {
+    let mut constrained = MODEL.to_vec();
+    constrained.extend_from_slice(b"100000 const 5 1\n100001 constraint 100000\n");
+    let region_policy = Btor2RegionPolicy::default();
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(&constrained, ROOTS, 6, region_policy).unwrap(),
+    )
+    .unwrap();
+    let queries = [Btor2ChannelPairTraceQuery {
+        query_id: 31,
+        left_channel_index: 0,
+        right_channel_index: 2,
+        relation: Btor2ChannelPairRelation::Equal,
+        pattern: Btor2ChannelTracePattern::new(1, 1, 1).unwrap(),
+        horizon: 0,
+    }];
+    let plan = preflight_btor2_channel_pair_trace_proof(
+        &constrained,
+        &structural,
+        &queries,
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(plan.structural_constant_members, 0);
+    assert_eq!(plan.explicit_state_members + plan.bitblast_members, 1);
+
+    let artifact = produce_btor2_channel_pair_trace_proof(
+        &constrained,
+        &structural,
+        &queries,
+        region_policy,
+        Btor2ChannelTraceProductionPolicy::default(),
+    )
+    .unwrap();
+    assert_ne!(
+        artifact.members[0].solver,
+        guarded_continuation_checker::btor2_region_property::Btor2ChannelPairTraceSolver::StructuralConstant
+    );
+    verify_btor2_channel_pair_trace_proof(
+        &constrained,
+        &queries,
+        &artifact,
+        region_policy,
+        Btor2ChannelTraceProofPolicy::default(),
+    )
+    .unwrap();
 }
 
 #[test]

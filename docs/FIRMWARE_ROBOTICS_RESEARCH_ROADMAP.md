@@ -150,6 +150,14 @@ close either register by itself.
     model checkers and explanation tools on public and confidential partner
     designs; commission independent technical, security, and scholarly review.
 
+12. **Cross-channel temporal composition (predeclared).** Extend the
+    source-bound OpenTitan PWM trace workflow from isolated channel histories to
+    exact relations between two channels. The
+    [v1 experiment](BTOR2_CROSS_CHANNEL_TRACE_COMPOSITION_V1.md) starts with
+    equality and difference histories, requires ordered pair-class admission,
+    exact fallback and concrete target replay, and treats established
+    self-composition and symmetry techniques as prior art rather than novelty.
+
 Release-path work now includes candidate
 [reproducible Linux evaluation bundle v1](LINUX_EVALUATION_BUNDLE_V1.md): static
 x86_64 musl, SPDX, deterministic provenance, offline replay, and a protected
