@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare the channel history-monitor experiment after the authentic
+  current-input guard hypothesis fails. The fixed monitor carries two classes'
+  prior write, enable and invert configuration across frames and exposes three
+  answer-independent guard states. False and uncovered frames require exact
+  fallback or no logical answer. Direct GCC and pinned Yosys plus Z3
+  comparisons remain mandatory, and no result or novelty claim exists yet.
+
 - Predeclare the guarded channel-relation experiment. It targets mixed
   structural classes with a source-authenticated Boolean guard, requires exact
   coverage accounting and concrete UNSAFE replay, and retains direct GCC and
