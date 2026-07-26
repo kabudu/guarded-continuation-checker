@@ -733,6 +733,12 @@ certificates, maintained symbolic baselines, RTL composition, hosted evidence
 and independent assessment remain open, so exact execution stays selected and
 no novelty or production claim results yet.
 
+The proof-carrying follow-up is
+[predeclared](docs/OPENTITAN_PWM_PREDICATE_CERTIFICATE_EXPERIMENT_V1.md).
+It freezes a canonical bounded artifact, byte-starting independent
+verification and static portfolio route before implementation. Exact
+per-input execution remains the complete fallback.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
