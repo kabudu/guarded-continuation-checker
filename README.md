@@ -705,6 +705,12 @@ occurs too late and the complete quotient cycles are slower than the exact
 reference. GCC therefore selects exact per-input execution. No production or
 novelty claim results.
 
+A distinct
+[proof-carrying live-slice experiment](docs/OPENTITAN_PWM_LIVE_SLICE_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared to reconstruct register and memory liveness together and select
+one earliest merge without trial-replaying every suffix. It keeps the same
+exact fallback and fourfold work gate. No implementation or result exists yet.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

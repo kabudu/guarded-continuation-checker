@@ -742,6 +742,11 @@ The live-memory candidate fails its fourfold gate and is slower than exact
 per-input verification on both authentic profiles. No certificate, RTL answer
 or production row changes. The exact portfolio route remains mandatory.
 
+The live-slice follow-up is unimplemented and changes no production row. Its
+register-and-memory slice checker, deterministic codec, hostile matrix, exact
+fallback, resource governance, maintained baselines, RTL binding and hosted
+evidence all remain open.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

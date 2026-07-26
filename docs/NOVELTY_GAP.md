@@ -972,3 +972,11 @@ controls, but authentic state convergence occurs only 77 O0 instructions and
 reference in both profiles. This adds no novelty evidence. A future live-slice
 candidate would also need independently reconstructed register liveness and a
 new predeclaration.
+
+The
+[live-slice follow-up](OPENTITAN_PWM_LIVE_SLICE_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared before implementation. It extends the proof obligation to
+register use/def facts and chooses the earliest merge from one complete
+backward slice instead of trial-replaying suffixes. Compiler liveness, dynamic
+slicing and symbolic state subsumption remain direct prior art, so no novelty
+claim exists.

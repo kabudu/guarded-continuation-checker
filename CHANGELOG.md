@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Predeclare a proof-carrying live-slice quotient that reconstructs register
+  and memory liveness together from one complete representative trace. It must
+  select one earliest merge without trial suffix replay, independently verify
+  every use/def fact, retain exact fallback and pass the unchanged fourfold
+  total-work gate. No implementation or result exists yet.
+
 - Retain the proof-carrying live-memory quotient as a negative result. Its
   byte-precise read-before-overwrite reconstruction accepts a dead-stack
   control and refuses a read-after-merge neighbour, but authentic O0 and O2
