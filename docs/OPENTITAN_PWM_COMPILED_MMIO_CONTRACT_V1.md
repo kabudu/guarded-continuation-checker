@@ -458,10 +458,11 @@ residue.
 
 A concurrent 100-transition directory and symlink replacement campaign cannot
 redirect publication from the retained parent, and the final ancestor check
-refuses the changed declared path. A separate 1,000-publication descriptor
-stress cohort preserves every exact payload and leaves no temporary file.
-macOS process inspection reports zero leaked allocations after that cohort.
-The pinned authentic OpenTitan build preserves the frozen O0 identity
+refuses the changed declared path. macOS process inspection reports zero leaked
+allocations for that concurrent cohort. A separate 1,000-publication descriptor
+stress cohort preserves every exact payload and leaves no temporary file, also
+with zero leaked allocations. The pinned authentic OpenTitan build preserves
+the frozen O0 identity
 `fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0`
 and O2 identity
 `1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec`.

@@ -14,6 +14,7 @@ parent_replacement_redirected=false
 replacement_tree_certificate=false
 concurrent_replacement_transitions=100
 concurrent_replacement_redirects=0
+concurrent_replacement_process_leaked_allocations=0
 temporary_collision_refused=true
 final_collision_refused=true
 final_symlink_collision_refused=true
