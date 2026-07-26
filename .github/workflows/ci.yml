@@ -484,6 +484,16 @@ jobs:
           git -C /tmp/sby remote add origin https://github.com/YosysHQ/sby.git
           git -C /tmp/sby fetch --depth 1 origin fea6e467d067b3ea84b6b5ac08cd48beb59f0d42
           git -C /tmp/sby checkout --detach FETCH_HEAD
+      - name: Install pinned Z3 for maintained comparisons
+        run: |
+          curl --fail --location --silent --show-error \
+            --output /tmp/z3-4.16.0.zip \
+            https://github.com/Z3Prover/z3/releases/download/z3-4.16.0/z3-4.16.0-x64-glibc-2.39.zip
+          echo \
+            "7288c49a5bd6dbafd7b0b0d1f65956b91672da24b08f09242919af159be3418e  /tmp/z3-4.16.0.zip" \
+            | sha256sum --check
+          unzip -q /tmp/z3-4.16.0.zip -d /tmp/z3-4.16.0
+          /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 --version
       - name: Build static corpus binary
         run: cargo build --release --locked --target x86_64-unknown-linux-musl
       - name: Run current distribution Yosys with independent oracle
@@ -519,7 +529,7 @@ jobs:
             --example btor2_channel_pair_trace_cohort
           scripts/run-opentitan-pwm-channel-pair-trace-maintained-baseline-v1.sh \
             /tmp/yosys-attestation/build/yosys \
-            "$(command -v z3)" \
+            /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 \
             target/release/examples/btor2_channel_pair_trace_cohort \
             /tmp/opentitan-pwm-channel-pair-trace-maintained-v1
       - name: Reproduce public source-to-model attestation
