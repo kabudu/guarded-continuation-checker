@@ -547,6 +547,28 @@ pub fn execute_compiled_mmio(
     image: &[u8],
     symbols: Rv32SymbolLayout,
 ) -> Result<Rv32Execution, Rv32Error> {
+    execute_compiled_mmio_inner(image, symbols, None)
+}
+
+/// Execute the bounded firmware entry with one concrete RISC-V `a0` argument.
+///
+/// The remaining argument registers retain the fail-closed unknown state used
+/// by [`execute_compiled_mmio`]. This narrow API prevents a caller from
+/// supplying stack, return-address or ambient machine state as if it were a
+/// firmware input.
+pub fn execute_compiled_mmio_with_a0(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+    a0: u32,
+) -> Result<Rv32Execution, Rv32Error> {
+    execute_compiled_mmio_inner(image, symbols, Some(a0))
+}
+
+fn execute_compiled_mmio_inner(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+    a0: Option<u32>,
+) -> Result<Rv32Execution, Rv32Error> {
     if image.is_empty() || image.len() > MAX_RV32_IMAGE_BYTES {
         return Err(reject("image size is outside policy"));
     }
@@ -582,6 +604,9 @@ pub fn execute_compiled_mmio(
     machine.store(stop, 4, 0x0010_0073)?;
     machine.set_reg(1, stop);
     machine.set_reg(2, stop & !0xf);
+    if let Some(a0) = a0 {
+        machine.set_reg(10, a0);
+    }
     while machine.pc != stop {
         machine.step()?;
     }
@@ -692,5 +717,24 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("runtime-unknown x10"));
         assert!(error.to_string().contains("branch operand"));
+    }
+
+    #[test]
+    fn concrete_a0_is_available_without_concretising_other_arguments() {
+        let mut image = vec![0; 0x110];
+        image[..4].copy_from_slice(&encode_i(0x13, 7, 10, 10, 1).to_le_bytes());
+        image[4..8].copy_from_slice(&encode_i(0x67, 0, 0, 1, 0).to_le_bytes());
+        let result = execute_compiled_mmio_with_a0(
+            &image,
+            Rv32SymbolLayout {
+                entry: RV32_IMAGE_BASE,
+                event_count: RV32_IMAGE_BASE + 0x100,
+                events: RV32_IMAGE_BASE + 0x104,
+            },
+            42,
+        )
+        .unwrap();
+        assert_eq!(result.return_value, 0);
+        assert_eq!(result.steps, 2);
     }
 }

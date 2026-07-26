@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add the exact all-input denominator and fail-closed fallback for the guarded
+  MMIO continuation quotient experiment. A stable concrete-`a0` RV32 API runs
+  all 256 runtime-channel values independently, constructs seven canonical
+  return-plus-MMIO classes, retains per-input locations and exact transition
+  work, and rebuilds the complete reference during verification. Pinned O0 and
+  O2 artifacts agree with an independently compiled native recorder for every
+  return value and event, and two source-complete output trees are
+  byte-identical.
+
 - Predeclare a guarded MMIO continuation quotient experiment over all 256
   runtime-channel values in the authentic compiled OpenTitan PWM caller. The
   candidate may merge inputs only when their complete compiled continuation,

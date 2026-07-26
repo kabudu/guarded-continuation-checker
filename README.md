@@ -676,6 +676,17 @@ materially less verification work than 256 separate jobs. Exact execution is
 the reference and fail-closed fallback. No implementation, result or novelty
 claim exists yet.
 
+The exact-reference cycle now supplies the denominator and fail-closed fallback
+for that experiment. A stable concrete-`a0` RV32 API executes all 256 values
+independently and produces seven canonical behaviour classes: six valid
+singletons for channels 0 through 5 and one 250-member invalid-input class.
+Pinned O0 and O2 builds agree with an independently compiled native recorder
+for every return value and MMIO event. The unoptimized and optimized producers
+decode 314,818 and 115,960 instruction transitions respectively; the
+predeclared production-plus-verification denominators are therefore 629,636
+and 231,920. This is reference evidence, not a quotient, work reduction or
+novelty result.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
