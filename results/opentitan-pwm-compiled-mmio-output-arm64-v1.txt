@@ -16,6 +16,7 @@ concurrent_replacement_transitions=100
 concurrent_replacement_redirects=0
 concurrent_replacement_process_leaked_allocations=0
 temporary_collision_refused=true
+temporary_collision_preserved=true
 final_collision_refused=true
 final_symlink_collision_refused=true
 partial_write_visible_output=false

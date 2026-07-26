@@ -687,51 +687,13 @@ fn publish_verified_create_new_with(
 ) -> Result<(), String> {
     #[cfg(unix)]
     {
-        let target = RaceResistantOutput::open(output)?;
         let temporary = CString::new(format!(
             ".gcc-compiled-mmio-{}-{}.tmp",
             std::process::id(),
             TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ))
         .map_err(|_| "temporary certificate filename contains NUL".to_string())?;
-        let result = (|| {
-            let mut file = target.create_temporary(&temporary)?;
-            write(&mut file)
-                .and_then(|_| file.sync_all())
-                .map_err(|error| format!("write temporary certificate: {error}"))?;
-            let before = file
-                .metadata()
-                .map_err(|error| format!("inspect temporary certificate: {error}"))?;
-            if !before.is_file()
-                || before.len() == 0
-                || before.len() > MAX_COMPILED_MMIO_CERTIFICATE_BYTES as u64
-            {
-                return Err("temporary certificate size or file type is outside policy".to_string());
-            }
-            file.seek(SeekFrom::Start(0))
-                .map_err(|error| format!("rewind temporary certificate: {error}"))?;
-            let mut disk = Vec::with_capacity(before.len() as usize + 1);
-            Read::by_ref(&mut file)
-                .take(MAX_COMPILED_MMIO_CERTIFICATE_BYTES as u64 + 1)
-                .read_to_end(&mut disk)
-                .map_err(|error| format!("reload temporary certificate: {error}"))?;
-            let after = file
-                .metadata()
-                .map_err(|error| format!("reinspect temporary certificate: {error}"))?;
-            if disk.len() != before.len() as usize || snapshot(&before) != snapshot(&after) {
-                return Err("temporary certificate changed during verification".to_string());
-            }
-            let decoded =
-                decode_compiled_mmio_certificate(&disk).map_err(|error| error.to_string())?;
-            loaded.verify(&decoded)?;
-            target.publish(&temporary)?;
-            target.cleanup(&temporary)?;
-            target.finish()
-        })();
-        if result.is_err() {
-            let _ = target.cleanup(&temporary);
-        }
-        result
+        publish_verified_create_new_with_temporary(output, loaded, write, temporary)
     }
     #[cfg(not(unix))]
     {
@@ -741,6 +703,53 @@ fn publish_verified_create_new_with(
                 .to_string(),
         )
     }
+}
+
+#[cfg(unix)]
+fn publish_verified_create_new_with_temporary(
+    output: &Path,
+    loaded: &LoadedCompiledMmioInputs,
+    write: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+    temporary: CString,
+) -> Result<(), String> {
+    let target = RaceResistantOutput::open(output)?;
+    let mut file = target.create_temporary(&temporary)?;
+    let result = (|| {
+        write(&mut file)
+            .and_then(|_| file.sync_all())
+            .map_err(|error| format!("write temporary certificate: {error}"))?;
+        let before = file
+            .metadata()
+            .map_err(|error| format!("inspect temporary certificate: {error}"))?;
+        if !before.is_file()
+            || before.len() == 0
+            || before.len() > MAX_COMPILED_MMIO_CERTIFICATE_BYTES as u64
+        {
+            return Err("temporary certificate size or file type is outside policy".to_string());
+        }
+        file.seek(SeekFrom::Start(0))
+            .map_err(|error| format!("rewind temporary certificate: {error}"))?;
+        let mut disk = Vec::with_capacity(before.len() as usize + 1);
+        Read::by_ref(&mut file)
+            .take(MAX_COMPILED_MMIO_CERTIFICATE_BYTES as u64 + 1)
+            .read_to_end(&mut disk)
+            .map_err(|error| format!("reload temporary certificate: {error}"))?;
+        let after = file
+            .metadata()
+            .map_err(|error| format!("reinspect temporary certificate: {error}"))?;
+        if disk.len() != before.len() as usize || snapshot(&before) != snapshot(&after) {
+            return Err("temporary certificate changed during verification".to_string());
+        }
+        let decoded = decode_compiled_mmio_certificate(&disk).map_err(|error| error.to_string())?;
+        loaded.verify(&decoded)?;
+        target.publish(&temporary)?;
+        target.cleanup(&temporary)?;
+        target.finish()
+    })();
+    if result.is_err() {
+        let _ = target.cleanup(&temporary);
+    }
+    result
 }
 
 pub fn run_compiled_mmio_file_cli(args: &[String]) -> Result<bool, String> {
@@ -1156,6 +1165,31 @@ mod tests {
             Path::new("upstream.c")
         );
         link_target.cleanup(&link_candidate).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn complete_publication_never_unlinks_a_preexisting_temporary_collision() {
+        let root = fixture_root("output-owned-cleanup");
+        let loaded = load_compiled_mmio_inputs(&root, Path::new("inputs.txt")).unwrap();
+        let output = root.join("result.cert");
+        let temporary = CString::new(".preexisting.tmp").unwrap();
+        fs::write(root.join(".preexisting.tmp"), b"do-not-modify").unwrap();
+
+        let error = publish_verified_create_new_with_temporary(
+            &output,
+            &loaded,
+            |file| file.write_all(b"unreachable"),
+            temporary,
+        )
+        .unwrap_err();
+        assert!(error.to_lowercase().contains("exists"));
+        assert_eq!(
+            fs::read(root.join(".preexisting.tmp")).unwrap(),
+            b"do-not-modify"
+        );
+        assert!(!output.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
