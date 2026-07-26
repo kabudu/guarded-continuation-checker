@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Retain the guarded-MMIO exact-state quotient as a negative result. A bounded
+  opaque replay API and separately coded route verifier merge synthetic states
+  only after complete byte equality, but authentic O0 and O2 inputs retain
+  different stale stack bytes and are therefore refused. Exact per-input
+  execution remains the fallback; no quotient or novelty result is claimed.
+
 - Add the exact all-input denominator and fail-closed fallback for the guarded
   MMIO continuation quotient experiment. A stable concrete-`a0` RV32 API runs
   all 256 runtime-channel values independently, constructs seven canonical

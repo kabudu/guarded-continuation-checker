@@ -1,8 +1,9 @@
 # OpenTitan PWM guarded MMIO continuation quotient experiment v1
 
-Status: exact all-input reference passes locally. Quotient implementation,
-maintained symbolic baselines, RTL composition and hosted gates remain open.
-No novelty claim exists.
+Status: the exact all-input reference passes locally, but the predeclared
+complete-concrete-state quotient is rejected on both O0 and O2. Maintained
+symbolic baselines, RTL composition and hosted gates remain open. No novelty
+claim exists.
 
 ## Product question
 
@@ -173,3 +174,28 @@ binds the exact identities and work counts. This closes only the exact
 reference and native-comparison prerequisites. No certificate, optimized
 quotient, maintained symbolic baseline, RTL composition or novelty result
 exists yet.
+
+## Exact-state quotient result
+
+The producer and separately coded verifier use opaque replay machines whose
+equality includes the program counter, all register values and knownness, all
+bounded-memory values and knownness, the execution bound state and retained
+event locations. Synthetic convergence and route-tampering controls pass.
+
+The authentic candidate is rejected before producing a quotient. Inputs 6 and
+7 reach the same return value and MMIO stream, but their complete terminal
+machine states remain different. The first differing byte is stale stack
+memory at `0x801fffe4` under O0 and `0x801fffb8` under O2. Equal observable
+behaviour therefore did not establish the frozen exact-state invariant.
+
+The retained
+[arm64 negative result](../results/opentitan-pwm-guarded-mmio-exact-state-negative-arm64-v1.txt)
+records both refusals. Gate 8 fails because no quotient cycle exists, and exact
+per-input execution remains the fallback. The experiment was not relaxed after
+observing the result.
+
+A distinct follow-up may test a proof-carrying liveness quotient. Such a
+certificate would have to prove that every excluded memory byte is dead on
+every remaining path before comparing live state. That is a stronger proof
+obligation and an abstract quotient, so it is outside this version's
+predeclared exact-concrete-state claim.
