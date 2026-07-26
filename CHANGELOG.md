@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Harden the compiled-MMIO file boundary against concurrent input-tree
+  replacement on Unix. The loader now opens one trusted root descriptor,
+  traverses with no-follow descriptor-relative operations, reads the same
+  inspected regular-file descriptors, rejects hard-link aliases, and checks
+  every file and traversed directory for changes across the complete load.
+  Deterministic rename, symlink, truncation, extension and in-place rewrite
+  attacks refuse, while sustained races return only one complete valid
+  snapshot or no result. Non-Unix platforms fail closed until an equivalent
+  reparse-point-safe implementation exists.
+
 - Add the first bounded compiled-MMIO extraction slice for the authentic
   OpenTitan PWM firmware contract. A fail-closed RV32IMC interpreter executes
   revision-pinned O0 and O2 images in 1,928 and 657 instructions respectively,

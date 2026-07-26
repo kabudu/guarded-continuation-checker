@@ -907,6 +907,12 @@ create-new publication, independent disk reload, exhaustive byte mutation
 coverage for the certificates, images and symbol tables, and representative
 mutation coverage for every source member and the toolchain identity. Two clean
 command cycles preserve the original certificate identities.
+The race-resistant input follow-up replaces path inspection followed by reopen
+with descriptor-relative no-follow traversal, same-descriptor reads, hard-link
+identity rejection and whole-load change detection. This closes a concrete
+integrity race if its hosted gate passes. Descriptor-relative traversal and
+time-of-check to time-of-use hardening are established systems techniques, so
+the result provides production-shaping evidence and no novelty evidence.
 This closes the authentic extraction and maintained binary-analysis
 preconditions for the fixed concrete caller. Binary execution, taint
 propagation, canonical certificates and binary-analysis cross-checking are

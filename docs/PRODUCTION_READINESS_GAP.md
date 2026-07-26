@@ -690,11 +690,15 @@ symlinks, non-regular and oversized inputs, publishes atomically without
 replacement, reloads its exact on-disk bytes and independently replays the
 extraction. The exhaustive local cohort changes every certificate, image and
 symbol-table byte, plus representative bytes in every source member and the
-toolchain identity, and observes refusal. Static all-path proof, concurrent
-input-tree replacement resistance, hosted identity beyond the passing macOS
-arm64 and Linux x86-64 profiles, compatibility history, a governed
-process-resource policy and independent acceptance remain open. No production
-row closes.
+toolchain identity, and observes refusal. The Unix loader now acquires one root
+descriptor, walks every component without following symlinks, rejects
+hard-link aliases and detects file or directory changes across the complete
+load. Local deterministic and sustained rename, rewrite, truncation, extension
+and symlink races return only a complete stable snapshot or refusal. Hosted
+Linux race and Valgrind gates, output-directory descriptor acquisition,
+Windows reparse-point handling, static all-path proof, compatibility history,
+a governed process-resource policy and independent acceptance remain open. No
+production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies

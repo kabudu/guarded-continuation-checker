@@ -7,6 +7,17 @@ use crate::compiled_mmio_certificate::{
     decode_compiled_mmio_certificate, encode_compiled_mmio_certificate, verify_compiled_mmio,
 };
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use std::{
+    collections::BTreeSet,
+    ffi::{CString, OsStr},
+    io::Read,
+    os::unix::{
+        ffi::OsStrExt,
+        fs::MetadataExt,
+        io::{AsRawFd, FromRawFd},
+    },
+};
 use std::{
     fs,
     io::Write,
@@ -209,50 +220,259 @@ pub fn parse_compiled_mmio_manifest(bytes: &[u8]) -> Result<CompiledMmioInputMan
     })
 }
 
-fn read_regular(
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ObjectSnapshot {
+    device: u64,
+    inode: u64,
+    length: u64,
+    modified_seconds: i64,
+    modified_nanoseconds: i64,
+    changed_seconds: i64,
+    changed_nanoseconds: i64,
+}
+
+#[cfg(unix)]
+fn snapshot(metadata: &fs::Metadata) -> ObjectSnapshot {
+    ObjectSnapshot {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+        length: metadata.len(),
+        modified_seconds: metadata.mtime(),
+        modified_nanoseconds: metadata.mtime_nsec(),
+        changed_seconds: metadata.ctime(),
+        changed_nanoseconds: metadata.ctime_nsec(),
+    }
+}
+
+#[cfg(unix)]
+fn c_string(value: &OsStr, label: &str) -> Result<CString, String> {
+    CString::new(value.as_bytes()).map_err(|_| format!("{label} contains NUL"))
+}
+
+#[cfg(unix)]
+fn open_root(path: &Path) -> Result<fs::File, String> {
+    let path = c_string(path.as_os_str(), "input root path")?;
+    // SAFETY: `path` is a live NUL-terminated C string. The returned descriptor
+    // is checked before ownership is transferred to `File`.
+    let descriptor = unsafe {
+        libc::open(
+            path.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if descriptor < 0 {
+        return Err(format!(
+            "open input root without following symlinks: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: `descriptor` is newly owned after a successful `open`.
+    Ok(unsafe { fs::File::from_raw_fd(descriptor) })
+}
+
+#[cfg(unix)]
+fn open_relative(
+    directory: &fs::File,
+    name: &OsStr,
+    directory_only: bool,
+) -> Result<fs::File, String> {
+    let name = c_string(name, "input path component")?;
+    let mut flags = libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+    if directory_only {
+        flags |= libc::O_DIRECTORY;
+    } else {
+        flags |= libc::O_NONBLOCK;
+    }
+    // SAFETY: `directory` owns a valid descriptor and `name` is a live
+    // NUL-terminated C string. `openat` returns a new descriptor on success.
+    let descriptor = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
+    if descriptor < 0 {
+        return Err(format!(
+            "open input component without following symlinks: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: `descriptor` is newly owned after a successful `openat`.
+    Ok(unsafe { fs::File::from_raw_fd(descriptor) })
+}
+
+#[cfg(unix)]
+struct RaceResistantInputRoot {
+    root: fs::File,
+    root_snapshot: ObjectSnapshot,
+    traversed_directories: Vec<(fs::File, ObjectSnapshot)>,
+    opened_files: BTreeSet<(u64, u64)>,
+}
+
+#[cfg(unix)]
+impl RaceResistantInputRoot {
+    fn open(path: &Path) -> Result<Self, String> {
+        let root = open_root(path)?;
+        let metadata = root
+            .metadata()
+            .map_err(|error| format!("inspect opened input root: {error}"))?;
+        if !metadata.is_dir() {
+            return Err("input root is not a directory".to_string());
+        }
+        Ok(Self {
+            root_snapshot: snapshot(&metadata),
+            root,
+            traversed_directories: Vec::new(),
+            opened_files: BTreeSet::new(),
+        })
+    }
+
+    fn read_regular(
+        &mut self,
+        relative: &Path,
+        limit: usize,
+        label: &str,
+    ) -> Result<Vec<u8>, String> {
+        self.read_regular_with_hook(relative, limit, label, |_| {})
+    }
+
+    fn read_regular_with_hook(
+        &mut self,
+        relative: &Path,
+        limit: usize,
+        label: &str,
+        hook: impl FnOnce(&fs::File),
+    ) -> Result<Vec<u8>, String> {
+        if relative.as_os_str().is_empty()
+            || relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(format!("{label} path is not canonical and relative"));
+        }
+        let components = relative
+            .components()
+            .map(|component| component.as_os_str())
+            .collect::<Vec<_>>();
+        let (filename, parents) = components
+            .split_last()
+            .ok_or_else(|| format!("{label} path is empty"))?;
+        let mut directory = self
+            .root
+            .try_clone()
+            .map_err(|error| format!("clone input root descriptor: {error}"))?;
+        for component in parents {
+            let next = open_relative(&directory, component, true)
+                .map_err(|error| format!("open {label} parent: {error}"))?;
+            let metadata = next
+                .metadata()
+                .map_err(|error| format!("inspect {label} parent: {error}"))?;
+            if !metadata.is_dir() {
+                return Err(format!("{label} parent is not a directory"));
+            }
+            self.traversed_directories.push((
+                next.try_clone().map_err(|error| error.to_string())?,
+                snapshot(&metadata),
+            ));
+            directory = next;
+        }
+        let mut file = open_relative(&directory, filename, false)
+            .map_err(|error| format!("open {label}: {error}"))?;
+        let before = file
+            .metadata()
+            .map_err(|error| format!("inspect opened {label}: {error}"))?;
+        if !before.is_file() || before.len() == 0 || before.len() > limit as u64 {
+            return Err(format!("{label} size or file type is outside policy"));
+        }
+        if !self.opened_files.insert((before.dev(), before.ino())) {
+            return Err(format!("{label} aliases another manifest input"));
+        }
+        hook(&file);
+        let expected = before.len() as usize;
+        let mut bytes = Vec::with_capacity(expected.saturating_add(1));
+        Read::by_ref(&mut file)
+            .take(expected as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| format!("read opened {label}: {error}"))?;
+        let after = file
+            .metadata()
+            .map_err(|error| format!("reinspect opened {label}: {error}"))?;
+        if bytes.len() != expected || snapshot(&before) != snapshot(&after) {
+            return Err(format!("{label} changed while it was being read"));
+        }
+        Ok(bytes)
+    }
+
+    fn finish(self) -> Result<(), String> {
+        let root_after = self
+            .root
+            .metadata()
+            .map_err(|error| format!("reinspect input root: {error}"))?;
+        if snapshot(&root_after) != self.root_snapshot {
+            return Err("input root changed during acquisition".to_string());
+        }
+        for (directory, before) in self.traversed_directories {
+            let after = directory
+                .metadata()
+                .map_err(|error| format!("reinspect input directory: {error}"))?;
+            if snapshot(&after) != before {
+                return Err("input directory changed during acquisition".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(unix))]
+struct RaceResistantInputRoot;
+
+#[cfg(not(unix))]
+impl RaceResistantInputRoot {
+    fn open(_path: &Path) -> Result<Self, String> {
+        Err(
+            "race-resistant compiled-MMIO input acquisition is unsupported on this platform"
+                .to_string(),
+        )
+    }
+}
+
+fn read_standalone_regular(
     root: &Path,
     relative: &Path,
     limit: usize,
     label: &str,
 ) -> Result<Vec<u8>, String> {
-    let root_metadata =
-        fs::symlink_metadata(root).map_err(|error| format!("inspect input root: {error}"))?;
-    if !root_metadata.file_type().is_dir() || root_metadata.file_type().is_symlink() {
-        return Err("input root must be a non-symlink directory".to_string());
+    #[cfg(unix)]
+    {
+        let mut opened = RaceResistantInputRoot::open(root)?;
+        let bytes = opened.read_regular(relative, limit, label)?;
+        opened.finish()?;
+        Ok(bytes)
     }
-    let mut checked = root.to_path_buf();
-    for component in relative.components() {
-        checked.push(component.as_os_str());
-        let metadata = fs::symlink_metadata(&checked)
-            .map_err(|error| format!("inspect {label} {}: {error}", checked.display()))?;
-        if metadata.file_type().is_symlink() {
-            return Err(format!("{label} path contains a symlink"));
-        }
+    #[cfg(not(unix))]
+    {
+        let _ = (root, relative, limit, label);
+        RaceResistantInputRoot::open(root)?;
+        unreachable!()
     }
-    let metadata = fs::metadata(&checked).map_err(|error| format!("inspect {label}: {error}"))?;
-    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > limit as u64 {
-        return Err(format!("{label} size or file type is outside policy"));
-    }
-    fs::read(&checked).map_err(|error| format!("read {label}: {error}"))
 }
 
+#[cfg(unix)]
 pub fn load_compiled_mmio_inputs(
     root: &Path,
     manifest_path: &Path,
 ) -> Result<LoadedCompiledMmioInputs, String> {
-    let manifest_bytes = read_regular(
-        root,
+    let mut opened_root = RaceResistantInputRoot::open(root)?;
+    let manifest_bytes = opened_root.read_regular(
         manifest_path,
         MAX_COMPILED_MMIO_MANIFEST_BYTES,
         "input manifest",
     )?;
     let manifest = parse_compiled_mmio_manifest(&manifest_bytes)?;
-    let load_set = |members: &[ManifestMember], label: &str| -> Result<Vec<Vec<u8>>, String> {
+    let mut load_set = |members: &[ManifestMember], label: &str| -> Result<Vec<Vec<u8>>, String> {
         let mut total = 0usize;
         members
             .iter()
             .map(|member| {
-                let bytes = read_regular(root, &member.path, MAX_BOUND_ARTIFACT_BYTES, label)?;
+                let bytes =
+                    opened_root.read_regular(&member.path, MAX_BOUND_ARTIFACT_BYTES, label)?;
                 total = total
                     .checked_add(bytes.len())
                     .ok_or_else(|| format!("{label} byte count overflow"))?;
@@ -265,24 +485,16 @@ pub fn load_compiled_mmio_inputs(
     };
     let upstream = load_set(&manifest.upstream, "upstream source")?;
     let compatibility = load_set(&manifest.compatibility, "compatibility source")?;
-    let toolchain = read_regular(
-        root,
+    let toolchain = opened_root.read_regular(
         &manifest.toolchain,
         MAX_TOOLCHAIN_IDENTITY_BYTES,
         "toolchain identity",
     )?;
-    let image = read_regular(
-        root,
-        &manifest.image,
-        MAX_BOUND_ARTIFACT_BYTES,
-        "compiled image",
-    )?;
-    let symbols = read_regular(
-        root,
-        &manifest.symbols,
-        MAX_SYMBOL_TABLE_BYTES,
-        "symbol table",
-    )?;
+    let image =
+        opened_root.read_regular(&manifest.image, MAX_BOUND_ARTIFACT_BYTES, "compiled image")?;
+    let symbols =
+        opened_root.read_regular(&manifest.symbols, MAX_SYMBOL_TABLE_BYTES, "symbol table")?;
+    opened_root.finish()?;
     Ok(LoadedCompiledMmioInputs {
         manifest,
         upstream,
@@ -291,6 +503,15 @@ pub fn load_compiled_mmio_inputs(
         image,
         symbols,
     })
+}
+
+#[cfg(not(unix))]
+pub fn load_compiled_mmio_inputs(
+    root: &Path,
+    _manifest_path: &Path,
+) -> Result<LoadedCompiledMmioInputs, String> {
+    RaceResistantInputRoot::open(root)?;
+    unreachable!()
 }
 
 fn certificate_sha256(bytes: &[u8]) -> String {
@@ -341,7 +562,7 @@ fn publish_verified_create_new_with(
             .and_then(|_| file.sync_all())
             .map_err(|error| format!("write temporary certificate: {error}"))?;
         drop(file);
-        let disk = read_regular(
+        let disk = read_standalone_regular(
             parent,
             Path::new(
                 temporary
@@ -405,7 +626,7 @@ pub fn run_compiled_mmio_file_cli(args: &[String]) -> Result<bool, String> {
         publish_verified_create_new(certificate_path, &encoded, &loaded)?;
         (certificate, encoded, "CREATED")
     } else {
-        let encoded = read_regular(
+        let encoded = read_standalone_regular(
             certificate_path.parent().unwrap_or_else(|| Path::new(".")),
             Path::new(
                 certificate_path
@@ -438,9 +659,20 @@ pub fn run_compiled_mmio_file_cli(args: &[String]) -> Result<bool, String> {
 mod tests {
     use super::*;
     use crate::riscv32imc::RV32_IMAGE_BASE;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering as AtomicOrdering},
+    };
 
     fn instruction(opcode: u32, rd: u32, rs1: u32, immediate: u32) -> [u8; 4] {
         (((immediate & 0xfff) << 20) | (rs1 << 15) | (rd << 7) | opcode).to_le_bytes()
+    }
+
+    fn fixture_image(return_value: u32) -> Vec<u8> {
+        let mut image = vec![0; 0x110];
+        image[..4].copy_from_slice(&instruction(0x13, 10, 0, return_value));
+        image[4..8].copy_from_slice(&instruction(0x67, 0, 1, 0));
+        image
     }
 
     fn fixture_root(label: &str) -> PathBuf {
@@ -450,9 +682,7 @@ mod tests {
             TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&root).unwrap();
-        let mut image = vec![0; 0x110];
-        image[..4].copy_from_slice(&instruction(0x13, 10, 0, 7));
-        image[4..8].copy_from_slice(&instruction(0x67, 0, 1, 0));
+        let image = fixture_image(7);
         let symbols = format!(
             "{:08x} T gcc_firmware_entry\n{:08x} B gcc_mmio_event_count\n{:08x} B gcc_mmio_events\n",
             RV32_IMAGE_BASE,
@@ -611,6 +841,212 @@ mod tests {
                 .to_string_lossy()
                 .contains("gcc-compiled-mmio")
         }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn descriptor_loader_detects_in_place_and_directory_entry_changes() {
+        let root = fixture_root("descriptor-races");
+        let image_path = root.join("image.bin");
+        let original = fs::read(&image_path).unwrap();
+        let changed = fixture_image(8);
+
+        let mut opened = RaceResistantInputRoot::open(&root).unwrap();
+        let error = opened
+            .read_regular_with_hook(
+                Path::new("image.bin"),
+                MAX_BOUND_ARTIFACT_BYTES,
+                "compiled image",
+                |_| fs::write(&image_path, &changed).unwrap(),
+            )
+            .unwrap_err();
+        assert!(error.contains("changed while it was being read"));
+        fs::write(&image_path, &original).unwrap();
+
+        let mut opened = RaceResistantInputRoot::open(&root).unwrap();
+        let error = opened
+            .read_regular_with_hook(
+                Path::new("image.bin"),
+                MAX_BOUND_ARTIFACT_BYTES,
+                "compiled image",
+                |_| fs::write(&image_path, &original[..original.len() / 2]).unwrap(),
+            )
+            .unwrap_err();
+        assert!(error.contains("changed while it was being read"));
+        fs::write(&image_path, &original).unwrap();
+
+        let mut opened = RaceResistantInputRoot::open(&root).unwrap();
+        let error = opened
+            .read_regular_with_hook(
+                Path::new("image.bin"),
+                MAX_BOUND_ARTIFACT_BYTES,
+                "compiled image",
+                |_| {
+                    let mut extended = original.clone();
+                    extended.extend_from_slice(b"extended");
+                    fs::write(&image_path, extended).unwrap();
+                },
+            )
+            .unwrap_err();
+        assert!(error.contains("changed while it was being read"));
+        fs::write(&image_path, &original).unwrap();
+
+        fs::create_dir(root.join("nested")).unwrap();
+        fs::write(root.join("nested/value.bin"), b"original").unwrap();
+        let mut opened = RaceResistantInputRoot::open(&root).unwrap();
+        assert_eq!(
+            opened
+                .read_regular(
+                    Path::new("nested/value.bin"),
+                    MAX_BOUND_ARTIFACT_BYTES,
+                    "nested input"
+                )
+                .unwrap(),
+            b"original"
+        );
+        fs::rename(root.join("nested/value.bin"), root.join("nested/value.old")).unwrap();
+        fs::write(root.join("nested/value.bin"), b"replacement").unwrap();
+        assert!(
+            opened
+                .finish()
+                .unwrap_err()
+                .contains("input directory changed")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn descriptor_loader_refuses_final_entry_replacement_after_open() {
+        let root = fixture_root("rename-after-open");
+        let image_path = root.join("image.bin");
+        let replacement = fixture_image(8);
+        let old_path = root.join("image.old");
+        let mut opened = RaceResistantInputRoot::open(&root).unwrap();
+        let error = opened
+            .read_regular_with_hook(
+                Path::new("image.bin"),
+                MAX_BOUND_ARTIFACT_BYTES,
+                "compiled image",
+                |_| {
+                    fs::rename(&image_path, &old_path).unwrap();
+                    fs::write(&image_path, &replacement).unwrap();
+                },
+            )
+            .unwrap_err();
+        assert!(error.contains("changed while it was being read"));
+        assert!(opened.finish().unwrap_err().contains("input root changed"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hard_link_aliases_refuse_even_under_distinct_paths() {
+        let root = fixture_root("hard-link");
+        fs::hard_link(root.join("upstream.c"), root.join("alias.c")).unwrap();
+        let manifest = fs::read(root.join("inputs.txt"))
+            .unwrap()
+            .as_slice()
+            .replace(
+                b"compatibility=compat.c,compat.c",
+                b"compatibility=compat.c,alias.c",
+            );
+        fs::write(root.join("inputs.txt"), manifest).unwrap();
+        assert!(
+            load_compiled_mmio_inputs(&root, Path::new("inputs.txt"))
+                .err()
+                .unwrap()
+                .contains("aliases another manifest input")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sustained_rewrite_race_never_returns_a_mixed_snapshot() {
+        let root = fixture_root("sustained-race");
+        let image_path = root.join("image.bin");
+        let first_image = fixture_image(7);
+        let second_image = fixture_image(8);
+        let first_inputs = load_compiled_mmio_inputs(&root, Path::new("inputs.txt")).unwrap();
+        let first_certificate = first_inputs.certify().unwrap();
+        fs::write(&image_path, &second_image).unwrap();
+        let second_inputs = load_compiled_mmio_inputs(&root, Path::new("inputs.txt")).unwrap();
+        let second_certificate = second_inputs.certify().unwrap();
+        fs::write(&image_path, &first_image).unwrap();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let worker_running = Arc::clone(&running);
+        let worker_path = image_path.clone();
+        let worker_first = first_image.clone();
+        let worker_second = second_image.clone();
+        let worker = std::thread::spawn(move || {
+            while worker_running.load(AtomicOrdering::Relaxed) {
+                fs::write(&worker_path, &worker_first).unwrap();
+                fs::write(&worker_path, &worker_second).unwrap();
+            }
+        });
+        let mut refused = 0usize;
+        for _ in 0..500 {
+            match load_compiled_mmio_inputs(&root, Path::new("inputs.txt")) {
+                Ok(inputs) => {
+                    let certificate = inputs.certify().unwrap();
+                    assert!(
+                        certificate == first_certificate || certificate == second_certificate,
+                        "loader returned a mixed compiled-MMIO snapshot"
+                    );
+                }
+                Err(_) => refused += 1,
+            }
+        }
+        running.store(false, AtomicOrdering::Relaxed);
+        worker.join().unwrap();
+        assert!(refused > 0);
+        fs::write(image_path, first_image).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sustained_regular_and_symlink_replacement_never_verifies_the_link() {
+        let root = fixture_root("sustained-symlink-race");
+        let image_path = root.join("image.bin");
+        let regular_candidate = root.join("candidate.regular");
+        let symlink_candidate = root.join("candidate.symlink");
+        let image = fixture_image(7);
+        let baseline_inputs = load_compiled_mmio_inputs(&root, Path::new("inputs.txt")).unwrap();
+        let baseline = baseline_inputs.certify().unwrap();
+        fs::write(&regular_candidate, &image).unwrap();
+        std::os::unix::fs::symlink("upstream.c", &symlink_candidate).unwrap();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let worker_running = Arc::clone(&running);
+        let worker_image = image.clone();
+        let worker_root = root.clone();
+        let worker = std::thread::spawn(move || {
+            let image_path = worker_root.join("image.bin");
+            let regular = worker_root.join("candidate.regular");
+            let symlink = worker_root.join("candidate.symlink");
+            while worker_running.load(AtomicOrdering::Relaxed) {
+                fs::rename(&regular, &image_path).unwrap();
+                fs::write(&regular, &worker_image).unwrap();
+                fs::rename(&symlink, &image_path).unwrap();
+                std::os::unix::fs::symlink("upstream.c", &symlink).unwrap();
+            }
+        });
+        let mut refused = 0usize;
+        for _ in 0..500 {
+            match load_compiled_mmio_inputs(&root, Path::new("inputs.txt")) {
+                Ok(inputs) => assert_eq!(inputs.certify().unwrap(), baseline),
+                Err(_) => refused += 1,
+            }
+        }
+        running.store(false, AtomicOrdering::Relaxed);
+        worker.join().unwrap();
+        assert!(refused > 0);
+        let _ = fs::remove_file(&image_path);
+        fs::write(&image_path, image).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
