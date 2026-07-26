@@ -751,6 +751,11 @@ The live-slice candidate fails its fourfold work gate on both authentic
 profiles. No certificate, RTL result or production row changes. Exact
 per-input fallback remains mandatory.
 
+The predicate-transducer follow-up is unimplemented and changes no production
+row. Its separate checker, canonical codec, hostile divergence matrix, exact
+fallback, resource policy, maintained baselines, RTL composition and hosted
+evidence all remain open.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

@@ -717,6 +717,13 @@ prefixes still dominate and yield only about 1.06× to 1.09× reduction. Exact
 execution remains selected. The next research question is bulk proof of the
 complete invalid-input predicate, not another suffix-only merge.
 
+The next
+[predeclared experiment](docs/OPENTITAN_PWM_PREDICATE_TRANSDUCER_EXPERIMENT_V1.md)
+tests one exact finite-domain symbolic execution over all 250 invalid inputs.
+It must preserve every lane, report both symbolic transitions and lane
+operations, retain exact fallback and pass the unchanged fourfold gate. No
+implementation or result exists yet.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

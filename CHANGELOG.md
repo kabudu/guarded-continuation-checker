@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare an exact finite-domain predicate transducer for all 250 invalid
+  runtime channels. It must preserve every lane through one uniform symbolic
+  control trace, independently reconstruct all register and sparse-memory
+  functions, report symbolic transitions and lane operations separately,
+  retain exact fallback and pass the unchanged fourfold gate. No
+  implementation or result exists yet.
+
 - Retain the register-and-memory live-slice quotient as a negative result. It
   reconstructs one backward slice, accepts dead-register and dead-stack
   controls, and refuses later register use, but 250 concrete invalid prefixes

@@ -986,3 +986,11 @@ the memory-only producer regression, but separately replaying 250 invalid
 prefixes limits authentic reduction to about 1.06× at O0 and 1.09× at O2.
 This adds no novelty evidence. A future candidate must certify a complete input
 predicate through the prefix rather than enumerate its members.
+
+The
+[finite-domain predicate transducer](OPENTITAN_PWM_PREDICATE_TRANSDUCER_EXPERIMENT_V1.md)
+is predeclared before implementation. It tests one exact symbolic state over
+all 250 invalid inputs, with separate symbolic-transition and lane-operation
+accounting. Finite-domain abstract interpretation, symbolic execution,
+multi-execution and explicit function tables are direct prior art. No novelty
+claim exists.
