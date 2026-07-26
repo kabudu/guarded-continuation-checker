@@ -8,6 +8,10 @@ use crate::riscv32imc::{
     CompiledMmioEvent, RV32_IMAGE_BASE, RV32_MEMORY_BITMAP_WORDS, Rv32ReplayMachine,
     Rv32SymbolLayout, execute_compiled_mmio_with_a0,
 };
+use crate::riscv32imc_predicate::{
+    PredicateTransducerExecution, execute_invalid_channel_predicate,
+};
+use crate::riscv32imc_predicate_checker::verify_invalid_channel_predicate;
 use std::{error::Error, fmt};
 
 pub const EXACT_COMPILED_MMIO_REFERENCE_VERSION: u32 = 1;
@@ -117,6 +121,20 @@ pub struct LiveSliceMmioQuotientVerification {
     pub decoded_instruction_transitions: u64,
     pub live_registers: u32,
     pub live_memory_bytes: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PredicateMmioWorkflow {
+    pub valid_behaviors: Vec<ExactCompiledMmioBehavior>,
+    pub invalid: PredicateTransducerExecution,
+    pub producer_decoded_transitions: u64,
+    pub producer_lane_value_operations: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PredicateMmioWorkflowVerification {
+    pub decoded_transitions: u64,
+    pub lane_value_operations: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -910,6 +928,66 @@ pub fn verify_live_slice_mmio_quotient(
     })
 }
 
+/// Execute six concrete valid singleton paths and one exact 250-lane invalid
+/// predicate transducer.
+pub fn build_predicate_mmio_workflow(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<PredicateMmioWorkflow, ExactCompiledMmioReferenceError> {
+    let mut valid_behaviors = Vec::with_capacity(usize::from(GUARDED_MMIO_VALID_CHANNELS));
+    let mut decoded_transitions = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = execute_compiled_mmio_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("predicate workflow valid input {input}: {error}")))?;
+        add_work(&mut decoded_transitions, execution.steps)?;
+        valid_behaviors.push(behavior(execution));
+    }
+    let invalid = execute_invalid_channel_predicate(image, symbols)
+        .map_err(|error| reject(format!("invalid predicate: {error}")))?;
+    add_work(&mut decoded_transitions, invalid.symbolic_transitions)?;
+    Ok(PredicateMmioWorkflow {
+        valid_behaviors,
+        producer_decoded_transitions: decoded_transitions,
+        producer_lane_value_operations: invalid.lane_value_operations,
+        invalid,
+    })
+}
+
+/// Independently replay and compare the complete predicate workflow.
+///
+/// Valid singleton paths use the concrete scalar engine. The invalid domain is
+/// checked by 250 scalar replay machines against the producer's shared decode
+/// trace, without invoking the vector transducer semantic core.
+pub fn verify_predicate_mmio_workflow(
+    workflow: &PredicateMmioWorkflow,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<PredicateMmioWorkflowVerification, ExactCompiledMmioReferenceError> {
+    let mut decoded_transitions = 0u64;
+    for (input, claimed) in workflow.valid_behaviors.iter().enumerate() {
+        let execution = execute_compiled_mmio_with_a0(image, symbols, input as u32)
+            .map_err(|error| reject(format!("predicate verifier valid input {input}: {error}")))?;
+        add_work(&mut decoded_transitions, execution.steps)?;
+        if behavior(execution) != *claimed {
+            return Err(reject(format!(
+                "predicate verifier valid input {input} differs from claim"
+            )));
+        }
+    }
+    let invalid = verify_invalid_channel_predicate(image, symbols, &workflow.invalid)
+        .map_err(|error| reject(error.to_string()))?;
+    add_work(&mut decoded_transitions, invalid.decoded_transitions)?;
+    if decoded_transitions != workflow.producer_decoded_transitions {
+        return Err(reject(
+            "predicate verifier transition count differs from producer",
+        ));
+    }
+    Ok(PredicateMmioWorkflowVerification {
+        decoded_transitions,
+        lane_value_operations: invalid.scalar_lane_steps,
+    })
+}
+
 /// Execute every value in the complete eight-bit `a0` domain independently.
 ///
 /// Classes are canonical: inputs are visited in ascending order, the first
@@ -1201,5 +1279,21 @@ mod tests {
     fn live_slice_quotient_refuses_a_dead_register_used_after_merge() {
         let (image, symbols) = dead_register_and_stack_image(true);
         assert!(build_live_slice_mmio_quotient(&image, symbols).is_err());
+    }
+
+    #[test]
+    fn predicate_workflow_covers_valid_singletons_and_one_invalid_domain() {
+        let (image, symbols) = guarded_image();
+        let workflow = build_predicate_mmio_workflow(&image, symbols).unwrap();
+        assert_eq!(workflow.valid_behaviors.len(), 6);
+        assert_eq!(workflow.invalid.lane_count, 250);
+        assert_eq!(workflow.invalid.symbolic_transitions, 2);
+        assert_eq!(workflow.producer_decoded_transitions, 14);
+        let verification = verify_predicate_mmio_workflow(&workflow, &image, symbols).unwrap();
+        assert_eq!(verification.decoded_transitions, 14);
+
+        let mut changed = workflow;
+        changed.invalid.return_value ^= 1;
+        assert!(verify_predicate_mmio_workflow(&changed, &image, symbols).is_err());
     }
 }

@@ -54,7 +54,7 @@ fn reject(message: impl Into<String>) -> Rv32Error {
     Rv32Error(message.into())
 }
 
-fn sign_extend(value: u32, bits: u32) -> u32 {
+pub(crate) fn sign_extend(value: u32, bits: u32) -> u32 {
     (((value << (32 - bits)) as i32) >> (32 - bits)) as u32
 }
 
@@ -102,7 +102,7 @@ fn bits(value: u16, high: u32, low: u32, destination: u32) -> u32 {
     (((value as u32) >> low) & ((1 << (high - low + 1)) - 1)) << destination
 }
 
-fn decompress(raw: u16) -> Result<u32, Rv32Error> {
+pub(crate) fn decompress(raw: u16) -> Result<u32, Rv32Error> {
     let quadrant = raw & 0b11;
     let funct3 = raw >> 13;
     let rd = ((raw >> 7) & 0x1f) as u32;
@@ -338,6 +338,32 @@ impl Rv32ReplayMachine {
             return Err(reject("cannot step a completed replay machine"));
         }
         self.machine.step()
+    }
+
+    /// Advance one scalar replay lane using an instruction decoded once by an
+    /// independent batch checker.
+    ///
+    /// The lane still fetches and compares its own instruction bytes before
+    /// executing the supplied decode. This prevents a forged shared trace from
+    /// skipping, replacing or relocating code.
+    pub(crate) fn step_predecoded(
+        &mut self,
+        expected_pc: u32,
+        expected_word: u32,
+        instruction_bytes: u8,
+        instruction: &Instruction,
+        image_end: u32,
+    ) -> Result<Rv32StepObservation, Rv32Error> {
+        if self.is_complete() {
+            return Err(reject("cannot step a completed replay machine"));
+        }
+        self.machine.step_predecoded(
+            expected_pc,
+            expected_word,
+            instruction_bytes,
+            instruction,
+            image_end,
+        )
     }
 
     pub fn finish(mut self) -> Result<Rv32Execution, Rv32Error> {
@@ -620,13 +646,86 @@ impl Machine {
         self.pc = self.pc.wrapping_add(length);
         self.steps += 1;
         self.execute(current, instruction)?;
-        Ok(Rv32StepObservation {
-            program_counter: observed_pc,
+        Ok(self.observation(observed_pc))
+    }
+
+    fn step_predecoded(
+        &mut self,
+        expected_pc: u32,
+        expected_word: u32,
+        instruction_bytes: u8,
+        instruction: &Instruction,
+        image_end: u32,
+    ) -> Result<Rv32StepObservation, Rv32Error> {
+        if self.steps >= MAX_RV32_STEPS {
+            return Err(reject("instruction step bound exceeded"));
+        }
+        if self.pc != expected_pc {
+            return Err(reject(format!(
+                "shared control trace expected PC 0x{expected_pc:08x}, lane reached 0x{:08x}",
+                self.pc
+            )));
+        }
+        if !matches!(instruction_bytes, 2 | 4) {
+            return Err(reject("shared control trace instruction width is invalid"));
+        }
+        self.observed_reads.clear();
+        self.observed_writes.clear();
+        self.observed_register_reads = 0;
+        self.observed_register_writes = 0;
+        let low = self
+            .load(self.pc, 2)
+            .map_err(|error| reject(format!("fetch at PC 0x{:08x}: {error}", self.pc)))?
+            as u16;
+        let actual_bytes = if low & 3 == 3 { 4 } else { 2 };
+        let actual_word = if actual_bytes == 2 {
+            decompress(low).map_err(|error| {
+                reject(format!(
+                    "compressed decode failed at 0x{:08x} after 0x{:08x}: {error}",
+                    self.pc, self.previous_pc
+                ))
+            })?
+        } else {
+            self.load(self.pc, 4)?
+        };
+        if actual_bytes != u32::from(instruction_bytes) || actual_word != expected_word {
+            return Err(reject(format!(
+                "shared control trace instruction mismatch at 0x{:08x}",
+                self.pc
+            )));
+        }
+        self.observed_reads.push(Rv32MemoryAccess {
+            address: self.pc,
+            width: instruction_bytes,
+        });
+        let current = self.pc;
+        self.previous_pc = current;
+        self.pc = self.pc.wrapping_add(actual_bytes);
+        self.steps += 1;
+        self.execute(current, *instruction)?;
+        for write in &self.observed_writes {
+            if write.address < image_end
+                && write
+                    .address
+                    .checked_add(u32::from(write.width))
+                    .is_some_and(|end| end > RV32_IMAGE_BASE)
+            {
+                return Err(reject(
+                    "self-modifying code is unsupported by shared control replay",
+                ));
+            }
+        }
+        Ok(self.observation(current))
+    }
+
+    fn observation(&self, program_counter: u32) -> Rv32StepObservation {
+        Rv32StepObservation {
+            program_counter,
             register_reads: self.observed_register_reads,
             register_writes: self.observed_register_writes,
             reads: self.observed_reads.clone(),
             writes: self.observed_writes.clone(),
-        })
+        }
     }
 
     fn execute(&mut self, current: u32, instruction: Instruction) -> Result<(), Rv32Error> {

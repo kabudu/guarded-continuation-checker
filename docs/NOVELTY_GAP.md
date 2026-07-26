@@ -994,3 +994,13 @@ all 250 invalid inputs, with separate symbolic-transition and lane-operation
 accounting. Finite-domain abstract interpretation, symbolic execution,
 multi-execution and explicit function tables are direct prior art. No novelty
 claim exists.
+
+The local mechanism is now a positive result. Its vector producer and separate
+250-machine scalar checker preserve all exact terminal behavior while reducing
+the complete measured transition cycle by 24.63x at O0 and 26.31x at O2.
+This establishes a useful bounded implementation result, not novelty. The
+closest-work question remains whether the proof-carrying binary-to-RTL
+composition differs materially from established finite-domain abstract
+interpretation, SIMD multi-execution, KLEE, Veritesting and CBMC workflows.
+Identical-scope maintained comparisons and independent expert review remain
+mandatory before any novelty claim.

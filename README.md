@@ -721,8 +721,17 @@ The next
 [predeclared experiment](docs/OPENTITAN_PWM_PREDICATE_TRANSDUCER_EXPERIMENT_V1.md)
 tests one exact finite-domain symbolic execution over all 250 invalid inputs.
 It must preserve every lane, report both symbolic transitions and lane
-operations, retain exact fallback and pass the unchanged fourfold gate. No
-implementation or result exists yet.
+operations, retain exact fallback and pass the unchanged fourfold gate.
+
+The local mechanism now passes that transition-work gate. A lane-valued
+producer and separate 250-machine scalar replay checker preserve the exact
+invalid return and ten-event MMIO stream. Their complete O0 cycle uses 25,562
+decoded transitions versus the frozen 629,636 exact cycle, a 24.63x reduction.
+O2 uses 8,816 versus 231,920, a 26.31x reduction. Lane work is reported
+separately and is not presented as eliminated computation. Canonical
+certificates, maintained symbolic baselines, RTL composition, hosted evidence
+and independent assessment remain open, so exact execution stays selected and
+no novelty or production claim results yet.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

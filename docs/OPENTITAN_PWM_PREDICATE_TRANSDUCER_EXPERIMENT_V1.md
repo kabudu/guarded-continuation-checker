@@ -1,7 +1,9 @@
 # OpenTitan PWM finite-domain predicate transducer experiment v1
 
-Status: predeclared after three continuation-merge negative results and before
-implementation. No result or novelty claim exists.
+Status: mechanism implemented after predeclaration. The authentic O0 and O2
+mechanism and fourfold transition-work gates pass locally. Certificate codec,
+maintained symbolic baselines, RTL composition, hosted reproduction and
+independent assessment remain open. No novelty or production claim exists.
 
 ## Product question
 
@@ -145,3 +147,39 @@ The mechanism passes only if:
 
 Failure is retained and exact execution remains the fallback. Passing is a
 bounded product result, not a universal solver or algorithmic novelty claim.
+
+## Local mechanism result
+
+The producer now executes the complete invalid domain as one exact lane-valued
+RV32IMC state. It emits a uniform decoded control trace. A separate checker
+does not invoke that vector semantic core: it creates 250 ordinary scalar
+replay machines, decodes each shared instruction once, verifies each lane's
+own fetched instruction bytes, requires uniform control and memory effects,
+and compares every terminal return and MMIO event.
+
+The pinned source-complete build first establishes that native O0, native O2
+and GCC's exact 256-input reference produce the same seven behavior classes.
+The transducer and scalar checker then produce:
+
+| Profile | Invalid symbolic transitions | Producer complete transitions | Verifier complete transitions | Complete cycle | Frozen exact cycle | Reduction |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| O0 | 1,213 | 12,781 | 12,781 | 25,562 | 629,636 | 24.63x |
+| O2 | 448 | 4,408 | 4,408 | 8,816 | 231,920 | 26.31x |
+
+O0 performs 303,250 producer lane-value operations and the scalar checker
+performs 303,250 lane steps. O2 performs 112,000 of each. These figures remain
+visible beside the transition reduction. The invalid predicate returns `2`
+and produces the same ordered ten-event MMIO stream for all 250 members.
+
+Focused hostile controls reject canonical-domain drift, transition-count and
+lane-work drift, sparse-memory accounting drift, PC relocation, instruction
+substitution, invalid instruction width, next-PC drift, trace truncation,
+terminal-result mutation and changed code. A divergent branch also refuses at
+production. The full repository suite remains the regression gate.
+
+This closes the local mechanism and independent scalar-replay portions of
+gates 1, 2, 3, 5, 8 and 9. It does not close the complete experiment. The
+canonical bounded certificate, deterministic clean cycles, complete hostile
+codec matrix, valid-class RTL binding, maintained angr/CBMC/Veritesting
+comparisons, hosted Linux reproduction and independent assessment are still
+required. Exact per-input execution therefore remains the portfolio route.
