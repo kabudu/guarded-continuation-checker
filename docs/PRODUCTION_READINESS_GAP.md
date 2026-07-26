@@ -655,14 +655,18 @@ preflight or process observability. Realistic safety properties,
 cross-platform reproduction, maintained baseline evidence, compatibility, and
 independent review remain open. No production row closes.
 
-- Create a visually polished, accessible SVG architecture diagram after the
-  first production release passes every applicable gate. It must show GCC's
-  platform boundary, the CQ-SAT engine, source-to-model attestation, governed
-  verification and exact fallback, proof artifacts, independent checking, and
-  embedded firmware and RTL integration paths. Keep the source editable and
-  publish an optimised web-ready SVG as the canonical asset embedded in both
-  the project README and guardedcontinuation.org. Include accessible metadata,
-  responsive sizing, and a lightweight fallback for non-SVG contexts.
+The cross-channel temporal-composition candidate now has a 912-byte canonical
+source-bound artifact, bounded decoder, deterministic byte identity, exhaustive
+truncation and mutation rejection, exact byte-level verification API, canonical
+manifest, capability discovery, and atomic create-new file commands. It remains
+outside the production support profile because maintained equivalent-scope
+comparison, whole-process resource trials, cross-platform identity, tagged
+compatibility and independent operator acceptance remain open. No production
+row closes.
+
+The accessible platform architecture diagram is complete and embedded in this
+repository and guardedcontinuation.org. Future releases must keep both copies
+byte-identical and aligned with the implemented trust boundary.
 
 ## Rules
 

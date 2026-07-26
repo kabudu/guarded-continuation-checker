@@ -11,10 +11,12 @@ use guarded_continuation_checker::btor2_region_property::{
     Btor2ChannelTraceProofPolicy, Btor2ChannelTraceQuery, Btor2ChannelTraceSolver,
     MAX_CHANNEL_TRACE_PATTERN_LENGTH, build_btor2_channel_pair_trace_model,
     build_btor2_channel_property_model, build_btor2_channel_trace_model,
-    decode_btor2_channel_trace_proof_artifact, encode_btor2_channel_trace_proof_artifact,
+    decode_btor2_channel_pair_trace_proof_artifact, decode_btor2_channel_trace_proof_artifact,
+    encode_btor2_channel_pair_trace_proof_artifact, encode_btor2_channel_trace_proof_artifact,
     preflight_btor2_channel_pair_trace_proof, preflight_btor2_channel_trace_proof,
-    produce_btor2_channel_pair_trace_proof, produce_btor2_channel_trace_proof,
-    produce_btor2_channel_trace_proof_bytes, verify_btor2_channel_pair_trace_proof,
+    produce_btor2_channel_pair_trace_proof, produce_btor2_channel_pair_trace_proof_bytes,
+    produce_btor2_channel_trace_proof, produce_btor2_channel_trace_proof_bytes,
+    verify_btor2_channel_pair_trace_proof, verify_btor2_channel_pair_trace_proof_bytes,
     verify_btor2_channel_trace_proof, verify_btor2_channel_trace_proof_bytes,
 };
 use guarded_continuation_checker::btor2_search::{self, SearchResult};
@@ -790,6 +792,134 @@ fn trace_wire_artifact_is_canonical_deterministic_and_hostile_safe() {
     let mut trailing = encoded;
     trailing.push(0);
     assert!(decode_btor2_channel_trace_proof_artifact(&trailing, proof_policy).is_err());
+}
+
+#[test]
+fn channel_pair_wire_artifact_is_canonical_deterministic_and_hostile_safe() {
+    let region_policy = Btor2RegionPolicy::default();
+    let structural = encode_btor2_region_equivalence_artifact(
+        &produce_btor2_region_equivalence_artifact(MODEL, ROOTS, 6, region_policy).unwrap(),
+    )
+    .unwrap();
+    let mut queries = Vec::new();
+    for (left, right) in [(0, 2), (2, 4), (4, 0)] {
+        for relation in [
+            Btor2ChannelPairRelation::Equal,
+            Btor2ChannelPairRelation::Different,
+        ] {
+            for (length, mask, value, horizon) in [(1, 1, 1, 0), (2, 3, 1, 2), (2, 3, 0, 2)] {
+                queries.push(Btor2ChannelPairTraceQuery {
+                    query_id: u32::try_from(queries.len()).unwrap(),
+                    left_channel_index: left,
+                    right_channel_index: right,
+                    relation,
+                    pattern: Btor2ChannelTracePattern::new(length, mask, value).unwrap(),
+                    horizon,
+                });
+            }
+        }
+    }
+    let production_policy = Btor2ChannelTraceProductionPolicy::default();
+    let proof_policy = production_policy.artifact();
+    let (plan, encoded) = produce_btor2_channel_pair_trace_proof_bytes(
+        MODEL,
+        &structural,
+        &queries,
+        region_policy,
+        production_policy,
+    )
+    .unwrap();
+    assert_eq!(plan.logical_queries, 18);
+    assert_eq!(plan.proof_members, 6);
+    assert_eq!(plan.structural_constant_members, 6);
+    let decoded = decode_btor2_channel_pair_trace_proof_artifact(&encoded, proof_policy).unwrap();
+    assert_eq!(
+        encode_btor2_channel_pair_trace_proof_artifact(&decoded, proof_policy).unwrap(),
+        encoded
+    );
+    assert_eq!(
+        produce_btor2_channel_pair_trace_proof_bytes(
+            MODEL,
+            &structural,
+            &queries,
+            region_policy,
+            production_policy,
+        )
+        .unwrap()
+        .1,
+        encoded
+    );
+    let summary = verify_btor2_channel_pair_trace_proof_bytes(
+        MODEL,
+        &queries,
+        &encoded,
+        region_policy,
+        proof_policy,
+    )
+    .unwrap();
+    assert_eq!(summary.metrics.logical_queries, 18);
+    assert_eq!(summary.metrics.proof_members, 6);
+    assert_eq!(summary.metrics.structural_constant_members, 6);
+
+    let evidence_bytes = decoded
+        .members
+        .iter()
+        .map(|member| member.evidence.len())
+        .sum();
+    let bounded_policy = Btor2ChannelTraceProofPolicy::new(
+        queries.len(),
+        decoded.members.len(),
+        evidence_bytes,
+        encoded.len(),
+    )
+    .unwrap();
+    decode_btor2_channel_pair_trace_proof_artifact(&encoded, bounded_policy).unwrap();
+    let byte_refusal = Btor2ChannelTraceProofPolicy::new(
+        queries.len(),
+        decoded.members.len(),
+        evidence_bytes,
+        encoded.len() - 1,
+    )
+    .unwrap();
+    assert!(decode_btor2_channel_pair_trace_proof_artifact(&encoded, byte_refusal).is_err());
+
+    let mut reordered_queries = queries.clone();
+    reordered_queries.swap(0, 1);
+    assert!(
+        verify_btor2_channel_pair_trace_proof_bytes(
+            MODEL,
+            &reordered_queries,
+            &encoded,
+            region_policy,
+            proof_policy,
+        )
+        .is_err()
+    );
+    let mut source_drift = MODEL.to_vec();
+    source_drift.push(b'\n');
+    assert!(
+        verify_btor2_channel_pair_trace_proof_bytes(
+            &source_drift,
+            &queries,
+            &encoded,
+            region_policy,
+            proof_policy,
+        )
+        .is_err()
+    );
+    for end in 0..encoded.len() {
+        assert!(
+            decode_btor2_channel_pair_trace_proof_artifact(&encoded[..end], proof_policy).is_err()
+        );
+    }
+    for offset in 0..encoded.len() {
+        let mut changed = encoded.clone();
+        changed[offset] ^= 1;
+        assert!(decode_btor2_channel_pair_trace_proof_artifact(&changed, proof_policy).is_err());
+    }
+    let mut trailing = encoded;
+    trailing.push(0);
+    assert!(decode_btor2_channel_pair_trace_proof_artifact(&trailing, proof_policy).is_err());
 }
 
 struct TraceCohortFixture {

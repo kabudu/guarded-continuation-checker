@@ -1,0 +1,16 @@
+gcc-btor2-channel-pair-traces-v1
+channels=6
+semantic_roots=9,39
+query=0,0,2,equal,1,1,1,0
+query=1,0,2,equal,2,3,0,2
+query=2,0,2,different,1,1,1,0
+query=3,0,2,different,2,3,0,2
+query=4,2,4,equal,1,1,1,0
+query=5,2,4,equal,2,3,0,2
+query=6,2,4,different,1,1,1,0
+query=7,2,4,different,2,3,0,2
+query=8,4,0,equal,1,1,1,0
+query=9,4,0,equal,2,3,0,2
+query=10,4,0,different,1,1,1,0
+query=11,4,0,different,2,3,0,2
+status=complete
