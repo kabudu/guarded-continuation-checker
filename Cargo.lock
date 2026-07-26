@@ -108,6 +108,7 @@ version = "0.31.0"
 dependencies = [
  "libc",
  "qatq",
+ "riscv-decode",
  "sha2",
  "varisat",
  "varisat-checker",
@@ -277,6 +278,12 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "riscv-decode"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68b59d645e392e041ad18f5e529ed13242d8405c66bb192f59703ea2137017d0"
 
 [[package]]
 name = "rustc-hash"

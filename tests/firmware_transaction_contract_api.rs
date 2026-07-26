@@ -1,11 +1,12 @@
 use guarded_continuation_checker::firmware_transaction_contract::{
-    FirmwareTransactionContractInput, FirmwareTransactionEvent,
+    FirmwareTransactionContractInput, FirmwareTransactionEvent, compiled_pwm_schedule,
     decode_firmware_transaction_contract, encode_firmware_transaction_contract,
     produce_firmware_transaction_contract, verify_firmware_transaction_contract,
 };
 use guarded_continuation_checker::revision_impact::TwoComponentRevisionImpactInput;
 use guarded_continuation_checker::revision_local::BoundedResult;
 use guarded_continuation_checker::revision_local::{BoundedQuery, ComponentSide};
+use guarded_continuation_checker::riscv32imc::CompiledMmioEvent;
 
 const CORE_BEFORE: &[u8] =
     include_bytes!("../corpus/rtl/opentitan-pwm-crosstalk-impact/generated/core-before.btor2");
@@ -27,6 +28,88 @@ const EVENTS: &[FirmwareTransactionEvent] = &[
     FirmwareTransactionEvent::EnableChannel0,
     FirmwareTransactionEvent::ConfigureChannel1,
     FirmwareTransactionEvent::ObserveChannel0,
+];
+const COMPILED_EVENTS: &[CompiledMmioEvent] = &[
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 4,
+        value: 1,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 8,
+        value: 3,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 16,
+        value: 0,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 44,
+        value: 2_147_500_032,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 20,
+        value: 0,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 16,
+        value: 0,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 4,
+        value: 1,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 12,
+        value: 0,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 12,
+        value: 1,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 4,
+        value: 1,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 8,
+        value: 3,
+    },
+    CompiledMmioEvent {
+        operation: 1,
+        offset: 16,
+        value: 0,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 48,
+        value: 2_684_379_136,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 24,
+        value: 8_192,
+    },
+    CompiledMmioEvent {
+        operation: 2,
+        offset: 16,
+        value: 0,
+    },
+    CompiledMmioEvent {
+        operation: 3,
+        offset: 0,
+        value: 1,
+    },
 ];
 
 fn queries() -> [BoundedQuery; 5] {
@@ -114,6 +197,20 @@ fn valid_firmware_contract_preserves_the_complete_authentic_impact_matrix() {
     assert_eq!(result(1, 1), BoundedResult::Safe);
     assert_eq!(result(0, 3), BoundedResult::Unsafe);
     assert_eq!(result(3, 3), BoundedResult::Safe);
+}
+
+#[test]
+fn exact_compiled_mmio_stream_reaches_the_semantic_schedule() {
+    assert_eq!(compiled_pwm_schedule(COMPILED_EVENTS).unwrap(), EVENTS);
+    for index in 0..COMPILED_EVENTS.len() {
+        let mut changed = COMPILED_EVENTS.to_vec();
+        changed[index].value ^= 1;
+        assert!(compiled_pwm_schedule(&changed).is_err());
+    }
+    assert!(compiled_pwm_schedule(&COMPILED_EVENTS[..15]).is_err());
+    let mut extended = COMPILED_EVENTS.to_vec();
+    extended.push(COMPILED_EVENTS[0]);
+    assert!(compiled_pwm_schedule(&extended).is_err());
 }
 
 #[test]

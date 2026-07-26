@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add the first bounded compiled-MMIO extraction slice for the authentic
+  OpenTitan PWM firmware contract. A fail-closed RV32IMC interpreter executes
+  revision-pinned O0 and O2 images in 1,928 and 657 instructions respectively,
+  retains profile-specific event publication locations, and recovers the same
+  16-event semantic stream as an independently compiled native recorder. Two
+  clean builds are byte-identical. Exact translation preserves the existing
+  four-step schedule, 20 RTL results and three semantic-change sets, while
+  single-event value drift, truncation and extension refuse. Static all-path
+  proof, the compiled hostile-control matrix and a maintained binary-analysis
+  baseline remain open, so this is an interim mechanism result with no novelty
+  or production-readiness claim.
+
 - Add a proof-carrying firmware transaction-contract envelope for the authentic
   OpenTitan PWM crosstalk revision. One source-bound four-event schedule is
   reused across all 20 revision observations without hiding the old-core

@@ -1,6 +1,8 @@
 # OpenTitan PWM compiled-MMIO contract experiment v1
 
-Status: predeclared experiment. No result or novelty claim exists.
+Status: implementation in progress. The bounded compiled-execution and semantic
+binding gates pass. Static all-path proof, maintained binary-analysis comparison
+and the complete hostile-control cohort remain open. No novelty claim exists.
 
 ## Product question
 
@@ -177,3 +179,45 @@ proof-carrying code, hardware/software co-verification and contract-based
 design have substantial prior art. Passing establishes a bounded product
 capability only. Novelty remains prohibited without an invariant that survives
 an equivalent-scope maintained comparison and independent expert review.
+
+## Interim result
+
+The first implementation uses a fail-closed Rust RV32IMC interpreter over the
+flat compiled image. It supplies the compressed-instruction expansions missing
+from the pinned decoder dependency, bounds image bytes, memory, instructions
+and event count, and refuses unsupported instructions or out-of-range memory.
+It is a narrow extraction mechanism for this experiment, not a general RISC-V
+emulator.
+
+Two clean runs of the pinned build are byte-identical. The exact compiled
+artifacts have these identities:
+
+| Profile | ELF SHA-256 | Flat image SHA-256 |
+| --- | --- | --- |
+| O0 | `df37a41e91610e7d0c61221b38ec346961694b098a978802a2ca0891f05ad07f` | `fb35297e84e7d66786eef3710423f4970e33a5dd4edd75f21e467dd6c5a99dcb` |
+| O2 | `b8b0de989e26e790511a854a958ed09b0fa49058873fd287de9dae1ea675c028` | `02fff087aeaf9b5e62dedc89c8a0a7dbd059b830506042cda9a4a1e01c47deeb` |
+
+O0 executes 1,928 bounded instructions and O2 executes 657. Both return zero
+and recover the same 16 semantic events. The independently compiled native
+recording executable also produces those exact 16 events at both optimization
+levels. Program locations and containing symbols remain profile-specific and
+are retained rather than normalized away.
+
+The recovered stream passes an exact translation into the existing four-step
+semantic schedule. Every single-event value mutation, truncation and extension
+tested at that boundary refuses. The translated schedule therefore preserves
+the existing 20-result RTL matrix and its three minimal semantic-change sets
+through the already checked firmware transaction envelope.
+
+This result does not yet satisfy the complete experiment. In particular:
+
+- the interpreter follows the one deterministic execution induced by the fixed
+  caller and recording MMIO model; it does not yet certify all paths of a
+  runtime-dependent program;
+- program locations are recorded, but O0 attributes event publication to the
+  non-inlined `record_event` helper while O2 attributes it to the inlined
+  caller;
+- the predeclared runtime-selected-channel refusal, compiled artifact mutation
+  matrix and maintained binary-analysis baseline remain to be completed; and
+- no performance, proof-size, production-readiness or novelty conclusion is
+  supported by this interim gate.

@@ -53,6 +53,7 @@ docker run --rm \
         "$optimization" \
         -I"$source/compat" \
         -Wl,-e,gcc_firmware_entry \
+        -Wl,-Ttext=0x80000000 \
         -Wl,--build-id=none \
         -o "/out/$profile/firmware.elf" \
         "$source/upstream/dif_pwm.c" \
@@ -62,6 +63,15 @@ docker run --rm \
         --no-show-raw-insn \
         "/out/$profile/firmware.elf" \
         > "/out/$profile/firmware.disassembly.txt"
+      llvm-objcopy \
+        -O binary \
+        "/out/$profile/firmware.elf" \
+        "/out/$profile/firmware.bin"
+      llvm-nm \
+        --defined-only \
+        --numeric-sort \
+        "/out/$profile/firmware.elf" \
+        > "/out/$profile/firmware.symbols.txt"
       clang \
         -std=c11 \
         -fno-builtin \
@@ -73,6 +83,49 @@ docker run --rm \
         "$source/compat/native_main.c"
       "/out/$profile/native-firmware" > "/out/$profile/native-events.txt"
     done
+  '
+
+cargo build --quiet --manifest-path "$root/Cargo.toml" --example extract_compiled_mmio
+extractor="$root/target/debug/examples/extract_compiled_mmio"
+for profile in o0 o2; do
+  "$extractor" \
+    "$output_abs/$profile/firmware.bin" \
+    "$output_abs/$profile/firmware.symbols.txt" \
+    > "$output_abs/$profile/extracted-events.txt"
+  awk -F, '
+    /^instruction_count=/ { next }
+    /^event=/ { print $1 "," $2 "," $3 "," $4; next }
+    { print }
+  ' "$output_abs/$profile/extracted-events.txt" \
+    > "$output_abs/$profile/extracted-events.normalized.txt"
+  cmp \
+    "$output_abs/$profile/native-events.txt" \
+    "$output_abs/$profile/extracted-events.normalized.txt"
+  rm "$output_abs/$profile/extracted-events.normalized.txt"
+done
+awk -F, '
+  /^instruction_count=/ { next }
+  /^event=/ { print $1 "," $2 "," $3 "," $4; next }
+  { print }
+' "$output_abs/o0/extracted-events.txt" \
+  > "$output_abs/o0/extracted-events.normalized.txt"
+awk -F, '
+  /^instruction_count=/ { next }
+  /^event=/ { print $1 "," $2 "," $3 "," $4; next }
+  { print }
+' "$output_abs/o2/extracted-events.txt" \
+  > "$output_abs/o2/extracted-events.normalized.txt"
+cmp \
+  "$output_abs/o0/extracted-events.normalized.txt" \
+  "$output_abs/o2/extracted-events.normalized.txt"
+rm \
+  "$output_abs/o0/extracted-events.normalized.txt" \
+  "$output_abs/o2/extracted-events.normalized.txt"
+
+docker run --rm \
+  -v "$output_abs:/out" \
+  "$image" \
+  sh -lc '
     {
       echo "compiled_mmio_build_version=1"
       echo "image_digest=sha256:47a73461b8cfb57f0b22988e69cd57992581a35d1a15bc2220eb3a21ab1fc5d3"
@@ -84,11 +137,17 @@ docker run --rm \
       echo "profiles=o0,o2"
       sha256sum \
         /out/o0/firmware.elf \
+        /out/o0/firmware.bin \
         /out/o0/firmware.disassembly.txt \
+        /out/o0/firmware.symbols.txt \
         /out/o0/native-events.txt \
+        /out/o0/extracted-events.txt \
         /out/o2/firmware.elf \
+        /out/o2/firmware.bin \
         /out/o2/firmware.disassembly.txt \
-        /out/o2/native-events.txt |
+        /out/o2/firmware.symbols.txt \
+        /out/o2/native-events.txt \
+        /out/o2/extracted-events.txt |
         sed "s#  /out/#  #"
       echo "status=complete"
     } > /out/manifest.txt
