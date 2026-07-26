@@ -1,0 +1,6 @@
+schedule,status,verified,envelope_bytes,events,impact_observations,minimal_semantic_change_sets,sha256
+valid,accepted,true,128892,4,20,3,00a6f126cc469078f49c7c101b3aae0518e6a30fb7c501f5bee84a9d63137ba0
+reordered,refused,false,0,0,0,0,none
+omitted,refused,false,0,0,0,0,none
+disabled_before_observation,refused,false,0,0,0,0,none
+reconfigured_active_channel,refused,false,0,0,0,0,none

@@ -30,6 +30,7 @@ pub mod controller_plant_aiger;
 pub mod controller_plant_artifact;
 pub mod controller_transducer;
 pub mod dense_relation;
+pub mod firmware_transaction_contract;
 #[cfg(feature = "research-qatq-transport")]
 pub mod qatq_transport;
 pub mod revision_batch;

@@ -1,0 +1,15 @@
+firmware_transaction_contract_version=1
+state_count=6
+state=reset
+state=channel0_configured
+state=channel0_enabled
+state=channel1_configured
+state=observation_ready
+state=rejected
+transition=reset,configure_channel0,channel0_configured
+transition=channel0_configured,enable_channel0,channel0_enabled
+transition=channel0_enabled,configure_channel1,channel1_configured
+transition=channel1_configured,observe_channel0,observation_ready
+otherwise=rejected
+accepted=observation_ready
+status=complete

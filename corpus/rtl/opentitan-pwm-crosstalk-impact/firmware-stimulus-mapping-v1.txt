@@ -1,0 +1,9 @@
+firmware_stimulus_mapping_version=1
+event=configure_channel0,wrapper_initial_configuration,before_frame_0
+event=enable_channel0,pwm_en_qe,phase_q_0
+event=configure_channel1,pwm_en_qe_shared_register_write,phase_q_2
+event=observe_channel0,phase_four_o,phase_q_4
+retained_channel=0
+unrelated_channel=1
+scenario_enable=external_left_node_2
+status=complete

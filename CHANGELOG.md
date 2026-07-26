@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a proof-carrying firmware transaction-contract envelope for the authentic
+  OpenTitan PWM crosstalk revision. One source-bound four-event schedule is
+  reused across all 20 revision observations without hiding the old-core
+  defect, while four invalid schedules refuse before RTL evidence is produced.
+  The canonical envelope preserves three minimal semantic-change sets and adds
+  124 bytes to the existing bundle. This is a cross-layer integrity mechanism,
+  not a proof-size, performance or novelty result.
+
 - Predeclare a lagged channel-relation experiment whose fixed lag of two comes
   from the authenticated even and odd phase-delay constants, rather than
   result-driven tuning. Add canonical coverage and relation products with an
