@@ -230,6 +230,23 @@ pub struct Btor2ChannelPairTraceQuery {
     pub horizon: u32,
 }
 
+/// One source-authenticated Boolean bit used as a guarded-relation boundary.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Btor2BooleanBoundary {
+    pub input_node: NodeId,
+    pub bit_index: u32,
+}
+
+/// A bounded claim that one channel relation holds whenever a guard is true.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2GuardedChannelRelationQuery {
+    pub left_channel_index: usize,
+    pub right_channel_index: usize,
+    pub relation: Btor2ChannelPairRelation,
+    pub guard: Btor2BooleanBoundary,
+    pub horizon: u32,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelTraceProofPolicy {
     max_queries: usize,
@@ -772,6 +789,104 @@ pub fn build_btor2_channel_pair_trace_model(
         }
     };
     build_btor2_observation_trace_model(&bytes, observation, query.pattern)
+}
+
+/// Reconstructs a canonical bad-property model for a guarded relation between
+/// two distinct Boolean channel observations.
+///
+/// The bad property is `guard && !relation`. A SAFE bounded result therefore
+/// establishes the implication only at frames where the authenticated guard is
+/// true. False-guard frames provide no relation evidence.
+pub fn build_btor2_guarded_channel_relation_model(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    query: Btor2GuardedChannelRelationQuery,
+    policy: Btor2RegionPolicy,
+) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+    if query.left_channel_index == query.right_channel_index {
+        return Err(reject(
+            "BTOR2 guarded channel relation requires two distinct channels",
+        ));
+    }
+    let (model, left) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.left_channel_index,
+        policy,
+    )?;
+    let (_right_model, right) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.right_channel_index,
+        policy,
+    )?;
+    let left_sort = statement_sort_id(model_bytes, left)?;
+    if statement_sort_id(model_bytes, right)? != left_sort {
+        return Err(reject(
+            "BTOR2 guarded channel relation observation sorts differ",
+        ));
+    }
+    if !model.inputs().contains(&query.guard.input_node) {
+        return Err(reject(
+            "BTOR2 guarded channel relation guard is not a source input",
+        ));
+    }
+    let guard_node = model
+        .nodes()
+        .get(&query.guard.input_node)
+        .ok_or_else(|| reject("BTOR2 guarded channel relation guard is missing"))?;
+    if query.guard.bit_index >= guard_node.width {
+        return Err(reject(
+            "BTOR2 guarded channel relation guard bit is outside range",
+        ));
+    }
+
+    let mut last = maximum_statement_id(model_bytes)?;
+    let mut bytes = model_bytes.to_vec();
+    if !bytes.ends_with(b"\n") {
+        bytes.push(b'\n');
+    }
+    let guard = if guard_node.width == 1 {
+        query.guard.input_node
+    } else {
+        let guard = allocate_statement_id(&mut last)?;
+        bytes.extend_from_slice(
+            format!(
+                "{guard} slice {left_sort} {} {} {}\n",
+                query.guard.input_node, query.guard.bit_index, query.guard.bit_index
+            )
+            .as_bytes(),
+        );
+        guard
+    };
+    let different = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{different} xor {left_sort} {left} {right}\n").as_bytes());
+    let violation = match query.relation {
+        Btor2ChannelPairRelation::Equal => different,
+        Btor2ChannelPairRelation::Different => {
+            let equal = allocate_statement_id(&mut last)?;
+            bytes.extend_from_slice(format!("{equal} not {left_sort} {different}\n").as_bytes());
+            equal
+        }
+    };
+    let guarded_violation = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{guarded_violation} and {left_sort} {guard} {violation}\n").as_bytes(),
+    );
+    let bad = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{bad} bad {guarded_violation} gcc_guarded_channel_relation_violation\n")
+            .as_bytes(),
+    );
+    btor2::parse_bytes(&bytes).map_err(|error| {
+        reject(format!(
+            "generated BTOR2 guarded channel relation is invalid: {error}"
+        ))
+    })?;
+    Ok((bytes, bad))
 }
 
 fn build_btor2_observation_trace_model(

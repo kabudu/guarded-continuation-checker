@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Predeclare the guarded channel-relation experiment. It targets mixed
+  structural classes with a source-authenticated Boolean guard, requires exact
+  coverage accounting and concrete UNSAFE replay, and retains direct GCC and
+  pinned Yosys plus Z3 controls. False-guard frames provide no relation
+  evidence, and uncovered work must use unchanged exact fallback or return no
+  logical answer. The first authentic OpenTitan probe rejects the frozen
+  single-positive-input language: all twelve mixed-class equality and
+  difference claims have independently checked counterexamples by horizon 2.
+  A current input bit does not summarize configuration state accumulated from
+  earlier firmware writes.
+
 - Predeclare the cross-channel temporal-composition experiment and add its first
   canonical model-building primitive. Two distinct authenticated channel
   observations can be compared for exact equality or difference, then consumed
