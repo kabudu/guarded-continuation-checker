@@ -765,9 +765,10 @@ mod tests {
                 let mut changed = original.clone();
                 changed[index] ^= 1;
                 fs::write(root.join(filename), &changed).unwrap();
-                match load_compiled_mmio_inputs(&root, Path::new("inputs.txt")) {
-                    Ok(changed_inputs) => assert!(changed_inputs.verify(&certificate).is_err()),
-                    Err(_) => {}
+                if let Ok(changed_inputs) =
+                    load_compiled_mmio_inputs(&root, Path::new("inputs.txt"))
+                {
+                    assert!(changed_inputs.verify(&certificate).is_err());
                 }
             }
             fs::write(root.join(filename), original).unwrap();
