@@ -656,7 +656,10 @@ of an authored event list. Canonical 488-byte certificates bind the complete
 source sets, toolchain, binary, symbols and bounded execution. A
 runtime-selected channel refuses before producing an RTL answer, while pinned
 angr 9.3.0 independently recovers the same 16 events from both binaries. This
-is local research evidence, not part of the frozen production profile.
+is local research evidence, not part of the frozen production profile. The
+versioned `compiled-mmio-certify` and `compiled-mmio-verify` commands accept a
+strict relative-path manifest, publish without replacing an existing file, and
+independently reload and replay every bound input before reporting success.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

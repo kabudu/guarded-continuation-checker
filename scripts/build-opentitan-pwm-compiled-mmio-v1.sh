@@ -115,8 +115,10 @@ docker run --rm \
 
 cargo build --quiet --manifest-path "$root/Cargo.toml" --example extract_compiled_mmio
 extractor="$root/target/debug/examples/extract_compiled_mmio"
-cargo build --quiet --manifest-path "$root/Cargo.toml" --example certify_compiled_mmio
-certifier="$root/target/debug/examples/certify_compiled_mmio"
+cargo build --quiet --manifest-path "$root/Cargo.toml" --bin guarded-continuation-checker
+certifier="$root/target/debug/guarded-continuation-checker"
+cargo build --quiet --manifest-path "$root/Cargo.toml" --example hostile_compiled_mmio_files
+hostile_checker="$root/target/debug/examples/hostile_compiled_mmio_files"
 for profile in o0 o2; do
   "$extractor" \
     "$output_abs/$profile/firmware.bin" \
@@ -132,12 +134,71 @@ for profile in o0 o2; do
     "$output_abs/$profile/native-events.txt" \
     "$output_abs/$profile/extracted-events.normalized.txt"
   rm "$output_abs/$profile/extracted-events.normalized.txt"
-  "$certifier" \
-    "$output_abs/$profile" \
-    "$root/corpus/firmware/opentitan-pwm-dif" \
+  input_root="$output_abs/$profile/certificate-inputs"
+  mkdir -p \
+    "$input_root/upstream" \
+    "$input_root/compat/hw/top" \
+    "$input_root/compat/sw/device/lib/base" \
+    "$input_root/compat/sw/device/lib/dif"
+  cp \
+    "$root/corpus/firmware/opentitan-pwm-dif/LICENSE" \
+    "$root/corpus/firmware/opentitan-pwm-dif/PROVENANCE.md" \
     "$root/corpus/firmware/opentitan-pwm-dif/toolchain-v1.txt" \
+    "$input_root/"
+  cp \
+    "$root/corpus/firmware/opentitan-pwm-dif/upstream/dif_pwm.c" \
+    "$input_root/upstream/"
+  cp \
+    "$root/corpus/firmware/opentitan-pwm-dif/compat/assert.h" \
+    "$root/corpus/firmware/opentitan-pwm-dif/compat/firmware_caller.c" \
+    "$input_root/compat/"
+  cp \
+    "$root/corpus/firmware/opentitan-pwm-dif/compat/hw/top/pwm_regs.h" \
+    "$input_root/compat/hw/top/"
+  cp \
+    "$root/corpus/firmware/opentitan-pwm-dif/compat/sw/device/lib/base/bitfield.h" \
+    "$input_root/compat/sw/device/lib/base/"
+  cp \
+    "$root/corpus/firmware/opentitan-pwm-dif/compat/sw/device/lib/dif/dif_base.h" \
+    "$root/corpus/firmware/opentitan-pwm-dif/compat/sw/device/lib/dif/dif_pwm.h" \
+    "$input_root/compat/sw/device/lib/dif/"
+  cp \
+    "$output_abs/$profile/firmware.bin" \
+    "$output_abs/$profile/firmware.symbols.txt" \
+    "$input_root/"
+  {
+    echo "gcc-compiled-mmio-input-manifest-v1"
+    echo "upstream_count=3"
+    echo "upstream=LICENSE,LICENSE"
+    echo "upstream=PROVENANCE.md,PROVENANCE.md"
+    echo "upstream=upstream/dif_pwm.c,upstream/dif_pwm.c"
+    echo "compatibility_count=6"
+    echo "compatibility=compat/assert.h,compat/assert.h"
+    echo "compatibility=compat/firmware_caller.c,compat/firmware_caller.c"
+    echo "compatibility=compat/hw/top/pwm_regs.h,compat/hw/top/pwm_regs.h"
+    echo "compatibility=compat/sw/device/lib/base/bitfield.h,compat/sw/device/lib/base/bitfield.h"
+    echo "compatibility=compat/sw/device/lib/dif/dif_base.h,compat/sw/device/lib/dif/dif_base.h"
+    echo "compatibility=compat/sw/device/lib/dif/dif_pwm.h,compat/sw/device/lib/dif/dif_pwm.h"
+    echo "toolchain=toolchain-v1.txt"
+    echo "image=firmware.bin"
+    echo "symbols=firmware.symbols.txt"
+    echo "status=complete"
+  } > "$input_root/inputs.txt"
+  "$certifier" compiled-mmio-certify \
+    "$input_root" \
+    inputs.txt \
     "$output_abs/$profile/compiled-mmio-certificate-v1.bin" \
     > "$output_abs/$profile/compiled-mmio-certificate-v1.txt"
+  "$certifier" compiled-mmio-verify \
+    "$input_root" \
+    inputs.txt \
+    "$output_abs/$profile/compiled-mmio-certificate-v1.bin" \
+    > "$output_abs/$profile/compiled-mmio-certificate-v1.verify.txt"
+  "$hostile_checker" \
+    "$input_root" \
+    inputs.txt \
+    "$output_abs/$profile/compiled-mmio-certificate-v1.bin" \
+    > "$output_abs/$profile/compiled-mmio-hostile-v1.txt"
 done
 if "$extractor" \
   "$output_abs/runtime-channel/firmware.bin" \
@@ -191,6 +252,8 @@ docker run --rm \
         /out/o0/extracted-events.txt \
         /out/o0/compiled-mmio-certificate-v1.bin \
         /out/o0/compiled-mmio-certificate-v1.txt \
+        /out/o0/compiled-mmio-certificate-v1.verify.txt \
+        /out/o0/compiled-mmio-hostile-v1.txt \
         /out/o2/firmware.elf \
         /out/o2/firmware.bin \
         /out/o2/firmware.disassembly.txt \
@@ -199,6 +262,8 @@ docker run --rm \
         /out/o2/extracted-events.txt \
         /out/o2/compiled-mmio-certificate-v1.bin \
         /out/o2/compiled-mmio-certificate-v1.txt \
+        /out/o2/compiled-mmio-certificate-v1.verify.txt \
+        /out/o2/compiled-mmio-hostile-v1.txt \
         /out/runtime-channel/firmware.elf \
         /out/runtime-channel/firmware.bin \
         /out/runtime-channel/firmware.symbols.txt \

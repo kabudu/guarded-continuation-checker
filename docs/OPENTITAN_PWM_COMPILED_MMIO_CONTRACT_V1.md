@@ -296,3 +296,59 @@ concrete caller. It does not establish all-path completeness, a certificate
 size or speed advantage, production support or novelty. angr is a
 well-established multi-architecture binary-analysis framework, and agreement
 with it is validation evidence rather than a differentiating claim.
+
+## Self-service file cycle
+
+The next cycle is frozen before implementation. It must expose versioned
+`compiled-mmio-certify` and `compiled-mmio-verify` commands over ordinary
+files. Both commands must use the same library verifier as the public Rust API
+and apply explicit limits before reading, decoding or executing inputs.
+
+The certify command must accept a canonical manifest naming every upstream and
+compatibility member, the toolchain identity, flat image and symbol table. It
+must reject absolute paths, parent traversal, duplicates, aliases, symlinks,
+non-regular files and inputs outside the declared root. Publication must use a
+create-new temporary file, verify the exact bytes from disk, then publish with
+an atomic create-new operation that cannot replace an existing destination.
+Any failure must leave no certificate or partial file.
+
+The verify command must independently reload all bound inputs, decode the
+certificate and reconstruct the complete extraction. Success reports identity
+and work metrics only after verification. Refusal reports no firmware contract
+or RTL answer.
+
+The hostile cohort must cover every certificate byte, every compiled-image
+byte, every symbol-table byte and representative bytes from every source and
+toolchain member. It must also cover truncation, extension, missing and extra
+members, order and name changes, path traversal, symlinks, output collisions,
+partial writes and resource-limit boundaries.
+
+The cycle advances only if two clean command runs are byte-identical, all
+hostile cases refuse without output, process time and peak memory are retained,
+and hosted Linux reproduces the certificate identities already measured
+locally. Passing establishes a self-service integrity mechanism only. Static
+all-path proof, compatibility history, independent acceptance, production
+readiness and novelty remain open.
+
+## Self-service file result
+
+The local macOS arm64 gate passes. Both profiles preserve their original
+488-byte certificate identities across two clean builds and independent
+file-command verification. The O0 verifier reports 7,942 microseconds and
+6,930,432 bytes maximum resident set size. The O2 verifier reports 7,580
+microseconds and 6,914,048 bytes maximum resident set size. These are
+single-process observations, not performance claims.
+
+The actual compiled corpus rejects all 976 certificate-byte mutations, all
+12,556 image-byte mutations, all 1,356 symbol-table-byte mutations, and 60
+representative mutations spanning every named source member and toolchain
+identity. The bounded file fixture also rejects traversal, absolute and aliased
+paths, symlinks, collisions, truncation and extension. The retained details are
+in the
+[arm64 file result](../results/opentitan-pwm-compiled-mmio-file-arm64-v1.txt).
+
+The protected hosted workflow now predeclares two clean Linux builds, exact
+certificate comparison and the frozen certificate identities. That platform
+gate remains open until the pull request workflow passes. Concurrent
+replacement of a previously inspected input tree, compatibility history,
+static all-path proof and independent operator acceptance also remain open.
