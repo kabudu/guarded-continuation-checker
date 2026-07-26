@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare a guarded MMIO continuation quotient experiment over all 256
+  runtime-channel values in the authentic compiled OpenTitan PWM caller. The
+  candidate may merge inputs only when their complete compiled continuation,
+  return class and MMIO stream agree. Exact per-input execution remains the
+  fail-closed reference and fallback, while pinned angr, CBMC and maintained
+  RTL evidence define the closest-system baselines.
+
 - Replace prose-heavy GitHub release descriptions with a concise, labelled
   highlights format and enforce that format before future releases publish.
 

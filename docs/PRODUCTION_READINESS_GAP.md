@@ -709,6 +709,13 @@ Windows reparse-point handling, static all-path proof, compatibility history,
 a governed process-resource policy and independent acceptance remain open. No
 production row closes.
 
+The guarded MMIO continuation quotient experiment is predeclared as the next
+static all-input step. It covers all 256 values of the authentic runtime-channel
+caller, requires disjoint and exhaustive compiled-behaviour classes, composes
+every valid class with retained RTL evidence, and keeps exact per-input
+execution as the fail-closed fallback. No implementation or result exists yet,
+so no production row changes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.
