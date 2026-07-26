@@ -1,6 +1,6 @@
 # BTOR2 lagged channel-relation experiment v1
 
-Status: predeclared experiment. No result or novelty claim exists.
+Status: authentic experiment is negative. No novelty claim exists.
 
 ## Product question
 
@@ -124,6 +124,18 @@ The hypothesis fails if:
   coverage and verification costs.
 
 Negative results remain in the repository.
+
+## First retained result
+
+The complete 16-row cohort has verified history coverage at frame 2, but both
+relations in both orientations have verified counterexamples at that same
+first valid frame. All four horizons reproduce the result through monotonic
+shortest-prefix checking.
+
+The [retained result](../results/opentitan-pwm-lagged-channel-relation-probe-v1.md)
+therefore rejects maintained-baseline and portfolio work. A source-derived
+physical phase delay does not create a functional temporal relation while the
+two firmware configuration classes remain independently symbolic.
 
 ## Claim boundary
 

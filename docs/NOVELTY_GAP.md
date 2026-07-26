@@ -859,3 +859,22 @@ falls by exactly one third, but end-to-end speed stays within roughly half a
 percent of parity. Cheap trace scans are therefore a falsified target. A viable
 candidate must reuse substantially more expensive proof obligations and still
 pay for independent equivalence admission and complete exact fallback.
+
+## Authentic PWM lagged relations
+
+The source-derived lag experiment tests whether the harness's fixed even and
+odd phase-delay difference can replace a same-frame relation with a useful
+two-frame temporal alignment. Canonical products carry both observation and
+validity history, while separate coverage evidence prevents prefix vacuity.
+
+The complete 16-row result is negative. Equality and difference in both
+temporal orientations have verified counterexamples at the first valid
+comparison frame. Independently symbolic firmware configuration can change the
+channel observations more strongly than the physical phase offset aligns them.
+No lagged relation is admitted into a portfolio.
+
+Trace alignment, retiming, sequential equivalence and relational products are
+established. This experiment supplies neither a novel invariant nor a product
+advantage. A follow-up must constrain the firmware contract from authentic
+software or verify a richer schedule property without selecting predicates
+from observed answers.

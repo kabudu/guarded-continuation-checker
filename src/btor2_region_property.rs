@@ -295,6 +295,35 @@ pub struct Btor2ChannelPhaseAbstractionModels {
     pub concrete_state_bits: u32,
 }
 
+/// Which channel supplies the historical observation in a lagged relation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Btor2LaggedChannelOrientation {
+    LeftLeads,
+    RightLeads,
+}
+
+/// A bounded relation between one current and one source-derived lagged
+/// channel observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2LaggedChannelRelationQuery {
+    pub left_channel_index: usize,
+    pub right_channel_index: usize,
+    pub orientation: Btor2LaggedChannelOrientation,
+    pub relation: Btor2ChannelPairRelation,
+    pub lag: u32,
+    pub horizon: u32,
+}
+
+/// Canonical coverage and relation products for one lagged channel query.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2LaggedChannelRelationModels {
+    pub coverage_model: Vec<u8>,
+    pub coverage_bad: NodeId,
+    pub relation_model: Vec<u8>,
+    pub relation_bad: NodeId,
+    pub history_state_bits: u32,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelTraceProofPolicy {
     max_queries: usize,
@@ -1400,6 +1429,159 @@ pub fn build_btor2_channel_phase_abstraction_models(
         abstract_state_bits: 10,
         concrete_state_nodes: base.concrete_state_nodes,
         concrete_state_bits: base.concrete_state_bits,
+    })
+}
+
+/// Builds separate history-coverage and lagged-relation products.
+///
+/// Version 1 deliberately accepts only the source-predeclared lag of two. The
+/// relation product cannot report a violation until the two-frame history is
+/// valid, and the separate coverage product prevents a vacuous SAFE result
+/// from being accepted.
+pub fn build_btor2_lagged_channel_relation_models(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    query: Btor2LaggedChannelRelationQuery,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2LaggedChannelRelationModels, Btor2RegionError> {
+    if query.left_channel_index == query.right_channel_index {
+        return Err(reject(
+            "BTOR2 lagged channel relation requires two distinct channels",
+        ));
+    }
+    if query.lag != 2 {
+        return Err(reject(
+            "BTOR2 lagged channel relation version 1 requires lag two",
+        ));
+    }
+    if query.horizon < query.lag || query.horizon > MAX_BITBLAST_HORIZON {
+        return Err(reject(
+            "BTOR2 lagged channel relation horizon is outside range",
+        ));
+    }
+    let (_model, left) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.left_channel_index,
+        policy,
+    )?;
+    let (_model, right) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.right_channel_index,
+        policy,
+    )?;
+    let bool_sort = statement_sort_id(model_bytes, left)?;
+    if statement_sort_id(model_bytes, right)? != bool_sort {
+        return Err(reject(
+            "BTOR2 lagged channel relation observation sorts differ",
+        ));
+    }
+    let (leading, current) = match query.orientation {
+        Btor2LaggedChannelOrientation::LeftLeads => (left, right),
+        Btor2LaggedChannelOrientation::RightLeads => (right, left),
+    };
+
+    let mut last = maximum_statement_id(model_bytes)?;
+    let mut common = model_bytes.to_vec();
+    if !common.ends_with(b"\n") {
+        common.push(b'\n');
+    }
+    let zero = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(format!("{zero} const {bool_sort} 0\n").as_bytes());
+    let one = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(format!("{one} const {bool_sort} 1\n").as_bytes());
+    let horizon_binding = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!(
+            "{horizon_binding} const {bool_sort} 0 gcc_lagged_channel_horizon_{}\n",
+            query.horizon
+        )
+        .as_bytes(),
+    );
+
+    let lag_one = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(format!("{lag_one} state {bool_sort}\n").as_bytes());
+    let lag_one_init = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{lag_one_init} init {bool_sort} {lag_one} {zero}\n").as_bytes(),
+    );
+    let lag_two = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(format!("{lag_two} state {bool_sort}\n").as_bytes());
+    let lag_two_init = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{lag_two_init} init {bool_sort} {lag_two} {zero}\n").as_bytes(),
+    );
+    let valid_one = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(format!("{valid_one} state {bool_sort}\n").as_bytes());
+    let valid_one_init = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{valid_one_init} init {bool_sort} {valid_one} {zero}\n").as_bytes(),
+    );
+    let valid_two = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(format!("{valid_two} state {bool_sort}\n").as_bytes());
+    let valid_two_init = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{valid_two_init} init {bool_sort} {valid_two} {zero}\n").as_bytes(),
+    );
+
+    let lag_one_next = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{lag_one_next} next {bool_sort} {lag_one} {leading}\n").as_bytes(),
+    );
+    let lag_two_next = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{lag_two_next} next {bool_sort} {lag_two} {lag_one}\n").as_bytes(),
+    );
+    let valid_one_next = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{valid_one_next} next {bool_sort} {valid_one} {one}\n").as_bytes(),
+    );
+    let valid_two_next = allocate_statement_id(&mut last)?;
+    common.extend_from_slice(
+        format!("{valid_two_next} next {bool_sort} {valid_two} {valid_one}\n").as_bytes(),
+    );
+
+    let mut coverage_model = common.clone();
+    let mut coverage_last = last;
+    let coverage_bad = allocate_statement_id(&mut coverage_last)?;
+    coverage_model.extend_from_slice(
+        format!("{coverage_bad} bad {valid_two} gcc_lagged_channel_history_covered\n").as_bytes(),
+    );
+    btor2::parse_bytes(&coverage_model).map_err(|error| {
+        reject(format!(
+            "generated BTOR2 lagged channel coverage model is invalid: {error}"
+        ))
+    })?;
+
+    let mut relation_model = common;
+    let mut relation_last = last;
+    let relation_bad = append_guarded_channel_relation_bad(
+        &mut relation_model,
+        &mut relation_last,
+        GuardedRelationNodes {
+            bool_sort,
+            left: lag_two,
+            right: current,
+            guard: valid_two,
+        },
+        query.relation,
+        "gcc_lagged_channel_relation_violation",
+    )?;
+    btor2::parse_bytes(&relation_model).map_err(|error| {
+        reject(format!(
+            "generated BTOR2 lagged channel relation model is invalid: {error}"
+        ))
+    })?;
+    Ok(Btor2LaggedChannelRelationModels {
+        coverage_model,
+        coverage_bad,
+        relation_model,
+        relation_bad,
+        history_state_bits: 4,
     })
 }
 
