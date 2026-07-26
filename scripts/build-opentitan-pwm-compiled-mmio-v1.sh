@@ -6,7 +6,7 @@ if [ "$#" -ne 1 ]; then
   exit 2
 fi
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 output=$1
 image="silkeh/clang@sha256:47a73461b8cfb57f0b22988e69cd57992581a35d1a15bc2220eb3a21ab1fc5d3"
 
@@ -25,7 +25,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-output_abs=$(CDPATH= cd -- "$output" && pwd)
+output_abs=$(CDPATH='' cd -- "$output" && pwd)
 
 docker run --rm \
   -v "$root:/work:ro" \
