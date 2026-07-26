@@ -702,9 +702,11 @@ ancestors without following symlinks, reloads the temporary certificate through
 the same descriptor, publishes without replacement and cleans and synchronizes
 descriptor-relative. Local parent-replacement, temporary-name, final-name,
 symlink, partial-write and 1,000-publication stress gates pass with no redirect,
-temporary residue or leaked allocation. Hosted output-race and Valgrind gates,
-Windows reparse-point handling, static all-path proof, compatibility history, a
-governed process-resource policy and independent acceptance remain open. No
+temporary residue or leaked allocation. Hosted Linux run 30203290328
+reproduces both frozen certificate identities, independently verifies the
+newly published certificate, and reports zero Valgrind errors or lost bytes.
+Windows reparse-point handling, static all-path proof, compatibility history,
+a governed process-resource policy and independent acceptance remain open. No
 production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
