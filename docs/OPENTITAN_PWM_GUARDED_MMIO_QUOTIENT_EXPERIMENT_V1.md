@@ -46,6 +46,13 @@ The producer may merge states only when their complete machine continuation,
 including future MMIO observations and return class, is equal. Equal event
 prefixes alone are insufficient.
 
+Version 1 tests exact concrete-state convergence, not abstract or solver-assumed
+state equivalence. A reusable continuation node is admitted only after byte
+equality of the complete program counter, register values and knownness,
+bounded memory values and knownness, and all other future execution state.
+Digests may index candidate nodes but cannot establish equality. Each input
+retains its own execution and event prefix before the shared node.
+
 The independent verifier must reconstruct the binary semantics, prove class
 predicates disjoint and exhaustive, replay every retained continuation edge,
 and check each RTL result. It must not trust producer hashes, class membership
