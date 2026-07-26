@@ -693,6 +693,11 @@ different stale stack bytes, so their complete concrete RV32 states never
 converge. GCC refuses the merge and keeps exact per-input execution. A separate
 future experiment may test whether independently checked memory-liveness
 proofs can remove only bytes that provably cannot affect the continuation.
+That follow-up is now
+[predeclared](docs/OPENTITAN_PWM_LIVE_STATE_QUOTIENT_EXPERIMENT_V1.md) with
+byte-precise read-before-overwrite proofs, hostile read-after-merge controls,
+exact fallback and the unchanged fourfold total-work gate. It has no
+implementation or result yet.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

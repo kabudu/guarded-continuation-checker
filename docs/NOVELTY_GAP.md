@@ -955,3 +955,12 @@ exclude a differing byte only after a checker proves that no remaining
 instruction path can read it. That follow-up requires a new predeclaration and
 closest-work comparison with compiler liveness, dead-store analysis, symbolic
 state subsumption and proof-carrying abstraction.
+
+A separate
+[proof-carrying live-state experiment](OPENTITAN_PWM_LIVE_STATE_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared before implementation. It requires a byte-precise,
+independently reconstructed read-before-overwrite proof over the bounded binary
+suffix. LLVM MemorySSA, CompCert liveness, symbolic state merging, dynamic
+slicing, observational equivalence and proof-carrying code are explicit
+closest-work families. The bounded firmware-to-RTL combination is the research
+question; no algorithmic novelty claim exists.

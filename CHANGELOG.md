@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare a proof-carrying live-state continuation quotient after the strict
+  exact-state candidate exposed stale stack differences. The new experiment
+  may ignore a differing byte only after an independent byte-precise
+  read-before-overwrite proof, retains exact fallback and hostile
+  read-after-merge controls, and keeps the existing fourfold total-work gate.
+  No implementation or result exists yet.
+
 - Retain the guarded-MMIO exact-state quotient as a negative result. A bounded
   opaque replay API and separately coded route verifier merge synthetic states
   only after complete byte equality, but authentic O0 and O2 inputs retain

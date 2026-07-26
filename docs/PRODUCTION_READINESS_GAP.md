@@ -732,6 +732,12 @@ production-row change. A future live-state quotient remains research-only
 until dead-byte proofs, an independent checker, hostile read-after-merge
 controls and exact fallback all pass.
 
+The live-state follow-up is predeclared but unimplemented. It cannot change a
+production row until its independently checked dead-byte certificate,
+read-after-merge hostile controls, exact portfolio fallback, deterministic
+codec, resource policy, maintained-tool baselines, RTL composition and hosted
+evidence all pass.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.
