@@ -180,6 +180,18 @@ jobs:
             --leak-check=full \
             --show-leak-kinds=all \
             target/debug/guarded-continuation-checker \
+            compiled-mmio-certify \
+            /tmp/compiled-mmio-a/o0/certificate-inputs \
+            inputs.txt \
+            /tmp/compiled-mmio-a/o0/valgrind-output.bin
+          echo \
+            "fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0  /tmp/compiled-mmio-a/o0/valgrind-output.bin" |
+            sha256sum --check
+          valgrind \
+            --error-exitcode=1 \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            target/debug/guarded-continuation-checker \
             compiled-mmio-verify \
             /tmp/compiled-mmio-a/o0/certificate-inputs \
             inputs.txt \

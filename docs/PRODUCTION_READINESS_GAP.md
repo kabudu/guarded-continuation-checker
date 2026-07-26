@@ -697,9 +697,15 @@ load. Local deterministic and sustained rename, rewrite, truncation, extension
 and symlink races return only a complete stable snapshot or refusal. Hosted
 Linux run 30198476777 passes the race cohort, preserves both frozen certificate
 identities and completes the Valgrind descriptor-boundary verification.
-Output-directory descriptor acquisition, Windows reparse-point handling,
-static all-path proof, compatibility history, a governed process-resource
-policy and independent acceptance remain open. No production row closes.
+The Unix certifier now also anchors the resolved output parent, traverses its
+ancestors without following symlinks, reloads the temporary certificate through
+the same descriptor, publishes without replacement and cleans and synchronizes
+descriptor-relative. Local parent-replacement, temporary-name, final-name,
+symlink, partial-write and 1,000-publication stress gates pass with no redirect,
+temporary residue or leaked allocation. Hosted output-race and Valgrind gates,
+Windows reparse-point handling, static all-path proof, compatibility history, a
+governed process-resource policy and independent acceptance remain open. No
+production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
