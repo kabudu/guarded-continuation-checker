@@ -1,6 +1,6 @@
 # BTOR2 guarded channel-relation experiment v1
 
-Status: predeclared. No result or novelty claim exists yet.
+Status: first authentic probe is negative. No novelty claim exists.
 
 ## Product question
 
@@ -109,6 +109,20 @@ The hypothesis fails for this cohort if any of these occurs:
   the same scope.
 
 A negative result remains part of the repository.
+
+## First retained result
+
+The fixed OpenTitan PWM probe checks one mixed-class pair under all six
+positive firmware-input bits and both relation kinds through horizon 2. All
+twelve claims are UNSAFE, with independently verified counterexamples at
+frames 0 through 2.
+
+The result rejects the version-1 guard language on this source. A current-frame
+input bit does not summarize the configuration state accumulated from earlier
+firmware writes. The complete
+[retained rows](../results/opentitan-pwm-guarded-channel-relation-probe-v1.md)
+therefore motivate a separately predeclared state-bearing guard monitor rather
+than a wider search over answer-selected input bits.
 
 ## Claim boundary
 

@@ -1,0 +1,13 @@
+model,left,right,guard,input_node,bit_index,relation,horizon,result,bad_frame,certificate_bytes,verified
+symbolic-class-6,0,1,class_write,2,0,equal,2,UNSAFE,2,125,true
+symbolic-class-6,0,1,class_write,2,0,different,2,UNSAFE,1,125,true
+symbolic-class-6,0,1,class_write,2,1,equal,2,UNSAFE,2,125,true
+symbolic-class-6,0,1,class_write,2,1,different,2,UNSAFE,1,125,true
+symbolic-class-6,0,1,class_invert,3,0,equal,2,UNSAFE,2,125,true
+symbolic-class-6,0,1,class_invert,3,0,different,2,UNSAFE,0,125,true
+symbolic-class-6,0,1,class_invert,3,1,equal,2,UNSAFE,2,125,true
+symbolic-class-6,0,1,class_invert,3,1,different,2,UNSAFE,1,125,true
+symbolic-class-6,0,1,class_enable,4,0,equal,2,UNSAFE,2,125,true
+symbolic-class-6,0,1,class_enable,4,0,different,2,UNSAFE,1,125,true
+symbolic-class-6,0,1,class_enable,4,1,equal,2,UNSAFE,2,125,true
+symbolic-class-6,0,1,class_enable,4,1,different,2,UNSAFE,1,125,true

@@ -169,6 +169,13 @@ guard-certificate costs, agree with pinned Yosys plus Z3 at identical scope,
 survive hostile guard-boundary controls and reveal a distinct invariant before
 the novelty status can change.
 
+The first guarded probe is a negative result. All six positive firmware-input
+bits permit counterexamples to both equality and difference for the selected
+mixed-class OpenTitan pair by horizon 2. This falsifies the current-frame guard
+as a useful semantic summary. A follow-up must predeclare and authenticate a
+state-bearing history monitor rather than select a stronger predicate from the
+observed answers.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the
