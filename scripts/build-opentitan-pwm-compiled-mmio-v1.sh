@@ -28,6 +28,7 @@ trap cleanup EXIT HUP INT TERM
 output_abs=$(CDPATH='' cd -- "$output" && pwd)
 
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$root:/work:ro" \
   -v "$output_abs:/out" \
   "$image" \
@@ -231,6 +232,7 @@ rm \
   "$output_abs/o2/extracted-events.normalized.txt"
 
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$output_abs:/out" \
   "$image" \
   sh -lc '
