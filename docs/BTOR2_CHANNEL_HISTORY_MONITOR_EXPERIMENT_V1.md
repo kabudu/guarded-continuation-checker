@@ -1,6 +1,6 @@
 # BTOR2 channel history-monitor experiment v1
 
-Status: predeclared. No result or novelty claim exists yet.
+Status: authentic persistence probe is negative. No novelty claim exists.
 
 ## Product question
 
@@ -120,6 +120,21 @@ The mechanism fails if:
   monitor costs are included.
 
 Negative results remain in the repository.
+
+## First retained result
+
+The complete 30-row OpenTitan cohort produces eight SAFE and 22 UNSAFE
+answers. Every frozen guard and relation is UNSAFE by horizon 2. At horizon 8,
+the two written-configuration guards each admit equality and difference
+counterexamples at frame 7.
+
+The canonical monitor, hostile boundary checks and independent certificate
+verification pass. The semantic hypothesis does not: retained firmware
+configuration omits operational phase and internal channel evolution. The
+[complete retained rows](../results/opentitan-pwm-channel-history-monitor-probe-v1.md)
+reject promotion into the proof portfolio. False-coverage composition and
+exact-fallback packaging are not implemented because the prerequisite
+persistent guarded relation failed.
 
 ## Claim boundary
 

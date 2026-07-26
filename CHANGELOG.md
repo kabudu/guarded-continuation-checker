@@ -7,7 +7,10 @@
   prior write, enable and invert configuration across frames and exposes three
   answer-independent guard states. False and uncovered frames require exact
   fallback or no logical answer. Direct GCC and pinned Yosys plus Z3
-  comparisons remain mandatory, and no result or novelty claim exists yet.
+  comparisons remain mandatory. The authentic 30-row persistence probe is
+  negative: every guard and relation admits a counterexample by horizon 2.
+  Firmware configuration history still omits operational phase and internal
+  channel evolution, so the monitor is not promoted into the proof portfolio.
 
 - Predeclare the guarded channel-relation experiment. It targets mixed
   structural classes with a source-authenticated Boolean guard, requires exact

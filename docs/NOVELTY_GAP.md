@@ -184,6 +184,14 @@ product evidence unless complete proof-carrying composition exposes a distinct
 invariant and beats equivalent maintained workflows after monitor and fallback
 costs.
 
+The fixed history monitor also fails its semantic prerequisite. All six
+guard-relation combinations are UNSAFE by horizon 2, despite eight shallow SAFE
+rows at horizons 0 and 1. Retained firmware configuration is not a sufficient
+quotient for operational phase and internal channel evolution. No artifact,
+portfolio or novelty work proceeds from this monitor. A next hypothesis must
+compress operational phase without reproducing complete channel state and must
+include the abstraction proof in every comparison.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the
