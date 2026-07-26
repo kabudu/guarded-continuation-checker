@@ -23,6 +23,7 @@ jobs:
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
           test "$GITHUB_REF_NAME" = "v$version"
           test -f "docs/releases/v$version.md"
+          scripts/check-release-notes.sh "docs/releases/v$version.md"
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Install deterministic packaging tools
         run: |

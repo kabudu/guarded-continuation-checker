@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Replace prose-heavy GitHub release descriptions with a concise, labelled
+  highlights format and enforce that format before future releases publish.
+
 - Harden the compiled-MMIO file boundary against concurrent input-tree
   replacement on Unix. The loader now opens one trusted root descriptor,
   traverses with no-follow descriptor-relative operations, reads the same

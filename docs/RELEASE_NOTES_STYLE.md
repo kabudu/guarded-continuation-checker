@@ -1,34 +1,24 @@
-# Release-note style
+# GitHub release notes style
 
-GitHub release notes are product communication, not an internal experiment
-log. They must help a new reader understand the release before presenting
-implementation detail.
+GitHub already displays the release title. A release-notes file must therefore
+start with a short summary, not a duplicate level-one heading.
 
-Use this order:
+Use this structure:
 
-1. One short paragraph stating the user-visible outcome.
-2. An optional second paragraph explaining the central capability.
-3. `## What is new`, with no more than seven compact bullets.
-4. `## Measured result` when the release includes measurements.
-5. `## Install`, with copyable commands.
-6. `## Project status`, with the honest support and claim boundary.
+1. One short opening paragraph that states the user-visible outcome.
+2. A `## Release highlights` section with no more than seven concise bullets.
+3. Optional focused sections for measurements, installation or migration.
+4. A final `## Status and scope` section for maturity and claim boundaries.
 
-Each bullet must express one idea and should fit on one rendered line where
-practical. Move qualifications, benchmark context and detailed methodology into
-short prose below the list. Avoid packing several clauses, measurements or tool
-names into one bullet. Use inline code only for literal commands, identifiers,
-versions or file names.
+Keep each bullet to one sentence and lead with a short bold label. Prefer a
+table when several measurements share the same dimensions. Do not use em
+dashes, manual HTML or research-log prose.
 
-Before publishing:
+Run the formatting gate before publishing:
 
-- preview the Markdown in GitHub;
-- check it on a narrow viewport;
-- confirm that wrapped bullets remain easy to scan;
-- verify every command and link;
-- retain negative measurements and claim boundaries without letting them
-  dominate the opening;
-- confirm that the committed file and published release body are identical.
+```sh
+scripts/check-release-notes.sh docs/releases/vX.Y.Z.md
+```
 
-The canonical notes live at `docs/releases/v<version>.md`. The release workflow
-publishes that exact file, so live-only edits must be copied back into the
-repository.
+The tag-release workflow runs the same gate before it publishes or refreshes a
+GitHub release.
