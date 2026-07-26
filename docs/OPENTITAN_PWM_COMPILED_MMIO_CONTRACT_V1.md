@@ -347,8 +347,9 @@ paths, symlinks, collisions, truncation and extension. The retained details are
 in the
 [arm64 file result](../results/opentitan-pwm-compiled-mmio-file-arm64-v1.txt).
 
-The protected hosted workflow now predeclares two clean Linux builds, exact
-certificate comparison and the frozen certificate identities. That platform
-gate remains open until the pull request workflow passes. Concurrent
-replacement of a previously inspected input tree, compatibility history,
-static all-path proof and independent operator acceptance also remain open.
+The protected hosted Linux workflow passes two clean builds, exact certificate
+comparison, the frozen certificate identities and the same hostile mutation
+cohort. This closes portable macOS arm64 and Linux x86-64 certificate identity
+for the two fixed profiles. Concurrent replacement of a previously inspected
+input tree, compatibility history, static all-path proof and independent
+operator acceptance remain open.

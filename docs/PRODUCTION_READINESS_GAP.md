@@ -691,9 +691,10 @@ replacement, reloads its exact on-disk bytes and independently replays the
 extraction. The exhaustive local cohort changes every certificate, image and
 symbol-table byte, plus representative bytes in every source member and the
 toolchain identity, and observes refusal. Static all-path proof, concurrent
-input-tree replacement resistance, hosted cross-platform identity,
-compatibility history, a governed process-resource policy and independent
-acceptance remain open. No production row closes.
+input-tree replacement resistance, hosted identity beyond the passing macOS
+arm64 and Linux x86-64 profiles, compatibility history, a governed
+process-resource policy and independent acceptance remain open. No production
+row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
