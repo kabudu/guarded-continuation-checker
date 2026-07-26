@@ -62,6 +62,16 @@ docker run --rm \
         --no-show-raw-insn \
         "/out/$profile/firmware.elf" \
         > "/out/$profile/firmware.disassembly.txt"
+      clang \
+        -std=c11 \
+        -fno-builtin \
+        "$optimization" \
+        -I"$source/compat" \
+        -o "/out/$profile/native-firmware" \
+        "$source/upstream/dif_pwm.c" \
+        "$source/compat/firmware_caller.c" \
+        "$source/compat/native_main.c"
+      "/out/$profile/native-firmware" > "/out/$profile/native-events.txt"
     done
     {
       echo "compiled_mmio_build_version=1"
@@ -75,8 +85,10 @@ docker run --rm \
       sha256sum \
         /out/o0/firmware.elf \
         /out/o0/firmware.disassembly.txt \
+        /out/o0/native-events.txt \
         /out/o2/firmware.elf \
-        /out/o2/firmware.disassembly.txt |
+        /out/o2/firmware.disassembly.txt \
+        /out/o2/native-events.txt |
         sed "s#  /out/#  #"
       echo "status=complete"
     } > /out/manifest.txt
