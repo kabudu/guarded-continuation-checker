@@ -447,6 +447,12 @@ descriptor-relative publication techniques and provides no novelty evidence.
 Windows reparse-point handling, compatibility history, static all-path proof,
 independent operator acceptance and production readiness remain open.
 
+The retained output directory is part of the trust boundary. Descriptor-relative
+operations prevent a mutable path from redirecting publication, but they cannot
+protect an inode or directory that an untrusted process can modify through a
+separate descriptor under the same effective identity. Evaluators must use a
+dedicated output directory that is writable only by the GCC worker.
+
 ## Race-resistant output result
 
 The local macOS arm64 gate passes. Replacement of the acquired parent publishes

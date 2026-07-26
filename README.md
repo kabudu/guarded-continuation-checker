@@ -662,7 +662,10 @@ strict relative-path manifest, publish without replacing an existing file, and
 independently reload and replay every bound input before reporting success. On
 Unix, input acquisition and certificate publication are descriptor-relative
 and reject concurrent file or directory replacement; other platforms currently
-fail closed for these research commands.
+fail closed for these research commands. The output directory remains trusted
+and must be writable only by the GCC worker; descriptor-relative publication
+does not protect a retained directory from another process with the same
+effective identity and independent write access.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
