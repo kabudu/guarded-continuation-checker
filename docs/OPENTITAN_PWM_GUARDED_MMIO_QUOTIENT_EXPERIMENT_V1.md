@@ -112,7 +112,7 @@ The mechanism passes only if:
 6. two clean builds and certificate cycles are byte-identical;
 7. verifier work is bounded before graph or artifact allocation;
 8. the complete quotient workflow uses at least four times fewer decoded
-   firmware instruction transitions than 256 independent verification jobs;
+   firmware instruction transitions than 256 independent certificate cycles;
 9. source-through-answer wall time and peak RSS are reported against every
    baseline, including any regression; and
 10. hosted Linux reproduces certificate identity, answers and governed
@@ -120,6 +120,15 @@ The mechanism passes only if:
 
 Failure of any gate remains a retained negative result. Exact per-input
 execution stays the fail-closed fallback.
+
+For gate 8, reference work is the sum of decoded transitions for independent
+certificate production and independent verification of all 256 inputs.
+Quotient work is the sum of producer and independent-verifier transitions,
+charging every per-input prefix and every shared continuation node exactly
+once per process. The reported reduction is reference work divided by quotient
+work. Setup, class construction, predicate checks and RTL composition remain
+included in the wall-time and memory comparison even when they decode no
+firmware instruction.
 
 ## Claim boundary
 
