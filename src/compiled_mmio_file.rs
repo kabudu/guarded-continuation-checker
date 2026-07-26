@@ -1033,6 +1033,80 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn concurrent_directory_and_symlink_replacement_cannot_redirect_publication() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+        use std::time::Duration;
+
+        const REPLACEMENT_TRANSITIONS: usize = 100;
+
+        let root = fixture_root("output-concurrent-replacement");
+        let container = root.join("container");
+        let declared = container.join("declared");
+        let retained = container.join("retained");
+        let attacker = container.join("attacker");
+        fs::create_dir(&container).unwrap();
+        fs::create_dir(&declared).unwrap();
+        fs::create_dir(&attacker).unwrap();
+        let target = RaceResistantOutput::open(&declared.join("result.cert")).unwrap();
+
+        fs::rename(&declared, &retained).unwrap();
+        fs::create_dir(&declared).unwrap();
+
+        let start = Arc::new(Barrier::new(2));
+        let transitions = Arc::new(AtomicUsize::new(0));
+        let worker_start = Arc::clone(&start);
+        let worker_transitions = Arc::clone(&transitions);
+        let worker_container = container.clone();
+        let worker_declared = declared.clone();
+        let worker_attacker = attacker.clone();
+        let worker = thread::spawn(move || {
+            worker_start.wait();
+            for index in 0..(REPLACEMENT_TRANSITIONS / 2) {
+                let replacement = worker_container.join(format!("replacement-{index}"));
+                fs::rename(&worker_declared, &replacement).unwrap();
+                std::os::unix::fs::symlink(&worker_attacker, &worker_declared).unwrap();
+                worker_transitions.fetch_add(1, Ordering::Release);
+                thread::sleep(Duration::from_millis(1));
+                fs::remove_file(&worker_declared).unwrap();
+                fs::create_dir(&worker_declared).unwrap();
+                worker_transitions.fetch_add(1, Ordering::Release);
+                thread::sleep(Duration::from_millis(1));
+            }
+        });
+
+        start.wait();
+        while transitions.load(Ordering::Acquire) == 0 {
+            thread::yield_now();
+        }
+
+        let temporary = CString::new(".concurrent.tmp").unwrap();
+        let expected = b"retained-descriptor-certificate";
+        let mut file = target.create_temporary(&temporary).unwrap();
+        file.write_all(expected).unwrap();
+        file.sync_all().unwrap();
+        target.publish(&temporary).unwrap();
+        target.cleanup(&temporary).unwrap();
+        worker.join().unwrap();
+
+        assert_eq!(transitions.load(Ordering::Acquire), REPLACEMENT_TRANSITIONS);
+        assert_eq!(fs::read(retained.join("result.cert")).unwrap(), expected);
+        assert!(!declared.join("result.cert").exists());
+        assert!(!attacker.join("result.cert").exists());
+        for index in 0..(REPLACEMENT_TRANSITIONS / 2) {
+            assert!(
+                !container
+                    .join(format!("replacement-{index}/result.cert"))
+                    .exists()
+            );
+        }
+        assert!(target.finish().unwrap_err().contains("ancestor changed"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn descriptor_publication_refuses_temporary_final_and_symlink_collisions() {
         let root = fixture_root("output-collisions");
         let output = root.join("result.cert");

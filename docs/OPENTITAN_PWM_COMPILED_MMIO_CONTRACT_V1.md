@@ -425,8 +425,11 @@ publication. Publication must use a descriptor-relative hard link that cannot
 replace an existing final name. The implementation must then synchronize the
 output directory, remove the temporary name descriptor-relative, synchronize
 the directory again, and refuse if any retained directory changed during the
-complete operation. Failure at any stage must leave no new final certificate
-and must make a best-effort descriptor-relative temporary cleanup.
+complete operation. Failure before the create-new link must leave no final
+certificate. Failure after that link may leave only the exact independently
+verified certificate in the retained directory; it must never roll back by
+removing or replacing a final name through the mutable declared path. Every
+failure must make a best-effort descriptor-relative temporary cleanup.
 
 The hostile cohort must deterministically replace an ancestor directory, the
 final parent entry and the final output name at controlled publication hooks.
@@ -453,10 +456,12 @@ temporary names, existing final names and final-name symlinks refuse without
 replacement. Injected partial writes leave no visible output or temporary
 residue.
 
-A 1,000-publication descriptor stress cohort preserves every exact payload and
-leaves no temporary file. macOS process inspection reports zero leaked
-allocations after that cohort. The pinned authentic OpenTitan build preserves
-the frozen O0 identity
+A concurrent 100-transition directory and symlink replacement campaign cannot
+redirect publication from the retained parent, and the final ancestor check
+refuses the changed declared path. A separate 1,000-publication descriptor
+stress cohort preserves every exact payload and leaves no temporary file.
+macOS process inspection reports zero leaked allocations after that cohort.
+The pinned authentic OpenTitan build preserves the frozen O0 identity
 `fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0`
 and O2 identity
 `1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec`.
