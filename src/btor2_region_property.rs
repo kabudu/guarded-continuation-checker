@@ -247,6 +247,34 @@ pub struct Btor2GuardedChannelRelationQuery {
     pub horizon: u32,
 }
 
+/// Source boundaries tracked for one firmware configuration class.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Btor2ChannelHistoryClass {
+    pub write: Btor2BooleanBoundary,
+    pub enable: Btor2BooleanBoundary,
+    pub invert: Btor2BooleanBoundary,
+}
+
+/// The fixed version-1 state predicates exposed by the history monitor.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Btor2ChannelHistoryGuard {
+    BothUnwritten,
+    SameTrackedConfig,
+    OppositeTrackedInvert,
+}
+
+/// A bounded relation claim guarded by source-derived configuration history.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2GuardedChannelHistoryQuery {
+    pub left_channel_index: usize,
+    pub right_channel_index: usize,
+    pub relation: Btor2ChannelPairRelation,
+    pub left_class: Btor2ChannelHistoryClass,
+    pub right_class: Btor2ChannelHistoryClass,
+    pub guard: Btor2ChannelHistoryGuard,
+    pub horizon: u32,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelTraceProofPolicy {
     max_queries: usize,
@@ -884,6 +912,293 @@ pub fn build_btor2_guarded_channel_relation_model(
     btor2::parse_bytes(&bytes).map_err(|error| {
         reject(format!(
             "generated BTOR2 guarded channel relation is invalid: {error}"
+        ))
+    })?;
+    Ok((bytes, bad))
+}
+
+fn append_boolean_boundary(
+    bytes: &mut Vec<u8>,
+    last: &mut NodeId,
+    model: &btor2::Btor2Model,
+    boundary: Btor2BooleanBoundary,
+    bool_sort: NodeId,
+) -> Result<NodeId, Btor2RegionError> {
+    if !model.inputs().contains(&boundary.input_node) {
+        return Err(reject(
+            "BTOR2 channel history boundary is not a source input",
+        ));
+    }
+    let node = model
+        .nodes()
+        .get(&boundary.input_node)
+        .ok_or_else(|| reject("BTOR2 channel history boundary is missing"))?;
+    if boundary.bit_index >= node.width {
+        return Err(reject(
+            "BTOR2 channel history boundary bit is outside range",
+        ));
+    }
+    if node.width == 1 {
+        return Ok(boundary.input_node);
+    }
+    let bit = allocate_statement_id(last)?;
+    bytes.extend_from_slice(
+        format!(
+            "{bit} slice {bool_sort} {} {} {}\n",
+            boundary.input_node, boundary.bit_index, boundary.bit_index
+        )
+        .as_bytes(),
+    );
+    Ok(bit)
+}
+
+#[derive(Clone, Copy)]
+struct ChannelHistoryState {
+    seen: NodeId,
+    enable: NodeId,
+    invert: NodeId,
+}
+
+fn append_channel_history_state(
+    bytes: &mut Vec<u8>,
+    last: &mut NodeId,
+    bool_sort: NodeId,
+    zero: NodeId,
+    write: NodeId,
+    enable_input: NodeId,
+    invert_input: NodeId,
+) -> Result<ChannelHistoryState, Btor2RegionError> {
+    let seen = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{seen} state {bool_sort}\n").as_bytes());
+    let seen_init = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{seen_init} init {bool_sort} {seen} {zero}\n").as_bytes());
+    let seen_value = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{seen_value} or {bool_sort} {seen} {write}\n").as_bytes());
+    let seen_next = allocate_statement_id(last)?;
+    bytes.extend_from_slice(
+        format!("{seen_next} next {bool_sort} {seen} {seen_value}\n").as_bytes(),
+    );
+
+    let enable = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{enable} state {bool_sort}\n").as_bytes());
+    let enable_init = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{enable_init} init {bool_sort} {enable} {zero}\n").as_bytes());
+    let enable_value = allocate_statement_id(last)?;
+    bytes.extend_from_slice(
+        format!("{enable_value} ite {bool_sort} {write} {enable_input} {enable}\n").as_bytes(),
+    );
+    let enable_next = allocate_statement_id(last)?;
+    bytes.extend_from_slice(
+        format!("{enable_next} next {bool_sort} {enable} {enable_value}\n").as_bytes(),
+    );
+
+    let invert = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{invert} state {bool_sort}\n").as_bytes());
+    let invert_init = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{invert_init} init {bool_sort} {invert} {zero}\n").as_bytes());
+    let invert_value = allocate_statement_id(last)?;
+    bytes.extend_from_slice(
+        format!("{invert_value} ite {bool_sort} {write} {invert_input} {invert}\n").as_bytes(),
+    );
+    let invert_next = allocate_statement_id(last)?;
+    bytes.extend_from_slice(
+        format!("{invert_next} next {bool_sort} {invert} {invert_value}\n").as_bytes(),
+    );
+    Ok(ChannelHistoryState {
+        seen,
+        enable,
+        invert,
+    })
+}
+
+fn append_not(
+    bytes: &mut Vec<u8>,
+    last: &mut NodeId,
+    bool_sort: NodeId,
+    value: NodeId,
+) -> Result<NodeId, Btor2RegionError> {
+    let result = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{result} not {bool_sort} {value}\n").as_bytes());
+    Ok(result)
+}
+
+fn append_and(
+    bytes: &mut Vec<u8>,
+    last: &mut NodeId,
+    bool_sort: NodeId,
+    left: NodeId,
+    right: NodeId,
+) -> Result<NodeId, Btor2RegionError> {
+    let result = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{result} and {bool_sort} {left} {right}\n").as_bytes());
+    Ok(result)
+}
+
+fn append_xor(
+    bytes: &mut Vec<u8>,
+    last: &mut NodeId,
+    bool_sort: NodeId,
+    left: NodeId,
+    right: NodeId,
+) -> Result<NodeId, Btor2RegionError> {
+    let result = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{result} xor {bool_sort} {left} {right}\n").as_bytes());
+    Ok(result)
+}
+
+/// Reconstructs the frozen version-1 history monitor and a guarded relation
+/// violation over two distinct Boolean channel observations.
+pub fn build_btor2_guarded_channel_history_model(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    query: Btor2GuardedChannelHistoryQuery,
+    policy: Btor2RegionPolicy,
+) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+    if query.left_channel_index == query.right_channel_index {
+        return Err(reject(
+            "BTOR2 guarded channel history requires two distinct channels",
+        ));
+    }
+    let boundaries = [
+        query.left_class.write,
+        query.left_class.enable,
+        query.left_class.invert,
+        query.right_class.write,
+        query.right_class.enable,
+        query.right_class.invert,
+    ];
+    if boundaries
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
+        != boundaries.len()
+    {
+        return Err(reject(
+            "BTOR2 guarded channel history boundaries must be distinct",
+        ));
+    }
+    let (model, left) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.left_channel_index,
+        policy,
+    )?;
+    let (_right_model, right) = channel_observation(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.right_channel_index,
+        policy,
+    )?;
+    let bool_sort = statement_sort_id(model_bytes, left)?;
+    if statement_sort_id(model_bytes, right)? != bool_sort {
+        return Err(reject(
+            "BTOR2 guarded channel history observation sorts differ",
+        ));
+    }
+
+    let mut last = maximum_statement_id(model_bytes)?;
+    let mut bytes = model_bytes.to_vec();
+    if !bytes.ends_with(b"\n") {
+        bytes.push(b'\n');
+    }
+    let boundary_nodes = boundaries
+        .iter()
+        .map(|boundary| {
+            append_boolean_boundary(&mut bytes, &mut last, &model, *boundary, bool_sort)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let zero = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(format!("{zero} const {bool_sort} 0\n").as_bytes());
+    let left_history = append_channel_history_state(
+        &mut bytes,
+        &mut last,
+        bool_sort,
+        zero,
+        boundary_nodes[0],
+        boundary_nodes[1],
+        boundary_nodes[2],
+    )?;
+    let right_history = append_channel_history_state(
+        &mut bytes,
+        &mut last,
+        bool_sort,
+        zero,
+        boundary_nodes[3],
+        boundary_nodes[4],
+        boundary_nodes[5],
+    )?;
+
+    let both_seen = append_and(
+        &mut bytes,
+        &mut last,
+        bool_sort,
+        left_history.seen,
+        right_history.seen,
+    )?;
+    let enable_different = append_xor(
+        &mut bytes,
+        &mut last,
+        bool_sort,
+        left_history.enable,
+        right_history.enable,
+    )?;
+    let enable_same = append_not(&mut bytes, &mut last, bool_sort, enable_different)?;
+    let invert_different = append_xor(
+        &mut bytes,
+        &mut last,
+        bool_sort,
+        left_history.invert,
+        right_history.invert,
+    )?;
+    let guard = match query.guard {
+        Btor2ChannelHistoryGuard::BothUnwritten => {
+            let left_unwritten = append_not(&mut bytes, &mut last, bool_sort, left_history.seen)?;
+            let right_unwritten = append_not(&mut bytes, &mut last, bool_sort, right_history.seen)?;
+            append_and(
+                &mut bytes,
+                &mut last,
+                bool_sort,
+                left_unwritten,
+                right_unwritten,
+            )?
+        }
+        Btor2ChannelHistoryGuard::SameTrackedConfig => {
+            let invert_same = append_not(&mut bytes, &mut last, bool_sort, invert_different)?;
+            let same_config =
+                append_and(&mut bytes, &mut last, bool_sort, enable_same, invert_same)?;
+            append_and(&mut bytes, &mut last, bool_sort, both_seen, same_config)?
+        }
+        Btor2ChannelHistoryGuard::OppositeTrackedInvert => {
+            let opposite = append_and(
+                &mut bytes,
+                &mut last,
+                bool_sort,
+                enable_same,
+                invert_different,
+            )?;
+            append_and(&mut bytes, &mut last, bool_sort, both_seen, opposite)?
+        }
+    };
+
+    let different = append_xor(&mut bytes, &mut last, bool_sort, left, right)?;
+    let violation = match query.relation {
+        Btor2ChannelPairRelation::Equal => different,
+        Btor2ChannelPairRelation::Different => {
+            append_not(&mut bytes, &mut last, bool_sort, different)?
+        }
+    };
+    let guarded_violation = append_and(&mut bytes, &mut last, bool_sort, guard, violation)?;
+    let bad = allocate_statement_id(&mut last)?;
+    bytes.extend_from_slice(
+        format!("{bad} bad {guarded_violation} gcc_guarded_channel_history_violation\n").as_bytes(),
+    );
+    btor2::parse_bytes(&bytes).map_err(|error| {
+        reject(format!(
+            "generated BTOR2 guarded channel history is invalid: {error}"
         ))
     })?;
     Ok((bytes, bad))
