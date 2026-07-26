@@ -738,6 +738,10 @@ read-after-merge hostile controls, exact portfolio fallback, deterministic
 codec, resource policy, maintained-tool baselines, RTL composition and hosted
 evidence all pass.
 
+The live-memory candidate fails its fourfold gate and is slower than exact
+per-input verification on both authentic profiles. No certificate, RTL answer
+or production row changes. The exact portfolio route remains mandatory.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

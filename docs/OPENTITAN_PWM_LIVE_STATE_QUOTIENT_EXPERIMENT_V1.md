@@ -1,7 +1,9 @@
 # OpenTitan PWM proof-carrying live-state quotient experiment v1
 
-Status: predeclared after the exact-state negative result and before
-implementation. No result or novelty claim exists.
+Status: the live-memory candidate passes its initial soundness controls but
+fails the unchanged total-work gate on both authentic profiles. Certificate,
+maintained baselines, RTL composition and hosted gates were not attempted. No
+novelty claim exists.
 
 ## Product question
 
@@ -156,3 +158,33 @@ The mechanism passes only if:
 Failure of any gate is retained as a negative result. Passing establishes a
 bounded product capability, not by itself a novel algorithm or a universal
 firmware result.
+
+## Retained result
+
+The implementation records every decoded instruction fetch, data read and data
+write. Producer and separately coded verifier reconstruct the byte-precise
+read-before-overwrite set. The synthetic stale-stack control passes, while the
+near-neighbour that reads the differing byte after the merge refuses.
+
+The authentic result fails gate 8:
+
+| Profile | Prefix | Shared suffix | Live bytes | Producer | Verifier | Total | Exact cycle |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| O0 | 1,136 | 77 | 628 | 1,018,345 | 295,645 | 1,313,990 | 629,636 |
+| O2 | 424 | 24 | 462 | 189,085 | 109,984 | 299,069 | 231,920 |
+
+The O0 and O2 reduction ratios are 0.479 and 0.775 respectively, where a value
+above 4.0 was required. Both are regressions. Candidate discovery suffix
+replays increase producer work, but even the verifier-only route shows that
+memory-only convergence occurs too near return to approach the frozen gate.
+
+The retained
+[arm64 result](../results/opentitan-pwm-live-memory-quotient-arm64-v1.txt)
+records the exact counts. Exact per-input execution remains the selected
+route. No certificate, RTL answer, maintained-tool comparison or production
+capability results from this experiment.
+
+The observed late convergence suggests a distinct, not retroactively relaxed,
+follow-up: certify liveness for registers and memory together. That live-slice
+candidate requires a new predeclaration and must keep the same exact fallback
+and total-work threshold.

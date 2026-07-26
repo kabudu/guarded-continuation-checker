@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Retain the proof-carrying live-memory quotient as a negative result. Its
+  byte-precise read-before-overwrite reconstruction accepts a dead-stack
+  control and refuses a read-after-merge neighbour, but authentic O0 and O2
+  convergence occurs too late. Total work exceeds the exact reference on both
+  profiles, so exact fallback remains selected and no certificate or RTL
+  result is promoted.
+
 - Predeclare a proof-carrying live-state continuation quotient after the strict
   exact-state candidate exposed stale stack differences. The new experiment
   may ignore a differing byte only after an independent byte-precise

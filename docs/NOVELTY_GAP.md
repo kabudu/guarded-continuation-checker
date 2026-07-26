@@ -964,3 +964,11 @@ suffix. LLVM MemorySSA, CompCert liveness, symbolic state merging, dynamic
 slicing, observational equivalence and proof-carrying code are explicit
 closest-work families. The bounded firmware-to-RTL combination is the research
 question; no algorithmic novelty claim exists.
+
+The live-memory candidate is a retained negative result. Its byte-precise
+read-before-overwrite checker passes the dead-stack and read-after-merge
+controls, but authentic state convergence occurs only 77 O0 instructions and
+24 O2 instructions before return. Total quotient work exceeds the exact
+reference in both profiles. This adds no novelty evidence. A future live-slice
+candidate would also need independently reconstructed register liveness and a
+new predeclaration.

@@ -699,6 +699,12 @@ byte-precise read-before-overwrite proofs, hostile read-after-merge controls,
 exact fallback and the unchanged fourfold total-work gate. It has no
 implementation or result yet.
 
+That memory-only experiment is now retained as a negative result. It proves
+dead-stack handling on synthetic controls, but authentic O0 and O2 convergence
+occurs too late and the complete quotient cycles are slower than the exact
+reference. GCC therefore selects exact per-input execution. No production or
+novelty claim results.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
