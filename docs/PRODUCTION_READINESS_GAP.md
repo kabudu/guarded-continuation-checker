@@ -667,6 +667,16 @@ identity. The version-1 artifact and migration contract is now frozen, but
 release-to-release history cannot close until a later compatible release
 exists. Independent operator acceptance remains open. No production row closes.
 
+The firmware transaction-contract envelope adds a canonical source and
+stimulus-mapping boundary around the authentic PWM revision-impact bundle. It
+preserves every RTL answer, retains the old-core counterexample and refuses
+four invalid schedules before producing evidence. The contract and mapping are
+still authored fixtures rather than extracted compiled firmware, the interface
+has no self-service CLI or compatibility history, and the envelope reduces
+neither work nor bytes. Authentic firmware extraction, MMIO binding, resource
+governance, maintained contract-aware comparison and independent acceptance
+remain open. No production row closes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

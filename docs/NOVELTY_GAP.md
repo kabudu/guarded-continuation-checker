@@ -878,3 +878,23 @@ established. This experiment supplies neither a novel invariant nor a product
 advantage. A follow-up must constrain the firmware contract from authentic
 software or verify a richer schedule property without selecting predicates
 from observed answers.
+
+## Firmware transaction-contract composition
+
+The first firmware transaction envelope binds an authored interpretation of
+OpenTitan's published PWM programming sequence to the retained authentic
+crosstalk revision-impact bundle. Independent checking preserves all 20
+revision observations and three semantic change sets. Crucially, the valid
+schedule does not assume away the old-core crosstalk counterexample. Four
+invalid schedules refuse without an RTL answer.
+
+The 128,892-byte envelope is 124 bytes larger than the existing impact bundle,
+performs the same RTL proof work and remains much larger than the maintained
+model-plus-evidence package. Protocol monitors, contract-based verification and
+proof-carrying composition are established. This is a useful cross-layer
+integrity boundary, not an invariant-breaking result.
+
+The candidate remains open only if a later experiment extracts the contract
+from authentic compiled firmware, binds it to real MMIO events and reuses its
+proof across several RTL revisions or properties with an equivalent-scope
+advantage over a maintained contract-aware workflow.

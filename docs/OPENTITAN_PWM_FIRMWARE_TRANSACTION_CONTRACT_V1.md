@@ -1,6 +1,6 @@
 # OpenTitan PWM firmware transaction-contract experiment v1
 
-Status: predeclared experiment. No result or novelty claim exists.
+Status: bounded cross-layer mechanism passes. No novelty claim exists.
 
 ## Product question
 
@@ -139,6 +139,25 @@ The experiment advances only if:
 
 There is no predeclared speed or byte threshold. Negative results remain in the
 repository.
+
+## First retained result
+
+The [complete retained result](../results/opentitan-pwm-firmware-transaction-contract-v1.md)
+passes the integrity mechanism:
+
+- one 128,892-byte canonical envelope preserves all 20 revision observations
+  and all three minimal semantic-change sets;
+- the old-core crosstalk properties remain UNSAFE under the valid firmware
+  schedule;
+- the corresponding changed revisions remain SAFE;
+- four invalid schedules refuse before RTL evidence is produced; and
+- contract, mapping and envelope drift fail closed.
+
+The envelope adds 124 bytes to the existing revision-impact bundle. It neither
+reduces proof work nor improves evidence size, and the maintained RTL evidence
+remains much smaller. The contract and mapping are authored interpretations of
+the public guide rather than extracted production firmware. The result
+therefore advances a product-integrity mechanism only.
 
 ## Claim boundary
 
