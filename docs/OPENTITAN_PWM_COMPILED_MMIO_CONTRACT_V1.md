@@ -47,9 +47,25 @@ register definitions and MMIO primitives needed to compile the unmodified DIF
 function bodies, but every authored compatibility definition must be labelled
 and source-bound separately.
 
-The compiler, target triple, optimization level, linker and container digest
-must be fixed before the first RTL result is checked. Version 1 may not tune
-optimization or rewrite source after observing verification answers.
+The frozen toolchain is:
+
+```text
+image=docker.io/silkeh/clang:21-bookworm
+image_digest=sha256:47a73461b8cfb57f0b22988e69cd57992581a35d1a15bc2220eb3a21ab1fc5d3
+clang=21.1.5
+llvm_objdump=21.1.5
+target=riscv32-unknown-elf
+march=rv32imc
+mabi=ilp32
+language=c11
+profiles=O0,O2
+linking=freestanding-static
+```
+
+Both optimization profiles are frozen before the first result. They must
+produce the same canonical MMIO event stream even when instruction shape and
+program locations differ. Version 1 may not tune optimization or rewrite
+source after observing verification answers.
 
 ## Required extraction
 
@@ -95,7 +111,7 @@ RTL counterfactual. A contract must not mask an RTL counterexample.
 
 The primary cohort contains:
 
-- optimization levels fixed before result production;
+- Clang `-O0` and `-O2` profiles;
 - the parent and child crosstalk RTL revisions;
 - four old/new atom combinations;
 - five existing query classes; and
