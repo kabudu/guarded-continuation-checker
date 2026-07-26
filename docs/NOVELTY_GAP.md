@@ -898,3 +898,13 @@ The candidate remains open only if a later experiment extracts the contract
 from authentic compiled firmware, binds it to real MMIO events and reuses its
 proof across several RTL revisions or properties with an equivalent-scope
 advantage over a maintained contract-aware workflow.
+
+The first compiled-MMIO cycle now extracts both pinned OpenTitan O0 and O2
+artifacts, produces source, toolchain, binary and symbol-bound certificates,
+refuses a runtime-selected channel and agrees exactly with pinned angr 9.3.0.
+This closes the authentic extraction and maintained binary-analysis
+preconditions for the fixed concrete caller. Binary execution, taint
+propagation, canonical certificates and binary-analysis cross-checking are
+established techniques. The cycle measures no certificate or end-to-end
+advantage over an equivalent contract-aware maintained workflow, so it adds
+validation evidence but no novelty evidence.

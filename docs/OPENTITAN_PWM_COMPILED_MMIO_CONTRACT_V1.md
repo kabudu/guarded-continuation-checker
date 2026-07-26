@@ -1,8 +1,8 @@
 # OpenTitan PWM compiled-MMIO contract experiment v1
 
-Status: implementation in progress. The bounded compiled-execution and semantic
-binding gates pass. Static all-path proof, maintained binary-analysis comparison
-and the complete hostile-control cohort remain open. No novelty claim exists.
+Status: binary-bound certificate cycle passes locally. Static all-path proof,
+the remaining hostile-control cohort, hosted portability and independent review
+remain open. No novelty claim exists.
 
 ## Product question
 
@@ -217,7 +217,82 @@ This result does not yet satisfy the complete experiment. In particular:
 - program locations are recorded, but O0 attributes event publication to the
   non-inlined `record_event` helper while O2 attributes it to the inlined
   caller;
-- the predeclared runtime-selected-channel refusal, compiled artifact mutation
-  matrix and maintained binary-analysis baseline remain to be completed; and
+- the predeclared runtime-selected-channel refusal, binary-bound certificate
+  and maintained binary-analysis baseline are completed in the next cycle;
+- the broader compiled artifact mutation matrix remains incomplete; and
 - no performance, proof-size, production-readiness or novelty conclusion is
   supported by this interim gate.
+
+## Binary-bound certificate cycle
+
+The next cycle is frozen before implementation. It must produce one canonical
+certificate per compiled profile and independently verify it against the exact
+inputs. The certificate must bind:
+
+- the complete named upstream-source set;
+- the complete named compatibility-source set;
+- a canonical pinned-toolchain identity;
+- the flat image and full symbol-table bytes;
+- the independently parsed entry, event-count and event-array locations; and
+- the complete bounded execution result, including instruction count, event
+  values and event-producing program locations.
+
+The codec must be deterministic, bounded and checksummed. Verification must
+recompute all set and artifact digests, parse the symbol table again, rerun the
+bounded executor and compare the complete result. Digest substitution,
+single-byte image and certificate mutation, truncation, extension, reordered
+or duplicate source members, changed symbols and changed toolchain identity
+must refuse.
+
+The runtime-input gate is separate from ordinary concrete execution. A
+runtime-selected channel caller will enter with unknown RISC-V argument
+registers. If an unknown value can influence a branch, address, stored value,
+jump target, event or return value, extraction must refuse without creating a
+certificate or requesting an RTL answer.
+
+Passing the certificate mechanism closes artifact identity and the predeclared
+runtime-channel refusal only. The result below separately evaluates the
+maintained binary-analysis gate. All-path completeness, independent review,
+production readiness and novelty remain open.
+
+## Binary-bound certificate result
+
+The cycle passes locally for both frozen profiles. Each canonical certificate
+is 488 bytes and independently binds the named upstream and compatibility
+source sets, pinned toolchain identity, complete symbol table, flat image,
+parsed symbol layout and full bounded execution. The exact local identities are
+retained in the
+[arm64 result manifest](../results/opentitan-pwm-compiled-mmio-certificate-arm64-v1.txt).
+
+| Profile | Certificate SHA-256 | Instructions | Events |
+| --- | --- | ---: | ---: |
+| O0 | `fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0` | 1,928 | 16 |
+| O2 | `1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec` | 657 | 16 |
+
+Two clean compilation, extraction and certification runs reproduce every
+output byte. The codec rejects every representative single-byte mutation,
+truncation and extension. Independent verification rejects changed upstream
+or compatibility bytes, toolchain identity, image, symbol table, duplicate
+members and reordered members before accepting an extraction.
+
+The executor now tracks whether register and memory values are known. Unknown
+callee-saved values may move through the stack without being treated as
+constants, but an unknown branch operand, jump target, memory address, event
+field, event count or return value refuses. The separately compiled
+runtime-channel caller refuses at its first channel-dependent branch with no
+certificate and no RTL answer. Both fixed callers still produce their original
+byte-identical images and exact event streams.
+
+The maintained comparison uses pinned angr 9.3.0 over the exact RISC-V ELFs.
+Its P-Code route independently executes O0 in 267 lifted blocks and O2 in 129
+lifted blocks. It recovers the same 16 events as both GCC and the native
+recorder, and two clean baseline runs are byte-identical. angr currently labels
+its RISC-V P-Code engine experimental and does not infer a default calling
+convention for this bare-metal target, so the baseline explicitly supplies only
+the entry address, return address and stack pointer.
+
+This closes the local maintained binary-analysis comparison for the fixed
+concrete caller. It does not establish all-path completeness, a certificate
+size or speed advantage, production support or novelty. angr is a
+well-established multi-architecture binary-analysis framework, and agreement
+with it is validation evidence rather than a differentiating claim.

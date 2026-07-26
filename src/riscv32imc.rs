@@ -254,7 +254,9 @@ fn decompress(raw: u16) -> Result<u32, Rv32Error> {
 
 struct Machine {
     memory: Vec<u8>,
+    memory_known: Vec<bool>,
     registers: [u32; 32],
+    register_known: [bool; 32],
     pc: u32,
     stop: u32,
     steps: u64,
@@ -289,10 +291,28 @@ impl Machine {
         Ok(value)
     }
 
+    fn load_is_known(&self, address: u32, width: usize) -> Result<bool, Rv32Error> {
+        let index = self.index(address, width)?;
+        Ok(self.memory_known[index..index + width]
+            .iter()
+            .all(|known| *known))
+    }
+
     fn store(&mut self, address: u32, width: usize, value: u32) -> Result<(), Rv32Error> {
+        self.store_with_knownness(address, width, value, true)
+    }
+
+    fn store_with_knownness(
+        &mut self,
+        address: u32,
+        width: usize,
+        value: u32,
+        known: bool,
+    ) -> Result<(), Rv32Error> {
         let index = self.index(address, width)?;
         for byte in 0..width {
             self.memory[index + byte] = (value >> (byte * 8)) as u8;
+            self.memory_known[index + byte] = known;
         }
         Ok(())
     }
@@ -304,6 +324,23 @@ impl Machine {
     fn set_reg(&mut self, index: u32, value: u32) {
         if index != 0 {
             self.registers[index as usize] = value;
+            self.register_known[index as usize] = true;
+        }
+    }
+
+    fn set_unknown(&mut self, index: u32) {
+        if index != 0 {
+            self.register_known[index as usize] = false;
+        }
+    }
+
+    fn require_reg(&self, current: u32, index: u32, role: &str) -> Result<u32, Rv32Error> {
+        if self.register_known[index as usize] {
+            Ok(self.reg(index))
+        } else {
+            Err(reject(format!(
+                "runtime-unknown x{index} used as {role} at 0x{current:08x}"
+            )))
         }
     }
 
@@ -346,7 +383,7 @@ impl Machine {
             }
             Jalr(value) => {
                 let target = self
-                    .reg(value.rs1())
+                    .require_reg(current, value.rs1(), "jump target")?
                     .wrapping_add(sign_extend(value.imm(), 12))
                     & !1;
                 if target == 0 {
@@ -358,36 +395,12 @@ impl Machine {
                 self.set_reg(value.rd(), self.pc);
                 self.pc = target;
             }
-            Beq(value) => self.branch(
-                current,
-                value,
-                self.reg(value.rs1()) == self.reg(value.rs2()),
-            ),
-            Bne(value) => self.branch(
-                current,
-                value,
-                self.reg(value.rs1()) != self.reg(value.rs2()),
-            ),
-            Blt(value) => self.branch(
-                current,
-                value,
-                (self.reg(value.rs1()) as i32) < (self.reg(value.rs2()) as i32),
-            ),
-            Bge(value) => self.branch(
-                current,
-                value,
-                (self.reg(value.rs1()) as i32) >= (self.reg(value.rs2()) as i32),
-            ),
-            Bltu(value) => self.branch(
-                current,
-                value,
-                self.reg(value.rs1()) < self.reg(value.rs2()),
-            ),
-            Bgeu(value) => self.branch(
-                current,
-                value,
-                self.reg(value.rs1()) >= self.reg(value.rs2()),
-            ),
+            Beq(value) => self.branch(current, value, |a, b| a == b)?,
+            Bne(value) => self.branch(current, value, |a, b| a != b)?,
+            Blt(value) => self.branch(current, value, |a, b| (a as i32) < (b as i32))?,
+            Bge(value) => self.branch(current, value, |a, b| (a as i32) >= (b as i32))?,
+            Bltu(value) => self.branch(current, value, |a, b| a < b)?,
+            Bgeu(value) => self.branch(current, value, |a, b| a >= b)?,
             Lb(value) => self.load_i(current, value, 1, true)?,
             Lh(value) => self.load_i(current, value, 2, true)?,
             Lw(value) => self.load_i(current, value, 4, false)?,
@@ -427,10 +440,18 @@ impl Machine {
         Ok(())
     }
 
-    fn branch(&mut self, current: u32, value: BType, take: bool) {
-        if take {
+    fn branch(
+        &mut self,
+        current: u32,
+        value: BType,
+        predicate: impl FnOnce(u32, u32) -> bool,
+    ) -> Result<(), Rv32Error> {
+        let left = self.require_reg(current, value.rs1(), "branch operand")?;
+        let right = self.require_reg(current, value.rs2(), "branch operand")?;
+        if predicate(left, right) {
             self.pc = current.wrapping_add(sign_extend(value.imm(), 13));
         }
+        Ok(())
     }
 
     fn load_i(
@@ -441,7 +462,7 @@ impl Machine {
         signed: bool,
     ) -> Result<(), Rv32Error> {
         let address = self
-            .reg(value.rs1())
+            .require_reg(current, value.rs1(), "load address")?
             .wrapping_add(sign_extend(value.imm(), 12));
         let loaded = self.load(address, width).map_err(|error| {
             reject(format!(
@@ -455,47 +476,70 @@ impl Machine {
         } else {
             loaded
         };
-        self.set_reg(value.rd(), result);
+        if self.load_is_known(address, width)? {
+            self.set_reg(value.rd(), result);
+        } else {
+            self.set_unknown(value.rd());
+        }
         Ok(())
     }
 
     fn store_s(&mut self, current: u32, value: SType, width: usize) -> Result<(), Rv32Error> {
         let address = self
-            .reg(value.rs1())
+            .require_reg(current, value.rs1(), "store address")?
             .wrapping_add(sign_extend(value.imm(), 12));
         let stored = self.reg(value.rs2());
-        self.store(address, width, stored).map_err(|error| {
-            reject(format!(
-                "store at PC 0x{current:08x} through x{}=0x{:08x}: {error}",
-                value.rs1(),
-                self.reg(value.rs1())
-            ))
-        })?;
+        let stored_known = self.register_known[value.rs2() as usize];
+        self.store_with_knownness(address, width, stored, stored_known)
+            .map_err(|error| {
+                reject(format!(
+                    "store at PC 0x{current:08x} through x{}=0x{:08x}: {error}",
+                    value.rs1(),
+                    self.reg(value.rs1())
+                ))
+            })?;
         if width == 4 && address == self.event_count_address {
+            if !stored_known {
+                return Err(reject(format!(
+                    "runtime-unknown event count stored at 0x{current:08x}"
+                )));
+            }
             self.event_program_locations.push(current);
         }
         Ok(())
     }
 
     fn op_i(&mut self, value: IType, operation: impl FnOnce(u32, u32) -> u32) {
-        self.set_reg(
-            value.rd(),
-            operation(self.reg(value.rs1()), sign_extend(value.imm(), 12)),
-        );
+        if self.register_known[value.rs1() as usize] {
+            self.set_reg(
+                value.rd(),
+                operation(self.reg(value.rs1()), sign_extend(value.imm(), 12)),
+            );
+        } else {
+            self.set_unknown(value.rd());
+        }
     }
 
     fn shift_i(&mut self, value: ShiftType, operation: impl FnOnce(u32, u32) -> u32) {
-        self.set_reg(
-            value.rd(),
-            operation(self.reg(value.rs1()), value.shamt() & 31),
-        );
+        if self.register_known[value.rs1() as usize] {
+            self.set_reg(
+                value.rd(),
+                operation(self.reg(value.rs1()), value.shamt() & 31),
+            );
+        } else {
+            self.set_unknown(value.rd());
+        }
     }
 
     fn op_r(&mut self, value: RType, operation: impl FnOnce(u32, u32) -> u32) {
-        self.set_reg(
-            value.rd(),
-            operation(self.reg(value.rs1()), self.reg(value.rs2())),
-        );
+        if self.register_known[value.rs1() as usize] && self.register_known[value.rs2() as usize] {
+            self.set_reg(
+                value.rd(),
+                operation(self.reg(value.rs1()), self.reg(value.rs2())),
+            );
+        } else {
+            self.set_unknown(value.rd());
+        }
     }
 }
 
@@ -523,7 +567,9 @@ pub fn execute_compiled_mmio(
         .ok_or_else(|| reject("stop address overflow"))?;
     let mut machine = Machine {
         memory: vec![0; MAX_RV32_MEMORY_BYTES],
+        memory_known: vec![true; MAX_RV32_MEMORY_BYTES],
         registers: [0; 32],
+        register_known: [false; 32],
         pc: symbols.entry,
         stop,
         steps: 0,
@@ -531,6 +577,7 @@ pub fn execute_compiled_mmio(
         event_count_address: symbols.event_count,
         event_program_locations: Vec::new(),
     };
+    machine.register_known[0] = true;
     machine.memory[..image.len()].copy_from_slice(image);
     machine.store(stop, 4, 0x0010_0073)?;
     machine.set_reg(1, stop);
@@ -538,7 +585,10 @@ pub fn execute_compiled_mmio(
     while machine.pc != stop {
         machine.step()?;
     }
-    let return_value = machine.reg(10);
+    let return_value = machine.require_reg(machine.stop, 10, "firmware return value")?;
+    if !machine.load_is_known(symbols.event_count, 4)? {
+        return Err(reject("compiled event count is runtime-unknown"));
+    }
     let event_count = machine.load(symbols.event_count, 4)? as usize;
     if event_count > 32 {
         return Err(reject("compiled event count exceeds policy"));
@@ -554,6 +604,9 @@ pub fn execute_compiled_mmio(
             .events
             .checked_add((index * 12) as u32)
             .ok_or_else(|| reject("compiled event address overflow"))?;
+        if !machine.load_is_known(address, 12)? {
+            return Err(reject("compiled event contains a runtime-unknown field"));
+        }
         events.push(CompiledMmioEvent {
             operation: machine.load(address, 4)?,
             offset: machine.load(address + 4, 4)?,
@@ -620,5 +673,24 @@ mod tests {
         assert_eq!(result.steps, 2);
         assert!(result.events.is_empty());
         assert!(result.event_program_locations.is_empty());
+    }
+
+    #[test]
+    fn refuses_a_runtime_argument_at_its_first_control_effect() {
+        let mut image = vec![0; 0x110];
+        image[..4].copy_from_slice(&encode_b(0, 10, 0, 8).to_le_bytes());
+        image[4..8].copy_from_slice(&encode_i(0x67, 0, 0, 1, 0).to_le_bytes());
+        image[8..12].copy_from_slice(&encode_i(0x67, 0, 0, 1, 0).to_le_bytes());
+        let error = execute_compiled_mmio(
+            &image,
+            Rv32SymbolLayout {
+                entry: RV32_IMAGE_BASE,
+                event_count: RV32_IMAGE_BASE + 0x100,
+                events: RV32_IMAGE_BASE + 0x104,
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("runtime-unknown x10"));
+        assert!(error.to_string().contains("branch operand"));
     }
 }

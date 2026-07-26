@@ -677,6 +677,19 @@ neither work nor bytes. Authentic firmware extraction, MMIO binding, resource
 governance, maintained contract-aware comparison and independent acceptance
 remain open. No production row closes.
 
+The compiled-MMIO follow-up replaces the authored event schedule with exact
+execution of pinned O0 and O2 RV32IMC artifacts. Its 488-byte certificates bind
+the full named source sets, toolchain identity, image, symbol table, parsed
+locations and complete execution. Two clean builds are byte-identical, every
+codec mutation in the bounded cohort refuses, a runtime-selected channel
+refuses at its first unknown control effect, and pinned angr 9.3.0 independently
+recovers the same 16 events from both ELFs. This closes local authentic firmware
+extraction and a maintained binary-analysis comparison for one fixed concrete
+caller. Static all-path proof, the remaining compiled mutation cohort, a stable
+file CLI, hosted cross-platform identity, compatibility history, process
+resource governance and independent acceptance remain open. No production row
+closes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

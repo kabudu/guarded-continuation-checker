@@ -83,10 +83,40 @@ docker run --rm \
         "$source/compat/native_main.c"
       "/out/$profile/native-firmware" > "/out/$profile/native-events.txt"
     done
+    mkdir -p /out/runtime-channel
+    clang \
+      --target=riscv32-unknown-elf \
+      -march=rv32imc \
+      -mabi=ilp32 \
+      -std=c11 \
+      -ffreestanding \
+      -fno-builtin \
+      -nostdlib \
+      -fuse-ld=lld \
+      -O2 \
+      -DGCC_RUNTIME_CHANNEL_CONTROL \
+      -I"$source/compat" \
+      -Wl,-e,gcc_firmware_entry \
+      -Wl,-Ttext=0x80000000 \
+      -Wl,--build-id=none \
+      -o /out/runtime-channel/firmware.elf \
+      "$source/upstream/dif_pwm.c" \
+      "$source/compat/firmware_caller.c"
+    llvm-objcopy \
+      -O binary \
+      /out/runtime-channel/firmware.elf \
+      /out/runtime-channel/firmware.bin
+    llvm-nm \
+      --defined-only \
+      --numeric-sort \
+      /out/runtime-channel/firmware.elf \
+      > /out/runtime-channel/firmware.symbols.txt
   '
 
 cargo build --quiet --manifest-path "$root/Cargo.toml" --example extract_compiled_mmio
 extractor="$root/target/debug/examples/extract_compiled_mmio"
+cargo build --quiet --manifest-path "$root/Cargo.toml" --example certify_compiled_mmio
+certifier="$root/target/debug/examples/certify_compiled_mmio"
 for profile in o0 o2; do
   "$extractor" \
     "$output_abs/$profile/firmware.bin" \
@@ -102,7 +132,24 @@ for profile in o0 o2; do
     "$output_abs/$profile/native-events.txt" \
     "$output_abs/$profile/extracted-events.normalized.txt"
   rm "$output_abs/$profile/extracted-events.normalized.txt"
+  "$certifier" \
+    "$output_abs/$profile" \
+    "$root/corpus/firmware/opentitan-pwm-dif" \
+    "$root/corpus/firmware/opentitan-pwm-dif/toolchain-v1.txt" \
+    "$output_abs/$profile/compiled-mmio-certificate-v1.bin" \
+    > "$output_abs/$profile/compiled-mmio-certificate-v1.txt"
 done
+if "$extractor" \
+  "$output_abs/runtime-channel/firmware.bin" \
+  "$output_abs/runtime-channel/firmware.symbols.txt" \
+  > "$output_abs/runtime-channel/extracted-events.txt" \
+  2> "$output_abs/runtime-channel/refusal.txt"; then
+  echo "runtime-selected channel unexpectedly produced an event stream" >&2
+  exit 1
+fi
+grep "runtime-unknown" "$output_abs/runtime-channel/refusal.txt" >/dev/null
+echo "runtime_channel_refusal=PASS" \
+  > "$output_abs/runtime-channel/status.txt"
 awk -F, '
   /^instruction_count=/ { next }
   /^event=/ { print $1 "," $2 "," $3 "," $4; next }
@@ -142,12 +189,21 @@ docker run --rm \
         /out/o0/firmware.symbols.txt \
         /out/o0/native-events.txt \
         /out/o0/extracted-events.txt \
+        /out/o0/compiled-mmio-certificate-v1.bin \
+        /out/o0/compiled-mmio-certificate-v1.txt \
         /out/o2/firmware.elf \
         /out/o2/firmware.bin \
         /out/o2/firmware.disassembly.txt \
         /out/o2/firmware.symbols.txt \
         /out/o2/native-events.txt \
-        /out/o2/extracted-events.txt |
+        /out/o2/extracted-events.txt \
+        /out/o2/compiled-mmio-certificate-v1.bin \
+        /out/o2/compiled-mmio-certificate-v1.txt \
+        /out/runtime-channel/firmware.elf \
+        /out/runtime-channel/firmware.bin \
+        /out/runtime-channel/firmware.symbols.txt \
+        /out/runtime-channel/refusal.txt \
+        /out/runtime-channel/status.txt |
         sed "s#  /out/#  #"
       echo "status=complete"
     } > /out/manifest.txt

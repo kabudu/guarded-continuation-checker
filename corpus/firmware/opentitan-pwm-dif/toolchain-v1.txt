@@ -1,0 +1,14 @@
+compiled_mmio_toolchain_identity_version=1
+container=docker.io/silkeh/clang:21-bookworm
+container_digest=sha256:47a73461b8cfb57f0b22988e69cd57992581a35d1a15bc2220eb3a21ab1fc5d3
+clang=21.1.5
+llvm_objcopy=21.1.5
+llvm_objdump=21.1.5
+llvm_nm=21.1.5
+target=riscv32-unknown-elf
+march=rv32imc
+mabi=ilp32
+language=c11
+linking=freestanding-static
+text_address=0x80000000
+build_id=none
