@@ -716,6 +716,14 @@ every valid class with retained RTL evidence, and keeps exact per-input
 execution as the fail-closed fallback. No implementation or result exists yet,
 so no production row changes.
 
+The exact-reference cycle now implements that fallback and freezes its work
+denominator. All 256 values agree between pinned O0 and O2 RV32 execution and
+independently compiled native recording, producing six valid singleton classes
+and one 250-member invalid class. Two source-complete build trees are
+byte-identical. The quotient, deterministic certificate, independent verifier,
+maintained symbolic baselines, RTL composition, hostile matrix, resource
+policy and hosted evidence remain open, so no production row changes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

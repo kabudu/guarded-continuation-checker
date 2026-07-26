@@ -196,6 +196,19 @@ jobs:
             /tmp/compiled-mmio-a/o0/certificate-inputs \
             inputs.txt \
             /tmp/compiled-mmio-a/o0/compiled-mmio-certificate-v1.bin
+      - name: Reproduce guarded MMIO exact reference
+        run: |
+          shellcheck -s sh \
+            scripts/build-opentitan-pwm-guarded-mmio-reference-v1.sh
+          scripts/build-opentitan-pwm-guarded-mmio-reference-v1.sh \
+            /tmp/guarded-mmio-reference-a
+          scripts/build-opentitan-pwm-guarded-mmio-reference-v1.sh \
+            /tmp/guarded-mmio-reference-b
+          diff --recursive --brief \
+            /tmp/guarded-mmio-reference-a \
+            /tmp/guarded-mmio-reference-b
+          grep '^status=complete$' \
+            /tmp/guarded-mmio-reference-a/manifest.txt
       - name: Package and install exact crate payload
         run: scripts/test-crate-package-v1.sh
       - name: Reproduce composed-witness model exports

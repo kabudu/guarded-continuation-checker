@@ -24,6 +24,7 @@ pub mod btor2_region_property;
 pub mod btor2_search;
 pub mod compiled_mmio_certificate;
 pub mod compiled_mmio_file;
+pub mod compiled_mmio_quotient;
 pub mod composed_witness;
 pub mod controller_mtbdd;
 pub mod controller_mtbdd_proof;

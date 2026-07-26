@@ -1,6 +1,8 @@
 # OpenTitan PWM guarded MMIO continuation quotient experiment v1
 
-Status: predeclared before implementation. No result or novelty claim exists.
+Status: exact all-input reference passes locally. Quotient implementation,
+maintained symbolic baselines, RTL composition and hosted gates remain open.
+No novelty claim exists.
 
 ## Product question
 
@@ -136,3 +138,38 @@ Passing would establish a bounded, proof-carrying firmware-to-RTL integration
 capability. It would not by itself establish a novel algorithm. A novelty
 claim requires an advantage that survives identical-scope maintained-tool
 comparison, focused prior-art review and independent expert assessment.
+
+## Exact reference result
+
+The first implementation cycle deliberately performs no continuation reuse. A
+stable concrete-`a0` RV32 API executes all 256 values independently, retains
+per-input instruction work and event-producing locations, and groups only
+equal return values plus complete ordered MMIO streams. Verification rebuilds
+and compares the complete reference.
+
+Pinned O0 and O2 artifacts and independently compiled native recorders agree
+on every input, return value and event. Both optimization profiles produce the
+same semantic partition:
+
+| Class | Inputs | Return | Events |
+| --- | ---: | ---: | ---: |
+| Valid channel 0 | 1 | 0 | 16 |
+| Valid channel 1 | 1 | 0 | 16 |
+| Valid channel 2 | 1 | 0 | 16 |
+| Valid channel 3 | 1 | 0 | 16 |
+| Valid channel 4 | 1 | 0 | 16 |
+| Valid channel 5 | 1 | 0 | 16 |
+| Invalid channel | 250 | 2 | 10 |
+
+O0 production decodes 314,818 instruction transitions and O2 production
+decodes 115,960. Charging independent production and verification fixes the
+reference-cycle denominators at 629,636 and 231,920 transitions. The quotient
+must therefore remain at or below 157,409 and 57,980 respectively to pass the
+predeclared fourfold gate.
+
+Two clean, source-complete build trees are byte-identical. The retained
+[arm64 result](../results/opentitan-pwm-guarded-mmio-reference-arm64-v1.txt)
+binds the exact identities and work counts. This closes only the exact
+reference and native-comparison prerequisites. No certificate, optimized
+quotient, maintained symbolic baseline, RTL composition or novelty result
+exists yet.

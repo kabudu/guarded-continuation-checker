@@ -936,3 +936,12 @@ binary-bound, independently replayable firmware-to-RTL composition and any
 measured work advantage that survives identical-scope angr, CBMC and exact
 per-input comparison. No novelty claim exists before those predeclared gates
 and independent expert review pass.
+
+The exact-reference cycle finds seven complete behaviours across the authentic
+256-input caller. Six valid channels remain singleton classes, while all 250
+invalid channels share one return-plus-MMIO behaviour under both O0 and O2.
+That concentration creates a concrete continuation-reuse opportunity, but the
+reference performs every execution independently and therefore supplies no
+work reduction or novelty evidence. Exact-state quotient production,
+independent certificate replay and identical-scope angr, CBMC and Veritesting
+comparisons remain mandatory.
