@@ -10,9 +10,10 @@
   parent once, traverses canonical ancestors without following symlinks, then
   creates, reloads, independently verifies, publishes, cleans and synchronizes
   through retained descriptors. Ancestor replacement cannot redirect output,
-  final and temporary collisions cannot replace existing objects, and a
-  1,000-publication stress gate leaves no temporary files or leaked
-  allocations.
+  final and temporary collisions cannot replace or remove existing objects,
+  and a concurrent 100-transition directory/symlink campaign plus a
+  1,000-publication stress gate leave no redirected certificates, temporary
+  residue or leaked allocations.
 
 - Harden the compiled-MMIO file boundary against concurrent input-tree
   replacement on Unix. The loader now opens one trusted root descriptor,
