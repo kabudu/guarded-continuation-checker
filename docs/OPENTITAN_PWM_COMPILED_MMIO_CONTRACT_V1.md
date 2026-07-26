@@ -454,7 +454,8 @@ only into the retained original directory and is detected at the ancestor-entry
 identity check; the replacement tree receives no certificate. Precreated
 temporary names, existing final names and final-name symlinks refuse without
 replacement. Injected partial writes leave no visible output or temporary
-residue.
+residue. An injected failure after a successful create-new link preserves the
+exact final certificate rather than rolling it back through a mutable path.
 
 A concurrent 100-transition directory and symlink replacement campaign cannot
 redirect publication from the retained parent, and the final ancestor check

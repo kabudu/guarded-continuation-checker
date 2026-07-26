@@ -19,6 +19,7 @@ temporary_collision_refused=true
 final_collision_refused=true
 final_symlink_collision_refused=true
 partial_write_visible_output=false
+post_link_cleanup_failure_exact_final=true
 repeated_publications=1000
 repeated_publication_mismatches=0
 temporary_files_remaining=0

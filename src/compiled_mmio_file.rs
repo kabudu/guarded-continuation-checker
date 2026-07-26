@@ -1161,6 +1161,26 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn post_link_cleanup_failure_preserves_the_exact_final_certificate() {
+        let root = fixture_root("output-post-link-failure");
+        let output = root.join("result.cert");
+        let target = RaceResistantOutput::open(&output).unwrap();
+        let temporary = CString::new(".post-link.tmp").unwrap();
+        let expected = b"independently-verified-before-link";
+        let mut file = target.create_temporary(&temporary).unwrap();
+        file.write_all(expected).unwrap();
+        file.sync_all().unwrap();
+        target.publish(&temporary).unwrap();
+
+        fs::remove_file(root.join(".post-link.tmp")).unwrap();
+        assert!(target.cleanup(&temporary).is_err());
+        assert_eq!(fs::read(&output).unwrap(), expected);
+        target.finish().unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn repeated_descriptor_publication_preserves_exact_bytes_and_cleans_temporaries() {
         let root = fixture_root("repeated-output");
         for index in 0..1_000_u32 {
