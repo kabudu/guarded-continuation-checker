@@ -137,9 +137,18 @@ seconds with 4,243,456 to 4,423,680 bytes peak RSS. Fresh verification takes
 [complete rows](../results/opentitan-pwm-channel-pair-trace-process-resources-macos-arm64-v1.csv)
 use `/usr/bin/time` around the public command boundary.
 
-These are host observations, not cross-host performance guarantees. The
-protected Linux replication and cross-platform artifact identity remain open
-until hosted evidence is retained.
+Five hosted Linux x86-64 trials retain the same artifact and logical-result
+identity. Certification takes 0.10 to 0.25 seconds with 6,344,704 to 6,643,712
+bytes peak RSS. Fresh verification takes 0.08 seconds with 6,316,032 to
+6,520,832 bytes peak RSS. The
+[complete Linux rows](../results/opentitan-pwm-channel-pair-trace-process-resources-linux-x86_64-v1.csv)
+come from protected
+[run 30184711008](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30184711008).
+The portable component matrix in protected
+[run 30184010209](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30184010209)
+also reproduces the frozen wire identity on Ubuntu, macOS and Windows.
+
+These are host observations, not cross-host performance guarantees.
 
 ## Claim boundary
 

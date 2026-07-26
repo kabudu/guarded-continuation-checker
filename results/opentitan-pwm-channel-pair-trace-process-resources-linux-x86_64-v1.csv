@@ -1,0 +1,11 @@
+schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,artifact_bytes,time_backend,operating_system,architecture,artifact_sha256,logical_queries,status
+1,certify,1,0.16,6627328,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,1,0.08,6520832,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,2,0.14,6643712,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,2,0.08,6316032,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,3,0.25,6344704,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,3,0.08,6381568,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,4,0.10,6639616,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,4,0.08,6475776,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,5,0.10,6492160,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,5,0.08,6447104,912,gnu,Linux,x86_64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok

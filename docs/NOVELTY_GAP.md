@@ -152,6 +152,9 @@ explanation. It adds no novelty evidence.
 The five-trial whole-process resource result is a product-operability
 measurement. Its low cost follows from the narrow structural-constant cohort
 and does not support a general algorithmic performance or novelty claim.
+Hosted Linux x86-64 reproduces the 912-byte identity across five certification
+and verification trials, while Ubuntu, macOS and Windows reproduce the wire
+artifact. This closes portability evidence only and adds no novelty evidence.
 
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
