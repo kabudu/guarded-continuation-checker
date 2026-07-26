@@ -192,6 +192,14 @@ portfolio or novelty work proceeds from this monitor. A next hypothesis must
 compress operational phase without reproducing complete channel state and must
 include the abstraction proof in every comparison.
 
+The operational-phase follow-up freezes a ten-bit abstraction and explicitly
+disqualifies a complete-state lookup. Separate reachability evidence prevents
+vacuous guarded implications, and a three-consecutive-phase gate prevents an
+isolated reset fact from becoming a composition claim. Phase and predicate
+abstraction, reachability proofs and product monitors are established, so even
+a passing cohort remains product research until it exposes a distinct
+proof-carrying invariant and passes maintained equivalent-scope comparison.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

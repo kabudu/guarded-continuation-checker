@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Predeclare a non-vacuous operational phase-abstraction experiment after the
+  firmware history monitor fails. The fixed ten-bit vocabulary combines the
+  authenticated four-bit OpenTitan phase root with six history-monitor bits
+  and compares it with 33 complete source-state bits. Every implication
+  requires a separate reachability witness, and a candidate must cover at
+  least three consecutive phases under one guard before portfolio work begins.
+  No result or novelty claim exists yet.
+
 - Predeclare the channel history-monitor experiment after the authentic
   current-input guard hypothesis fails. The fixed monitor carries two classes'
   prior write, enable and invert configuration across frames and exposes three
