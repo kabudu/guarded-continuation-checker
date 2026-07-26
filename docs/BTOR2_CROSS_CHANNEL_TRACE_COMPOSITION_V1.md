@@ -128,6 +128,19 @@ contains six SAFE and six UNSAFE rows at frames zero and one. This closes the
 local independent semantic gate. It does not demonstrate novelty or a
 performance advantage.
 
+## Whole-process resource evidence
+
+Five macOS arm64 trials retain byte-identical 912-byte artifacts for every
+certification and fresh-verification process. Certification takes 0.05 to 0.06
+seconds with 4,243,456 to 4,423,680 bytes peak RSS. Fresh verification takes
+0.04 seconds with 4,210,688 to 4,276,224 bytes peak RSS. The
+[complete rows](../results/opentitan-pwm-channel-pair-trace-process-resources-macos-arm64-v1.csv)
+use `/usr/bin/time` around the public command boundary.
+
+These are host observations, not cross-host performance guarantees. The
+protected Linux replication and cross-platform artifact identity remain open
+until hosted evidence is retained.
+
 ## Claim boundary
 
 Relational monitors, self-composition, symmetry reduction, bounded model

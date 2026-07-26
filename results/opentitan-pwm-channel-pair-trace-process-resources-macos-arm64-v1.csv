@@ -1,0 +1,11 @@
+schema_version,operation,trial,elapsed_seconds,peak_rss_bytes,artifact_bytes,time_backend,operating_system,architecture,artifact_sha256,logical_queries,status
+1,certify,1,0.06,4292608,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,1,0.04,4243456,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,2,0.06,4292608,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,2,0.04,4259840,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,3,0.06,4423680,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,3,0.04,4259840,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,4,0.05,4243456,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,4,0.04,4210688,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,certify,5,0.05,4423680,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok
+1,verify,5,0.04,4276224,912,bsd,Darwin,arm64,aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok

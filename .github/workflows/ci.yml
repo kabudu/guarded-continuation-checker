@@ -532,6 +532,18 @@ jobs:
             /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 \
             target/release/examples/btor2_channel_pair_trace_cohort \
             /tmp/opentitan-pwm-channel-pair-trace-maintained-v1
+      - name: Measure channel-pair trace process resources
+        env:
+          TRIALS: 5
+        run: |
+          cargo build --release --locked \
+            --bin guarded-continuation-checker
+          scripts/benchmark-btor2-channel-pair-trace-process-resources-v1.sh \
+            target/release/guarded-continuation-checker \
+            /tmp/opentitan-pwm-channel-pair-trace-process-resources-v1.csv
+          cat /tmp/opentitan-pwm-channel-pair-trace-process-resources-v1.csv
+          test "$(grep -c ',aac88db71d0b536a7b2c4aed4c3f37315e29a15affbdb1f260db94136e994e51,12,ok$' \
+            /tmp/opentitan-pwm-channel-pair-trace-process-resources-v1.csv)" -eq 10
       - name: Reproduce public source-to-model attestation
         run: |
           PATH="/tmp/yosys-attestation/build:$PATH" \

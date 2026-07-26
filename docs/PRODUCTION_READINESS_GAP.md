@@ -661,8 +661,9 @@ truncation and mutation rejection, exact byte-level verification API, canonical
 manifest, capability discovery, and atomic create-new file commands. It remains
 outside the production support profile because maintained equivalent-scope
 comparison now passes locally with pinned Yosys plus Z3. Whole-process resource
-trials, cross-platform identity, tagged compatibility and independent operator
-acceptance remain open. No production row closes.
+trials now pass locally on macOS arm64 with deterministic artifact identity.
+Hosted Linux replication, cross-platform identity, tagged compatibility and
+independent operator acceptance remain open. No production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies

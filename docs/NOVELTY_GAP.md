@@ -149,6 +149,10 @@ channel-pair histories with exact answer and earliest-frame agreement. This
 closes a semantic baseline gate but reinforces the established congruence
 explanation. It adds no novelty evidence.
 
+The five-trial whole-process resource result is a product-operability
+measurement. Its low cost follows from the narrow structural-constant cohort
+and does not support a general algorithmic performance or novelty claim.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the
