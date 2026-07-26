@@ -739,6 +739,20 @@ It freezes a canonical bounded artifact, byte-starting independent
 verification and static portfolio route before implementation. Exact
 per-input execution remains the complete fallback.
 
+Its local codec and routing slice now passes. Authentic O0 and O2 artifacts
+are respectively 17,284 and 7,339 bytes, reproduce byte-identically across
+clean cycles and are independently checked from bytes with 250 scalar replay
+machines. A divergent neighbor selects the unchanged exact reference, while
+source drift and forced routing refuse. RTL composition, complete authentic
+hostile and resource matrices, hosted reproduction, maintained baselines and
+independent assessment remain open.
+
+Sequential scalar replay retains implementation diversity without retaining
+250 full memories. The measured authentic O0 cycle peaks at 10.81 MiB and
+finishes in 0.47 seconds; O2 peaks at 4.39 MiB and finishes in 0.06 seconds on
+the local arm64 host. These are local mechanism measurements, not portable
+service limits.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

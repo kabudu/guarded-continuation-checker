@@ -765,6 +765,15 @@ byte-starting checker, hostile artifact matrix, static exact fallback,
 resource policy, RTL composition, hosted reproduction, compatibility evidence
 and independent assessment pass.
 
+The local predicate certificate, byte-starting checker and static route now
+pass synthetic and authentic hostile controls. O0 and O2 artifacts are 17,284
+and 7,339 bytes; all 34,569 and 14,679 respective single-byte mutation,
+truncation and extension cases refuse. Sequential scalar replay reduces the
+observed O0 peak from 793.39 MiB to 10.81 MiB while preserving exact checks;
+O2 peaks at 4.39 MiB. Hosted resource governance, valid-class RTL composition,
+hosted reproduction, compatibility history, maintained baselines and
+independent assessment remain open. No production row closes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

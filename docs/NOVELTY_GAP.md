@@ -1012,3 +1012,10 @@ transducer can become deterministic exchangeable evidence with byte-starting
 independent replay and static exact fallback. Proof-carrying code, symbolic
 execution certificates and portfolio solving remain established prior art.
 No novelty claim exists.
+
+The local certificate slice now produces deterministic authentic O0 and O2
+artifacts, independently reconstructs their complete semantics from bytes and
+preserves a static exact fallback. This improves the product mechanism but
+does not distinguish it from proof-carrying symbolic execution or established
+portfolio verification. Maintained identical-scope comparisons and independent
+expert review remain open, so the novelty status does not change.

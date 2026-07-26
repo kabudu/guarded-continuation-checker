@@ -1,8 +1,10 @@
 # OpenTitan PWM predicate certificate and portfolio experiment v1
 
-Status: predeclared after the finite-domain predicate transducer passed its
-local mechanism gate and before certificate or portfolio implementation. No
-result, novelty or production claim exists.
+Status: implementation in progress after predeclaration. The local canonical
+codec, byte-starting scalar checker, deterministic authentic cycles and static
+predicate/exact routing pass. RTL composition, complete resource evidence,
+hosted reproduction, maintained baselines and independent assessment remain
+open. No novelty or production claim exists.
 
 ## Product question
 
@@ -153,3 +155,42 @@ The cycle passes only if:
 Failure is retained and the complete exact route remains selected. Passing
 would establish an exchangeable bounded product mechanism, not a universal
 solver, scholarly novelty or production readiness.
+
+## Local implementation result
+
+The version 1 codec now uses fixed-width canonical fields, a 4 MiB outer limit,
+count validation before allocation and a SHA-256 corruption check. Accepted
+bytes are re-encoded and must be byte-identical. Semantic acceptance still
+requires the independent 250-machine scalar replay; the checksum is not proof.
+
+The synthetic hostile suite changes every artifact byte and tests every
+truncation. It also rejects image and symbol substitution. Portfolio controls
+select `predicate-v1` for a uniform invalid domain, select the complete
+`exact-v1` reference for a lane-varying terminal neighbor, and reject source
+changes and forced route substitution.
+
+Two clean authentic cycles per profile are byte-identical. Every single-byte
+mutation, truncation and one-byte extension of both retained artifacts is
+rejected:
+
+| Profile | Artifact bytes | Hostile codec cases | Verifier decoded transitions | Verifier lane steps | Whole-cycle wall time | Peak RSS | Route |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| O0 | 17,284 | 34,569 | 12,781 | 303,250 | 0.47 s | 10.81 MiB | `predicate-v1` |
+| O2 | 7,339 | 14,679 | 4,408 | 112,000 | 0.06 s | 4.39 MiB | `predicate-v1` |
+
+The decoded transition figures remain within the frozen complete-cycle gate
+when combined with production. The public downstream Rust test exchanges
+bytes, decodes them, performs independent semantic replay and exercises
+portfolio production and verification without private module access.
+
+The first scalar-checker layout held all 250 complete machine memories at once
+and exposed a 793.39 MiB O0 peak. The corrected checker decodes the trace once,
+replays one ordinary scalar lane at a time and retains only the first lane's
+effect transcript. This preserves every semantic comparison and lane-work
+count while reducing the measured O0 peak to 10.81 MiB.
+
+This closes local portions of gates 1 through 8 and 11, including the complete
+authentic byte-mutation and truncation matrix. Valid-class RTL composition,
+hosted Linux resource reproduction, maintained symbolic baselines and
+independent assessment remain open. The feature is not admitted to the
+production support profile.
