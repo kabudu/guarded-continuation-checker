@@ -13,7 +13,9 @@
   final and temporary collisions cannot replace or remove existing objects,
   and a concurrent 100-transition directory/symlink campaign plus a
   1,000-publication stress gate leave no redirected certificates, temporary
-  residue or leaked allocations.
+  residue or leaked allocations. Hosted Linux run 30203290328 reproduces the
+  frozen certificate identity and reports zero Valgrind errors or lost bytes
+  across the real certificate publication path.
 
 - Harden the compiled-MMIO file boundary against concurrent input-tree
   replacement on Unix. The loader now opens one trusted root descriptor,
