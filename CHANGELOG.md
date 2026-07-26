@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Predeclare a lagged channel-relation experiment whose fixed lag of two comes
+  from the authenticated even and odd phase-delay constants, rather than
+  result-driven tuning. Add canonical coverage and relation products with an
+  explicit two-frame observation and validity history, hostile API controls,
+  and monotonic shortest-prefix reporting. The complete 16-row authentic
+  cohort is negative: equality and difference in both temporal orientations
+  have verified counterexamples at the first valid frame. Independently
+  symbolic firmware classes defeat a functional relation despite the physical
+  phase offset, so baseline and portfolio work does not begin.
+
 - Predeclare a non-vacuous operational phase-abstraction experiment after the
   firmware history monitor fails. The fixed ten-bit vocabulary combines the
   authenticated four-bit OpenTitan phase root with six history-monitor bits

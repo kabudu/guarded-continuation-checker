@@ -1,0 +1,17 @@
+orientation,relation,lag,horizon,coverage_frame,coverage_certificate_bytes,result,bad_frame,relation_certificate_bytes,verified,status,history_state_bits
+left_leads,equal,2,4,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,different,2,4,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,equal,2,4,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,different,2,4,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,equal,2,8,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,different,2,8,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,equal,2,8,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,different,2,8,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,equal,2,12,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,different,2,12,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,equal,2,12,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,different,2,12,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,equal,2,16,2,125,UNSAFE,2,125,true,accepted,4
+left_leads,different,2,16,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,equal,2,16,2,125,UNSAFE,2,125,true,accepted,4
+right_leads,different,2,16,2,125,UNSAFE,2,125,true,accepted,4
