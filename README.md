@@ -485,9 +485,10 @@ than establishing a solver-performance comparison. The first 912-byte
 canonical pair artifact and bounded file interface now pass deterministic
 round-trip, exhaustive truncation and mutation rejection, source and query
 drift rejection, and atomic no-clobber publication. Mixed-class baselines,
-maintained-tool agreement, cross-platform identity and independent acceptance
-remain open. Congruence and symmetry reasoning are established prior art, so
-this is not a novelty claim.
+pinned Yosys plus Z3 independently agrees on all twelve file-workflow answers
+and earliest bad frames. Product-scale mixed fallback, cross-platform identity
+and independent acceptance remain open. Congruence and symmetry reasoning are
+established prior art, so this is not a novelty claim.
 
 Run the fixed cross-channel workflow with:
 

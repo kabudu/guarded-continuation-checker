@@ -1,9 +1,9 @@
 # BTOR2 cross-channel trace composition experiment v1
 
-Status: source-bound structural-constant mechanism and bounded self-service wire
-workflow pass locally. Maintained temporal comparison, mixed exact fallback at
-product scale, whole-process resources, portability, compatibility history and
-independent acceptance remain open.
+Status: source-bound structural-constant mechanism, bounded self-service wire
+workflow and maintained Yosys plus Z3 comparison pass locally. Mixed exact
+fallback at product scale, whole-process resources, portability, compatibility
+history and independent acceptance remain open.
 
 ## Product question
 
@@ -63,11 +63,11 @@ The first implementation slice must:
 5. retain negative results if proof reuse does not reduce complete evidence or
    checking work.
 
-The complete product cycle additionally requires maintained Yosys plus Z3
-comparison, whole-process resources, cross-platform identity, tagged
-compatibility and independent acceptance. Canonical pair-query evidence, static
-aggregate preflight, exact fallback, target witness replay, hostile codec tests
-and self-service file integration now pass locally.
+The complete product cycle additionally requires whole-process resources,
+cross-platform identity, tagged compatibility and independent acceptance.
+Canonical pair-query evidence, static aggregate preflight, exact fallback,
+target witness replay, hostile codec tests, self-service file integration and
+maintained Yosys plus Z3 comparison now pass locally.
 
 ## First retained result
 
@@ -114,6 +114,19 @@ The retained query manifest is
 commands are `certify-btor2-channel-pair-traces`,
 `verify-btor2-channel-pair-traces` and
 `btor2-channel-pair-trace-cli-version`.
+
+## Maintained semantic comparison
+
+Pinned Yosys independently compiles the authentic six-channel SystemVerilog
+harness to one SMT transition system. Z3 then checks every exact frame of all
+twelve file-workflow queries using a separately constructed equality or
+difference relation and temporal pattern.
+
+All twelve results and earliest bad frames agree. The retained
+[maintained comparison](../results/opentitan-pwm-channel-pair-trace-maintained-v1.md)
+contains six SAFE and six UNSAFE rows at frames zero and one. This closes the
+local independent semantic gate. It does not demonstrate novelty or a
+performance advantage.
 
 ## Claim boundary
 
