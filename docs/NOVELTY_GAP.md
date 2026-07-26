@@ -144,6 +144,11 @@ create-new publication and stable command schema are conventional
 productisation controls. They close a self-service evidence gap without adding
 algorithmic novelty evidence.
 
+Pinned Yosys plus Z3 independently reconstructs and checks all twelve retained
+channel-pair histories with exact answer and earliest-frame agreement. This
+closes a semantic baseline gate but reinforces the established congruence
+explanation. It adds no novelty evidence.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

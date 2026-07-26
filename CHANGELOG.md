@@ -17,8 +17,10 @@
   versioned pair-query manifest, stable capability discovery, bounded
   create/verify commands, atomic no-clobber publication, deterministic
   artifacts and typed resource refusal. The fixed self-service artifact is 912
-  bytes. Maintained comparison, cross-platform identity, compatibility history
-  and independent operator acceptance remain open.
+  bytes. Add a separately constructed pinned Yosys plus Z3 oracle that agrees
+  on all twelve file-workflow answers and earliest bad frames. Cross-platform
+  identity, compatibility history, whole-process resources and independent
+  operator acceptance remain open.
 
 - Add the canonical accessible platform architecture SVG and embed it in the
   project README. The diagram separates authenticated inputs, GCC governance,

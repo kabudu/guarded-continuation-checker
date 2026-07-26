@@ -1,0 +1,13 @@
+model,query_id,left,right,relation,length,mask,value,horizon,result,bad_frame
+symbolic-class-6,0,0,2,equal,1,1,1,0,UNSAFE,0
+symbolic-class-6,1,0,2,equal,2,3,0,2,SAFE,none
+symbolic-class-6,2,0,2,different,1,1,1,0,SAFE,none
+symbolic-class-6,3,0,2,different,2,3,0,2,UNSAFE,1
+symbolic-class-6,4,2,4,equal,1,1,1,0,UNSAFE,0
+symbolic-class-6,5,2,4,equal,2,3,0,2,SAFE,none
+symbolic-class-6,6,2,4,different,1,1,1,0,SAFE,none
+symbolic-class-6,7,2,4,different,2,3,0,2,UNSAFE,1
+symbolic-class-6,8,4,0,equal,1,1,1,0,UNSAFE,0
+symbolic-class-6,9,4,0,equal,2,3,0,2,SAFE,none
+symbolic-class-6,10,4,0,different,1,1,1,0,SAFE,none
+symbolic-class-6,11,4,0,different,2,3,0,2,UNSAFE,1
