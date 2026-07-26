@@ -685,10 +685,15 @@ codec mutation in the bounded cohort refuses, a runtime-selected channel
 refuses at its first unknown control effect, and pinned angr 9.3.0 independently
 recovers the same 16 events from both ELFs. This closes local authentic firmware
 extraction and a maintained binary-analysis comparison for one fixed concrete
-caller. Static all-path proof, the remaining compiled mutation cohort, a stable
-file CLI, hosted cross-platform identity, compatibility history, process
-resource governance and independent acceptance remain open. No production row
-closes.
+caller. The versioned file CLI now rejects noncanonical paths, aliases,
+symlinks, non-regular and oversized inputs, publishes atomically without
+replacement, reloads its exact on-disk bytes and independently replays the
+extraction. The exhaustive local cohort changes every certificate, image and
+symbol-table byte, plus representative bytes in every source member and the
+toolchain identity, and observes refusal. Static all-path proof, concurrent
+input-tree replacement resistance, hosted cross-platform identity,
+compatibility history, a governed process-resource policy and independent
+acceptance remain open. No production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies

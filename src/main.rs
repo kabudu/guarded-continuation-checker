@@ -16,7 +16,8 @@ use guarded_continuation_checker::{
     aiger_obligation::{self, AigerAnd, AigerInputPredicate, AigerLatch, AigerTransition},
     btor2, btor2_bitblast, btor2_bounded, btor2_braking, btor2_component, btor2_invariant_chain,
     btor2_motion, btor2_phase, btor2_predicate_set, btor2_region, btor2_region_equivalence,
-    btor2_region_extract, btor2_region_property, btor2_search, composed_witness, controller_mtbdd,
+    btor2_region_extract, btor2_region_property, btor2_search, compiled_mmio_file,
+    composed_witness, controller_mtbdd,
     controller_plant::ControllerPlantWiring,
     controller_plant_artifact::{self, ControllerPlantArtifactInput},
     dense_relation::DenseRelation,
@@ -31862,6 +31863,14 @@ fn main() {
     if cfg!(feature = "production-firmware") {
         eprintln!("error: command is outside production support profile firmware-rtl-v1");
         std::process::exit(2);
+    }
+    match compiled_mmio_file::run_compiled_mmio_file_cli(&args[1..]) {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(2);
+        }
     }
     match run_artifact_cli(&args[1..]) {
         Ok(true) => return,

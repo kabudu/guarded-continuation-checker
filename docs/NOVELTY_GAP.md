@@ -902,6 +902,11 @@ advantage over a maintained contract-aware workflow.
 The first compiled-MMIO cycle now extracts both pinned OpenTitan O0 and O2
 artifacts, produces source, toolchain, binary and symbol-bound certificates,
 refuses a runtime-selected channel and agrees exactly with pinned angr 9.3.0.
+The self-service follow-up adds strict manifest-driven file commands, atomic
+create-new publication, independent disk reload, exhaustive byte mutation
+coverage for the certificates, images and symbol tables, and representative
+mutation coverage for every source member and the toolchain identity. Two clean
+command cycles preserve the original certificate identities.
 This closes the authentic extraction and maintained binary-analysis
 preconditions for the fixed concrete caller. Binary execution, taint
 propagation, canonical certificates and binary-analysis cross-checking are

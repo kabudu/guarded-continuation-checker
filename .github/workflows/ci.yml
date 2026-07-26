@@ -158,6 +158,23 @@ jobs:
             target/release/guarded-continuation-checker
       - name: Test
         run: cargo test --locked
+      - name: Reproduce compiled-MMIO self-service certificates
+        run: |
+          shellcheck -s sh scripts/build-opentitan-pwm-compiled-mmio-v1.sh
+          scripts/build-opentitan-pwm-compiled-mmio-v1.sh /tmp/compiled-mmio-a
+          scripts/build-opentitan-pwm-compiled-mmio-v1.sh /tmp/compiled-mmio-b
+          cmp \
+            /tmp/compiled-mmio-a/o0/compiled-mmio-certificate-v1.bin \
+            /tmp/compiled-mmio-b/o0/compiled-mmio-certificate-v1.bin
+          cmp \
+            /tmp/compiled-mmio-a/o2/compiled-mmio-certificate-v1.bin \
+            /tmp/compiled-mmio-b/o2/compiled-mmio-certificate-v1.bin
+          printf '%s  %s\n' \
+            fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0 \
+            /tmp/compiled-mmio-a/o0/compiled-mmio-certificate-v1.bin \
+            1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec \
+            /tmp/compiled-mmio-a/o2/compiled-mmio-certificate-v1.bin |
+            sha256sum --check
       - name: Package and install exact crate payload
         run: scripts/test-crate-package-v1.sh
       - name: Reproduce composed-witness model exports
