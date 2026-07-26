@@ -72,7 +72,11 @@ __attribute__((noinline, used)) void gcc_observe_channel0(void) {
   record_event(kGccObserveChannel0, 0, gcc_pwm_enable_register & 1);
 }
 
+#ifdef GCC_RUNTIME_CHANNEL_CONTROL
+__attribute__((used)) uint32_t gcc_firmware_entry(uint32_t runtime_channel) {
+#else
 __attribute__((used)) uint32_t gcc_firmware_entry(void) {
+#endif
   const dif_pwm_t pwm = {.base_addr = {.base = UINT32_C(0x40000000)}};
   const dif_pwm_channel_config_t channel0 = {
       .polarity = kDifPwmPolarityActiveHigh,
@@ -96,7 +100,12 @@ __attribute__((used)) uint32_t gcc_firmware_entry(void) {
   result |= (uint32_t)dif_pwm_configure_channel(&pwm, 0, channel0);
   result |= (uint32_t)dif_pwm_channels_set_enabled(
       &pwm, UINT32_C(1) << 0, kDifToggleEnabled);
+#ifdef GCC_RUNTIME_CHANNEL_CONTROL
+  result |=
+      (uint32_t)dif_pwm_configure_channel(&pwm, runtime_channel, channel1);
+#else
   result |= (uint32_t)dif_pwm_configure_channel(&pwm, 1, channel1);
+#endif
   gcc_observe_channel0();
   return result;
 }

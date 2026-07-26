@@ -649,6 +649,15 @@ the archive name, capability snapshot, build information and provenance. It is
 an evaluation-ready release, not a production-grade claim; independent review
 and partner evidence remain required.
 
+The post-release
+[compiled OpenTitan PWM experiment](docs/OPENTITAN_PWM_COMPILED_MMIO_CONTRACT_V1.md)
+derives the firmware schedule from pinned O0 and O2 RV32IMC artifacts instead
+of an authored event list. Canonical 488-byte certificates bind the complete
+source sets, toolchain, binary, symbols and bounded execution. A
+runtime-selected channel refuses before producing an RTL answer, while pinned
+angr 9.3.0 independently recovers the same 16 events from both binaries. This
+is local research evidence, not part of the frozen production profile.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

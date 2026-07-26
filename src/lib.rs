@@ -22,6 +22,7 @@ pub mod btor2_region_equivalence;
 pub mod btor2_region_extract;
 pub mod btor2_region_property;
 pub mod btor2_search;
+pub mod compiled_mmio_certificate;
 pub mod composed_witness;
 pub mod controller_mtbdd;
 pub mod controller_mtbdd_proof;
