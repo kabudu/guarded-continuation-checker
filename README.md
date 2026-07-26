@@ -659,7 +659,10 @@ angr 9.3.0 independently recovers the same 16 events from both binaries. This
 is local research evidence, not part of the frozen production profile. The
 versioned `compiled-mmio-certify` and `compiled-mmio-verify` commands accept a
 strict relative-path manifest, publish without replacing an existing file, and
-independently reload and replay every bound input before reporting success.
+independently reload and replay every bound input before reporting success. On
+Unix, input acquisition is descriptor-relative and rejects concurrent file or
+directory replacement; other platforms currently fail closed for these
+research commands.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

@@ -134,7 +134,7 @@ jobs:
       - name: Install formal RTL tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes yosys z3 shellcheck
+          sudo apt-get install --yes shellcheck valgrind yosys z3
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -175,6 +175,15 @@ jobs:
             1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec \
             /tmp/compiled-mmio-a/o2/compiled-mmio-certificate-v1.bin |
             sha256sum --check
+          valgrind \
+            --error-exitcode=1 \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            target/debug/guarded-continuation-checker \
+            compiled-mmio-verify \
+            /tmp/compiled-mmio-a/o0/certificate-inputs \
+            inputs.txt \
+            /tmp/compiled-mmio-a/o0/compiled-mmio-certificate-v1.bin
       - name: Package and install exact crate payload
         run: scripts/test-crate-package-v1.sh
       - name: Reproduce composed-witness model exports

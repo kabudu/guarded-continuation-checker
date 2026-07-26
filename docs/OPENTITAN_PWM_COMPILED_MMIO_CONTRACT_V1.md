@@ -353,3 +353,55 @@ cohort. This closes portable macOS arm64 and Linux x86-64 certificate identity
 for the two fixed profiles. Concurrent replacement of a previously inspected
 input tree, compatibility history, static all-path proof and independent
 operator acceptance remain open.
+
+## Race-resistant input cycle
+
+The next input-boundary cycle is frozen before implementation. On Unix, the
+loader must open the declared root once without following a symlink, traverse
+every manifest path relative to that directory descriptor, and open every
+component without following a symlink. It must inspect and read the same file
+descriptor, reject non-regular and oversized inputs before allocation, reject
+hard-link aliases by device and inode, and detect changes to any opened file or
+traversed directory during the complete load.
+
+The loader must never return a mixed snapshot assembled across a concurrent
+rename, symlink replacement, hard-link substitution, truncation, extension or
+in-place rewrite. A stable tree may load normally. A changed tree must either
+produce bytes that independently fail the existing certificate identity check
+or refuse during acquisition. It must never verify the certificate for a
+different tree. Platforms without an equivalent race-resistant implementation
+must fail closed rather than silently use the earlier path-checking sequence.
+
+The hostile cohort must include deterministic replacements at the manifest,
+parent-directory and final-file boundaries, mutations after a file descriptor
+is opened, hard-link aliases across distinct manifest paths, and a sustained
+rename and symlink race. The cycle advances only if sanitizers or an equivalent
+memory-safety gate, macOS arm64, hosted Linux x86-64, the existing exhaustive
+mutation cohort and the full protected matrix pass. This closes a local file
+acquisition race only. Atomic output-directory acquisition, Windows reparse
+point handling, compatibility history, static all-path proof, independent
+acceptance, production readiness and novelty remain open.
+
+## Race-resistant input result
+
+The local macOS arm64 gate passes. Deterministic mutation after open,
+truncation, extension, final-entry replacement, nested-directory replacement
+and hard-link alias tests all refuse. A sustained 3,000-load in-place rewrite
+cohort and a separate 500-load regular-file and symlink replacement cohort
+return only one complete valid snapshot or a refusal. Neither cohort produces
+a mixed certificate. macOS process inspection reports zero leaked allocations
+after the focused descriptor-race test.
+
+The unchanged authentic OpenTitan build still produces certificate identities
+`fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0`
+for O0 and
+`1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec`
+for O2. Single verification observations are 7,758 microseconds for O0 and
+7,491 microseconds for O2. They are mechanism checks, not performance claims.
+The retained local result is in the
+[arm64 race result](../results/opentitan-pwm-compiled-mmio-race-arm64-v1.txt).
+
+Hosted Linux must still pass the same race cohort, frozen identities and a
+Valgrind descriptor-boundary run before the cycle advances. Output-directory
+descriptor acquisition, Windows reparse-point handling, compatibility history,
+static all-path proof and independent operator acceptance remain open.
