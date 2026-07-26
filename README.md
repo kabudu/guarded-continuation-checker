@@ -473,6 +473,19 @@ Linux production and verification resource trials. Tagged compatibility
 history and independent operator acceptance remain open. It is not yet part of
 the production support profile.
 
+The first
+[cross-channel trace-composition probe](docs/BTOR2_CROSS_CHANNEL_TRACE_COMPOSITION_V1.md)
+now observes exact equality or difference between two authenticated channel
+traces before applying the same bounded masked-history semantics. On a fixed
+six-channel OpenTitan cohort, an independently checked structural class turns
+24 logical pair queries into eight one-byte constant-relation members and
+replays every UNSAFE target pair. The naive exact horizon-2 routes hit their
+governed proof or node-step limits, so this closes a narrow capability rather
+than establishing a solver-performance comparison. Canonical wire evidence,
+mixed-class baselines, maintained-tool agreement and self-service integration
+remain open. Congruence and symmetry reasoning are established prior art, so
+this is not a novelty claim.
+
 The trace candidate now has a bounded self-service file interface:
 
 ```console
