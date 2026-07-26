@@ -406,3 +406,38 @@ certificate identities and completes the Valgrind descriptor-boundary
 verification without an error. Output-directory descriptor acquisition,
 Windows reparse-point handling, compatibility history, static all-path proof
 and independent operator acceptance remain open.
+
+## Race-resistant output cycle
+
+The next publication-boundary cycle is frozen before implementation. On Unix,
+the certifier must reject noncanonical output paths, open one stable filesystem
+root for the declared absolute or relative output, traverse every parent
+component descriptor-relative without following symlinks, and retain snapshots
+of every traversed directory through publication. Temporary creation, exact
+byte reload, create-new publication, cleanup and directory synchronization must
+all operate relative to the final retained directory descriptor.
+
+The temporary file must be created with exclusive regular-file semantics and
+mode `0600`, written and synchronized, then inspected and reloaded through the
+same descriptor. Its exact bytes must decode and independently replay before
+publication. Publication must use a descriptor-relative hard link that cannot
+replace an existing final name. The implementation must then synchronize the
+output directory, remove the temporary name descriptor-relative, synchronize
+the directory again, and refuse if any retained directory changed during the
+complete operation. Failure at any stage must leave no new final certificate
+and must make a best-effort descriptor-relative temporary cleanup.
+
+The hostile cohort must deterministically replace an ancestor directory, the
+final parent entry and the final output name at controlled publication hooks.
+It must race symlink and directory replacement continuously, precreate the
+temporary name, inject partial writes and force a final-name collision. Every
+case must either publish the exact independently verified bytes in the original
+retained directory or refuse without replacing an existing object. No
+certificate may appear in an attacker-controlled replacement tree.
+
+The cycle advances only if macOS arm64, hosted Linux x86-64 with Valgrind, the
+existing exhaustive input mutation cohort, frozen O0 and O2 certificate
+identities and the complete protected matrix pass. This uses established
+descriptor-relative publication techniques and provides no novelty evidence.
+Windows reparse-point handling, compatibility history, static all-path proof,
+independent operator acceptance and production readiness remain open.
