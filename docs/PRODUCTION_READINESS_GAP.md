@@ -663,8 +663,9 @@ outside the production support profile because maintained equivalent-scope
 comparison now passes locally with pinned Yosys plus Z3. Whole-process resource
 trials now pass on macOS arm64 and hosted Linux x86-64 with deterministic
 artifact identity. Ubuntu, macOS and Windows reproduce the frozen wire
-identity. Tagged compatibility and independent operator acceptance remain
-open. No production row closes.
+identity. The version-1 artifact and migration contract is now frozen, but
+release-to-release history cannot close until a later compatible release
+exists. Independent operator acceptance remains open. No production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies

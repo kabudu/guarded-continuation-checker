@@ -156,6 +156,9 @@ Hosted Linux x86-64 reproduces the 912-byte identity across five certification
 and verification trials, while Ubuntu, macOS and Windows reproduce the wire
 artifact. This closes portability evidence only and adds no novelty evidence.
 
+The frozen compatibility and migration contract and valid-checksum hostile enum
+tests are conventional format-lifecycle controls. They add no novelty evidence.
+
 The frozen Caliptra watchdog comparison adds a second independently maintained
 public embedded RTL design. Qualified Certifaiger plus `lrat_isa` accepts all
 five SAFE witnesses, `aigsim` replays all four shortest UNSAFE traces, and the

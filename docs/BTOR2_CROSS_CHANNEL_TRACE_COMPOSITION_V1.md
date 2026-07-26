@@ -150,6 +150,17 @@ also reproduces the frozen wire identity on Ubuntu, macOS and Windows.
 
 These are host observations, not cross-host performance guarantees.
 
+## Compatibility boundary
+
+The
+[version-1 compatibility contract](BTOR2_CHANNEL_PAIR_TRACE_COMPATIBILITY_V1.md)
+freezes the magic, artifact version, CLI version, manifest header, resource
+policy and 912-byte OpenTitan fingerprint. Valid-checksum artifacts carrying an
+unsupported version, relation or solver fail in semantic decoding without a
+logical answer. Incompatible evolution requires a new version, separate
+decoder, retained old-version verification and an explicit migration or refusal
+boundary.
+
 ## Claim boundary
 
 Relational monitors, self-composition, symmetry reduction, bounded model

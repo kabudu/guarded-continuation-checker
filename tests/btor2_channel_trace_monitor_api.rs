@@ -61,6 +61,12 @@ fn solve_pair_trace(
     verify_btor2_bitblast_certificate(&model, &certificate).unwrap()
 }
 
+fn replace_artifact_checksum(bytes: &mut [u8]) {
+    let payload_end = bytes.len() - 32;
+    let checksum: [u8; 32] = Sha256::digest(&bytes[..payload_end]).into();
+    bytes[payload_end..].copy_from_slice(&checksum);
+}
+
 #[test]
 fn trace_pattern_contract_rejects_noncanonical_values() {
     assert!(Btor2ChannelTracePattern::new(0, 1, 0).is_err());
@@ -860,6 +866,30 @@ fn channel_pair_wire_artifact_is_canonical_deterministic_and_hostile_safe() {
     assert_eq!(summary.metrics.logical_queries, 18);
     assert_eq!(summary.metrics.proof_members, 6);
     assert_eq!(summary.metrics.structural_constant_members, 6);
+
+    let mut unsupported_version = encoded.clone();
+    unsupported_version[8..12].copy_from_slice(&2u32.to_le_bytes());
+    replace_artifact_checksum(&mut unsupported_version);
+    assert!(
+        decode_btor2_channel_pair_trace_proof_artifact(&unsupported_version, proof_policy).is_err()
+    );
+
+    let structural_len = u32::from_le_bytes(encoded[44..48].try_into().unwrap()) as usize;
+    let query_count_offset = 48 + structural_len;
+    let first_query_relation_offset = query_count_offset + 4 + 4 + 4 + 4;
+    let mut unknown_relation = encoded.clone();
+    unknown_relation[first_query_relation_offset] = 2;
+    replace_artifact_checksum(&mut unknown_relation);
+    assert!(
+        decode_btor2_channel_pair_trace_proof_artifact(&unknown_relation, proof_policy).is_err()
+    );
+
+    let member_count_offset = query_count_offset + 4 + queries.len() * 20;
+    let first_member_solver_offset = member_count_offset + 4 + 25;
+    let mut unknown_solver = encoded.clone();
+    unknown_solver[first_member_solver_offset] = 3;
+    replace_artifact_checksum(&mut unknown_solver);
+    assert!(decode_btor2_channel_pair_trace_proof_artifact(&unknown_solver, proof_policy).is_err());
 
     let evidence_bytes = decoded
         .members
