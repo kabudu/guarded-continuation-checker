@@ -443,3 +443,27 @@ identities and the complete protected matrix pass. This uses established
 descriptor-relative publication techniques and provides no novelty evidence.
 Windows reparse-point handling, compatibility history, static all-path proof,
 independent operator acceptance and production readiness remain open.
+
+## Race-resistant output result
+
+The local macOS arm64 gate passes. Replacement of the acquired parent publishes
+only into the retained original directory and is detected at the ancestor-entry
+identity check; the replacement tree receives no certificate. Precreated
+temporary names, existing final names and final-name symlinks refuse without
+replacement. Injected partial writes leave no visible output or temporary
+residue.
+
+A 1,000-publication descriptor stress cohort preserves every exact payload and
+leaves no temporary file. macOS process inspection reports zero leaked
+allocations after that cohort. The pinned authentic OpenTitan build preserves
+the frozen O0 identity
+`fdaaa0f1be3645a6d2a4ade537361f5cf73ddf8e578207a2422f79325c0565e0`
+and O2 identity
+`1b0e2424049c6b75deeba7ddfe87e65722e5bf17e22ae9e94a11efa959f6dcec`.
+The retained details are in the
+[arm64 output result](../results/opentitan-pwm-compiled-mmio-output-arm64-v1.txt).
+
+Hosted Linux must still pass the same output cohort, frozen identities and a
+Valgrind publication-boundary run before the cycle advances. Windows
+reparse-point handling, compatibility history, static all-path proof and
+independent operator acceptance remain open.

@@ -1087,6 +1087,33 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn repeated_descriptor_publication_preserves_exact_bytes_and_cleans_temporaries() {
+        let root = fixture_root("repeated-output");
+        for index in 0..1_000_u32 {
+            let output = root.join(format!("result-{index}.cert"));
+            let target = RaceResistantOutput::open(&output).unwrap();
+            let temporary = CString::new(format!(".candidate-{index}.tmp")).unwrap();
+            let expected = index.to_le_bytes();
+            let mut file = target.create_temporary(&temporary).unwrap();
+            file.write_all(&expected).unwrap();
+            file.sync_all().unwrap();
+            target.publish(&temporary).unwrap();
+            target.cleanup(&temporary).unwrap();
+            target.finish().unwrap();
+            assert_eq!(fs::read(output).unwrap(), expected);
+        }
+        assert!(fs::read_dir(&root).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".candidate-")
+        }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn descriptor_loader_detects_in_place_and_directory_entry_changes() {
         let root = fixture_root("descriptor-races");
         let image_path = root.join("image.bin");

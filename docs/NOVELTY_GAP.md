@@ -913,6 +913,11 @@ identity rejection and whole-load change detection. This closes a concrete
 integrity race if its hosted gate passes. Descriptor-relative traversal and
 time-of-check to time-of-use hardening are established systems techniques, so
 the result provides production-shaping evidence and no novelty evidence.
+The output-boundary follow-up applies the same established discipline to
+temporary creation, same-descriptor reload, non-replacing hard-link
+publication, cleanup, directory synchronization and ancestor-entry identity.
+It closes another concrete integrity race if its hosted gates pass, but adds no
+novelty evidence.
 This closes the authentic extraction and maintained binary-analysis
 preconditions for the fixed concrete caller. Binary execution, taint
 propagation, canonical certificates and binary-analysis cross-checking are
