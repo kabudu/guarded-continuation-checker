@@ -35,6 +35,33 @@ fn write_executable(path: &Path, contents: &[u8]) {
     fs::set_permissions(path, permissions).unwrap();
 }
 
+#[cfg(unix)]
+fn retry_executable_busy<T>(
+    mut operation: impl FnMut() -> Result<T, PredicateApiError>,
+) -> Result<T, PredicateApiError> {
+    const MAX_EXECUTABLE_BUSY_ATTEMPTS: usize = 10;
+
+    for attempt in 0..MAX_EXECUTABLE_BUSY_ATTEMPTS {
+        match operation() {
+            Err(PredicateApiError::Io(error))
+                if error.raw_os_error() == Some(libc::ETXTBSY)
+                    && attempt + 1 < MAX_EXECUTABLE_BUSY_ATTEMPTS =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
+    unreachable!("the final executable-busy attempt always returns")
+}
+
+#[cfg(unix)]
+fn discover_allocation_observability_test_tool(
+    executable: &Path,
+) -> Result<ControllerSplitAllocationObservabilityTool, PredicateApiError> {
+    retry_executable_busy(|| ControllerSplitAllocationObservabilityTool::discover(executable))
+}
+
 fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -1579,7 +1606,7 @@ esac
 "#;
     write_executable(&executable, script.as_bytes());
 
-    let tool = ControllerSplitAllocationObservabilityTool::discover(&executable).unwrap();
+    let tool = discover_allocation_observability_test_tool(&executable).unwrap();
     let failure = tool
         .verify_set_observed(
             Path::new("evidence"),
@@ -1606,8 +1633,7 @@ esac
             )
             .as_bytes(),
     );
-    let overflow_tool =
-        ControllerSplitAllocationObservabilityTool::discover(&overflow_executable).unwrap();
+    let overflow_tool = discover_allocation_observability_test_tool(&overflow_executable).unwrap();
     let overflow = overflow_tool
         .verify_set_observed(
             Path::new("evidence"),
@@ -1624,4 +1650,35 @@ esac
         InvocationStatus::Failed(FailureClass::Response)
     );
     fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_tool_discovery_retries_only_temporary_executable_busy_errors() {
+    let mut attempts = 0;
+    let value = retry_executable_busy(|| {
+        attempts += 1;
+        if attempts < 3 {
+            Err(PredicateApiError::Io(std::io::Error::from_raw_os_error(
+                libc::ETXTBSY,
+            )))
+        } else {
+            Ok(17)
+        }
+    })
+    .unwrap();
+    assert_eq!(value, 17);
+    assert_eq!(attempts, 3);
+
+    let mut other_attempts = 0;
+    let error = retry_executable_busy::<()>(|| {
+        other_attempts += 1;
+        Err(PredicateApiError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "test",
+        )))
+    })
+    .unwrap_err();
+    assert!(matches!(error, PredicateApiError::Io(_)));
+    assert_eq!(other_attempts, 1);
 }
