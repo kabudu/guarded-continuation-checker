@@ -10,8 +10,8 @@ use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use std::{
     collections::BTreeSet,
-    ffi::{CString, OsStr},
-    io::Read,
+    ffi::{CString, OsStr, OsString},
+    io::{Read, Seek, SeekFrom},
     os::unix::{
         ffi::OsStrExt,
         fs::MetadataExt,
@@ -521,6 +521,157 @@ fn certificate_sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
+#[cfg(unix)]
+struct RaceResistantOutput {
+    directory: fs::File,
+    ancestors: Vec<(fs::File, OsString, (u64, u64))>,
+    final_name: CString,
+}
+
+#[cfg(unix)]
+impl RaceResistantOutput {
+    fn open(output: &Path) -> Result<Self, String> {
+        let filename = output
+            .file_name()
+            .ok_or_else(|| "certificate output path is empty".to_string())?;
+        let declared_parent = output.parent().unwrap_or_else(|| Path::new("."));
+        let canonical_parent = fs::canonicalize(declared_parent)
+            .map_err(|error| format!("resolve certificate output parent: {error}"))?;
+        let resolved_output = canonical_parent.join(filename);
+        let components = resolved_output.components().collect::<Vec<_>>();
+        let (filename, parent_components) = components
+            .split_last()
+            .ok_or_else(|| "certificate output path is empty".to_string())?;
+        let Component::Normal(filename) = filename else {
+            return Err("certificate output path is not canonical".to_string());
+        };
+        let absolute = resolved_output.is_absolute();
+        let mut parents = parent_components;
+        if absolute {
+            let Some((Component::RootDir, remaining)) = parents.split_first() else {
+                return Err("certificate output path is not canonical".to_string());
+            };
+            parents = remaining;
+        }
+        if parents
+            .iter()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err("certificate output path is not canonical".to_string());
+        }
+        let mut directory = open_root(if absolute {
+            Path::new("/")
+        } else {
+            Path::new(".")
+        })
+        .map_err(|error| format!("open certificate output root: {error}"))?;
+        let mut ancestors = Vec::new();
+        for component in parents {
+            let Component::Normal(name) = component else {
+                unreachable!("parent components were validated");
+            };
+            let next = open_relative(&directory, name, true)
+                .map_err(|error| format!("open certificate output parent: {error}"))?;
+            let metadata = next
+                .metadata()
+                .map_err(|error| format!("inspect certificate output parent: {error}"))?;
+            ancestors.push((
+                directory
+                    .try_clone()
+                    .map_err(|error| format!("retain certificate output ancestor: {error}"))?,
+                name.to_os_string(),
+                (metadata.dev(), metadata.ino()),
+            ));
+            directory = next;
+        }
+        Ok(Self {
+            directory,
+            ancestors,
+            final_name: c_string(filename, "certificate output filename")?,
+        })
+    }
+
+    fn create_temporary(&self, name: &CString) -> Result<fs::File, String> {
+        let flags = libc::O_RDWR
+            | libc::O_CREAT
+            | libc::O_EXCL
+            | libc::O_NOFOLLOW
+            | libc::O_CLOEXEC
+            | libc::O_NONBLOCK;
+        // SAFETY: the directory descriptor and NUL-terminated name are valid.
+        // `O_CREAT` supplies the required mode argument and the returned
+        // descriptor is checked before ownership transfer.
+        let descriptor = unsafe {
+            libc::openat(
+                self.directory.as_raw_fd(),
+                name.as_ptr(),
+                flags,
+                0o600 as libc::c_uint,
+            )
+        };
+        if descriptor < 0 {
+            return Err(format!(
+                "create temporary certificate: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: `descriptor` is newly owned after successful `openat`.
+        Ok(unsafe { fs::File::from_raw_fd(descriptor) })
+    }
+
+    fn publish(&self, temporary: &CString) -> Result<(), String> {
+        // SAFETY: both names are live NUL-terminated strings and both
+        // directory descriptors are valid for the duration of `linkat`.
+        let result = unsafe {
+            libc::linkat(
+                self.directory.as_raw_fd(),
+                temporary.as_ptr(),
+                self.directory.as_raw_fd(),
+                self.final_name.as_ptr(),
+                0,
+            )
+        };
+        if result != 0 {
+            return Err(format!(
+                "publish certificate without replacement: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        self.directory
+            .sync_all()
+            .map_err(|error| format!("sync certificate directory: {error}"))
+    }
+
+    fn cleanup(&self, temporary: &CString) -> Result<(), String> {
+        // SAFETY: the directory descriptor and NUL-terminated name remain
+        // valid for the duration of `unlinkat`.
+        let result = unsafe { libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0) };
+        if result != 0 {
+            return Err(format!(
+                "remove temporary certificate: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        self.directory
+            .sync_all()
+            .map_err(|error| format!("sync certificate cleanup: {error}"))
+    }
+
+    fn finish(&self) -> Result<(), String> {
+        for (parent, child_name, before_identity) in &self.ancestors {
+            let child = open_relative(parent, child_name, true)
+                .map_err(|error| format!("reopen certificate output ancestor: {error}"))?;
+            let after = child
+                .metadata()
+                .map_err(|error| format!("reinspect certificate output ancestor: {error}"))?;
+            if (after.dev(), after.ino()) != *before_identity {
+                return Err("certificate output ancestor changed during publication".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
 fn publish_verified_create_new(
     output: &Path,
     encoded: &[u8],
@@ -534,56 +685,62 @@ fn publish_verified_create_new_with(
     loaded: &LoadedCompiledMmioInputs,
     write: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
 ) -> Result<(), String> {
-    if fs::symlink_metadata(output).is_ok() {
-        return Err("certificate output already exists".to_string());
-    }
-    let parent = output.parent().unwrap_or_else(|| Path::new("."));
-    let name = output
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| "certificate output filename is invalid".to_string())?;
-    let temporary = parent.join(format!(
-        ".{name}.gcc-compiled-mmio-{}-{}.tmp",
-        std::process::id(),
-        TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-    ));
-    let result = (|| {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
+    #[cfg(unix)]
+    {
+        let target = RaceResistantOutput::open(output)?;
+        let temporary = CString::new(format!(
+            ".gcc-compiled-mmio-{}-{}.tmp",
+            std::process::id(),
+            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ))
+        .map_err(|_| "temporary certificate filename contains NUL".to_string())?;
+        let result = (|| {
+            let mut file = target.create_temporary(&temporary)?;
+            write(&mut file)
+                .and_then(|_| file.sync_all())
+                .map_err(|error| format!("write temporary certificate: {error}"))?;
+            let before = file
+                .metadata()
+                .map_err(|error| format!("inspect temporary certificate: {error}"))?;
+            if !before.is_file()
+                || before.len() == 0
+                || before.len() > MAX_COMPILED_MMIO_CERTIFICATE_BYTES as u64
+            {
+                return Err("temporary certificate size or file type is outside policy".to_string());
+            }
+            file.seek(SeekFrom::Start(0))
+                .map_err(|error| format!("rewind temporary certificate: {error}"))?;
+            let mut disk = Vec::with_capacity(before.len() as usize + 1);
+            Read::by_ref(&mut file)
+                .take(MAX_COMPILED_MMIO_CERTIFICATE_BYTES as u64 + 1)
+                .read_to_end(&mut disk)
+                .map_err(|error| format!("reload temporary certificate: {error}"))?;
+            let after = file
+                .metadata()
+                .map_err(|error| format!("reinspect temporary certificate: {error}"))?;
+            if disk.len() != before.len() as usize || snapshot(&before) != snapshot(&after) {
+                return Err("temporary certificate changed during verification".to_string());
+            }
+            let decoded =
+                decode_compiled_mmio_certificate(&disk).map_err(|error| error.to_string())?;
+            loaded.verify(&decoded)?;
+            target.publish(&temporary)?;
+            target.cleanup(&temporary)?;
+            target.finish()
+        })();
+        if result.is_err() {
+            let _ = target.cleanup(&temporary);
         }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|error| format!("create temporary certificate: {error}"))?;
-        write(&mut file)
-            .and_then(|_| file.sync_all())
-            .map_err(|error| format!("write temporary certificate: {error}"))?;
-        drop(file);
-        let disk = read_standalone_regular(
-            parent,
-            Path::new(
-                temporary
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .ok_or_else(|| "temporary filename is invalid".to_string())?,
-            ),
-            MAX_COMPILED_MMIO_CERTIFICATE_BYTES,
-            "temporary certificate",
-        )?;
-        let decoded = decode_compiled_mmio_certificate(&disk).map_err(|error| error.to_string())?;
-        loaded.verify(&decoded)?;
-        fs::hard_link(&temporary, output)
-            .map_err(|error| format!("publish certificate without replacement: {error}"))?;
-        fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| format!("sync certificate directory: {error}"))?;
-        Ok(())
-    })();
-    let _ = fs::remove_file(temporary);
-    result
+        result
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (output, loaded, write);
+        Err(
+            "race-resistant compiled-MMIO certificate publication is unsupported on this platform"
+                .to_string(),
+        )
+    }
 }
 
 pub fn run_compiled_mmio_file_cli(args: &[String]) -> Result<bool, String> {
@@ -842,6 +999,89 @@ mod tests {
                 .to_string_lossy()
                 .contains("gcc-compiled-mmio")
         }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn descriptor_publication_cannot_be_redirected_after_parent_acquisition() {
+        let root = fixture_root("output-parent-replacement");
+        let container = root.join("container");
+        let declared = container.join("declared");
+        let retained = container.join("retained");
+        fs::create_dir(&container).unwrap();
+        fs::create_dir(&declared).unwrap();
+        let target = RaceResistantOutput::open(&declared.join("result.cert")).unwrap();
+
+        fs::rename(&declared, &retained).unwrap();
+        fs::create_dir(&declared).unwrap();
+        let temporary = CString::new(".controlled.tmp").unwrap();
+        let mut file = target.create_temporary(&temporary).unwrap();
+        file.write_all(b"descriptor-bound").unwrap();
+        file.sync_all().unwrap();
+        target.publish(&temporary).unwrap();
+        target.cleanup(&temporary).unwrap();
+
+        assert_eq!(
+            fs::read(retained.join("result.cert")).unwrap(),
+            b"descriptor-bound"
+        );
+        assert!(!declared.join("result.cert").exists());
+        assert!(target.finish().unwrap_err().contains("ancestor changed"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn descriptor_publication_refuses_temporary_final_and_symlink_collisions() {
+        let root = fixture_root("output-collisions");
+        let output = root.join("result.cert");
+        let target = RaceResistantOutput::open(&output).unwrap();
+
+        let occupied_temporary = CString::new(".occupied.tmp").unwrap();
+        fs::write(root.join(".occupied.tmp"), b"occupied").unwrap();
+        assert!(
+            target
+                .create_temporary(&occupied_temporary)
+                .unwrap_err()
+                .to_lowercase()
+                .contains("exists")
+        );
+
+        let candidate = CString::new(".candidate.tmp").unwrap();
+        let mut file = target.create_temporary(&candidate).unwrap();
+        file.write_all(b"candidate").unwrap();
+        file.sync_all().unwrap();
+        fs::write(&output, b"sentinel").unwrap();
+        assert!(
+            target
+                .publish(&candidate)
+                .unwrap_err()
+                .to_lowercase()
+                .contains("exists")
+        );
+        assert_eq!(fs::read(&output).unwrap(), b"sentinel");
+        target.cleanup(&candidate).unwrap();
+
+        let link_output = root.join("link.cert");
+        std::os::unix::fs::symlink("upstream.c", &link_output).unwrap();
+        let link_target = RaceResistantOutput::open(&link_output).unwrap();
+        let link_candidate = CString::new(".link-candidate.tmp").unwrap();
+        let mut file = link_target.create_temporary(&link_candidate).unwrap();
+        file.write_all(b"candidate").unwrap();
+        file.sync_all().unwrap();
+        assert!(
+            link_target
+                .publish(&link_candidate)
+                .unwrap_err()
+                .to_lowercase()
+                .contains("exists")
+        );
+        assert_eq!(
+            fs::read_link(&link_output).unwrap(),
+            Path::new("upstream.c")
+        );
+        link_target.cleanup(&link_candidate).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 

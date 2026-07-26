@@ -410,12 +410,13 @@ and independent operator acceptance remain open.
 ## Race-resistant output cycle
 
 The next publication-boundary cycle is frozen before implementation. On Unix,
-the certifier must reject noncanonical output paths, open one stable filesystem
-root for the declared absolute or relative output, traverse every parent
-component descriptor-relative without following symlinks, and retain snapshots
-of every traversed directory through publication. Temporary creation, exact
-byte reload, create-new publication, cleanup and directory synchronization must
-all operate relative to the final retained directory descriptor.
+the certifier must reject a noncanonical final output name, resolve the declared
+existing parent once, open one stable filesystem root for that resolved parent,
+traverse every canonical parent component descriptor-relative without
+following symlinks, and retain snapshots of every traversed directory through
+publication. Temporary creation, exact-byte reload, create-new publication,
+cleanup and directory synchronization must all operate relative to the final
+retained directory descriptor.
 
 The temporary file must be created with exclusive regular-file semantics and
 mode `0600`, written and synchronized, then inspected and reloaded through the
@@ -433,7 +434,8 @@ It must race symlink and directory replacement continuously, precreate the
 temporary name, inject partial writes and force a final-name collision. Every
 case must either publish the exact independently verified bytes in the original
 retained directory or refuse without replacing an existing object. No
-certificate may appear in an attacker-controlled replacement tree.
+certificate may appear in a replacement tree introduced after the declared
+parent has been resolved and acquired.
 
 The cycle advances only if macOS arm64, hosted Linux x86-64 with Valgrind, the
 existing exhaustive input mutation cohort, frozen O0 and O2 certificate
