@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Retain the register-and-memory live-slice quotient as a negative result. It
+  reconstructs one backward slice, accepts dead-register and dead-stack
+  controls, and refuses later register use, but 250 concrete invalid prefixes
+  still dominate. Authentic O0 and O2 reductions remain near 1.06× and 1.09×,
+  below the unchanged fourfold gate, so exact fallback remains selected.
+
 - Predeclare a proof-carrying live-slice quotient that reconstructs register
   and memory liveness together from one complete representative trace. It must
   select one earliest merge without trial suffix replay, independently verify

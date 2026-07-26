@@ -1,7 +1,9 @@
 # OpenTitan PWM proof-carrying live-slice quotient experiment v1
 
-Status: predeclared after the live-memory regression and before implementation.
-No result or novelty claim exists.
+Status: the register-and-memory live-slice candidate passes its initial
+soundness controls but fails the unchanged total-work gate on both authentic
+profiles. Certificate, maintained baselines, RTL composition and hosted gates
+were not attempted. No novelty claim exists.
 
 ## Product question
 
@@ -131,3 +133,33 @@ The mechanism passes only if:
 Failure remains a retained negative result and exact execution remains the
 fallback. Passing is a bounded product result, not a universal firmware or
 algorithmic novelty claim.
+
+## Retained result
+
+The producer records register and memory use/def facts for one complete
+representative trace, reconstructs every suffix slice backwards, and selects
+the earliest candidate without trial suffix replay. The separately coded route
+verifier reconstructs the same slice. A control with dead register and stack
+differences passes, while a near-neighbour that later reads the register
+refuses.
+
+Both authentic profiles still fail gate 8:
+
+| Profile | Merge | Shared suffix | Live registers | Live bytes | Producer | Verifier | Total | Exact |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| O0 | 1,134 | 79 | 3 | 620 | 296,281 | 296,281 | 592,562 | 629,636 |
+| O2 | 409 | 39 | 4 | 526 | 106,658 | 106,658 | 213,316 | 231,920 |
+
+The reduction ratios are 1.063 and 1.087, far below the required 4.0. Register
+liveness removes the repeated-suffix regression, but 250 separately replayed
+invalid prefixes still dominate the complete cycle.
+
+The retained
+[arm64 result](../results/opentitan-pwm-live-slice-quotient-arm64-v1.txt)
+records the exact counts. Exact per-input execution remains selected. No
+certificate, RTL answer, maintained comparison, production capability or
+novelty evidence results.
+
+The result isolates a distinct next requirement: prove the invalid prefix in
+bulk as one input predicate and symbolic decision graph. That is not a relaxed
+live-slice gate and requires a new predeclaration.

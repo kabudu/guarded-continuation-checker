@@ -980,3 +980,9 @@ register use/def facts and chooses the earliest merge from one complete
 backward slice instead of trial-replaying suffixes. Compiler liveness, dynamic
 slicing and symbolic state subsumption remain direct prior art, so no novelty
 claim exists.
+
+The live-slice candidate is also retained negative. Register liveness removes
+the memory-only producer regression, but separately replaying 250 invalid
+prefixes limits authentic reduction to about 1.06× at O0 and 1.09× at O2.
+This adds no novelty evidence. A future candidate must certify a complete input
+predicate through the prefix rather than enumerate its members.

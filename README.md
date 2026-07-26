@@ -711,6 +711,12 @@ is predeclared to reconstruct register and memory liveness together and select
 one earliest merge without trial-replaying every suffix. It keeps the same
 exact fallback and fourfold work gate. No implementation or result exists yet.
 
+The live-slice result is also negative. Independently reconstructed register
+and memory slices pass the soundness controls, but 250 concrete invalid
+prefixes still dominate and yield only about 1.06× to 1.09× reduction. Exact
+execution remains selected. The next research question is bulk proof of the
+complete invalid-input predicate, not another suffix-only merge.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

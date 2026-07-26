@@ -267,6 +267,8 @@ struct Machine {
     event_program_locations: Vec<u32>,
     observed_reads: Vec<Rv32MemoryAccess>,
     observed_writes: Vec<Rv32MemoryAccess>,
+    observed_register_reads: u32,
+    observed_register_writes: u32,
 }
 
 /// Opaque bounded RV32IMC state used by exact continuation certificates.
@@ -289,6 +291,8 @@ pub struct Rv32MemoryAccess {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Rv32StepObservation {
     pub program_counter: u32,
+    pub register_reads: u32,
+    pub register_writes: u32,
     pub reads: Vec<Rv32MemoryAccess>,
     pub writes: Vec<Rv32MemoryAccess>,
 }
@@ -432,18 +436,63 @@ impl Rv32ReplayMachine {
     pub(crate) fn non_memory_state_equal(&self, other: &Self) -> bool {
         self.symbols == other.symbols && self.machine.same_non_memory_state(&other.machine)
     }
+
+    pub(crate) fn control_state_equal(&self, other: &Self) -> bool {
+        self.symbols == other.symbols && self.machine.same_control_state(&other.machine)
+    }
+
+    pub(crate) fn live_slice_equal(
+        &self,
+        other: &Self,
+        live_registers: u32,
+        live_memory: &[u64],
+    ) -> Result<bool, Rv32Error> {
+        if live_memory.len() != RV32_MEMORY_BITMAP_WORDS {
+            return Err(reject("live-memory bitmap length is outside policy"));
+        }
+        if !self.control_state_equal(other) {
+            return Ok(false);
+        }
+        for register in 0..32 {
+            if live_registers & (1u32 << register) != 0
+                && (self.machine.registers[register] != other.machine.registers[register]
+                    || self.machine.register_known[register]
+                        != other.machine.register_known[register])
+            {
+                return Ok(false);
+            }
+        }
+        for (word_index, word) in live_memory.iter().copied().enumerate() {
+            let mut remaining = word;
+            while remaining != 0 {
+                let bit = remaining.trailing_zeros() as usize;
+                let index = word_index * 64 + bit;
+                if self.machine.memory[index] != other.machine.memory[index]
+                    || self.machine.memory_known[index] != other.machine.memory_known[index]
+                {
+                    return Ok(false);
+                }
+                remaining &= remaining - 1;
+            }
+        }
+        Ok(true)
+    }
 }
 
 impl Machine {
-    fn same_non_memory_state(&self, other: &Self) -> bool {
-        self.registers == other.registers
-            && self.register_known == other.register_known
-            && self.pc == other.pc
+    fn same_control_state(&self, other: &Self) -> bool {
+        self.pc == other.pc
             && self.stop == other.stop
             && self.steps == other.steps
             && self.previous_pc == other.previous_pc
             && self.event_count_address == other.event_count_address
             && self.event_program_locations == other.event_program_locations
+    }
+
+    fn same_non_memory_state(&self, other: &Self) -> bool {
+        self.registers == other.registers
+            && self.register_known == other.register_known
+            && self.same_control_state(other)
     }
 
     fn same_state(&self, other: &Self) -> bool {
@@ -509,6 +558,7 @@ impl Machine {
 
     fn set_reg(&mut self, index: u32, value: u32) {
         if index != 0 {
+            self.observed_register_writes |= 1u32 << index;
             self.registers[index as usize] = value;
             self.register_known[index as usize] = true;
         }
@@ -516,8 +566,13 @@ impl Machine {
 
     fn set_unknown(&mut self, index: u32) {
         if index != 0 {
+            self.observed_register_writes |= 1u32 << index;
             self.register_known[index as usize] = false;
         }
+    }
+
+    fn observe_register_read(&mut self, index: u32) {
+        self.observed_register_reads |= 1u32 << index;
     }
 
     fn require_reg(&self, current: u32, index: u32, role: &str) -> Result<u32, Rv32Error> {
@@ -536,6 +591,8 @@ impl Machine {
         }
         self.observed_reads.clear();
         self.observed_writes.clear();
+        self.observed_register_reads = 0;
+        self.observed_register_writes = 0;
         let observed_pc = self.pc;
         let low = self
             .load(self.pc, 2)
@@ -565,6 +622,8 @@ impl Machine {
         self.execute(current, instruction)?;
         Ok(Rv32StepObservation {
             program_counter: observed_pc,
+            register_reads: self.observed_register_reads,
+            register_writes: self.observed_register_writes,
             reads: self.observed_reads.clone(),
             writes: self.observed_writes.clone(),
         })
@@ -580,6 +639,7 @@ impl Machine {
                 self.pc = current.wrapping_add(sign_extend(value.imm(), 21));
             }
             Jalr(value) => {
+                self.observe_register_read(value.rs1());
                 let target = self
                     .require_reg(current, value.rs1(), "jump target")?
                     .wrapping_add(sign_extend(value.imm(), 12))
@@ -644,6 +704,8 @@ impl Machine {
         value: BType,
         predicate: impl FnOnce(u32, u32) -> bool,
     ) -> Result<(), Rv32Error> {
+        self.observe_register_read(value.rs1());
+        self.observe_register_read(value.rs2());
         let left = self.require_reg(current, value.rs1(), "branch operand")?;
         let right = self.require_reg(current, value.rs2(), "branch operand")?;
         if predicate(left, right) {
@@ -659,6 +721,7 @@ impl Machine {
         width: usize,
         signed: bool,
     ) -> Result<(), Rv32Error> {
+        self.observe_register_read(value.rs1());
         let address = self
             .require_reg(current, value.rs1(), "load address")?
             .wrapping_add(sign_extend(value.imm(), 12));
@@ -687,6 +750,8 @@ impl Machine {
     }
 
     fn store_s(&mut self, current: u32, value: SType, width: usize) -> Result<(), Rv32Error> {
+        self.observe_register_read(value.rs1());
+        self.observe_register_read(value.rs2());
         let address = self
             .require_reg(current, value.rs1(), "store address")?
             .wrapping_add(sign_extend(value.imm(), 12));
@@ -716,6 +781,7 @@ impl Machine {
     }
 
     fn op_i(&mut self, value: IType, operation: impl FnOnce(u32, u32) -> u32) {
+        self.observe_register_read(value.rs1());
         if self.register_known[value.rs1() as usize] {
             self.set_reg(
                 value.rd(),
@@ -727,6 +793,7 @@ impl Machine {
     }
 
     fn shift_i(&mut self, value: ShiftType, operation: impl FnOnce(u32, u32) -> u32) {
+        self.observe_register_read(value.rs1());
         if self.register_known[value.rs1() as usize] {
             self.set_reg(
                 value.rd(),
@@ -738,6 +805,8 @@ impl Machine {
     }
 
     fn op_r(&mut self, value: RType, operation: impl FnOnce(u32, u32) -> u32) {
+        self.observe_register_read(value.rs1());
+        self.observe_register_read(value.rs2());
         if self.register_known[value.rs1() as usize] && self.register_known[value.rs2() as usize] {
             self.set_reg(
                 value.rd(),
@@ -818,6 +887,8 @@ fn initialize_machine(
         event_program_locations: Vec::new(),
         observed_reads: Vec::new(),
         observed_writes: Vec::new(),
+        observed_register_reads: 0,
+        observed_register_writes: 0,
     };
     machine.register_known[0] = true;
     machine.memory[..image.len()].copy_from_slice(image);
