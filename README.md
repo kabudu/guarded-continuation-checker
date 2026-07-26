@@ -506,7 +506,10 @@ target/release/guarded-continuation-checker \
 Use `verify-btor2-channel-pair-traces` with the same paths to independently
 decode and replay the saved artifact. Use
 `btor2-channel-pair-trace-cli-version` for the complete machine-readable
-contract. The retained
+contract. The
+[version-1 compatibility contract](docs/BTOR2_CHANNEL_PAIR_TRACE_COMPATIBILITY_V1.md)
+freezes the artifact, command and manifest identities and requires explicit
+versioned migration for incompatible changes. The retained
 [simulated self-service acceptance](results/btor2-channel-pair-trace-self-service-acceptance-v1.md)
 is local evidence, not partner validation.
 

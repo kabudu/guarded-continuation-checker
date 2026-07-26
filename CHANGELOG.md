@@ -26,7 +26,11 @@
   artifact. Retain five hosted Linux x86-64 trials: certification takes 0.10 to
   0.25 seconds at 6.34 to 6.64 MB peak RSS, while fresh verification takes 0.08
   seconds at 6.32 to 6.52 MB peak RSS. All three hosted portability platforms
-  reproduce the canonical artifact identity.
+  reproduce the canonical artifact identity. Freeze the version-1 compatibility
+  and migration contract and add
+  valid-checksum hostile cases for unsupported artifact versions, relations and
+  solvers so semantic decoder rejection is tested independently of the outer
+  checksum.
 
 - Add the canonical accessible platform architecture SVG and embed it in the
   project README. The diagram separates authenticated inputs, GCC governance,
