@@ -945,3 +945,13 @@ reference performs every execution independently and therefore supplies no
 work reduction or novelty evidence. Exact-state quotient production,
 independent certificate replay and identical-scope angr, CBMC and Veritesting
 comparisons remain mandatory.
+
+The predeclared complete-concrete-state candidate is now a retained negative
+result. O0 and O2 both preserve input-dependent stale stack bytes through
+return, so inputs with equal return-plus-MMIO behaviour never become equal
+whole-machine states. No quotient artifact or work-reduction claim results.
+The next potentially differentiating mechanism is certified future liveness:
+exclude a differing byte only after a checker proves that no remaining
+instruction path can read it. That follow-up requires a new predeclaration and
+closest-work comparison with compiler liveness, dead-store analysis, symbolic
+state subsumption and proof-carrying abstraction.

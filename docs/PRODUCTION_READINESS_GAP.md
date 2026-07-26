@@ -724,6 +724,14 @@ byte-identical. The quotient, deterministic certificate, independent verifier,
 maintained symbolic baselines, RTL composition, hostile matrix, resource
 policy and hosted evidence remain open, so no production row changes.
 
+The strict exact-state quotient then refused both authentic profiles because
+input-dependent stack bytes remain in bounded memory even after their last
+possible use. This is the required fail-closed outcome: equal terminal MMIO
+does not authorize a merge. There is no quotient artifact, RTL answer or
+production-row change. A future live-state quotient remains research-only
+until dead-byte proofs, an independent checker, hostile read-after-merge
+controls and exact fallback all pass.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

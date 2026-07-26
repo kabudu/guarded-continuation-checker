@@ -4,11 +4,15 @@
 //! fail-closed reference and work-accounting denominator for a later
 //! continuation quotient, not an optimized producer.
 
-use crate::riscv32imc::{CompiledMmioEvent, Rv32SymbolLayout, execute_compiled_mmio_with_a0};
+use crate::riscv32imc::{
+    CompiledMmioEvent, Rv32ReplayMachine, Rv32SymbolLayout, execute_compiled_mmio_with_a0,
+};
 use std::{error::Error, fmt};
 
 pub const EXACT_COMPILED_MMIO_REFERENCE_VERSION: u32 = 1;
 pub const EXACT_COMPILED_MMIO_INPUTS: usize = 256;
+pub const GUARDED_MMIO_QUOTIENT_VERSION: u32 = 1;
+pub const GUARDED_MMIO_VALID_CHANNELS: u8 = 6;
 const MEMBERSHIP_WORDS: usize = EXACT_COMPILED_MMIO_INPUTS / 64;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -52,6 +56,28 @@ pub struct ExactCompiledMmioReference {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GuardedMmioQuotient {
+    pub version: u32,
+    pub valid_behaviors: Vec<ExactCompiledMmioBehavior>,
+    pub invalid_behavior: ExactCompiledMmioBehavior,
+    pub invalid_representative: u8,
+    pub invalid_prefix_steps: Vec<u64>,
+    pub shared_continuation_steps: u64,
+    pub producer_decoded_instruction_transitions: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GuardedMmioQuotientVerification {
+    pub decoded_instruction_transitions: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GuardedMmioPortfolio {
+    Quotient(GuardedMmioQuotient),
+    Exact(ExactCompiledMmioReference),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExactCompiledMmioReferenceError(pub String);
 
 impl fmt::Display for ExactCompiledMmioReferenceError {
@@ -64,6 +90,222 @@ impl Error for ExactCompiledMmioReferenceError {}
 
 fn reject(message: impl Into<String>) -> ExactCompiledMmioReferenceError {
     ExactCompiledMmioReferenceError(message.into())
+}
+
+fn behavior(execution: crate::riscv32imc::Rv32Execution) -> ExactCompiledMmioBehavior {
+    ExactCompiledMmioBehavior {
+        return_value: execution.return_value,
+        events: execution.events,
+    }
+}
+
+fn add_work(total: &mut u64, work: u64) -> Result<(), ExactCompiledMmioReferenceError> {
+    *total = total
+        .checked_add(work)
+        .ok_or_else(|| reject("decoded instruction transition count overflow"))?;
+    Ok(())
+}
+
+/// Produce the frozen eight-bit guarded-MMIO quotient using exact state
+/// convergence only.
+///
+/// Channels 0 through 5 remain explicit singleton paths. Inputs 6 through 255
+/// may reuse the suffix reached by inputs 6 and 7 only after their opaque
+/// replay machines become byte-for-byte equal. Every other invalid input must
+/// independently reach that same state at the declared prefix length.
+pub fn build_guarded_mmio_quotient(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<GuardedMmioQuotient, ExactCompiledMmioReferenceError> {
+    let mut valid_behaviors = Vec::with_capacity(usize::from(GUARDED_MMIO_VALID_CHANNELS));
+    let mut producer_work = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("valid input {input}: {error}")))?
+            .finish()
+            .map_err(|error| reject(format!("valid input {input}: {error}")))?;
+        add_work(&mut producer_work, execution.steps)?;
+        valid_behaviors.push(behavior(execution));
+    }
+
+    let mut representative =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS))
+            .map_err(|error| reject(format!("invalid representative: {error}")))?;
+    let mut second =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS) + 1)
+            .map_err(|error| reject(format!("invalid convergence witness: {error}")))?;
+    while representative != second {
+        if representative.is_complete() || second.is_complete() {
+            let difference = representative
+                .exact_difference(&second)
+                .unwrap_or_else(|| "unclassified state".to_string());
+            return Err(reject(format!(
+                "invalid inputs completed without exact state convergence: {difference}"
+            )));
+        }
+        representative
+            .step()
+            .map_err(|error| reject(format!("invalid representative: {error}")))?;
+        second
+            .step()
+            .map_err(|error| reject(format!("invalid convergence witness: {error}")))?;
+    }
+    let merge_steps = representative.steps();
+    add_work(&mut producer_work, merge_steps)?;
+    add_work(&mut producer_work, second.steps())?;
+
+    let mut invalid_prefix_steps = vec![merge_steps; 250];
+    for input in (GUARDED_MMIO_VALID_CHANNELS + 2)..=u8::MAX {
+        let mut candidate = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("invalid input {input}: {error}")))?;
+        while candidate.steps() < merge_steps {
+            candidate
+                .step()
+                .map_err(|error| reject(format!("invalid input {input}: {error}")))?;
+        }
+        if candidate != representative {
+            return Err(reject(format!(
+                "invalid input {input} does not reach the exact shared state"
+            )));
+        }
+        add_work(&mut producer_work, candidate.steps())?;
+        invalid_prefix_steps[usize::from(input - GUARDED_MMIO_VALID_CHANNELS)] = candidate.steps();
+    }
+
+    let prefix_steps = representative.steps();
+    let invalid_execution = representative
+        .finish()
+        .map_err(|error| reject(format!("shared invalid continuation: {error}")))?;
+    let shared_continuation_steps = invalid_execution
+        .steps
+        .checked_sub(prefix_steps)
+        .ok_or_else(|| reject("shared continuation work underflow"))?;
+    add_work(&mut producer_work, shared_continuation_steps)?;
+
+    Ok(GuardedMmioQuotient {
+        version: GUARDED_MMIO_QUOTIENT_VERSION,
+        valid_behaviors,
+        invalid_behavior: behavior(invalid_execution),
+        invalid_representative: GUARDED_MMIO_VALID_CHANNELS,
+        invalid_prefix_steps,
+        shared_continuation_steps,
+        producer_decoded_instruction_transitions: producer_work,
+    })
+}
+
+/// Reconstruct and verify every quotient route without invoking the producer.
+pub fn verify_guarded_mmio_quotient(
+    quotient: &GuardedMmioQuotient,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<GuardedMmioQuotientVerification, ExactCompiledMmioReferenceError> {
+    if quotient.version != GUARDED_MMIO_QUOTIENT_VERSION
+        || quotient.invalid_representative != GUARDED_MMIO_VALID_CHANNELS
+        || quotient.valid_behaviors.len() != usize::from(GUARDED_MMIO_VALID_CHANNELS)
+        || quotient.invalid_prefix_steps.len()
+            != EXACT_COMPILED_MMIO_INPUTS - usize::from(GUARDED_MMIO_VALID_CHANNELS)
+    {
+        return Err(reject("quotient shape is not canonical"));
+    }
+
+    let mut verifier_work = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("verify valid input {input}: {error}")))?
+            .finish()
+            .map_err(|error| reject(format!("verify valid input {input}: {error}")))?;
+        add_work(&mut verifier_work, execution.steps)?;
+        if behavior(execution) != quotient.valid_behaviors[usize::from(input)] {
+            return Err(reject(format!("valid input {input} behavior mismatch")));
+        }
+    }
+
+    let representative_steps = quotient.invalid_prefix_steps[0];
+    if representative_steps == 0 {
+        return Err(reject("invalid representative prefix is empty"));
+    }
+    let mut representative =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS))
+            .map_err(|error| reject(format!("verify invalid representative: {error}")))?;
+    while representative.steps() < representative_steps {
+        representative
+            .step()
+            .map_err(|error| reject(format!("verify invalid representative: {error}")))?;
+    }
+    add_work(&mut verifier_work, representative.steps())?;
+
+    for input in (GUARDED_MMIO_VALID_CHANNELS + 1)..=u8::MAX {
+        let declared =
+            quotient.invalid_prefix_steps[usize::from(input - GUARDED_MMIO_VALID_CHANNELS)];
+        if declared != representative_steps {
+            return Err(reject(format!(
+                "invalid input {input} has a noncanonical prefix length"
+            )));
+        }
+        let mut candidate = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("verify invalid input {input}: {error}")))?;
+        while candidate.steps() < declared {
+            candidate
+                .step()
+                .map_err(|error| reject(format!("verify invalid input {input}: {error}")))?;
+        }
+        if candidate != representative {
+            return Err(reject(format!(
+                "invalid input {input} exact state mismatch"
+            )));
+        }
+        add_work(&mut verifier_work, candidate.steps())?;
+    }
+
+    let prefix_steps = representative.steps();
+    let invalid_execution = representative
+        .finish()
+        .map_err(|error| reject(format!("verify shared continuation: {error}")))?;
+    let shared_work = invalid_execution
+        .steps
+        .checked_sub(prefix_steps)
+        .ok_or_else(|| reject("verified shared continuation work underflow"))?;
+    if shared_work != quotient.shared_continuation_steps {
+        return Err(reject("shared continuation work mismatch"));
+    }
+    add_work(&mut verifier_work, shared_work)?;
+    if behavior(invalid_execution) != quotient.invalid_behavior {
+        return Err(reject("invalid class behavior mismatch"));
+    }
+
+    Ok(GuardedMmioQuotientVerification {
+        decoded_instruction_transitions: verifier_work,
+    })
+}
+
+/// Select the exact quotient when its invariant is established, otherwise run
+/// the complete per-input reference without returning a partial quotient.
+pub fn build_guarded_mmio_portfolio(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<GuardedMmioPortfolio, ExactCompiledMmioReferenceError> {
+    match build_guarded_mmio_quotient(image, symbols) {
+        Ok(quotient) => Ok(GuardedMmioPortfolio::Quotient(quotient)),
+        Err(_) => {
+            build_exact_compiled_mmio_reference(image, symbols).map(GuardedMmioPortfolio::Exact)
+        }
+    }
+}
+
+pub fn verify_guarded_mmio_portfolio(
+    portfolio: &GuardedMmioPortfolio,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<(), ExactCompiledMmioReferenceError> {
+    match portfolio {
+        GuardedMmioPortfolio::Quotient(quotient) => {
+            verify_guarded_mmio_quotient(quotient, image, symbols)?;
+            Ok(())
+        }
+        GuardedMmioPortfolio::Exact(reference) => {
+            verify_exact_compiled_mmio_reference(reference, image, symbols)
+        }
+    }
 }
 
 /// Execute every value in the complete eight-bit `a0` domain independently.
@@ -170,6 +412,22 @@ mod tests {
         )
     }
 
+    fn guarded_image() -> (Vec<u8>, Rv32SymbolLayout) {
+        let mut image = vec![0; 0x110];
+        let sltiu_a0_six = (6u32 << 20) | (10 << 15) | (3 << 12) | (10 << 7) | 0x13;
+        let return_to_ra = (1u32 << 15) | 0x67;
+        image[..4].copy_from_slice(&sltiu_a0_six.to_le_bytes());
+        image[4..8].copy_from_slice(&return_to_ra.to_le_bytes());
+        (
+            image,
+            Rv32SymbolLayout {
+                entry: RV32_IMAGE_BASE,
+                event_count: RV32_IMAGE_BASE + 0x100,
+                events: RV32_IMAGE_BASE + 0x104,
+            },
+        )
+    }
+
     #[test]
     fn exact_reference_partitions_the_complete_input_domain() {
         let (image, symbols) = parity_image();
@@ -196,5 +454,43 @@ mod tests {
         let mut reference = build_exact_compiled_mmio_reference(&image, symbols).unwrap();
         reference.classes[0].members[0] ^= 1;
         assert!(verify_exact_compiled_mmio_reference(&reference, &image, symbols).is_err());
+    }
+
+    #[test]
+    fn exact_guarded_quotient_reuses_only_a_byte_equal_state() {
+        let (image, symbols) = guarded_image();
+        let quotient = build_guarded_mmio_quotient(&image, symbols).unwrap();
+        assert_eq!(quotient.valid_behaviors.len(), 6);
+        assert_eq!(quotient.invalid_prefix_steps, vec![1; 250]);
+        assert_eq!(quotient.shared_continuation_steps, 1);
+        assert_eq!(quotient.producer_decoded_instruction_transitions, 263);
+        let verified = verify_guarded_mmio_quotient(&quotient, &image, symbols).unwrap();
+        assert_eq!(verified.decoded_instruction_transitions, 263);
+        assert_eq!(quotient.invalid_behavior.return_value, 0);
+    }
+
+    #[test]
+    fn guarded_quotient_verifier_rejects_route_and_behavior_tampering() {
+        let (image, symbols) = guarded_image();
+        let quotient = build_guarded_mmio_quotient(&image, symbols).unwrap();
+
+        let mut changed_route = quotient.clone();
+        changed_route.invalid_prefix_steps[249] = 2;
+        assert!(verify_guarded_mmio_quotient(&changed_route, &image, symbols).is_err());
+
+        let mut changed_behavior = quotient;
+        changed_behavior.invalid_behavior.return_value = 7;
+        assert!(verify_guarded_mmio_quotient(&changed_behavior, &image, symbols).is_err());
+    }
+
+    #[test]
+    fn guarded_portfolio_falls_back_to_the_complete_exact_reference() {
+        let (image, symbols) = parity_image();
+        let portfolio = build_guarded_mmio_portfolio(&image, symbols).unwrap();
+        let GuardedMmioPortfolio::Exact(reference) = &portfolio else {
+            panic!("nonconvergent inputs must use exact fallback");
+        };
+        assert_eq!(reference.executions.len(), EXACT_COMPILED_MMIO_INPUTS);
+        verify_guarded_mmio_portfolio(&portfolio, &image, symbols).unwrap();
     }
 }

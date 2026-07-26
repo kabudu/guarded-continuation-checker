@@ -252,6 +252,7 @@ fn decompress(raw: u16) -> Result<u32, Rv32Error> {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
 struct Machine {
     memory: Vec<u8>,
     memory_known: Vec<bool>,
@@ -263,6 +264,115 @@ struct Machine {
     previous_pc: u32,
     event_count_address: u32,
     event_program_locations: Vec<u32>,
+}
+
+/// Opaque bounded RV32IMC state used by exact continuation certificates.
+///
+/// Callers can advance and compare states, but cannot manufacture or alter
+/// machine contents. Equality covers every field that can affect later
+/// execution or retained evidence, and never relies on a digest.
+#[derive(Clone, Eq, PartialEq)]
+pub struct Rv32ReplayMachine {
+    machine: Machine,
+    symbols: Rv32SymbolLayout,
+}
+
+impl Rv32ReplayMachine {
+    pub fn new_with_a0(
+        image: &[u8],
+        symbols: Rv32SymbolLayout,
+        a0: u32,
+    ) -> Result<Self, Rv32Error> {
+        Ok(Self {
+            machine: initialize_machine(image, symbols, Some(a0))?,
+            symbols,
+        })
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.machine.pc == self.machine.stop
+    }
+
+    pub fn steps(&self) -> u64 {
+        self.machine.steps
+    }
+
+    pub fn program_counter(&self) -> u32 {
+        self.machine.pc
+    }
+
+    pub fn step(&mut self) -> Result<(), Rv32Error> {
+        if self.is_complete() {
+            return Err(reject("cannot step a completed replay machine"));
+        }
+        self.machine.step()
+    }
+
+    pub fn finish(mut self) -> Result<Rv32Execution, Rv32Error> {
+        while !self.is_complete() {
+            self.step()?;
+        }
+        finalize_machine(&self.machine, self.symbols)
+    }
+
+    pub(crate) fn exact_difference(&self, other: &Self) -> Option<String> {
+        if self.symbols != other.symbols {
+            return Some("symbol layout".to_string());
+        }
+        let left = &self.machine;
+        let right = &other.machine;
+        for (index, (left_known, right_known)) in left
+            .register_known
+            .iter()
+            .zip(&right.register_known)
+            .enumerate()
+        {
+            if left_known != right_known {
+                return Some(format!("register x{index} knownness"));
+            }
+            if left.registers[index] != right.registers[index] {
+                return Some(format!("register x{index} value"));
+            }
+        }
+        for (index, (left_known, right_known)) in left
+            .memory_known
+            .iter()
+            .zip(&right.memory_known)
+            .enumerate()
+        {
+            if left_known != right_known {
+                return Some(format!(
+                    "memory knownness at 0x{:08x}",
+                    RV32_IMAGE_BASE + index as u32
+                ));
+            }
+            if left.memory[index] != right.memory[index] {
+                return Some(format!(
+                    "memory value at 0x{:08x}",
+                    RV32_IMAGE_BASE + index as u32
+                ));
+            }
+        }
+        if left.pc != right.pc {
+            return Some("program counter".to_string());
+        }
+        if left.stop != right.stop {
+            return Some("stop address".to_string());
+        }
+        if left.steps != right.steps {
+            return Some("step count".to_string());
+        }
+        if left.previous_pc != right.previous_pc {
+            return Some("previous program counter".to_string());
+        }
+        if left.event_count_address != right.event_count_address {
+            return Some("event-count address".to_string());
+        }
+        if left.event_program_locations != right.event_program_locations {
+            return Some("event program locations".to_string());
+        }
+        None
+    }
 }
 
 impl Machine {
@@ -569,6 +679,18 @@ fn execute_compiled_mmio_inner(
     symbols: Rv32SymbolLayout,
     a0: Option<u32>,
 ) -> Result<Rv32Execution, Rv32Error> {
+    let mut machine = initialize_machine(image, symbols, a0)?;
+    while machine.pc != machine.stop {
+        machine.step()?;
+    }
+    finalize_machine(&machine, symbols)
+}
+
+fn initialize_machine(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+    a0: Option<u32>,
+) -> Result<Machine, Rv32Error> {
     if image.is_empty() || image.len() > MAX_RV32_IMAGE_BYTES {
         return Err(reject("image size is outside policy"));
     }
@@ -607,8 +729,15 @@ fn execute_compiled_mmio_inner(
     if let Some(a0) = a0 {
         machine.set_reg(10, a0);
     }
-    while machine.pc != stop {
-        machine.step()?;
+    Ok(machine)
+}
+
+fn finalize_machine(
+    machine: &Machine,
+    symbols: Rv32SymbolLayout,
+) -> Result<Rv32Execution, Rv32Error> {
+    if machine.pc != machine.stop {
+        return Err(reject("cannot finalize an incomplete replay machine"));
     }
     let return_value = machine.require_reg(machine.stop, 10, "firmware return value")?;
     if !machine.load_is_known(symbols.event_count, 4)? {
@@ -642,7 +771,7 @@ fn execute_compiled_mmio_inner(
         return_value,
         steps: machine.steps,
         events,
-        event_program_locations: machine.event_program_locations,
+        event_program_locations: machine.event_program_locations.clone(),
     })
 }
 
@@ -736,5 +865,24 @@ mod tests {
         .unwrap();
         assert_eq!(result.return_value, 0);
         assert_eq!(result.steps, 2);
+    }
+
+    #[test]
+    fn replay_state_equality_requires_complete_concrete_convergence() {
+        let mut image = vec![0; 0x110];
+        image[..4].copy_from_slice(&encode_i(0x13, 7, 10, 10, 1).to_le_bytes());
+        image[4..8].copy_from_slice(&encode_i(0x67, 0, 0, 1, 0).to_le_bytes());
+        let symbols = Rv32SymbolLayout {
+            entry: RV32_IMAGE_BASE,
+            event_count: RV32_IMAGE_BASE + 0x100,
+            events: RV32_IMAGE_BASE + 0x104,
+        };
+        let mut even_zero = Rv32ReplayMachine::new_with_a0(&image, symbols, 0).unwrap();
+        let mut even_two = Rv32ReplayMachine::new_with_a0(&image, symbols, 2).unwrap();
+        assert!(even_zero != even_two);
+        even_zero.step().unwrap();
+        even_two.step().unwrap();
+        assert!(even_zero == even_two);
+        assert_eq!(even_zero.clone().finish().unwrap().return_value, 0);
     }
 }

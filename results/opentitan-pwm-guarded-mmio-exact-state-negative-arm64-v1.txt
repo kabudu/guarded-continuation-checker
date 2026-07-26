@@ -1,0 +1,17 @@
+guarded_mmio_exact_state_result_version=1
+platform=macos-arm64
+rust_version=1.97.0
+input_domain=0..255
+invalid_class_domain=6..255
+merge_rule=complete-concrete-rv32-state-byte-equality
+o0_status=rejected
+o0_first_terminal_difference=memory-value
+o0_first_terminal_difference_address=0x801fffe4
+o2_status=rejected
+o2_first_terminal_difference=memory-value
+o2_first_terminal_difference_address=0x801fffb8
+equal_terminal_behavior_is_not_state_equality=true
+quotient_cycle_transitions=none
+fourfold_gate=failed
+fallback=exact-per-input-reference
+status=retained-negative-result

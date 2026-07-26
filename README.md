@@ -687,6 +687,13 @@ predeclared production-plus-verification denominators are therefore 629,636
 and 231,920. This is reference evidence, not a quotient, work reduction or
 novelty result.
 
+The first strict quotient attempt is retained as a negative result. Although
+the 250 invalid inputs have equal returns and MMIO streams, O0 and O2 retain
+different stale stack bytes, so their complete concrete RV32 states never
+converge. GCC refuses the merge and keeps exact per-input execution. A separate
+future experiment may test whether independently checked memory-liveness
+proofs can remove only bytes that provably cannot affect the continuation.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
