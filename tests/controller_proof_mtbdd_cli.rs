@@ -1596,15 +1596,19 @@ esac
         InvocationStatus::Failed(FailureClass::Response)
     );
 
-    fs::write(
-        &executable,
-        script.replace(
-            "allocation_calls=0",
-            "allocation_calls=18446744073709551616",
-        ),
-    )
-    .unwrap();
-    let overflow = tool
+    let overflow_executable = root.join("hostile-allocation-overflow-helper");
+    write_executable(
+        &overflow_executable,
+        script
+            .replace(
+                "allocation_calls=0",
+                "allocation_calls=18446744073709551616",
+            )
+            .as_bytes(),
+    );
+    let overflow_tool =
+        ControllerSplitAllocationObservabilityTool::discover(&overflow_executable).unwrap();
+    let overflow = overflow_tool
         .verify_set_observed(
             Path::new("evidence"),
             Path::new("policy"),

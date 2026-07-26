@@ -7,6 +7,7 @@ use crate::revision_impact::{
     decode_two_component_revision_impact_bundle, encode_two_component_revision_impact_bundle,
     produce_two_component_revision_impact, verify_two_component_revision_impact,
 };
+use crate::riscv32imc::CompiledMmioEvent;
 use sha2::{Digest, Sha256};
 use std::{error::Error, fmt};
 
@@ -137,6 +138,108 @@ fn validate_events(
         ));
     }
     Ok(())
+}
+
+/// Converts the exact compiled OpenTitan PWM MMIO stream into the semantic
+/// four-step schedule accepted by the v1 firmware transaction contract.
+///
+/// Any extra, missing, reordered or changed compiled event is refused.
+pub fn compiled_pwm_schedule(
+    events: &[CompiledMmioEvent],
+) -> Result<Vec<FirmwareTransactionEvent>, FirmwareTransactionContractError> {
+    const EXPECTED: [CompiledMmioEvent; 16] = [
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 4,
+            value: 1,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 8,
+            value: 3,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 16,
+            value: 0,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 44,
+            value: 2_147_500_032,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 20,
+            value: 0,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 16,
+            value: 0,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 4,
+            value: 1,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 12,
+            value: 0,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 12,
+            value: 1,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 4,
+            value: 1,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 8,
+            value: 3,
+        },
+        CompiledMmioEvent {
+            operation: 1,
+            offset: 16,
+            value: 0,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 48,
+            value: 2_684_379_136,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 24,
+            value: 8_192,
+        },
+        CompiledMmioEvent {
+            operation: 2,
+            offset: 16,
+            value: 0,
+        },
+        CompiledMmioEvent {
+            operation: 3,
+            offset: 0,
+            value: 1,
+        },
+    ];
+    if events != EXPECTED {
+        return Err(reject(
+            "compiled MMIO stream does not match the observation-ready schedule",
+        ));
+    }
+    Ok(vec![
+        FirmwareTransactionEvent::ConfigureChannel0,
+        FirmwareTransactionEvent::EnableChannel0,
+        FirmwareTransactionEvent::ConfigureChannel1,
+        FirmwareTransactionEvent::ObserveChannel0,
+    ])
 }
 
 /// Produces the exact RTL impact evidence only after the firmware transaction
