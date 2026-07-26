@@ -74,7 +74,10 @@ Symbolic execution, bounded model checking and proof-carrying code are
 established. The closest-work register starts with
 [KLEE](https://llvm.org/pubs/2008-12-OSDI-KLEE.pdf),
 [CBMC](https://diffblue.github.io/cbmc/man/cbmc.html), and
-[Proof-Carrying Code](https://doi.org/10.1145/263699.263712).
+[Proof-Carrying Code](https://doi.org/10.1145/263699.263712), plus
+[angr Veritesting](https://docs.angr.io/en/latest/api/angr.analyses.veritesting.html)
+and
+[Efficient State Merging](https://infoscience.epfl.ch/entities/publication/e52a46a1-1dd7-4b4b-ba8d-960201ab7a12).
 
 ## Hostile controls
 
