@@ -924,3 +924,14 @@ propagation, canonical certificates and binary-analysis cross-checking are
 established techniques. The cycle measures no certificate or end-to-end
 advantage over an equivalent contract-aware maintained workflow, so it adds
 validation evidence but no novelty evidence.
+
+The next predeclared experiment moves from one fixed execution to the complete
+eight-bit runtime-channel domain. A guarded MMIO continuation quotient may
+merge inputs only when complete future machine behaviour, return class and
+MMIO continuation agree. KLEE-style symbolic execution, CBMC-style bounded
+model checking, path merging and proof-carrying code are established prior
+art. The candidate distinction is therefore limited to the complete
+binary-bound, independently replayable firmware-to-RTL composition and any
+measured work advantage that survives identical-scope angr, CBMC and exact
+per-input comparison. No novelty claim exists before those predeclared gates
+and independent expert review pass.

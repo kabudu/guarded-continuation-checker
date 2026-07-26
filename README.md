@@ -667,6 +667,15 @@ and must be writable only by the GCC worker; descriptor-relative publication
 does not protect a retained directory from another process with the same
 effective identity and independent write access.
 
+The next
+[guarded MMIO continuation quotient experiment](docs/OPENTITAN_PWM_GUARDED_MMIO_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared over all 256 values of the authentic runtime-channel caller. It
+will test whether complete compiled continuations can be partitioned into
+independently checked behaviour classes and composed with RTL evidence using
+materially less verification work than 256 separate jobs. Exact execution is
+the reference and fail-closed fallback. No implementation, result or novelty
+claim exists yet.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest
