@@ -401,7 +401,8 @@ for O2. Single verification observations are 7,758 microseconds for O0 and
 The retained local result is in the
 [arm64 race result](../results/opentitan-pwm-compiled-mmio-race-arm64-v1.txt).
 
-Hosted Linux must still pass the same race cohort, frozen identities and a
-Valgrind descriptor-boundary run before the cycle advances. Output-directory
-descriptor acquisition, Windows reparse-point handling, compatibility history,
-static all-path proof and independent operator acceptance remain open.
+Hosted Linux run 30198476777 passes the same race cohort, preserves both frozen
+certificate identities and completes the Valgrind descriptor-boundary
+verification without an error. Output-directory descriptor acquisition,
+Windows reparse-point handling, compatibility history, static all-path proof
+and independent operator acceptance remain open.

@@ -695,10 +695,11 @@ descriptor, walks every component without following symlinks, rejects
 hard-link aliases and detects file or directory changes across the complete
 load. Local deterministic and sustained rename, rewrite, truncation, extension
 and symlink races return only a complete stable snapshot or refusal. Hosted
-Linux race and Valgrind gates, output-directory descriptor acquisition,
-Windows reparse-point handling, static all-path proof, compatibility history,
-a governed process-resource policy and independent acceptance remain open. No
-production row closes.
+Linux run 30198476777 passes the race cohort, preserves both frozen certificate
+identities and completes the Valgrind descriptor-boundary verification.
+Output-directory descriptor acquisition, Windows reparse-point handling,
+static all-path proof, compatibility history, a governed process-resource
+policy and independent acceptance remain open. No production row closes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
