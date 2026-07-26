@@ -1,6 +1,6 @@
 # BTOR2 channel phase-abstraction experiment v1
 
-Status: predeclared. No result or novelty claim exists yet.
+Status: authentic abstraction probe is negative. No novelty claim exists.
 
 ## Product question
 
@@ -128,6 +128,22 @@ The hypothesis fails if:
   reachability and monitor costs.
 
 Negative results remain in the repository.
+
+## First retained result
+
+The complete 81-row cohort confirms that the ten-bit vocabulary is smaller
+than the 69-bit concrete source state and provides 25 verified reachability
+witnesses. It does not preserve a mixed-class relation.
+
+From phase 2 through phase 8, every frozen history guard admits verified
+counterexamples to both equality and difference. The same abstract class
+therefore contains both relation values. There are no accepted SAFE relation
+rows, so the three-consecutive-phase gate fails.
+
+The [complete retained result](../results/opentitan-pwm-channel-phase-abstraction-probe-v1.md)
+rejects portfolio and maintained-baseline work for this abstraction. Adding
+unselected channel-local state after observing these answers would violate the
+predeclaration.
 
 ## Claim boundary
 

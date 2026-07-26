@@ -275,6 +275,26 @@ pub struct Btor2GuardedChannelHistoryQuery {
     pub horizon: u32,
 }
 
+/// A phase-refined history query with an authenticated shared phase root.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPhaseAbstractionQuery {
+    pub history: Btor2GuardedChannelHistoryQuery,
+    pub phase_root: NodeId,
+    pub phase_value: u64,
+}
+
+/// Canonical reachability and guarded-relation products for one phase class.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Btor2ChannelPhaseAbstractionModels {
+    pub reachability_model: Vec<u8>,
+    pub reachability_bad: NodeId,
+    pub relation_model: Vec<u8>,
+    pub relation_bad: NodeId,
+    pub abstract_state_bits: u32,
+    pub concrete_state_nodes: usize,
+    pub concrete_state_bits: u32,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Btor2ChannelTraceProofPolicy {
     max_queries: usize,
@@ -639,7 +659,7 @@ fn allocate_statement_id(last: &mut NodeId) -> Result<NodeId, Btor2RegionError> 
     Ok(*last)
 }
 
-fn statement_sort_id(model_bytes: &[u8], node: NodeId) -> Result<NodeId, Btor2RegionError> {
+fn raw_statement_sort_id(model_bytes: &[u8], node: NodeId) -> Result<NodeId, Btor2RegionError> {
     let text = std::str::from_utf8(model_bytes)
         .map_err(|_| reject("BTOR2 channel trace source is not UTF-8"))?;
     let sort = text.lines().find_map(|line| {
@@ -647,7 +667,13 @@ fn statement_sort_id(model_bytes: &[u8], node: NodeId) -> Result<NodeId, Btor2Re
         let id = fields.next()?.parse::<NodeId>().ok()?;
         (id == node).then(|| fields.nth(1)?.parse::<NodeId>().ok())?
     });
-    let sort = sort.ok_or_else(|| reject("BTOR2 channel trace observation sort is missing"))?;
+    sort.ok_or_else(|| reject("BTOR2 channel trace observation sort is missing"))
+}
+
+fn statement_sort_id(model_bytes: &[u8], node: NodeId) -> Result<NodeId, Btor2RegionError> {
+    let text = std::str::from_utf8(model_bytes)
+        .map_err(|_| reject("BTOR2 channel trace source is not UTF-8"))?;
+    let sort = raw_statement_sort_id(model_bytes, node)?;
     let valid = text.lines().any(|line| {
         let fields = line.split_ascii_whitespace().collect::<Vec<_>>();
         fields.len() == 4
@@ -1046,15 +1072,24 @@ fn append_xor(
     Ok(result)
 }
 
-/// Reconstructs the frozen version-1 history monitor and a guarded relation
-/// violation over two distinct Boolean channel observations.
-pub fn build_btor2_guarded_channel_history_model(
+struct ChannelHistoryBase {
+    bytes: Vec<u8>,
+    last: NodeId,
+    bool_sort: NodeId,
+    left: NodeId,
+    right: NodeId,
+    guard: NodeId,
+    concrete_state_nodes: usize,
+    concrete_state_bits: u32,
+}
+
+fn build_btor2_channel_history_base(
     model_bytes: &[u8],
     semantic_roots: &[NodeId],
     expected_channels: usize,
     query: Btor2GuardedChannelHistoryQuery,
     policy: Btor2RegionPolicy,
-) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+) -> Result<ChannelHistoryBase, Btor2RegionError> {
     if query.left_channel_index == query.right_channel_index {
         return Err(reject(
             "BTOR2 guarded channel history requires two distinct channels",
@@ -1184,24 +1219,188 @@ pub fn build_btor2_guarded_channel_history_model(
         }
     };
 
-    let different = append_xor(&mut bytes, &mut last, bool_sort, left, right)?;
-    let violation = match query.relation {
+    let concrete_state_bits = model.states().iter().try_fold(0u32, |total, state| {
+        total
+            .checked_add(model.nodes()[state].width)
+            .ok_or_else(|| reject("BTOR2 channel history state-bit count overflow"))
+    })?;
+    Ok(ChannelHistoryBase {
+        bytes,
+        last,
+        bool_sort,
+        left,
+        right,
+        guard,
+        concrete_state_nodes: model.states().len(),
+        concrete_state_bits,
+    })
+}
+
+#[derive(Clone, Copy)]
+struct GuardedRelationNodes {
+    bool_sort: NodeId,
+    left: NodeId,
+    right: NodeId,
+    guard: NodeId,
+}
+
+fn append_guarded_channel_relation_bad(
+    bytes: &mut Vec<u8>,
+    last: &mut NodeId,
+    nodes: GuardedRelationNodes,
+    relation: Btor2ChannelPairRelation,
+    symbol: &str,
+) -> Result<NodeId, Btor2RegionError> {
+    let different = append_xor(bytes, last, nodes.bool_sort, nodes.left, nodes.right)?;
+    let violation = match relation {
         Btor2ChannelPairRelation::Equal => different,
-        Btor2ChannelPairRelation::Different => {
-            append_not(&mut bytes, &mut last, bool_sort, different)?
-        }
+        Btor2ChannelPairRelation::Different => append_not(bytes, last, nodes.bool_sort, different)?,
     };
-    let guarded_violation = append_and(&mut bytes, &mut last, bool_sort, guard, violation)?;
-    let bad = allocate_statement_id(&mut last)?;
-    bytes.extend_from_slice(
-        format!("{bad} bad {guarded_violation} gcc_guarded_channel_history_violation\n").as_bytes(),
-    );
+    let guarded_violation = append_and(bytes, last, nodes.bool_sort, nodes.guard, violation)?;
+    let bad = allocate_statement_id(last)?;
+    bytes.extend_from_slice(format!("{bad} bad {guarded_violation} {symbol}\n").as_bytes());
+    Ok(bad)
+}
+
+/// Reconstructs the frozen version-1 history monitor and a guarded relation
+/// violation over two distinct Boolean channel observations.
+pub fn build_btor2_guarded_channel_history_model(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    query: Btor2GuardedChannelHistoryQuery,
+    policy: Btor2RegionPolicy,
+) -> Result<(Vec<u8>, NodeId), Btor2RegionError> {
+    let base = build_btor2_channel_history_base(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query,
+        policy,
+    )?;
+    let mut bytes = base.bytes;
+    let mut last = base.last;
+    let bad = append_guarded_channel_relation_bad(
+        &mut bytes,
+        &mut last,
+        GuardedRelationNodes {
+            bool_sort: base.bool_sort,
+            left: base.left,
+            right: base.right,
+            guard: base.guard,
+        },
+        query.relation,
+        "gcc_guarded_channel_history_violation",
+    )?;
     btor2::parse_bytes(&bytes).map_err(|error| {
         reject(format!(
             "generated BTOR2 guarded channel history is invalid: {error}"
         ))
     })?;
     Ok((bytes, bad))
+}
+
+/// Builds separate non-vacuity and guarded-relation products for one frozen
+/// phase-abstraction query.
+pub fn build_btor2_channel_phase_abstraction_models(
+    model_bytes: &[u8],
+    semantic_roots: &[NodeId],
+    expected_channels: usize,
+    query: Btor2ChannelPhaseAbstractionQuery,
+    policy: Btor2RegionPolicy,
+) -> Result<Btor2ChannelPhaseAbstractionModels, Btor2RegionError> {
+    if !semantic_roots.contains(&query.phase_root) {
+        return Err(reject(
+            "BTOR2 channel phase root is not an authenticated semantic root",
+        ));
+    }
+    let source = btor2::parse_component_bytes(model_bytes, semantic_roots)
+        .map_err(|error| reject(format!("invalid BTOR2 channel phase model: {error}")))?;
+    let phase = source
+        .nodes()
+        .get(&query.phase_root)
+        .ok_or_else(|| reject("BTOR2 channel phase root is missing"))?;
+    if phase.width != 4 {
+        return Err(reject("BTOR2 channel phase root must use four bits"));
+    }
+    if query.phase_value >= 1u64 << phase.width {
+        return Err(reject("BTOR2 channel phase value is outside range"));
+    }
+    let base = build_btor2_channel_history_base(
+        model_bytes,
+        semantic_roots,
+        expected_channels,
+        query.history,
+        policy,
+    )?;
+    let phase_sort = raw_statement_sort_id(model_bytes, query.phase_root)?;
+    let mut common = base.bytes;
+    let mut common_last = base.last;
+    let phase_constant = allocate_statement_id(&mut common_last)?;
+    common.extend_from_slice(
+        format!(
+            "{phase_constant} const {phase_sort} {:04b}\n",
+            query.phase_value
+        )
+        .as_bytes(),
+    );
+    let phase_equal = allocate_statement_id(&mut common_last)?;
+    common.extend_from_slice(
+        format!(
+            "{phase_equal} eq {} {} {phase_constant}\n",
+            base.bool_sort, query.phase_root
+        )
+        .as_bytes(),
+    );
+    let combined_guard = append_and(
+        &mut common,
+        &mut common_last,
+        base.bool_sort,
+        base.guard,
+        phase_equal,
+    )?;
+
+    let mut reachability_model = common.clone();
+    let mut reachability_last = common_last;
+    let reachability_bad = allocate_statement_id(&mut reachability_last)?;
+    reachability_model.extend_from_slice(
+        format!("{reachability_bad} bad {combined_guard} gcc_channel_phase_guard_reachable\n")
+            .as_bytes(),
+    );
+    btor2::parse_bytes(&reachability_model).map_err(|error| {
+        reject(format!(
+            "generated BTOR2 channel phase reachability model is invalid: {error}"
+        ))
+    })?;
+
+    let mut relation_model = common;
+    let mut relation_last = common_last;
+    let relation_bad = append_guarded_channel_relation_bad(
+        &mut relation_model,
+        &mut relation_last,
+        GuardedRelationNodes {
+            bool_sort: base.bool_sort,
+            left: base.left,
+            right: base.right,
+            guard: combined_guard,
+        },
+        query.history.relation,
+        "gcc_channel_phase_relation_violation",
+    )?;
+    btor2::parse_bytes(&relation_model).map_err(|error| {
+        reject(format!(
+            "generated BTOR2 channel phase relation model is invalid: {error}"
+        ))
+    })?;
+    Ok(Btor2ChannelPhaseAbstractionModels {
+        reachability_model,
+        reachability_bad,
+        relation_model,
+        relation_bad,
+        abstract_state_bits: 10,
+        concrete_state_nodes: base.concrete_state_nodes,
+        concrete_state_bits: base.concrete_state_bits,
+    })
 }
 
 fn build_btor2_observation_trace_model(

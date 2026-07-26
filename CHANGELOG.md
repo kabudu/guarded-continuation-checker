@@ -8,7 +8,10 @@
   and compares it with 33 complete source-state nodes occupying 69 bits. Every
   implication requires a separate reachability witness, and a candidate must
   cover at least three consecutive phases under one guard before portfolio work
-  begins. No result or novelty claim exists yet.
+  begins. The complete 81-row probe retains 25 verified reachability witnesses,
+  but every phase from 2 through 8 admits counterexamples to both relation
+  values under every guard. The same abstract class is not relation-preserving,
+  so portfolio work does not begin.
 
 - Predeclare the channel history-monitor experiment after the authentic
   current-input guard hypothesis fails. The fixed monitor carries two classes'
