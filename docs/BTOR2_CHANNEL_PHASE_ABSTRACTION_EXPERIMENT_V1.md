@@ -26,9 +26,9 @@ six-channel OpenTitan PWM model. It is a four-bit counter exported as
 
 The abstract vocabulary is therefore ten bits: four authenticated phase bits
 and six deterministic monitor bits. The complete parsed source contains 33
-state bits. The experiment fails its compression precondition if the
-implementation adds another source-state discriminator or if the abstract
-vocabulary reaches the complete-state size.
+state nodes occupying 69 state bits. The experiment fails its compression
+precondition if the implementation adds another source-state discriminator or
+if the abstract vocabulary reaches the complete-state size.
 
 Version 1 freezes:
 
@@ -75,7 +75,7 @@ The first slice must:
 4. emit separate reachability and relation bad properties;
 5. independently parse both generated models;
 6. reject phase-node, width, value, boundary, endpoint and horizon drift;
-7. report the ten-bit abstraction and 33-bit complete-state control; and
+7. report the ten-bit abstraction and 69-bit complete-state control; and
 8. refuse vacuous implications without a verified reachability witness.
 
 ## Predeclared cohort
