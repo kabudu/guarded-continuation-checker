@@ -1022,9 +1022,10 @@ expert review remain open, so the novelty status does not change.
 
 The
 [predicate-to-RTL binding follow-up](OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
-is predeclared before implementation. It requires source-bound translation
-from each verified firmware MMIO schedule to a complete RTL input trace and
-requires invalid firmware inputs to create no RTL member or answer.
+fails its source-binding gate. The retained RTL harness groups channels by
+parity, so its inputs cannot represent the firmware's exact selected-channel
+writes without also asserting writes to untouched siblings. No RTL answer is
+produced and the novelty status does not change.
 Firmware-aware hardware verification, hardware-software co-verification,
 transaction-level modeling and bounded trace validation are established
 closest work. No novelty claim exists without focused prior-art comparison,

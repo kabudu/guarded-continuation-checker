@@ -1,7 +1,37 @@
 # OpenTitan PWM predicate-to-RTL binding experiment v1
 
-Status: predeclared after the finite-domain predicate certificate and before
-implementation. No result, novelty or production claim exists.
+Status: failed at the source-binding gate before evidence production. No RTL
+answer or artifact was produced. No novelty or production claim exists.
+
+## Result
+
+The retained `symbolic-class-6.btor2` model cannot satisfy the frozen mapping
+contract.
+
+Its source harness exposes two shared configuration classes. Every even
+channel consumes class 0 inputs and every odd channel consumes class 1 inputs.
+The authentic firmware instead configures exactly the runtime-selected channel
+after configuring and enabling channel 0. Consequently:
+
+- channels 0, 2 and 4 collide at the harness boundary;
+- channels 1, 3 and 5 collide at the harness boundary;
+- selecting one class input also asserts write traffic for untouched sibling
+  channels; and
+- the hard-coded even-channel values differ from the runtime-selected channel
+  configuration for channels 2 and 4.
+
+No complete, semantics-preserving translation exists from the six authentic
+MMIO schedules to this harness's six symbolic input bits. Treating the parity
+classes as selected channels would invent environmental behavior not present
+in the firmware evidence.
+
+The static route therefore refuses before RTL production. Invalid firmware
+inputs still create zero RTL members, but none of the six valid inputs is
+admitted either.
+
+The next candidate must use a source-attested harness with independently
+driven per-channel write enables and complete configuration values. Its
+mapping must be derived from the MMIO words rather than channel parity.
 
 ## Product question
 
@@ -52,7 +82,7 @@ The mapping is an explicit integration contract, not a discovered
 environmental assumption. Its source bytes and semantic interpretation are
 bound into the resulting evidence.
 
-## Production
+## Intended production
 
 Production starts only after:
 
@@ -146,7 +176,7 @@ finite-domain binary transducer into independently replayed RTL evidence.
 No novelty claim is permitted without a focused prior-art review,
 identical-scope maintained-tool comparison and independent expert assessment.
 
-## Predeclared gates
+## Frozen gates and disposition
 
 The cycle passes only if:
 
@@ -163,6 +193,7 @@ The cycle passes only if:
 11. prior-art comparison and independent assessment remain open unless
     separately completed.
 
-Failure is retained. Passing would close a bounded firmware-to-RTL integrity
-mechanism, not establish universal verification, scholarly novelty or
-production readiness.
+Gate 1 fails because the retained RTL boundary collapses three firmware
+channels into each parity class. Gates 2 through 11 are not attempted. This
+failure is retained as a regression guard against presenting grouped symbolic
+inputs as exact per-channel firmware evidence.
