@@ -1030,3 +1030,12 @@ Firmware-aware hardware verification, hardware-software co-verification,
 transaction-level modeling and bounded trace validation are established
 closest work. No novelty claim exists without focused prior-art comparison,
 an identical-scope maintained-tool baseline and independent expert assessment.
+
+The replacement
+[exact MMIO-to-RTL mapping](OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md) now translates
+and independently replays all six valid firmware schedules while mapping all
+250 invalid inputs to no RTL member. Its first bounded window produces only
+zero PWM observations, so it establishes no useful behavioral distinction and
+does not change the novelty assessment. The predeclared one-cycle continuation
+tests whether the source-derived phase horizon exposes a non-trivial relation
+without per-formula calibration.

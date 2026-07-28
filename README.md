@@ -771,8 +771,15 @@ The replacement
 [per-channel RTL boundary](docs/OPENTITAN_PWM_PER_CHANNEL_RTL_BOUNDARY_V1.md)
 now passes its local source gate. Pinned Yosys produces a deterministic
 six-channel model with 39 independently addressable semantic inputs, all
-within the exact 64-bit word policy. MMIO translation and RTL evidence remain
-open.
+within the exact 64-bit word policy.
+
+The first
+[exact MMIO-to-RTL mapping cycle](docs/OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md)
+also passes its translation and independent replay gates. Authentic O0 and O2
+firmware produce six valid RTL traces and zero invalid members with identical
+semantics. Its 17-transition window is retained as non-discriminating because
+all PWM observations remain zero. A predeclared one-cycle quiescent
+continuation is the next gate.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

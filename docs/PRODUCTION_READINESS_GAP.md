@@ -786,6 +786,15 @@ members, independent replay, hostile controls, deterministic artifacts,
 resource governance, hosted reproduction, three-platform API checks, exact
 fallback, maintained comparison and independent assessment.
 
+The replacement
+[exact MMIO-to-RTL mapping](OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md) now passes
+complete schedule translation, pinned-source replay, O0/O2 semantic agreement,
+six valid RTL members and zero invalid RTL members. Its first observation
+window is non-discriminating because all PWM outputs remain zero. The
+predeclared one-cycle continuation, hostile evidence controls, governed
+artifact, hosted reproduction and maintained comparison remain open, so the
+valid-class RTL composition row does not close.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.
