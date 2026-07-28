@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a manual hosted Linux evidence workflow for the maintained OpenTitan PWM
+  MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the
+  complete angr and RTL workflow, requires byte-identical semantic identity
+  with the local result, and retains complete resource evidence. No hosted
+  result exists until the merged workflow is dispatched.
+
 - Add an identical-scope maintained comparison for the proof-carrying OpenTitan
   PWM MMIO-to-RTL composition. Pinned angr independently derives the complete
   256-input firmware partition, while pinned Yosys plus Z3 independently

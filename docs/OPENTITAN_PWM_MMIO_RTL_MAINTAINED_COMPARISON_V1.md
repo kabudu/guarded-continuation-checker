@@ -1,6 +1,7 @@
 # OpenTitan PWM MMIO-to-RTL maintained comparison v1
 
-Status: all local acceptance gates pass in two clean cycles.
+Status: all local acceptance gates pass in two clean cycles. Hosted Linux
+reproduction is predeclared but has not run.
 
 ## Question
 
@@ -121,3 +122,45 @@ The Docker-client RSS is deliberately not presented as angr memory. GCC's row
 also includes exhaustive certificate mutation, truncation and extension
 verification that the maintained row does not perform. These rows therefore
 must not be used as a head-to-head performance claim.
+
+## Hosted Linux gate
+
+Before observing a hosted result, the Ubuntu 24.04 reproduction gate is frozen
+to the same source revision, firmware images, 256-input domain, tool revisions,
+33 transitions per member, observation schedule and eleven hostile controls.
+The hosted workflow must:
+
+1. build exact Yosys revision
+   `b8e7da6f40ae8f552c116bf6c359b07c6533e159` from source;
+2. verify the published Z3 archive digest before using Z3 4.16.0;
+3. run angr 9.3.0 in the same digest-pinned Python container;
+4. reproduce the retained semantic manifest byte-for-byte;
+5. retain complete reports and resource rows as a downloadable workflow
+   artifact;
+6. report setup, in-container analysis, synthesis, SMT replay and GCC
+   certificate verification separately; and
+7. refuse the workflow if any semantic identity or hostile control differs.
+
+No threshold, horizon, input partition or expected digest may change after the
+first hosted result is observed. Hosted agreement will close platform
+reproduction only. It will not establish production readiness, novelty or a
+performance advantage.
+
+## Trust-boundary comparison
+
+The maintained route answers the bounded semantic question by regenerating
+and solving it. It does not emit an exchangeable proof object that a later
+consumer can verify without angr, Yosys and Z3. GCC emits a bounded,
+source-bound certificate that a separate verifier reconstructs from bytes.
+
+That difference is a product capability hypothesis, not yet a novelty claim.
+The next comparison must measure an identical consumer task:
+
+- transfer and independently recheck GCC evidence; versus
+- transfer sufficient maintained-route inputs and rerun the maintained
+  derivation.
+
+Tool installation, model generation, solving, checking, artifact bytes and
+peak memory must all remain visible. Comparing GCC's exhaustive hostile-corpus
+verification with one maintained replay is not an equivalent task and remains
+prohibited.
