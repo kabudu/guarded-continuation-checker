@@ -6,7 +6,9 @@
   MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the
   complete angr and RTL workflow, requires byte-identical semantic identity
   with the local result, and retains complete resource evidence. No hosted
-  result exists until the merged workflow is dispatched.
+  attempt preserves normalized semantics but fails the frozen raw SMT-LIB byte
+  identity. Failed-run artifact upload now executes unconditionally so the
+  exact platform difference can be diagnosed without weakening the gate.
 
 - Add an identical-scope maintained comparison for the proof-carrying OpenTitan
   PWM MMIO-to-RTL composition. Pinned angr independently derives the complete

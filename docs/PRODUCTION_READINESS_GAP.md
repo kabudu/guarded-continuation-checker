@@ -817,6 +817,13 @@ container setup from true in-container analysis. Hosted reproduction,
 compatibility history and independent assessment remain open, so no production
 row closes.
 
+Hosted maintained-comparison run 30405783137 preserves every normalized
+semantic result and all eleven hostile refusals, but fails the predeclared
+cross-platform raw SMT-LIB byte identity. Its failed step also skipped artifact
+upload, so the exact model-text difference is not yet available for diagnosis.
+The local gate remains closed, but hosted reproduction remains open. No
+production row changes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.
