@@ -770,7 +770,7 @@ MMIO words.
 The replacement
 [per-channel RTL boundary](docs/OPENTITAN_PWM_PER_CHANNEL_RTL_BOUNDARY_V1.md)
 now passes its local source gate. Pinned Yosys produces a deterministic
-six-channel model with 35 independently addressable semantic inputs, all
+six-channel model with 39 independently addressable semantic inputs, all
 within the exact 64-bit word policy. MMIO translation and RTL evidence remain
 open.
 

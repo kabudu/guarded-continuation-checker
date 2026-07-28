@@ -18,12 +18,12 @@ lowering already used by the channel-family corpus. Pinned Yosys revision
 `b8e7da6f40ae8f552c116bf6c359b07c6533e159` produces:
 
 - `generated/firmware-trace-6.btor2`;
-- 97,650 canonical bytes;
+- 98,299 canonical bytes;
 - SHA-256
-  `fade740257a0cdeb7db61e78860d4c769eb06858628ac575842ba09b6f8c532e`;
+  `4a651ff8ab98a574d4b7e1b84bec09726edc278a32edf6e00f14e2b9d79ed1f3`;
 - 59 retained state declarations;
-- 35 semantic inputs plus the clock; and
-- semantic roots 45 and 71 for the step and six-channel output vectors.
+- 39 semantic inputs plus the clock; and
+- semantic roots 49 and 75 for the step and six-channel output vectors.
 
 All semantic input words are at most 16 bits. The boundary therefore stays
 inside GCC's existing 64-bit exact word policy. The six channel-wide write,
@@ -34,7 +34,9 @@ enable and inversion vectors remain within six bits.
 The public regression test independently parses the generated model and
 requires:
 
-- exactly 35 semantic inputs;
+- exactly 39 semantic inputs;
+- separate enable, invert, parameter, duty-cycle and blink-parameter write
+  domains;
 - separate 16-bit words for every channel's phase, duty-cycle and blink
   fields;
 - complete channel-wide write, enable, inversion, blink-mode and

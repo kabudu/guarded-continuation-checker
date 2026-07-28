@@ -17,9 +17,10 @@ contract, not a discovered environmental assumption. The generated 2, 4, and
 6-channel models preserve those inputs and the complete channel equations.
 
 `firmware-trace-harness.sv` is the stricter source-binding boundary. It exposes
-independent write, enable, inversion, phase, mode, duty-cycle and blink values
-for every channel. The generated `firmware-trace-6.btor2` model retains 35
-semantic input words, plus the clock, and does not group channels by parity.
+independent enable, invert, parameter, duty-cycle and blink-parameter write
+domains plus complete per-channel values. The generated
+`firmware-trace-6.btor2` model retains 39 semantic input words, plus the clock,
+and does not group channels by parity or merge register write domains.
 They are a prerequisite for exact MMIO-to-RTL translation, not evidence that
 such translation has passed.
 
