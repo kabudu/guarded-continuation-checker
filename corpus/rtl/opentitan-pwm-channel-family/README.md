@@ -21,6 +21,9 @@ independent enable, invert, parameter, duty-cycle and blink-parameter write
 domains plus complete per-channel values. The generated
 `firmware-trace-6.btor2` model retains 39 semantic input words, plus the clock,
 and does not group channels by parity or merge register write domains.
+Configuration values use the fixture's explicit four-bit beat-domain scale;
+the firmware mapping must reject phase-tick words that are not exactly
+divisible by 4,096.
 They are a prerequisite for exact MMIO-to-RTL translation, not evidence that
 such translation has passed.
 

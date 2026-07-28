@@ -14,36 +14,36 @@ module opentitan_pwm_firmware_trace_harness #(
   input  logic [NOutputs-1:0]          channel_invert_i,
   input  logic [NOutputs-1:0]          blink_enable_i,
   input  logic [NOutputs-1:0]          heartbeat_enable_i,
-  input  logic [15:0]                  phase_delay_0_i,
-  input  logic [15:0]                  phase_delay_1_i,
-  input  logic [15:0]                  phase_delay_2_i,
-  input  logic [15:0]                  phase_delay_3_i,
-  input  logic [15:0]                  phase_delay_4_i,
-  input  logic [15:0]                  phase_delay_5_i,
-  input  logic [15:0]                  duty_cycle_a_0_i,
-  input  logic [15:0]                  duty_cycle_a_1_i,
-  input  logic [15:0]                  duty_cycle_a_2_i,
-  input  logic [15:0]                  duty_cycle_a_3_i,
-  input  logic [15:0]                  duty_cycle_a_4_i,
-  input  logic [15:0]                  duty_cycle_a_5_i,
-  input  logic [15:0]                  duty_cycle_b_0_i,
-  input  logic [15:0]                  duty_cycle_b_1_i,
-  input  logic [15:0]                  duty_cycle_b_2_i,
-  input  logic [15:0]                  duty_cycle_b_3_i,
-  input  logic [15:0]                  duty_cycle_b_4_i,
-  input  logic [15:0]                  duty_cycle_b_5_i,
-  input  logic [15:0]                  blink_parameter_x_0_i,
-  input  logic [15:0]                  blink_parameter_x_1_i,
-  input  logic [15:0]                  blink_parameter_x_2_i,
-  input  logic [15:0]                  blink_parameter_x_3_i,
-  input  logic [15:0]                  blink_parameter_x_4_i,
-  input  logic [15:0]                  blink_parameter_x_5_i,
-  input  logic [15:0]                  blink_parameter_y_0_i,
-  input  logic [15:0]                  blink_parameter_y_1_i,
-  input  logic [15:0]                  blink_parameter_y_2_i,
-  input  logic [15:0]                  blink_parameter_y_3_i,
-  input  logic [15:0]                  blink_parameter_y_4_i,
-  input  logic [15:0]                  blink_parameter_y_5_i,
+  input  logic [3:0]                  phase_delay_0_i,
+  input  logic [3:0]                  phase_delay_1_i,
+  input  logic [3:0]                  phase_delay_2_i,
+  input  logic [3:0]                  phase_delay_3_i,
+  input  logic [3:0]                  phase_delay_4_i,
+  input  logic [3:0]                  phase_delay_5_i,
+  input  logic [3:0]                  duty_cycle_a_0_i,
+  input  logic [3:0]                  duty_cycle_a_1_i,
+  input  logic [3:0]                  duty_cycle_a_2_i,
+  input  logic [3:0]                  duty_cycle_a_3_i,
+  input  logic [3:0]                  duty_cycle_a_4_i,
+  input  logic [3:0]                  duty_cycle_a_5_i,
+  input  logic [3:0]                  duty_cycle_b_0_i,
+  input  logic [3:0]                  duty_cycle_b_1_i,
+  input  logic [3:0]                  duty_cycle_b_2_i,
+  input  logic [3:0]                  duty_cycle_b_3_i,
+  input  logic [3:0]                  duty_cycle_b_4_i,
+  input  logic [3:0]                  duty_cycle_b_5_i,
+  input  logic [3:0]                  blink_parameter_x_0_i,
+  input  logic [3:0]                  blink_parameter_x_1_i,
+  input  logic [3:0]                  blink_parameter_x_2_i,
+  input  logic [3:0]                  blink_parameter_x_3_i,
+  input  logic [3:0]                  blink_parameter_x_4_i,
+  input  logic [3:0]                  blink_parameter_x_5_i,
+  input  logic [3:0]                  blink_parameter_y_0_i,
+  input  logic [3:0]                  blink_parameter_y_1_i,
+  input  logic [3:0]                  blink_parameter_y_2_i,
+  input  logic [3:0]                  blink_parameter_y_3_i,
+  input  logic [3:0]                  blink_parameter_y_4_i,
+  input  logic [3:0]                  blink_parameter_y_5_i,
   output logic [NOutputs-1:0]          pwm_o,
   output logic [3:0]                   step_o
 );
@@ -58,24 +58,29 @@ module opentitan_pwm_firmware_trace_harness #(
   assign rst_ni = step_q != 4'd0;
   assign step_o = step_q;
   assign phase_delay = {
-    phase_delay_5_i, phase_delay_4_i, phase_delay_3_i,
-    phase_delay_2_i, phase_delay_1_i, phase_delay_0_i
+    12'd0, phase_delay_5_i, 12'd0, phase_delay_4_i,
+    12'd0, phase_delay_3_i, 12'd0, phase_delay_2_i,
+    12'd0, phase_delay_1_i, 12'd0, phase_delay_0_i
   };
   assign duty_cycle_a = {
-    duty_cycle_a_5_i, duty_cycle_a_4_i, duty_cycle_a_3_i,
-    duty_cycle_a_2_i, duty_cycle_a_1_i, duty_cycle_a_0_i
+    12'd0, duty_cycle_a_5_i, 12'd0, duty_cycle_a_4_i,
+    12'd0, duty_cycle_a_3_i, 12'd0, duty_cycle_a_2_i,
+    12'd0, duty_cycle_a_1_i, 12'd0, duty_cycle_a_0_i
   };
   assign duty_cycle_b = {
-    duty_cycle_b_5_i, duty_cycle_b_4_i, duty_cycle_b_3_i,
-    duty_cycle_b_2_i, duty_cycle_b_1_i, duty_cycle_b_0_i
+    12'd0, duty_cycle_b_5_i, 12'd0, duty_cycle_b_4_i,
+    12'd0, duty_cycle_b_3_i, 12'd0, duty_cycle_b_2_i,
+    12'd0, duty_cycle_b_1_i, 12'd0, duty_cycle_b_0_i
   };
   assign blink_parameter_x = {
-    blink_parameter_x_5_i, blink_parameter_x_4_i, blink_parameter_x_3_i,
-    blink_parameter_x_2_i, blink_parameter_x_1_i, blink_parameter_x_0_i
+    12'd0, blink_parameter_x_5_i, 12'd0, blink_parameter_x_4_i,
+    12'd0, blink_parameter_x_3_i, 12'd0, blink_parameter_x_2_i,
+    12'd0, blink_parameter_x_1_i, 12'd0, blink_parameter_x_0_i
   };
   assign blink_parameter_y = {
-    blink_parameter_y_5_i, blink_parameter_y_4_i, blink_parameter_y_3_i,
-    blink_parameter_y_2_i, blink_parameter_y_1_i, blink_parameter_y_0_i
+    12'd0, blink_parameter_y_5_i, 12'd0, blink_parameter_y_4_i,
+    12'd0, blink_parameter_y_3_i, 12'd0, blink_parameter_y_2_i,
+    12'd0, blink_parameter_y_1_i, 12'd0, blink_parameter_y_0_i
   };
 
   always_ff @(posedge clk_i) begin

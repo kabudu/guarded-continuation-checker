@@ -18,16 +18,22 @@ lowering already used by the channel-family corpus. Pinned Yosys revision
 `b8e7da6f40ae8f552c116bf6c359b07c6533e159` produces:
 
 - `generated/firmware-trace-6.btor2`;
-- 98,299 canonical bytes;
+- 97,036 canonical bytes;
 - SHA-256
-  `4a651ff8ab98a574d4b7e1b84bec09726edc278a32edf6e00f14e2b9d79ed1f3`;
+  `159adf69ab636d95195b2a65dd5d7afd46f05b3bad8326659fe07943cd425f7b`;
 - 59 retained state declarations;
 - 39 semantic inputs plus the clock; and
-- semantic roots 49 and 75 for the step and six-channel output vectors.
+- semantic roots 48 and 74 for the step and six-channel output vectors.
 
-All semantic input words are at most 16 bits. The boundary therefore stays
-inside GCC's existing 64-bit exact word policy. The six channel-wide write,
-enable and inversion vectors remain within six bits.
+All normalized configuration values are four-bit beat-domain words. The
+firmware mapping must divide the exact phase-tick fields by 4,096 and reject
+any non-divisible or out-of-range value. The boundary therefore makes the
+fixture's reduced counter scale explicit and stays inside GCC's existing
+64-bit exact word policy. The six channel-wide write, enable and inversion
+vectors remain within six bits.
+
+Every four-bit value is explicitly zero-extended within its own 16-bit
+OpenTitan register lane. Dense packing across channel lanes is forbidden.
 
 ## Integrity properties
 
@@ -37,8 +43,8 @@ requires:
 - exactly 39 semantic inputs;
 - separate enable, invert, parameter, duty-cycle and blink-parameter write
   domains;
-- separate 16-bit words for every channel's phase, duty-cycle and blink
-  fields;
+- separate four-bit normalized words for every channel's phase, duty-cycle and
+  blink fields;
 - complete channel-wide write, enable, inversion, blink-mode and
   heartbeat-mode vectors;
 - no constraint or embedded property that could silently narrow caller input;
