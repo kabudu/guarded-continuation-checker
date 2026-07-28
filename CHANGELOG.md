@@ -29,6 +29,8 @@
   refuse before RTL production and invalid inputs still create no RTL member.
   The next candidate requires independently driven per-channel RTL inputs.
 
+## 0.31.0 - 2026-07-28
+
 - Add a canonical bounded certificate and static portfolio for the exact
   finite-domain firmware predicate. Byte-starting verification independently
   replays all 250 invalid inputs with ordinary scalar machines, exhaustive
