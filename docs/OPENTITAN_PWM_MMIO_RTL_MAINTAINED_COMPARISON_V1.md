@@ -1,6 +1,6 @@
 # OpenTitan PWM MMIO-to-RTL maintained comparison v1
 
-Status: predeclared before implementation or measurement.
+Status: all local acceptance gates pass in two clean cycles.
 
 ## Question
 
@@ -67,8 +67,8 @@ never converted into a SAFE or UNSAFE result.
 
 ## Interpretation
 
-Agreement would close the local identical-scope maintained-tool comparison
-gate for this bounded cohort. It would validate GCC's result, not establish
+Agreement closes the local identical-scope maintained-tool comparison gate for
+this bounded cohort. It validates GCC's result, but does not establish
 novelty or a performance advantage. Binary symbolic execution,
 hardware-software co-verification, transaction-level translation, SMT-based
 RTL simulation and proof-carrying evidence are established techniques.
@@ -77,3 +77,47 @@ Novelty would still require a material mechanism distinction or advantage,
 focused prior-art review and independent expert assessment. Production
 promotion would still require hosted resource reproduction, compatibility
 history, governed self-service interfaces and independent acceptance.
+
+## Local result
+
+Two clean Darwin arm64 orchestration cycles produce byte-identical retained
+manifests, firmware partitions and normalized RTL traces. Both compiler
+profiles yield seven firmware behaviors: six valid singleton channels and one
+invalid behavior covering inputs `6..255`. The maintained route reconstructs
+six valid RTL members, zero invalid members, 198 transitions, 204 observations,
+two phase-cycle classes and six non-zero traces. Every normalized observation
+agrees with GCC.
+
+The retained identities are:
+
+- SMT-LIB SHA-256
+  `286078b59f7292b7b3b65f8ac1bb4462efd0b452a37e53bafae3637192361a15`;
+- normalized semantic SHA-256
+  `e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907abf`.
+
+Ten hostile controls change firmware magic, firmware symbol identity, RTL
+source, Yosys identity, Z3 identity, event order, event value, mapping width,
+phase representability or continuation length. Every case refuses before an
+RTL answer is emitted.
+
+## Resource accounting
+
+The two cycles retain every setup and analysis cost. The ranges below are
+observations, not service limits:
+
+| Operation | Profile | Wall seconds | Peak RSS |
+| --- | --- | ---: | ---: |
+| Fresh angr container, including pinned install | O0 | 18.65 to 20.64 | Docker client only |
+| angr analysis inside Linux container | O0 | 0.912 to 0.957 | 189,984,768 to 190,091,264 bytes |
+| Fresh angr container, including pinned install | O2 | 17.34 to 17.84 | Docker client only |
+| angr analysis inside Linux container | O2 | 0.729 to 0.788 | 189,177,856 to 189,186,048 bytes |
+| Shared Yosys synthesis | shared | 0.27 to 0.30 | 24,903,680 to 25,182,208 bytes |
+| Maintained translation plus Z3 replay | O0 | 1.01 to 1.02 | 68,059,136 to 68,419,584 bytes |
+| Maintained translation plus Z3 replay | O2 | 0.98 to 1.01 | 67,993,600 to 68,599,808 bytes |
+| GCC production plus verification | O0 | 14.01 to 14.72 | 14,630,912 to 14,696,448 bytes |
+| GCC production plus verification | O2 | 10.36 to 10.72 | 10,387,456 to 12,500,992 bytes |
+
+The Docker-client RSS is deliberately not presented as angr memory. GCC's row
+also includes exhaustive certificate mutation, truncation and extension
+verification that the maintained row does not perform. These rows therefore
+must not be used as a head-to-head performance claim.

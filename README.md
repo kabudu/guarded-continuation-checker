@@ -784,8 +784,13 @@ separates channel 0 from channels 1 through 5. A bounded canonical composed
 certificate now nests the compiled-firmware evidence, binds the pinned RTL
 source and replays all six members from caller-supplied sources. O0 and O2
 artifacts are 17,834 and 7,889 bytes and reject exhaustive codec drift,
-source drift and checksum-valid semantic forgeries. Maintained comparison,
-hosted reproduction and independent assessment remain open.
+source drift and checksum-valid semantic forgeries. An
+[identical-scope maintained comparison](docs/OPENTITAN_PWM_MMIO_RTL_MAINTAINED_COMPARISON_V1.md)
+uses angr 9.3.0 plus pinned Yosys and Z3 to reconstruct the complete firmware
+partition and all 204 observations independently. Two clean cycles agree
+byte-for-byte with GCC and reject ten hostile drift cases. This validates the
+bounded result without establishing novelty or a performance advantage.
+Hosted reproduction and independent assessment remain open.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

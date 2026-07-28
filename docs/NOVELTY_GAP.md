@@ -1049,5 +1049,10 @@ byte-level corruption and checksum-valid semantic forgeries. This is stronger
 product evidence, but it does not by itself distinguish GCC from established
 proof-carrying hardware-software co-verification or transaction-level replay.
 The translator and verifier also share the same versioned mapping policy.
-Identical-scope maintained comparison, focused prior-art review and independent
-expert assessment therefore remain mandatory before any novelty claim.
+The identical-scope maintained comparison now independently recovers the same
+seven firmware behaviors and all 204 RTL observations with angr, Yosys and Z3.
+This strengthens confidence in the result, but also demonstrates that the
+bounded semantics can be reproduced by a straightforward composition of
+established tools. A material mechanism distinction or advantage, focused
+prior-art review and independent expert assessment therefore remain mandatory
+before any novelty claim.
