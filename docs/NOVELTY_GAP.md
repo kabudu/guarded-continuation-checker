@@ -1019,3 +1019,13 @@ preserves a static exact fallback. This improves the product mechanism but
 does not distinguish it from proof-carrying symbolic execution or established
 portfolio verification. Maintained identical-scope comparisons and independent
 expert review remain open, so the novelty status does not change.
+
+The
+[predicate-to-RTL binding follow-up](OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
+is predeclared before implementation. It requires source-bound translation
+from each verified firmware MMIO schedule to a complete RTL input trace and
+requires invalid firmware inputs to create no RTL member or answer.
+Firmware-aware hardware verification, hardware-software co-verification,
+transaction-level modeling and bounded trace validation are established
+closest work. No novelty claim exists without focused prior-art comparison,
+an identical-scope maintained-tool baseline and independent expert assessment.
