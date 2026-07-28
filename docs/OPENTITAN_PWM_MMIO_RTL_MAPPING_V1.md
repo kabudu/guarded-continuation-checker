@@ -1,8 +1,8 @@
 # OpenTitan PWM exact MMIO-to-RTL mapping v1
 
 Status: translation, independent replay, the predeclared one-phase-cycle
-follow-up and canonical proof-carrying composition pass locally. Maintained
-comparison, hosted gates and independent assessment remain open.
+follow-up, canonical proof-carrying composition and identical-scope maintained
+comparison pass locally. Hosted gates and independent assessment remain open.
 
 ## Question
 
@@ -111,8 +111,15 @@ manifest.
 
 This closes the local canonical-artifact and byte-starting verification gates
 for the bounded composition. Hosted Linux reproduction, process-resource
-governance, compatibility evidence and a maintained identical-scope comparison
-remain open.
+governance and compatibility evidence remain open.
+
+The identical-scope comparison is
+[predeclared separately](OPENTITAN_PWM_MMIO_RTL_MAINTAINED_COMPARISON_V1.md).
+Pinned angr independently derives the complete firmware behavior partition and
+pinned Yosys plus Z3 reconstruct every RTL observation without consuming GCC's
+certificate, mapper output or replay output. Two clean cycles agree exactly
+with GCC and reject all predeclared hostile changes plus an unknown-report-row
+control.
 
 ## Claim boundary
 
@@ -120,5 +127,4 @@ Firmware-aware RTL verification, transaction-level mapping, bounded trace
 replay and proof-carrying evidence are established. The positive behavioral
 composition is useful integration engineering and a stronger novelty
 candidate, but it is not proof that the mechanism is novel. A novelty claim
-still requires focused prior-art review, identical-scope maintained-tool
-comparison and independent expert assessment.
+still requires focused prior-art review and independent expert assessment.

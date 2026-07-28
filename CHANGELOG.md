@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add an identical-scope maintained comparison for the proof-carrying OpenTitan
+  PWM MMIO-to-RTL composition. Pinned angr independently derives the complete
+  256-input firmware partition, while pinned Yosys plus Z3 independently
+  reconstruct all six 33-transition RTL members without consuming GCC
+  certificates or replayed traces. Two clean cycles agree byte-for-byte with
+  GCC and all eleven hostile drift controls fail closed. Complete setup and
+  analysis resources remain visible; the result is validation, not a novelty
+  or performance claim.
+
 - Add an exact, fail-closed translator from the retained 16-event compiled
   OpenTitan PWM MMIO schedule into complete per-frame RTL valuations, plus an
   independent source-bound BTOR2 replay. Authentic O0 and O2 builds map six
