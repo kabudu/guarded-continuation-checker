@@ -812,7 +812,7 @@ angr independently derives all seven behaviors over the complete 256-input
 domain, and pinned Yosys plus Z3 independently reconstruct six RTL members,
 198 transitions and 204 observations without consuming GCC certificates or
 replay output. O0, O2 and GCC observations agree byte-for-byte across two clean
-cycles. Ten hostile changes refuse, and resource rows distinguish fresh
+cycles. Eleven hostile changes refuse, and resource rows distinguish fresh
 container setup from true in-container analysis. Hosted reproduction,
 compatibility history and independent assessment remain open, so no production
 row closes.

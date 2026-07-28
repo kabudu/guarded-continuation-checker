@@ -95,10 +95,10 @@ The retained identities are:
 - normalized semantic SHA-256
   `e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907abf`.
 
-Ten hostile controls change firmware magic, firmware symbol identity, RTL
+Eleven hostile controls change firmware magic, firmware symbol identity, RTL
 source, Yosys identity, Z3 identity, event order, event value, mapping width,
-phase representability or continuation length. Every case refuses before an
-RTL answer is emitted.
+phase representability, continuation length or report grammar. Every case
+refuses before an RTL answer is emitted.
 
 ## Resource accounting
 

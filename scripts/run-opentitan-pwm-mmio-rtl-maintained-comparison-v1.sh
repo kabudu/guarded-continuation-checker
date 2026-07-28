@@ -179,7 +179,7 @@ python3 "$repo/scripts/test-mmio-rtl-maintained-hostile-v1.py" \
   "$repo/scripts/mmio-rtl-yosys-z3-baseline-v1.py" \
   "$scratch/result/o0-angr.txt" \
   >"$scratch/result/translator-hostile.txt"
-grep -q '^hostile_controls=5$' "$scratch/result/translator-hostile.txt"
+grep -q '^hostile_controls=6$' "$scratch/result/translator-hostile.txt"
 grep -q '^hostile_controls=2$' "$scratch/result/firmware-hostile.txt"
 
 hostile_source_repo="$scratch/hostile-source-repo"
@@ -302,7 +302,7 @@ sha256_file() {
   echo "rtl_observations=204"
   echo "phase_cycle_classes=2"
   echo "nonzero_traces=6"
-  echo "hostile_controls=10"
+  echo "hostile_controls=11"
   echo "profiles_semantically_identical=true"
   echo "gcc_maintained_agreement=true"
   printf 'rtl_smt2_sha256=%s\n' \

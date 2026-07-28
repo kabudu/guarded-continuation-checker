@@ -68,6 +68,20 @@ class Inputs:
 def parse_behaviors(path: Path) -> list[Behavior]:
     headers: dict[int, tuple[str, int, int]] = {}
     events: dict[int, list[Event]] = {}
+    metadata_patterns = {
+        "angr_version": r"angr_version=9[.]3[.]0",
+        "input_domain": r"input_domain=0-255",
+        "behavior_count": r"behavior_count=7",
+        "symbolic_global_steps": r"symbolic_global_steps=[1-9][0-9]*",
+        "coverage": r"coverage=256",
+        "disjoint": r"disjoint=true",
+        "analysis_wall_seconds": r"analysis_wall_seconds=[0-9]+[.][0-9]{6}",
+        "analysis_user_seconds": r"analysis_user_seconds=[0-9]+[.][0-9]{6}",
+        "analysis_system_seconds": r"analysis_system_seconds=[0-9]+[.][0-9]{6}",
+        "analysis_peak_rss_bytes": r"analysis_peak_rss_bytes=[1-9][0-9]*",
+        "status": r"status=complete",
+    }
+    seen_metadata: set[str] = set()
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("behavior="):
             match = re.fullmatch(
@@ -102,6 +116,20 @@ def parse_behaviors(path: Path) -> list[Behavior]:
                     int(match.group(5)),
                 )
             )
+        else:
+            matches = [
+                name
+                for name, pattern in metadata_patterns.items()
+                if re.fullmatch(pattern, line)
+            ]
+            if len(matches) != 1:
+                raise RuntimeError("unknown or malformed angr report row")
+            name = matches[0]
+            if name in seen_metadata:
+                raise RuntimeError("duplicate angr report metadata")
+            seen_metadata.add(name)
+    if seen_metadata != set(metadata_patterns):
+        raise RuntimeError("angr report metadata is incomplete")
     if sorted(headers) != list(range(7)):
         raise RuntimeError("angr behavior identifiers are not canonical")
     result = []

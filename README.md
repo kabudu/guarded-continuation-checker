@@ -788,7 +788,7 @@ source drift and checksum-valid semantic forgeries. An
 [identical-scope maintained comparison](docs/OPENTITAN_PWM_MMIO_RTL_MAINTAINED_COMPARISON_V1.md)
 uses angr 9.3.0 plus pinned Yosys and Z3 to reconstruct the complete firmware
 partition and all 204 observations independently. Two clean cycles agree
-byte-for-byte with GCC and reject ten hostile drift cases. This validates the
+byte-for-byte with GCC and reject eleven hostile drift cases. This validates the
 bounded result without establishing novelty or a performance advantage.
 Hosted reproduction and independent assessment remain open.
 

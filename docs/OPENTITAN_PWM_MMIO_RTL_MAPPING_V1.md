@@ -118,7 +118,8 @@ The identical-scope comparison is
 Pinned angr independently derives the complete firmware behavior partition and
 pinned Yosys plus Z3 reconstruct every RTL observation without consuming GCC's
 certificate, mapper output or replay output. Two clean cycles agree exactly
-with GCC and reject all ten predeclared hostile changes.
+with GCC and reject all predeclared hostile changes plus an unknown-report-row
+control.
 
 ## Claim boundary
 

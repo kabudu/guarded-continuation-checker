@@ -69,7 +69,11 @@ def main() -> None:
         "nonrepresentable-phase",
         lambda: baseline.normalize_beat(1, "hostile phase"),
     )
-    print("hostile_controls=5")
+    must_refuse(
+        "unknown-report-row",
+        lambda: parse_changed(original + "untrusted_answer=SAFE\n"),
+    )
+    print("hostile_controls=6")
     print("status=complete")
 
 
