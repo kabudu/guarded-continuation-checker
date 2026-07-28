@@ -767,6 +767,13 @@ channel. No complete semantics-preserving input translation exists. The next
 candidate requires independently driven per-channel inputs derived from the
 MMIO words.
 
+The replacement
+[per-channel RTL boundary](docs/OPENTITAN_PWM_PER_CHANNEL_RTL_BOUNDARY_V1.md)
+now passes its local source gate. Pinned Yosys produces a deterministic
+six-channel model with 35 independently addressable semantic inputs, all
+within the exact 64-bit word policy. MMIO translation and RTL evidence remain
+open.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

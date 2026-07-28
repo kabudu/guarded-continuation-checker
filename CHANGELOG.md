@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a pinned six-channel OpenTitan PWM RTL source boundary with independently
+  driven per-channel configuration fields. Its 35 semantic inputs all remain
+  within the exact 64-bit word policy, and a public regression test rejects
+  missing, grouped or oversized boundary words. MMIO translation and RTL
+  evidence remain open, so no novelty or production claim results.
+
 - Retain the first source-bound predicate-to-RTL binding experiment as a
   fail-closed result. The existing RTL harness groups channels by parity, while
   the authentic firmware configures one runtime-selected channel. No complete
