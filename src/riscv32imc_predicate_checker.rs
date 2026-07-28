@@ -57,14 +57,11 @@ pub fn verify_invalid_channel_predicate(
     let image_end = RV32_IMAGE_BASE
         .checked_add(image.len() as u32)
         .ok_or_else(|| reject("image end overflow"))?;
-    let mut lanes = (INVALID_PREDICATE_FIRST..=u8::MAX)
-        .map(|input| Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input)))
-        .collect::<Result<Vec<_>, _>>()?;
     let stop = RV32_IMAGE_BASE
         .checked_add(crate::riscv32imc::MAX_RV32_MEMORY_BYTES as u32 - 4)
         .ok_or_else(|| reject("stop address overflow"))?;
     let mut written_bytes = (stop..stop + 4).collect::<BTreeSet<_>>();
-
+    let mut decoded_trace = Vec::with_capacity(claimed.control_trace.len());
     for (index, step) in claimed.control_trace.iter().enumerate() {
         if index > 0
             && claimed.control_trace[index - 1].next_program_counter != step.program_counter
@@ -78,32 +75,37 @@ pub fn verify_invalid_channel_predicate(
                 "control trace decode failed at transition {index}: {error:?}"
             ))
         })?;
-        let mut shared_observation = None;
-        for (lane_index, lane) in lanes.iter_mut().enumerate() {
+        decoded_trace.push(instruction);
+    }
+
+    let mut shared_observations = Vec::with_capacity(claimed.control_trace.len());
+    for (lane_index, input) in (INVALID_PREDICATE_FIRST..=u8::MAX).enumerate() {
+        let mut lane = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))?;
+        for (index, (step, instruction)) in
+            claimed.control_trace.iter().zip(&decoded_trace).enumerate()
+        {
             let observation = lane
                 .step_predecoded(
                     step.program_counter,
                     step.instruction_word,
                     step.instruction_bytes,
-                    &instruction,
+                    instruction,
                     image_end,
                 )
                 .map_err(|error| {
                     reject(format!("lane {lane_index}, transition {index}: {error}"))
                 })?;
-            if let Some(expected) = &shared_observation {
-                if &observation != expected {
-                    return Err(reject(format!(
-                        "lane {lane_index} has nonuniform effects at transition {index}"
-                    )));
-                }
-            } else {
+            if lane_index == 0 {
                 for write in &observation.writes {
                     for byte in 0..u32::from(write.width) {
                         written_bytes.insert(write.address + byte);
                     }
                 }
-                shared_observation = Some(observation);
+                shared_observations.push(observation);
+            } else if observation != shared_observations[index] {
+                return Err(reject(format!(
+                    "lane {lane_index} has nonuniform effects at transition {index}"
+                )));
             }
             if lane.program_counter() != step.next_program_counter {
                 return Err(reject(format!(
@@ -111,17 +113,6 @@ pub fn verify_invalid_channel_predicate(
                 )));
             }
         }
-    }
-    if u32::try_from(written_bytes.len())
-        .map_err(|_| reject("sparse memory byte count overflow"))?
-        != claimed.sparse_memory_bytes
-    {
-        return Err(reject(
-            "sparse memory byte count does not match independently observed stores",
-        ));
-    }
-
-    for (lane_index, lane) in lanes.into_iter().enumerate() {
         if !lane.is_complete() {
             return Err(reject(format!(
                 "lane {lane_index} did not terminate at the certified trace boundary"
@@ -136,6 +127,14 @@ pub fn verify_invalid_channel_predicate(
                 "lane {lane_index} terminal behavior differs from the claim"
             )));
         }
+    }
+    if u32::try_from(written_bytes.len())
+        .map_err(|_| reject("sparse memory byte count overflow"))?
+        != claimed.sparse_memory_bytes
+    {
+        return Err(reject(
+            "sparse memory byte count does not match independently observed stores",
+        ));
     }
 
     Ok(PredicateReplayVerification {

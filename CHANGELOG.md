@@ -2,12 +2,24 @@
 
 ## Unreleased
 
-- Predeclare an exact finite-domain predicate transducer for all 250 invalid
-  runtime channels. It must preserve every lane through one uniform symbolic
-  control trace, independently reconstruct all register and sparse-memory
-  functions, report symbolic transitions and lane operations separately,
-  retain exact fallback and pass the unchanged fourfold gate. No
-  implementation or result exists yet.
+- Add a canonical bounded certificate and static portfolio for the exact
+  finite-domain firmware predicate. Byte-starting verification independently
+  replays all 250 invalid inputs with ordinary scalar machines, exhaustive
+  authentic mutation and truncation controls fail closed, and a divergent
+  neighbour selects the complete exact reference. Complete accounting includes
+  preflight, production and verification: 26,775 O0 and 9,264 O2 decoded
+  transitions, respectively 23.52x and 25.03x below the frozen exact cycles.
+  Sequential scalar replay reduces measured O0 peak RSS from 793.39 MiB to
+  10.81 MiB without changing lane work or semantics.
+
+- Implement the predeclared exact finite-domain predicate transducer for all
+  250 invalid runtime channels. It preserves every lane through one uniform
+  symbolic control trace, reports symbolic transitions and lane operations
+  separately, and is independently checked by 250 ordinary scalar replay
+  machines. Producer plus verifier use 25,562 O0 and 8,816 O2 decoded
+  transitions versus frozen exact cycles of 629,636 and 231,920. Exact
+  per-input execution remains the fallback, and no novelty or production claim
+  results.
 
 - Retain the register-and-memory live-slice quotient as a negative result. It
   reconstructs one backward slice, accepts dead-register and dead-stack

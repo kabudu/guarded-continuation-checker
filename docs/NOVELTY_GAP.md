@@ -1004,3 +1004,18 @@ composition differs materially from established finite-domain abstract
 interpretation, SIMD multi-execution, KLEE, Veritesting and CBMC workflows.
 Identical-scope maintained comparisons and independent expert review remain
 mandatory before any novelty claim.
+
+The
+[predicate certificate and portfolio follow-up](OPENTITAN_PWM_PREDICATE_CERTIFICATE_EXPERIMENT_V1.md)
+is predeclared before implementation. It tests whether the bounded binary
+transducer can become deterministic exchangeable evidence with byte-starting
+independent replay and static exact fallback. Proof-carrying code, symbolic
+execution certificates and portfolio solving remain established prior art.
+No novelty claim exists.
+
+The local certificate slice now produces deterministic authentic O0 and O2
+artifacts, independently reconstructs their complete semantics from bytes and
+preserves a static exact fallback. This improves the product mechanism but
+does not distinguish it from proof-carrying symbolic execution or established
+portfolio verification. Maintained identical-scope comparisons and independent
+expert review remain open, so the novelty status does not change.
