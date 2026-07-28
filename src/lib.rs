@@ -27,6 +27,7 @@ pub mod compiled_mmio_file;
 pub mod compiled_mmio_predicate_certificate;
 pub mod compiled_mmio_predicate_portfolio;
 pub mod compiled_mmio_quotient;
+pub mod compiled_mmio_rtl_certificate;
 pub mod compiled_mmio_rtl_mapping;
 pub mod composed_witness;
 pub mod controller_mtbdd;

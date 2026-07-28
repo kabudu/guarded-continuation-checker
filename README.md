@@ -780,8 +780,12 @@ firmware produce six valid RTL traces and zero invalid members with identical
 semantics. Its 17-transition window is retained as non-discriminating because
 all PWM observations remain zero. The predeclared one-cycle quiescent
 continuation then passes: every valid trace becomes non-zero and exact replay
-separates channel 0 from channels 1 through 5. Evidence encoding, maintained
-comparison and hosted gates remain open.
+separates channel 0 from channels 1 through 5. A bounded canonical composed
+certificate now nests the compiled-firmware evidence, binds the pinned RTL
+source and replays all six members from caller-supplied sources. O0 and O2
+artifacts are 17,834 and 7,889 bytes and reject exhaustive codec drift,
+source drift and checksum-valid semantic forgeries. Maintained comparison,
+hosted reproduction and independent assessment remain open.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

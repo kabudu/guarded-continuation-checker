@@ -28,8 +28,9 @@ for profile in o0 o2; do
     "$output/$profile/firmware.bin" \
     "$output/$profile/firmware.symbols.txt" \
     "$model" \
+    "$output/$profile/compiled-mmio-rtl-certificate-v1.bin" \
     > "$output/$profile/mmio-rtl-replay-v1.txt"
-  grep -E '^(compiled_mmio_pwm_rtl_version|rtl_model_sha256|valid_rtl_members|invalid_rtl_members|rtl_trace_base|rtl_trace_phase_cycle|status)=' \
+  grep -E '^(compiled_mmio_pwm_rtl_version|rtl_model_sha256|valid_rtl_members|invalid_rtl_members|rtl_trace_base|rtl_trace_phase_cycle|composed_certificate_(valid_rtl_members|invalid_rtl_members|rtl_transitions|rtl_observations|clean_cycles_identical|source_drift_cases|semantic_drift_cases)|status)=' \
     "$output/$profile/mmio-rtl-replay-v1.txt" \
     > "$output/$profile/mmio-rtl-semantics-v1.txt"
 done
@@ -74,9 +75,11 @@ fi
     "$model" \
     "$output/o0/firmware.bin" \
     "$output/o0/firmware.symbols.txt" \
+    "$output/o0/compiled-mmio-rtl-certificate-v1.bin" \
     "$output/o0/mmio-rtl-replay-v1.txt" \
     "$output/o2/firmware.bin" \
     "$output/o2/firmware.symbols.txt" \
+    "$output/o2/compiled-mmio-rtl-certificate-v1.bin" \
     "$output/o2/mmio-rtl-replay-v1.txt"
   echo "profiles_semantically_identical=true"
   echo "phase_cycle_classes=$phase_classes"

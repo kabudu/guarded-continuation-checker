@@ -9,7 +9,11 @@
   members. The initial 17-transition observation window is retained as a
   negative result because every PWM observation remains zero. Its predeclared
   16-transition quiescent continuation then exposes two non-empty behavioral
-  classes without changing the MMIO schedule or tuning the horizon.
+  classes without changing the MMIO schedule or tuning the horizon. A bounded
+  canonical composed certificate now binds the nested firmware evidence and
+  pinned RTL source, while byte-starting verification reconstructs six
+  members, 198 transitions and 204 observations. Exhaustive codec drift,
+  caller-source drift and checksum-valid semantic forgeries refuse.
 
 - Add a pinned six-channel OpenTitan PWM RTL source boundary with independently
   driven per-channel configuration fields and five separate register write

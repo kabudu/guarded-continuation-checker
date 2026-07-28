@@ -104,7 +104,7 @@ fn expect(event: CompiledMmioEvent, operation: u32, offset: u32, value: u32) -> 
 }
 
 fn normalized_beat(value: u32, role: &str) -> Result<u8, PwmRtlMappingError> {
-    if value % PHASE_TICKS_PER_BEAT != 0 {
+    if !value.is_multiple_of(PHASE_TICKS_PER_BEAT) {
         return Err(reject(format!("{role} is not an exact beat-domain value")));
     }
     let beat = value / PHASE_TICKS_PER_BEAT;
@@ -213,6 +213,21 @@ fn bind_inputs(
     model: &btor2::Btor2Model,
     inputs: &PwmRtlInputs,
 ) -> Result<WordValues, PwmRtlMappingError> {
+    fn expected_width(symbol: &str) -> u32 {
+        if symbol == "clk_i" {
+            1
+        } else if symbol.starts_with("phase_delay_")
+            || symbol.starts_with("duty_cycle_a_")
+            || symbol.starts_with("duty_cycle_b_")
+            || symbol.starts_with("blink_parameter_x_")
+            || symbol.starts_with("blink_parameter_y_")
+        {
+            4
+        } else {
+            6
+        }
+    }
+
     let mut named = named_inputs(inputs);
     let mut bound = WordValues::new();
     let source_inputs = model
@@ -231,6 +246,15 @@ fn bind_inputs(
             "RTL model input count differs from the mapping boundary",
         ));
     }
+    for node in source_inputs {
+        let symbol = node
+            .symbol
+            .as_deref()
+            .ok_or_else(|| reject("RTL model input is unnamed"))?;
+        if node.width != expected_width(symbol) {
+            return Err(reject(format!("RTL input {symbol} has the wrong width")));
+        }
+    }
     for input in model.inputs() {
         let node = model
             .nodes()
@@ -246,21 +270,6 @@ fn bind_inputs(
         let value = named
             .remove(symbol)
             .ok_or_else(|| reject(format!("unexpected RTL input {symbol}")))?;
-        let expected_width = if symbol == "clk_i" {
-            1
-        } else if symbol.starts_with("phase_delay_")
-            || symbol.starts_with("duty_cycle_a_")
-            || symbol.starts_with("duty_cycle_b_")
-            || symbol.starts_with("blink_parameter_x_")
-            || symbol.starts_with("blink_parameter_y_")
-        {
-            4
-        } else {
-            6
-        };
-        if node.width != expected_width {
-            return Err(reject(format!("RTL input {symbol} has the wrong width")));
-        }
         bound.insert(*input, value);
     }
     if named.len() != 1 || named.remove("clk_i") != Some(0) {

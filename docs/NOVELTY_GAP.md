@@ -1041,3 +1041,13 @@ non-empty classes without per-formula calibration: input 0 overwrites channel
 first configuration. This strengthens the binary-to-RTL composition candidate
 but does not establish novelty. Comparable hardware-software trace validation,
 maintained-tool comparison and independent expert assessment remain mandatory.
+
+The canonical composed-certificate follow-up makes that local result
+proof-carrying. It binds the nested compiled-firmware evidence and pinned RTL
+source, reconstructs six members from caller-supplied sources and rejects both
+byte-level corruption and checksum-valid semantic forgeries. This is stronger
+product evidence, but it does not by itself distinguish GCC from established
+proof-carrying hardware-software co-verification or transaction-level replay.
+The translator and verifier also share the same versioned mapping policy.
+Identical-scope maintained comparison, focused prior-art review and independent
+expert assessment therefore remain mandatory before any novelty claim.

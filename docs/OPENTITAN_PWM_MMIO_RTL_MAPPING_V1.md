@@ -1,8 +1,8 @@
 # OpenTitan PWM exact MMIO-to-RTL mapping v1
 
-Status: translation, independent replay and the predeclared one-phase-cycle
-follow-up pass locally. Evidence encoding, maintained comparison, hosted gates
-and independent assessment remain open.
+Status: translation, independent replay, the predeclared one-phase-cycle
+follow-up and canonical proof-carrying composition pass locally. Maintained
+comparison, hosted gates and independent assessment remain open.
 
 ## Question
 
@@ -83,10 +83,36 @@ duty values 4 and 8 while configuring a disabled selected channel. The result
 therefore connects a concrete compiled-firmware choice to a distinct replayed
 RTL behavior without granting any RTL member to an invalid input.
 
-This is a positive bounded composition result, not yet a proof-carrying product
-artifact. The next gate must encode the mapping and observations, then have a
-byte-starting verifier reconstruct them from the firmware certificate, mapping
-policy and BTOR2 source.
+## Canonical composed certificate
+
+The next cycle encodes the complete result as a bounded canonical certificate.
+It nests the independently checked compiled-MMIO predicate certificate, binds
+the pinned RTL source digest, and records all six valid replay members. Invalid
+inputs must still contribute zero members.
+
+The verifier starts from the certificate bytes plus caller-supplied firmware
+image, symbol table and BTOR2 source. It checks the nested firmware certificate,
+reconstructs the exact mapping, reparses the RTL source and independently
+replays every transition before comparing every recorded observation. It does
+not trust producer state or observations. Mapping reconstruction reuses the
+same versioned policy implementation, so this result does not claim an
+independently implemented translator.
+
+| Profile | Artifact bytes | Valid members | RTL transitions | RTL observations | Hostile codec refusals |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| O0 | 17,834 | 6 | 198 | 204 | 35,669 |
+| O2 | 7,889 | 6 | 198 | 204 | 15,779 |
+
+Both profiles also reject three caller-source drift cases and two semantic
+forgeries whose outer checksums have been recomputed correctly. Producing the
+same certificate twice yields identical bytes. The clean reproduction saves
+the actual binary artifacts and records their SHA-256 identities in its
+manifest.
+
+This closes the local canonical-artifact and byte-starting verification gates
+for the bounded composition. Hosted Linux reproduction, process-resource
+governance, compatibility evidence and a maintained identical-scope comparison
+remain open.
 
 ## Claim boundary
 

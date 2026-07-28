@@ -796,6 +796,17 @@ with all continuation writes disabled. Hostile evidence controls, a governed
 artifact, hosted reproduction and maintained comparison remain open, so the
 valid-class RTL composition row does not close.
 
+The proof-carrying follow-up closes the local artifact and hostile-control
+parts of that gap. Its bounded canonical O0 and O2 artifacts are 17,834 and
+7,889 bytes. A byte-starting verifier checks the nested firmware certificate,
+reconstructs the exact mapping and independently reparses and replays all six
+RTL members, 198 transitions and 204 observations. Every byte mutation,
+truncation and extension refuses, as do three caller-source drift cases and two
+checksum-valid semantic forgeries. Hosted Linux reproduction, process-resource
+governance, compatibility history, three-platform API evidence, maintained
+comparison and independent assessment remain open, so the production row still
+does not close.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.
