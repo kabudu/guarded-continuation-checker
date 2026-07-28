@@ -36,13 +36,16 @@ fn downstream_api_exchanges_and_independently_checks_predicate_evidence() {
         certificate
     );
     let verification = verify_compiled_mmio_predicate_bytes(&bytes, &image, symbols).unwrap();
-    assert_eq!(verification.decoded_transitions, 14);
+    assert_eq!(verification.producer_decoded_transitions, 14);
+    assert_eq!(verification.verifier_decoded_transitions, 14);
 
     let preflight = preflight_compiled_mmio_predicate(&image, symbols).unwrap();
-    assert_eq!(preflight.route, CompiledMmioPredicateRoute::PredicateV1);
+    assert_eq!(preflight.route(), CompiledMmioPredicateRoute::PredicateV1);
     let evidence = produce_compiled_mmio_predicate_portfolio(&preflight, &image, symbols).unwrap();
     let portfolio =
         verify_compiled_mmio_predicate_portfolio(&preflight, &evidence, &image, symbols).unwrap();
     assert_eq!(portfolio.route, CompiledMmioPredicateRoute::PredicateV1);
+    assert_eq!(portfolio.total_decoded_transitions, Some(30));
+    assert_eq!(portfolio.total_lane_value_operations, Some(1_500));
     assert!(portfolio.predicate_artifact_bytes > 0);
 }

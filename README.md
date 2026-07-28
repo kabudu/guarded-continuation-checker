@@ -747,6 +747,12 @@ source drift and forced routing refuse. RTL composition, complete authentic
 hostile and resource matrices, hosted reproduction, maintained baselines and
 independent assessment remain open.
 
+Complete portfolio accounting includes route preflight. O0 uses 26,775 decoded
+transitions across preflight, production and verification versus the frozen
+629,636 exact cycle, a 23.52x reduction. O2 uses 9,264 versus 231,920, a
+25.03x reduction. The corresponding lane-operation totals are 909,750 and
+336,000 and remain visible rather than being treated as eliminated work.
+
 Sequential scalar replay retains implementation diversity without retaining
 250 full memories. The measured authentic O0 cycle peaks at 10.81 MiB and
 finishes in 0.47 seconds; O2 peaks at 4.39 MiB and finishes in 0.06 seconds on

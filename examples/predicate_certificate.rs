@@ -67,12 +67,38 @@ fn run() -> Result<(), String> {
     println!("route={:?}", portfolio.route);
     println!("artifact_bytes={}", verification.artifact_bytes);
     println!(
+        "producer_decoded_transitions={}",
+        verification.producer_decoded_transitions
+    );
+    println!(
         "verifier_decoded_transitions={}",
-        verification.decoded_transitions
+        verification.verifier_decoded_transitions
+    );
+    println!(
+        "producer_lane_value_operations={}",
+        verification.producer_lane_value_operations
     );
     println!(
         "verifier_lane_value_operations={}",
-        verification.lane_value_operations
+        verification.verifier_lane_value_operations
+    );
+    println!(
+        "preflight_decoded_transitions={}",
+        portfolio
+            .preflight_decoded_transitions
+            .map_or_else(|| "unknown".to_string(), |value| value.to_string())
+    );
+    println!(
+        "complete_decoded_transitions={}",
+        portfolio
+            .total_decoded_transitions
+            .map_or_else(|| "unknown".to_string(), |value| value.to_string())
+    );
+    println!(
+        "complete_lane_value_operations={}",
+        portfolio
+            .total_lane_value_operations
+            .map_or_else(|| "unknown".to_string(), |value| value.to_string())
     );
     println!("clean_cycles_byte_identical=true");
     println!("hostile_codec_cases={hostile_cases}");

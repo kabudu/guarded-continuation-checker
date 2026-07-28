@@ -36,8 +36,10 @@ pub struct CompiledMmioPredicateCertificate {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompiledMmioPredicateCertificateVerification {
-    pub decoded_transitions: u64,
-    pub lane_value_operations: u64,
+    pub producer_decoded_transitions: u64,
+    pub producer_lane_value_operations: u64,
+    pub verifier_decoded_transitions: u64,
+    pub verifier_lane_value_operations: u64,
     pub artifact_bytes: u32,
 }
 
@@ -438,8 +440,10 @@ pub fn verify_compiled_mmio_predicate_bytes(
     } = verify_predicate_mmio_workflow(&certificate.workflow, image, symbols)
         .map_err(|error| reject(error.to_string()))?;
     Ok(CompiledMmioPredicateCertificateVerification {
-        decoded_transitions,
-        lane_value_operations,
+        producer_decoded_transitions: certificate.workflow.producer_decoded_transitions,
+        producer_lane_value_operations: certificate.workflow.producer_lane_value_operations,
+        verifier_decoded_transitions: decoded_transitions,
+        verifier_lane_value_operations: lane_value_operations,
         artifact_bytes: bytes
             .len()
             .try_into()
@@ -482,8 +486,10 @@ mod tests {
         );
         let verification =
             verify_compiled_mmio_predicate_bytes(&first_bytes, &image, symbols).unwrap();
-        assert_eq!(verification.decoded_transitions, 14);
-        assert_eq!(verification.lane_value_operations, 500);
+        assert_eq!(verification.producer_decoded_transitions, 14);
+        assert_eq!(verification.producer_lane_value_operations, 500);
+        assert_eq!(verification.verifier_decoded_transitions, 14);
+        assert_eq!(verification.verifier_lane_value_operations, 500);
         assert_eq!(verification.artifact_bytes as usize, first_bytes.len());
     }
 

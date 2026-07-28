@@ -25,12 +25,32 @@ pub enum CompiledMmioPredicateRoute {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompiledMmioPredicatePreflight {
-    pub version: u32,
-    pub image_bytes: u32,
-    pub image_sha256: [u8; 32],
-    pub symbols: Rv32SymbolLayout,
-    pub route: CompiledMmioPredicateRoute,
-    pub refusal: Option<String>,
+    version: u32,
+    image_bytes: u32,
+    image_sha256: [u8; 32],
+    symbols: Rv32SymbolLayout,
+    route: CompiledMmioPredicateRoute,
+    refusal: Option<String>,
+    decoded_transitions: Option<u64>,
+    lane_value_operations: Option<u64>,
+}
+
+impl CompiledMmioPredicatePreflight {
+    pub fn route(&self) -> CompiledMmioPredicateRoute {
+        self.route
+    }
+
+    pub fn refusal(&self) -> Option<&str> {
+        self.refusal.as_deref()
+    }
+
+    pub fn decoded_transitions(&self) -> Option<u64> {
+        self.decoded_transitions
+    }
+
+    pub fn lane_value_operations(&self) -> Option<u64> {
+        self.lane_value_operations
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,8 +62,14 @@ pub enum CompiledMmioPredicateEvidence {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompiledMmioPredicatePortfolioVerification {
     pub route: CompiledMmioPredicateRoute,
-    pub decoded_transitions: u64,
-    pub lane_value_operations: u64,
+    pub preflight_decoded_transitions: Option<u64>,
+    pub producer_decoded_transitions: u64,
+    pub verifier_decoded_transitions: u64,
+    pub total_decoded_transitions: Option<u64>,
+    pub preflight_lane_value_operations: Option<u64>,
+    pub producer_lane_value_operations: u64,
+    pub verifier_lane_value_operations: u64,
+    pub total_lane_value_operations: Option<u64>,
     pub predicate_artifact_bytes: u32,
 }
 
@@ -92,9 +118,20 @@ fn check_identity(
     {
         return Err(reject("source changed after portfolio preflight"));
     }
-    match (preflight.route, &preflight.refusal) {
-        (CompiledMmioPredicateRoute::PredicateV1, None)
-        | (CompiledMmioPredicateRoute::ExactV1, Some(_)) => Ok(()),
+    let canonical_lane_work = preflight.decoded_transitions.and_then(|work| {
+        work.checked_mul(crate::riscv32imc_predicate::INVALID_PREDICATE_LANES as u64)
+    });
+    if preflight.lane_value_operations != canonical_lane_work {
+        return Err(reject("preflight work counters are inconsistent"));
+    }
+    match (
+        preflight.route,
+        &preflight.refusal,
+        preflight.decoded_transitions,
+        preflight.lane_value_operations,
+    ) {
+        (CompiledMmioPredicateRoute::PredicateV1, None, Some(_), Some(_))
+        | (CompiledMmioPredicateRoute::ExactV1, Some(_), None, None) => Ok(()),
         _ => Err(reject("preflight route and refusal are inconsistent")),
     }
 }
@@ -109,10 +146,21 @@ pub fn preflight_compiled_mmio_predicate(
 ) -> Result<CompiledMmioPredicatePreflight, CompiledMmioPredicatePortfolioError> {
     let image_bytes =
         u32::try_from(image.len()).map_err(|_| reject("image byte count overflow"))?;
-    let (route, refusal) = match execute_invalid_channel_predicate(image, symbols) {
-        Ok(_) => (CompiledMmioPredicateRoute::PredicateV1, None),
-        Err(error) => (CompiledMmioPredicateRoute::ExactV1, Some(error.to_string())),
-    };
+    let (route, refusal, decoded_transitions, lane_value_operations) =
+        match execute_invalid_channel_predicate(image, symbols) {
+            Ok(execution) => (
+                CompiledMmioPredicateRoute::PredicateV1,
+                None,
+                Some(execution.symbolic_transitions),
+                Some(execution.lane_value_operations),
+            ),
+            Err(error) => (
+                CompiledMmioPredicateRoute::ExactV1,
+                Some(error.to_string()),
+                None,
+                None,
+            ),
+        };
     Ok(CompiledMmioPredicatePreflight {
         version: COMPILED_MMIO_PREDICATE_PORTFOLIO_VERSION,
         image_bytes,
@@ -120,6 +168,8 @@ pub fn preflight_compiled_mmio_predicate(
         symbols,
         route,
         refusal,
+        decoded_transitions,
+        lane_value_operations,
     })
 }
 
@@ -155,14 +205,32 @@ pub fn verify_compiled_mmio_predicate_portfolio(
             CompiledMmioPredicateEvidence::PredicateV1(bytes),
         ) => {
             let CompiledMmioPredicateCertificateVerification {
-                decoded_transitions,
-                lane_value_operations,
+                producer_decoded_transitions,
+                producer_lane_value_operations,
+                verifier_decoded_transitions,
+                verifier_lane_value_operations,
                 artifact_bytes,
             } = verify_compiled_mmio_predicate_bytes(bytes, image, symbols)?;
+            let total_decoded_transitions = preflight
+                .decoded_transitions
+                .and_then(|work| work.checked_add(producer_decoded_transitions))
+                .and_then(|work| work.checked_add(verifier_decoded_transitions))
+                .ok_or_else(|| reject("complete decoded transition count overflow"))?;
+            let total_lane_value_operations = preflight
+                .lane_value_operations
+                .and_then(|work| work.checked_add(producer_lane_value_operations))
+                .and_then(|work| work.checked_add(verifier_lane_value_operations))
+                .ok_or_else(|| reject("complete lane operation count overflow"))?;
             Ok(CompiledMmioPredicatePortfolioVerification {
                 route: CompiledMmioPredicateRoute::PredicateV1,
-                decoded_transitions,
-                lane_value_operations,
+                preflight_decoded_transitions: preflight.decoded_transitions,
+                producer_decoded_transitions,
+                verifier_decoded_transitions,
+                total_decoded_transitions: Some(total_decoded_transitions),
+                preflight_lane_value_operations: preflight.lane_value_operations,
+                producer_lane_value_operations,
+                verifier_lane_value_operations,
+                total_lane_value_operations: Some(total_lane_value_operations),
                 predicate_artifact_bytes: artifact_bytes,
             })
         }
@@ -173,8 +241,14 @@ pub fn verify_compiled_mmio_predicate_portfolio(
             verify_exact_compiled_mmio_reference(reference, image, symbols)?;
             Ok(CompiledMmioPredicatePortfolioVerification {
                 route: CompiledMmioPredicateRoute::ExactV1,
-                decoded_transitions: reference.decoded_instruction_transitions,
-                lane_value_operations: 0,
+                preflight_decoded_transitions: None,
+                producer_decoded_transitions: reference.decoded_instruction_transitions,
+                verifier_decoded_transitions: reference.decoded_instruction_transitions,
+                total_decoded_transitions: None,
+                preflight_lane_value_operations: None,
+                producer_lane_value_operations: 0,
+                verifier_lane_value_operations: 0,
+                total_lane_value_operations: None,
                 predicate_artifact_bytes: 0,
             })
         }
@@ -220,6 +294,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(verified.route, CompiledMmioPredicateRoute::PredicateV1);
+        assert_eq!(verified.preflight_decoded_transitions, Some(2));
+        assert_eq!(verified.producer_decoded_transitions, 14);
+        assert_eq!(verified.verifier_decoded_transitions, 14);
+        assert_eq!(verified.total_decoded_transitions, Some(30));
+        assert_eq!(verified.total_lane_value_operations, Some(1_500));
 
         let (divergent_image, symbols) = guarded_image(128);
         let exact = preflight_compiled_mmio_predicate(&divergent_image, symbols).unwrap();
@@ -230,6 +309,8 @@ mod tests {
             verify_compiled_mmio_predicate_portfolio(&exact, &evidence, &divergent_image, symbols)
                 .unwrap();
         assert_eq!(verified.route, CompiledMmioPredicateRoute::ExactV1);
+        assert_eq!(verified.preflight_decoded_transitions, None);
+        assert_eq!(verified.total_decoded_transitions, None);
     }
 
     #[test]
@@ -256,5 +337,8 @@ mod tests {
         assert!(
             verify_compiled_mmio_predicate_portfolio(&genuine, &exact, &image, symbols).is_err()
         );
+        let mut changed_work = genuine.clone();
+        changed_work.decoded_transitions = Some(3);
+        assert!(produce_compiled_mmio_predicate_portfolio(&changed_work, &image, symbols).is_err());
     }
 }

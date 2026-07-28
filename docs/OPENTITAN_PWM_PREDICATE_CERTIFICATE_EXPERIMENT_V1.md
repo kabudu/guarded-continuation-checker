@@ -143,7 +143,8 @@ The cycle passes only if:
 5. static portfolio selection preserves predicate admission and exact fallback
    on positive and negative controls;
 6. forced routing and source drift fail closed;
-7. producer plus verifier remain within the frozen fourfold transition gates;
+7. preflight plus producer plus verifier remain within the frozen fourfold
+   transition gates;
 8. all lane work, wall time, peak RSS and artifact bytes remain visible;
 9. valid classes compose with the retained independently checked RTL answers
    and invalid lanes produce no RTL answer;
@@ -173,15 +174,16 @@ Two clean authentic cycles per profile are byte-identical. Every single-byte
 mutation, truncation and one-byte extension of both retained artifacts is
 rejected:
 
-| Profile | Artifact bytes | Hostile codec cases | Verifier decoded transitions | Verifier lane steps | Whole-cycle wall time | Peak RSS | Route |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| O0 | 17,284 | 34,569 | 12,781 | 303,250 | 0.47 s | 10.81 MiB | `predicate-v1` |
-| O2 | 7,339 | 14,679 | 4,408 | 112,000 | 0.06 s | 4.39 MiB | `predicate-v1` |
+| Profile | Artifact bytes | Hostile codec cases | Preflight transitions | Producer transitions | Verifier transitions | Complete transitions | Complete lane operations | Qualification wall time | Peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| O0 | 17,284 | 34,569 | 1,213 | 12,781 | 12,781 | 26,775 | 909,750 | 0.47 s | 10.81 MiB |
+| O2 | 7,339 | 14,679 | 448 | 4,408 | 4,408 | 9,264 | 336,000 | 0.06 s | 4.39 MiB |
 
-The decoded transition figures remain within the frozen complete-cycle gate
-when combined with production. The public downstream Rust test exchanges
-bytes, decodes them, performs independent semantic replay and exercises
-portfolio production and verification without private module access.
+The complete figures include route preflight rather than hiding it. They are
+23.52x below the frozen exact O0 cycle and 25.03x below the exact O2 cycle.
+The public downstream Rust test exchanges bytes, decodes them, performs
+independent semantic replay and exercises portfolio production and
+verification without private module access.
 
 The first scalar-checker layout held all 250 complete machine memories at once
 and exposed a 793.39 MiB O0 peak. The corrected checker decodes the trace once,
