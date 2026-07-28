@@ -693,6 +693,45 @@ different stale stack bytes, so their complete concrete RV32 states never
 converge. GCC refuses the merge and keeps exact per-input execution. A separate
 future experiment may test whether independently checked memory-liveness
 proofs can remove only bytes that provably cannot affect the continuation.
+That follow-up is now
+[predeclared](docs/OPENTITAN_PWM_LIVE_STATE_QUOTIENT_EXPERIMENT_V1.md) with
+byte-precise read-before-overwrite proofs, hostile read-after-merge controls,
+exact fallback and the unchanged fourfold total-work gate. It has no
+implementation or result yet.
+
+That memory-only experiment is now retained as a negative result. It proves
+dead-stack handling on synthetic controls, but authentic O0 and O2 convergence
+occurs too late and the complete quotient cycles are slower than the exact
+reference. GCC therefore selects exact per-input execution. No production or
+novelty claim results.
+
+A distinct
+[proof-carrying live-slice experiment](docs/OPENTITAN_PWM_LIVE_SLICE_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared to reconstruct register and memory liveness together and select
+one earliest merge without trial-replaying every suffix. It keeps the same
+exact fallback and fourfold work gate. No implementation or result exists yet.
+
+The live-slice result is also negative. Independently reconstructed register
+and memory slices pass the soundness controls, but 250 concrete invalid
+prefixes still dominate and yield only about 1.06× to 1.09× reduction. Exact
+execution remains selected. The next research question is bulk proof of the
+complete invalid-input predicate, not another suffix-only merge.
+
+The next
+[predeclared experiment](docs/OPENTITAN_PWM_PREDICATE_TRANSDUCER_EXPERIMENT_V1.md)
+tests one exact finite-domain symbolic execution over all 250 invalid inputs.
+It must preserve every lane, report both symbolic transitions and lane
+operations, retain exact fallback and pass the unchanged fourfold gate.
+
+The local mechanism now passes that transition-work gate. A lane-valued
+producer and separate 250-machine scalar replay checker preserve the exact
+invalid return and ten-event MMIO stream. Their complete O0 cycle uses 25,562
+decoded transitions versus the frozen 629,636 exact cycle, a 24.63x reduction.
+O2 uses 8,816 versus 231,920, a 26.31x reduction. Lane work is reported
+separately and is not presented as eliminated computation. Canonical
+certificates, maintained symbolic baselines, RTL composition, hosted evidence
+and independent assessment remain open, so exact execution stays selected and
+no novelty or production claim results yet.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

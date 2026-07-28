@@ -5,13 +5,20 @@
 //! continuation quotient, not an optimized producer.
 
 use crate::riscv32imc::{
-    CompiledMmioEvent, Rv32ReplayMachine, Rv32SymbolLayout, execute_compiled_mmio_with_a0,
+    CompiledMmioEvent, RV32_IMAGE_BASE, RV32_MEMORY_BITMAP_WORDS, Rv32ReplayMachine,
+    Rv32SymbolLayout, execute_compiled_mmio_with_a0,
 };
+use crate::riscv32imc_predicate::{
+    PredicateTransducerExecution, execute_invalid_channel_predicate,
+};
+use crate::riscv32imc_predicate_checker::verify_invalid_channel_predicate;
 use std::{error::Error, fmt};
 
 pub const EXACT_COMPILED_MMIO_REFERENCE_VERSION: u32 = 1;
 pub const EXACT_COMPILED_MMIO_INPUTS: usize = 256;
 pub const GUARDED_MMIO_QUOTIENT_VERSION: u32 = 1;
+pub const LIVE_STATE_MMIO_QUOTIENT_VERSION: u32 = 1;
+pub const LIVE_SLICE_MMIO_QUOTIENT_VERSION: u32 = 1;
 pub const GUARDED_MMIO_VALID_CHANNELS: u8 = 6;
 const MEMBERSHIP_WORDS: usize = EXACT_COMPILED_MMIO_INPUTS / 64;
 
@@ -75,6 +82,59 @@ pub struct GuardedMmioQuotientVerification {
 pub enum GuardedMmioPortfolio {
     Quotient(GuardedMmioQuotient),
     Exact(ExactCompiledMmioReference),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveStateMmioQuotient {
+    pub version: u32,
+    pub valid_behaviors: Vec<ExactCompiledMmioBehavior>,
+    pub invalid_behavior: ExactCompiledMmioBehavior,
+    pub invalid_representative: u8,
+    pub invalid_prefix_steps: Vec<u64>,
+    pub live_memory: Vec<u64>,
+    pub shared_continuation_steps: u64,
+    pub producer_decoded_instruction_transitions: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LiveStateMmioQuotientVerification {
+    pub decoded_instruction_transitions: u64,
+    pub live_memory_bytes: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveSliceMmioQuotient {
+    pub version: u32,
+    pub valid_behaviors: Vec<ExactCompiledMmioBehavior>,
+    pub invalid_behavior: ExactCompiledMmioBehavior,
+    pub invalid_representative: u8,
+    pub merge_steps: u64,
+    pub invalid_prefix_steps: Vec<u64>,
+    pub live_registers: u32,
+    pub live_memory: Vec<u64>,
+    pub shared_continuation_steps: u64,
+    pub producer_decoded_instruction_transitions: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LiveSliceMmioQuotientVerification {
+    pub decoded_instruction_transitions: u64,
+    pub live_registers: u32,
+    pub live_memory_bytes: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PredicateMmioWorkflow {
+    pub valid_behaviors: Vec<ExactCompiledMmioBehavior>,
+    pub invalid: PredicateTransducerExecution,
+    pub producer_decoded_transitions: u64,
+    pub producer_lane_value_operations: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PredicateMmioWorkflowVerification {
+    pub decoded_transitions: u64,
+    pub lane_value_operations: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -308,6 +368,626 @@ pub fn verify_guarded_mmio_portfolio(
     }
 }
 
+fn bitmap_set(
+    bitmap: &mut [u64],
+    address: u32,
+    width: usize,
+) -> Result<(), ExactCompiledMmioReferenceError> {
+    let start = address
+        .checked_sub(RV32_IMAGE_BASE)
+        .ok_or_else(|| reject("observed memory access is below the bounded image"))?;
+    let start =
+        usize::try_from(start).map_err(|_| reject("observed address conversion overflow"))?;
+    let end = start
+        .checked_add(width)
+        .filter(|end| *end <= RV32_MEMORY_BITMAP_WORDS * 64)
+        .ok_or_else(|| reject("observed memory access is outside the bounded image"))?;
+    for index in start..end {
+        bitmap[index / 64] |= 1u64 << (index % 64);
+    }
+    Ok(())
+}
+
+fn bitmap_contains(bitmap: &[u64], address: u32) -> Result<bool, ExactCompiledMmioReferenceError> {
+    let index = usize::try_from(
+        address
+            .checked_sub(RV32_IMAGE_BASE)
+            .ok_or_else(|| reject("observed memory access is below the bounded image"))?,
+    )
+    .map_err(|_| reject("observed address conversion overflow"))?;
+    if index >= RV32_MEMORY_BITMAP_WORDS * 64 {
+        return Err(reject(
+            "observed memory access is outside the bounded image",
+        ));
+    }
+    Ok(bitmap[index / 64] & (1u64 << (index % 64)) != 0)
+}
+
+fn bitmap_clear(
+    bitmap: &mut [u64],
+    address: u32,
+    width: usize,
+) -> Result<(), ExactCompiledMmioReferenceError> {
+    let start = usize::try_from(
+        address
+            .checked_sub(RV32_IMAGE_BASE)
+            .ok_or_else(|| reject("observed memory access is below the bounded image"))?,
+    )
+    .map_err(|_| reject("observed address conversion overflow"))?;
+    let end = start
+        .checked_add(width)
+        .filter(|end| *end <= RV32_MEMORY_BITMAP_WORDS * 64)
+        .ok_or_else(|| reject("observed memory access is outside the bounded image"))?;
+    for index in start..end {
+        bitmap[index / 64] &= !(1u64 << (index % 64));
+    }
+    Ok(())
+}
+
+fn bitmap_offsets(bitmap: &[u64]) -> Vec<u32> {
+    let mut offsets = Vec::new();
+    for (word_index, word) in bitmap.iter().copied().enumerate() {
+        let mut remaining = word;
+        while remaining != 0 {
+            let bit = remaining.trailing_zeros() as usize;
+            offsets.push((word_index * 64 + bit) as u32);
+            remaining &= remaining - 1;
+        }
+    }
+    offsets
+}
+
+fn offsets_bitmap(offsets: &[u32]) -> Result<Vec<u64>, ExactCompiledMmioReferenceError> {
+    let mut bitmap = vec![0u64; RV32_MEMORY_BITMAP_WORDS];
+    for offset in offsets {
+        let address = RV32_IMAGE_BASE
+            .checked_add(*offset)
+            .ok_or_else(|| reject("live-memory offset overflow"))?;
+        bitmap_set(&mut bitmap, address, 1)?;
+    }
+    Ok(bitmap)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LiveSlicePoint {
+    registers: u32,
+    memory_offsets: Vec<u32>,
+}
+
+fn reconstruct_representative_live_slices(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<(crate::riscv32imc::Rv32Execution, Vec<LiveSlicePoint>), ExactCompiledMmioReferenceError>
+{
+    let mut machine =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS))
+            .map_err(|error| reject(format!("live-slice representative: {error}")))?;
+    let mut observations = Vec::new();
+    while !machine.is_complete() {
+        observations.push(
+            machine
+                .step_observed()
+                .map_err(|error| reject(format!("live-slice representative: {error}")))?,
+        );
+    }
+    let execution = machine
+        .finish()
+        .map_err(|error| reject(format!("live-slice representative: {error}")))?;
+
+    let mut live_registers = 1u32 << 10;
+    let mut live_memory = vec![0u64; RV32_MEMORY_BITMAP_WORDS];
+    bitmap_set(&mut live_memory, symbols.event_count, 4)?;
+    bitmap_set(&mut live_memory, symbols.events, 32 * 12)?;
+    let mut slices = vec![
+        LiveSlicePoint {
+            registers: 0,
+            memory_offsets: Vec::new(),
+        };
+        observations.len() + 1
+    ];
+    slices[observations.len()] = LiveSlicePoint {
+        registers: live_registers,
+        memory_offsets: bitmap_offsets(&live_memory),
+    };
+    for (index, observation) in observations.iter().enumerate().rev() {
+        live_registers &= !observation.register_writes;
+        live_registers |= observation.register_reads;
+        for access in &observation.writes {
+            bitmap_clear(&mut live_memory, access.address, usize::from(access.width))?;
+        }
+        for access in &observation.reads {
+            bitmap_set(&mut live_memory, access.address, usize::from(access.width))?;
+        }
+        slices[index] = LiveSlicePoint {
+            registers: live_registers,
+            memory_offsets: bitmap_offsets(&live_memory),
+        };
+    }
+    Ok((execution, slices))
+}
+
+fn replay_suffix_live_memory(
+    mut machine: Rv32ReplayMachine,
+    symbols: Rv32SymbolLayout,
+) -> Result<(crate::riscv32imc::Rv32Execution, Vec<u64>, u64), ExactCompiledMmioReferenceError> {
+    let prefix_steps = machine.steps();
+    let mut written = vec![0u64; RV32_MEMORY_BITMAP_WORDS];
+    let mut live = vec![0u64; RV32_MEMORY_BITMAP_WORDS];
+    bitmap_set(&mut live, symbols.event_count, 4)?;
+    bitmap_set(&mut live, symbols.events, 32 * 12)?;
+    while !machine.is_complete() {
+        let observation = machine
+            .step_observed()
+            .map_err(|error| reject(format!("live-state suffix replay: {error}")))?;
+        for access in observation.reads {
+            for offset in 0..u32::from(access.width) {
+                let address = access
+                    .address
+                    .checked_add(offset)
+                    .ok_or_else(|| reject("observed read address overflow"))?;
+                if !bitmap_contains(&written, address)? {
+                    bitmap_set(&mut live, address, 1)?;
+                }
+            }
+        }
+        for access in observation.writes {
+            bitmap_set(&mut written, access.address, usize::from(access.width))?;
+        }
+    }
+    let execution = machine
+        .finish()
+        .map_err(|error| reject(format!("live-state suffix finalization: {error}")))?;
+    let suffix_steps = execution
+        .steps
+        .checked_sub(prefix_steps)
+        .ok_or_else(|| reject("live-state suffix work underflow"))?;
+    Ok((execution, live, suffix_steps))
+}
+
+/// Produce a live-state quotient only after replay proves every ignored memory
+/// byte is unread before overwrite on the complete shared suffix.
+pub fn build_live_state_mmio_quotient(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<LiveStateMmioQuotient, ExactCompiledMmioReferenceError> {
+    let mut valid_behaviors = Vec::with_capacity(usize::from(GUARDED_MMIO_VALID_CHANNELS));
+    let mut producer_work = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("live-state valid input {input}: {error}")))?
+            .finish()
+            .map_err(|error| reject(format!("live-state valid input {input}: {error}")))?;
+        add_work(&mut producer_work, execution.steps)?;
+        valid_behaviors.push(behavior(execution));
+    }
+
+    let mut representative =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS))
+            .map_err(|error| reject(format!("live-state representative: {error}")))?;
+    let mut second =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS) + 1)
+            .map_err(|error| reject(format!("live-state witness: {error}")))?;
+    let (invalid_execution, live_memory, shared_continuation_steps) = loop {
+        if representative.non_memory_state_equal(&second) {
+            let (execution, live, suffix_steps) =
+                replay_suffix_live_memory(representative.clone(), symbols)?;
+            add_work(&mut producer_work, suffix_steps)?;
+            if representative
+                .live_state_equal(&second, &live)
+                .map_err(|error| reject(error.to_string()))?
+            {
+                break (execution, live, suffix_steps);
+            }
+        }
+        if representative.is_complete() || second.is_complete() {
+            return Err(reject(
+                "invalid inputs completed without certified live-state convergence",
+            ));
+        }
+        representative
+            .step()
+            .map_err(|error| reject(format!("live-state representative: {error}")))?;
+        second
+            .step()
+            .map_err(|error| reject(format!("live-state witness: {error}")))?;
+        add_work(&mut producer_work, 2)?;
+    };
+
+    let merge_steps = representative.steps();
+    let mut invalid_prefix_steps = vec![merge_steps; 250];
+    for input in (GUARDED_MMIO_VALID_CHANNELS + 2)..=u8::MAX {
+        let mut candidate = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("live-state invalid input {input}: {error}")))?;
+        while candidate.steps() < merge_steps {
+            candidate
+                .step()
+                .map_err(|error| reject(format!("live-state invalid input {input}: {error}")))?;
+        }
+        if !candidate
+            .live_state_equal(&representative, &live_memory)
+            .map_err(|error| reject(error.to_string()))?
+        {
+            return Err(reject(format!(
+                "invalid input {input} does not satisfy certified live-state equality"
+            )));
+        }
+        add_work(&mut producer_work, candidate.steps())?;
+        invalid_prefix_steps[usize::from(input - GUARDED_MMIO_VALID_CHANNELS)] = candidate.steps();
+    }
+
+    Ok(LiveStateMmioQuotient {
+        version: LIVE_STATE_MMIO_QUOTIENT_VERSION,
+        valid_behaviors,
+        invalid_behavior: behavior(invalid_execution),
+        invalid_representative: GUARDED_MMIO_VALID_CHANNELS,
+        invalid_prefix_steps,
+        live_memory,
+        shared_continuation_steps,
+        producer_decoded_instruction_transitions: producer_work,
+    })
+}
+
+/// Reconstruct the live-in set and every route without invoking the producer.
+pub fn verify_live_state_mmio_quotient(
+    quotient: &LiveStateMmioQuotient,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<LiveStateMmioQuotientVerification, ExactCompiledMmioReferenceError> {
+    if quotient.version != LIVE_STATE_MMIO_QUOTIENT_VERSION
+        || quotient.invalid_representative != GUARDED_MMIO_VALID_CHANNELS
+        || quotient.valid_behaviors.len() != usize::from(GUARDED_MMIO_VALID_CHANNELS)
+        || quotient.invalid_prefix_steps.len()
+            != EXACT_COMPILED_MMIO_INPUTS - usize::from(GUARDED_MMIO_VALID_CHANNELS)
+        || quotient.live_memory.len() != RV32_MEMORY_BITMAP_WORDS
+    {
+        return Err(reject("live-state quotient shape is not canonical"));
+    }
+
+    let mut verifier_work = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("verify live-state valid input {input}: {error}")))?
+            .finish()
+            .map_err(|error| reject(format!("verify live-state valid input {input}: {error}")))?;
+        add_work(&mut verifier_work, execution.steps)?;
+        if behavior(execution) != quotient.valid_behaviors[usize::from(input)] {
+            return Err(reject(format!(
+                "live-state valid input {input} behavior mismatch"
+            )));
+        }
+    }
+
+    let merge_steps = quotient.invalid_prefix_steps[0];
+    let mut representative =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS))
+            .map_err(|error| reject(format!("verify live-state representative: {error}")))?;
+    while representative.steps() < merge_steps {
+        representative
+            .step()
+            .map_err(|error| reject(format!("verify live-state representative: {error}")))?;
+    }
+    add_work(&mut verifier_work, representative.steps())?;
+    let (invalid_execution, reconstructed_live, suffix_steps) =
+        replay_suffix_live_memory(representative.clone(), symbols)?;
+    add_work(&mut verifier_work, suffix_steps)?;
+    if reconstructed_live != quotient.live_memory
+        || suffix_steps != quotient.shared_continuation_steps
+        || behavior(invalid_execution) != quotient.invalid_behavior
+    {
+        return Err(reject(
+            "live-state suffix, live-in set or behavior mismatch",
+        ));
+    }
+
+    for input in (GUARDED_MMIO_VALID_CHANNELS + 1)..=u8::MAX {
+        let declared =
+            quotient.invalid_prefix_steps[usize::from(input - GUARDED_MMIO_VALID_CHANNELS)];
+        if declared != merge_steps {
+            return Err(reject(format!(
+                "live-state invalid input {input} has a noncanonical prefix"
+            )));
+        }
+        let mut candidate = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("verify live-state input {input}: {error}")))?;
+        while candidate.steps() < merge_steps {
+            candidate
+                .step()
+                .map_err(|error| reject(format!("verify live-state input {input}: {error}")))?;
+        }
+        if !candidate
+            .live_state_equal(&representative, &reconstructed_live)
+            .map_err(|error| reject(error.to_string()))?
+        {
+            return Err(reject(format!(
+                "live-state invalid input {input} equality mismatch"
+            )));
+        }
+        add_work(&mut verifier_work, candidate.steps())?;
+    }
+
+    let live_memory_bytes = reconstructed_live
+        .iter()
+        .map(|word| word.count_ones())
+        .sum();
+    Ok(LiveStateMmioQuotientVerification {
+        decoded_instruction_transitions: verifier_work,
+        live_memory_bytes,
+    })
+}
+
+fn replay_to_steps(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+    input: u8,
+    steps: u64,
+    role: &str,
+) -> Result<Rv32ReplayMachine, ExactCompiledMmioReferenceError> {
+    let mut machine = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+        .map_err(|error| reject(format!("{role}: {error}")))?;
+    while machine.steps() < steps {
+        machine
+            .step()
+            .map_err(|error| reject(format!("{role}: {error}")))?;
+    }
+    Ok(machine)
+}
+
+/// Build the earliest quotient admitted by a complete backward register and
+/// memory slice of one representative continuation.
+pub fn build_live_slice_mmio_quotient(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<LiveSliceMmioQuotient, ExactCompiledMmioReferenceError> {
+    let mut producer_work = 0u64;
+    let mut valid_behaviors = Vec::with_capacity(usize::from(GUARDED_MMIO_VALID_CHANNELS));
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("live-slice valid input {input}: {error}")))?
+            .finish()
+            .map_err(|error| reject(format!("live-slice valid input {input}: {error}")))?;
+        add_work(&mut producer_work, execution.steps)?;
+        valid_behaviors.push(behavior(execution));
+    }
+
+    let (invalid_execution, slices) = reconstruct_representative_live_slices(image, symbols)?;
+    add_work(&mut producer_work, invalid_execution.steps)?;
+    let mut representative =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS))
+            .map_err(|error| reject(format!("live-slice representative replay: {error}")))?;
+    let mut second =
+        Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(GUARDED_MMIO_VALID_CHANNELS) + 1)
+            .map_err(|error| reject(format!("live-slice witness replay: {error}")))?;
+    let (merge_steps, live_registers, live_memory) = loop {
+        let step_index = usize::try_from(representative.steps())
+            .map_err(|_| reject("live-slice step conversion overflow"))?;
+        let slice = slices
+            .get(step_index)
+            .ok_or_else(|| reject("live-slice position exceeds representative trace"))?;
+        let bitmap = offsets_bitmap(&slice.memory_offsets)?;
+        if representative
+            .live_slice_equal(&second, slice.registers, &bitmap)
+            .map_err(|error| reject(error.to_string()))?
+        {
+            break (representative.steps(), slice.registers, bitmap);
+        }
+        if representative.is_complete() || second.is_complete() {
+            return Err(reject(
+                "invalid inputs completed without certified live-slice convergence",
+            ));
+        }
+        representative
+            .step()
+            .map_err(|error| reject(format!("live-slice representative replay: {error}")))?;
+        second
+            .step()
+            .map_err(|error| reject(format!("live-slice witness replay: {error}")))?;
+        add_work(&mut producer_work, 2)?;
+    };
+    if merge_steps == 0 {
+        return Err(reject("live-slice merge cannot precede input use"));
+    }
+
+    let mut invalid_prefix_steps = vec![merge_steps; 250];
+    for input in (GUARDED_MMIO_VALID_CHANNELS + 2)..=u8::MAX {
+        let candidate = replay_to_steps(
+            image,
+            symbols,
+            input,
+            merge_steps,
+            "live-slice invalid input",
+        )?;
+        if !candidate
+            .live_slice_equal(&representative, live_registers, &live_memory)
+            .map_err(|error| reject(error.to_string()))?
+        {
+            return Err(reject(format!(
+                "invalid input {input} does not satisfy the certified live slice"
+            )));
+        }
+        add_work(&mut producer_work, candidate.steps())?;
+        invalid_prefix_steps[usize::from(input - GUARDED_MMIO_VALID_CHANNELS)] = candidate.steps();
+    }
+
+    Ok(LiveSliceMmioQuotient {
+        version: LIVE_SLICE_MMIO_QUOTIENT_VERSION,
+        valid_behaviors,
+        invalid_behavior: behavior(invalid_execution.clone()),
+        invalid_representative: GUARDED_MMIO_VALID_CHANNELS,
+        merge_steps,
+        invalid_prefix_steps,
+        live_registers,
+        live_memory,
+        shared_continuation_steps: invalid_execution
+            .steps
+            .checked_sub(merge_steps)
+            .ok_or_else(|| reject("live-slice shared continuation work underflow"))?,
+        producer_decoded_instruction_transitions: producer_work,
+    })
+}
+
+/// Independently reconstruct the backward slice and replay every declared
+/// route without invoking the producer.
+pub fn verify_live_slice_mmio_quotient(
+    quotient: &LiveSliceMmioQuotient,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<LiveSliceMmioQuotientVerification, ExactCompiledMmioReferenceError> {
+    if quotient.version != LIVE_SLICE_MMIO_QUOTIENT_VERSION
+        || quotient.invalid_representative != GUARDED_MMIO_VALID_CHANNELS
+        || quotient.valid_behaviors.len() != usize::from(GUARDED_MMIO_VALID_CHANNELS)
+        || quotient.invalid_prefix_steps.len()
+            != EXACT_COMPILED_MMIO_INPUTS - usize::from(GUARDED_MMIO_VALID_CHANNELS)
+        || quotient.live_memory.len() != RV32_MEMORY_BITMAP_WORDS
+        || quotient.merge_steps == 0
+    {
+        return Err(reject("live-slice quotient shape is not canonical"));
+    }
+
+    let mut verifier_work = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("verify live-slice valid input {input}: {error}")))?
+            .finish()
+            .map_err(|error| reject(format!("verify live-slice valid input {input}: {error}")))?;
+        add_work(&mut verifier_work, execution.steps)?;
+        if behavior(execution) != quotient.valid_behaviors[usize::from(input)] {
+            return Err(reject(format!(
+                "live-slice valid input {input} behavior mismatch"
+            )));
+        }
+    }
+
+    let (invalid_execution, slices) = reconstruct_representative_live_slices(image, symbols)?;
+    add_work(&mut verifier_work, invalid_execution.steps)?;
+    let merge_index = usize::try_from(quotient.merge_steps)
+        .map_err(|_| reject("live-slice merge conversion overflow"))?;
+    let slice = slices
+        .get(merge_index)
+        .ok_or_else(|| reject("live-slice merge exceeds representative trace"))?;
+    let reconstructed_memory = offsets_bitmap(&slice.memory_offsets)?;
+    let reconstructed_suffix = invalid_execution
+        .steps
+        .checked_sub(quotient.merge_steps)
+        .ok_or_else(|| reject("verified live-slice suffix work underflow"))?;
+    if slice.registers != quotient.live_registers
+        || reconstructed_memory != quotient.live_memory
+        || reconstructed_suffix != quotient.shared_continuation_steps
+        || behavior(invalid_execution) != quotient.invalid_behavior
+    {
+        return Err(reject(
+            "live-slice registers, memory, suffix or behavior mismatch",
+        ));
+    }
+
+    let representative = replay_to_steps(
+        image,
+        symbols,
+        GUARDED_MMIO_VALID_CHANNELS,
+        quotient.merge_steps,
+        "verify live-slice representative",
+    )?;
+    add_work(&mut verifier_work, representative.steps())?;
+    for input in (GUARDED_MMIO_VALID_CHANNELS + 1)..=u8::MAX {
+        let declared =
+            quotient.invalid_prefix_steps[usize::from(input - GUARDED_MMIO_VALID_CHANNELS)];
+        if declared != quotient.merge_steps {
+            return Err(reject(format!(
+                "live-slice input {input} has a noncanonical prefix"
+            )));
+        }
+        let candidate = replay_to_steps(
+            image,
+            symbols,
+            input,
+            declared,
+            "verify live-slice invalid input",
+        )?;
+        if !candidate
+            .live_slice_equal(
+                &representative,
+                quotient.live_registers,
+                &quotient.live_memory,
+            )
+            .map_err(|error| reject(error.to_string()))?
+        {
+            return Err(reject(format!(
+                "live-slice invalid input {input} equality mismatch"
+            )));
+        }
+        add_work(&mut verifier_work, candidate.steps())?;
+    }
+
+    Ok(LiveSliceMmioQuotientVerification {
+        decoded_instruction_transitions: verifier_work,
+        live_registers: quotient.live_registers,
+        live_memory_bytes: quotient
+            .live_memory
+            .iter()
+            .map(|word| word.count_ones())
+            .sum(),
+    })
+}
+
+/// Execute six concrete valid singleton paths and one exact 250-lane invalid
+/// predicate transducer.
+pub fn build_predicate_mmio_workflow(
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<PredicateMmioWorkflow, ExactCompiledMmioReferenceError> {
+    let mut valid_behaviors = Vec::with_capacity(usize::from(GUARDED_MMIO_VALID_CHANNELS));
+    let mut decoded_transitions = 0u64;
+    for input in 0..GUARDED_MMIO_VALID_CHANNELS {
+        let execution = execute_compiled_mmio_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("predicate workflow valid input {input}: {error}")))?;
+        add_work(&mut decoded_transitions, execution.steps)?;
+        valid_behaviors.push(behavior(execution));
+    }
+    let invalid = execute_invalid_channel_predicate(image, symbols)
+        .map_err(|error| reject(format!("invalid predicate: {error}")))?;
+    add_work(&mut decoded_transitions, invalid.symbolic_transitions)?;
+    Ok(PredicateMmioWorkflow {
+        valid_behaviors,
+        producer_decoded_transitions: decoded_transitions,
+        producer_lane_value_operations: invalid.lane_value_operations,
+        invalid,
+    })
+}
+
+/// Independently replay and compare the complete predicate workflow.
+///
+/// Valid singleton paths use the concrete scalar engine. The invalid domain is
+/// checked by 250 scalar replay machines against the producer's shared decode
+/// trace, without invoking the vector transducer semantic core.
+pub fn verify_predicate_mmio_workflow(
+    workflow: &PredicateMmioWorkflow,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<PredicateMmioWorkflowVerification, ExactCompiledMmioReferenceError> {
+    let mut decoded_transitions = 0u64;
+    for (input, claimed) in workflow.valid_behaviors.iter().enumerate() {
+        let execution = execute_compiled_mmio_with_a0(image, symbols, input as u32)
+            .map_err(|error| reject(format!("predicate verifier valid input {input}: {error}")))?;
+        add_work(&mut decoded_transitions, execution.steps)?;
+        if behavior(execution) != *claimed {
+            return Err(reject(format!(
+                "predicate verifier valid input {input} differs from claim"
+            )));
+        }
+    }
+    let invalid = verify_invalid_channel_predicate(image, symbols, &workflow.invalid)
+        .map_err(|error| reject(error.to_string()))?;
+    add_work(&mut decoded_transitions, invalid.decoded_transitions)?;
+    if decoded_transitions != workflow.producer_decoded_transitions {
+        return Err(reject(
+            "predicate verifier transition count differs from producer",
+        ));
+    }
+    Ok(PredicateMmioWorkflowVerification {
+        decoded_transitions,
+        lane_value_operations: invalid.scalar_lane_steps,
+    })
+}
+
 /// Execute every value in the complete eight-bit `a0` domain independently.
 ///
 /// Classes are canonical: inputs are visited in ascending order, the first
@@ -428,6 +1108,70 @@ mod tests {
         )
     }
 
+    fn stale_stack_image(read_after_merge: bool) -> (Vec<u8>, Rv32SymbolLayout) {
+        let mut image = vec![0; 0x110];
+        let stack_offset = 0xffcu32;
+        let store_a0 = ((stack_offset & 0xfe0) << 20)
+            | (10 << 20)
+            | (2 << 15)
+            | (2 << 12)
+            | ((stack_offset & 0x1f) << 7)
+            | 0x23;
+        let sltiu_a0_six = (6u32 << 20) | (10 << 15) | (3 << 12) | (10 << 7) | 0x13;
+        let load_a0 = (stack_offset << 20) | (2 << 15) | (2 << 12) | (10 << 7) | 0x03;
+        let return_to_ra = (1u32 << 15) | 0x67;
+        image[..4].copy_from_slice(&store_a0.to_le_bytes());
+        image[4..8].copy_from_slice(&sltiu_a0_six.to_le_bytes());
+        let return_offset = if read_after_merge {
+            image[8..12].copy_from_slice(&load_a0.to_le_bytes());
+            12
+        } else {
+            8
+        };
+        image[return_offset..return_offset + 4].copy_from_slice(&return_to_ra.to_le_bytes());
+        (
+            image,
+            Rv32SymbolLayout {
+                entry: RV32_IMAGE_BASE,
+                event_count: RV32_IMAGE_BASE + 0x100,
+                events: RV32_IMAGE_BASE + 0x104,
+            },
+        )
+    }
+
+    fn dead_register_and_stack_image(use_after_merge: bool) -> (Vec<u8>, Rv32SymbolLayout) {
+        let mut image = vec![0; 0x110];
+        let stack_offset = 0xffcu32;
+        let copy_a0_to_t0 = (10u32 << 15) | (5 << 7) | 0x13;
+        let store_t0 = ((stack_offset & 0xfe0) << 20)
+            | (5 << 20)
+            | (2 << 15)
+            | (2 << 12)
+            | ((stack_offset & 0x1f) << 7)
+            | 0x23;
+        let sltiu_a0_six = (6u32 << 20) | (10 << 15) | (3 << 12) | (10 << 7) | 0x13;
+        let copy_t0_to_a0 = (5u32 << 15) | (10 << 7) | 0x13;
+        let return_to_ra = (1u32 << 15) | 0x67;
+        image[..4].copy_from_slice(&copy_a0_to_t0.to_le_bytes());
+        image[4..8].copy_from_slice(&store_t0.to_le_bytes());
+        image[8..12].copy_from_slice(&sltiu_a0_six.to_le_bytes());
+        let return_offset = if use_after_merge {
+            image[12..16].copy_from_slice(&copy_t0_to_a0.to_le_bytes());
+            16
+        } else {
+            12
+        };
+        image[return_offset..return_offset + 4].copy_from_slice(&return_to_ra.to_le_bytes());
+        (
+            image,
+            Rv32SymbolLayout {
+                entry: RV32_IMAGE_BASE,
+                event_count: RV32_IMAGE_BASE + 0x100,
+                events: RV32_IMAGE_BASE + 0x104,
+            },
+        )
+    }
+
     #[test]
     fn exact_reference_partitions_the_complete_input_domain() {
         let (image, symbols) = parity_image();
@@ -492,5 +1236,64 @@ mod tests {
         };
         assert_eq!(reference.executions.len(), EXACT_COMPILED_MMIO_INPUTS);
         verify_guarded_mmio_portfolio(&portfolio, &image, symbols).unwrap();
+    }
+
+    #[test]
+    fn live_state_quotient_proves_a_stale_stack_byte_dead() {
+        let (image, symbols) = stale_stack_image(false);
+        assert!(build_guarded_mmio_quotient(&image, symbols).is_err());
+        let quotient = build_live_state_mmio_quotient(&image, symbols).unwrap();
+        assert_eq!(quotient.invalid_prefix_steps, vec![2; 250]);
+        assert_eq!(quotient.shared_continuation_steps, 1);
+        let verification = verify_live_state_mmio_quotient(&quotient, &image, symbols).unwrap();
+        assert_eq!(verification.live_memory_bytes, 392);
+        assert_eq!(
+            verification.decoded_instruction_transitions,
+            quotient.producer_decoded_instruction_transitions
+        );
+    }
+
+    #[test]
+    fn live_state_quotient_refuses_a_differing_byte_read_after_merge() {
+        let (image, symbols) = stale_stack_image(true);
+        assert!(build_live_state_mmio_quotient(&image, symbols).is_err());
+    }
+
+    #[test]
+    fn live_slice_quotient_proves_register_and_stack_differences_dead() {
+        let (image, symbols) = dead_register_and_stack_image(false);
+        assert!(build_live_state_mmio_quotient(&image, symbols).is_err());
+        let quotient = build_live_slice_mmio_quotient(&image, symbols).unwrap();
+        assert_eq!(quotient.merge_steps, 3);
+        assert_eq!(quotient.invalid_prefix_steps, vec![3; 250]);
+        assert_eq!(quotient.shared_continuation_steps, 1);
+        assert_eq!(quotient.live_registers & (1 << 5), 0);
+        let verification = verify_live_slice_mmio_quotient(&quotient, &image, symbols).unwrap();
+        assert_eq!(
+            verification.decoded_instruction_transitions,
+            quotient.producer_decoded_instruction_transitions
+        );
+    }
+
+    #[test]
+    fn live_slice_quotient_refuses_a_dead_register_used_after_merge() {
+        let (image, symbols) = dead_register_and_stack_image(true);
+        assert!(build_live_slice_mmio_quotient(&image, symbols).is_err());
+    }
+
+    #[test]
+    fn predicate_workflow_covers_valid_singletons_and_one_invalid_domain() {
+        let (image, symbols) = guarded_image();
+        let workflow = build_predicate_mmio_workflow(&image, symbols).unwrap();
+        assert_eq!(workflow.valid_behaviors.len(), 6);
+        assert_eq!(workflow.invalid.lane_count, 250);
+        assert_eq!(workflow.invalid.symbolic_transitions, 2);
+        assert_eq!(workflow.producer_decoded_transitions, 14);
+        let verification = verify_predicate_mmio_workflow(&workflow, &image, symbols).unwrap();
+        assert_eq!(verification.decoded_transitions, 14);
+
+        let mut changed = workflow;
+        changed.invalid.return_value ^= 1;
+        assert!(verify_predicate_mmio_workflow(&changed, &image, symbols).is_err());
     }
 }

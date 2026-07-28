@@ -40,6 +40,8 @@ pub mod revision_batch;
 pub mod revision_impact;
 pub mod revision_local;
 pub mod riscv32imc;
+pub mod riscv32imc_predicate;
+pub mod riscv32imc_predicate_checker;
 pub mod source_model_attestation;
 pub mod unsat_proof;
 

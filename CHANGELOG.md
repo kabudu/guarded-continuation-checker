@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- Predeclare an exact finite-domain predicate transducer for all 250 invalid
+  runtime channels. It must preserve every lane through one uniform symbolic
+  control trace, independently reconstruct all register and sparse-memory
+  functions, report symbolic transitions and lane operations separately,
+  retain exact fallback and pass the unchanged fourfold gate. No
+  implementation or result exists yet.
+
+- Retain the register-and-memory live-slice quotient as a negative result. It
+  reconstructs one backward slice, accepts dead-register and dead-stack
+  controls, and refuses later register use, but 250 concrete invalid prefixes
+  still dominate. Authentic O0 and O2 reductions remain near 1.06× and 1.09×,
+  below the unchanged fourfold gate, so exact fallback remains selected.
+
+- Predeclare a proof-carrying live-slice quotient that reconstructs register
+  and memory liveness together from one complete representative trace. It must
+  select one earliest merge without trial suffix replay, independently verify
+  every use/def fact, retain exact fallback and pass the unchanged fourfold
+  total-work gate. No implementation or result exists yet.
+
+- Retain the proof-carrying live-memory quotient as a negative result. Its
+  byte-precise read-before-overwrite reconstruction accepts a dead-stack
+  control and refuses a read-after-merge neighbour, but authentic O0 and O2
+  convergence occurs too late. Total work exceeds the exact reference on both
+  profiles, so exact fallback remains selected and no certificate or RTL
+  result is promoted.
+
+- Predeclare a proof-carrying live-state continuation quotient after the strict
+  exact-state candidate exposed stale stack differences. The new experiment
+  may ignore a differing byte only after an independent byte-precise
+  read-before-overwrite proof, retains exact fallback and hostile
+  read-after-merge controls, and keeps the existing fourfold total-work gate.
+  No implementation or result exists yet.
+
 - Retain the guarded-MMIO exact-state quotient as a negative result. A bounded
   opaque replay API and separately coded route verifier merge synthetic states
   only after complete byte equality, but authentic O0 and O2 inputs retain

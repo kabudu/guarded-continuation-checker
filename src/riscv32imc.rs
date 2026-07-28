@@ -15,6 +15,7 @@ pub const RV32_IMAGE_BASE: u32 = 0x8000_0000;
 pub const MAX_RV32_IMAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_RV32_MEMORY_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_RV32_STEPS: u64 = 1_000_000;
+pub const RV32_MEMORY_BITMAP_WORDS: usize = MAX_RV32_MEMORY_BYTES / 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Rv32SymbolLayout {
@@ -53,7 +54,7 @@ fn reject(message: impl Into<String>) -> Rv32Error {
     Rv32Error(message.into())
 }
 
-fn sign_extend(value: u32, bits: u32) -> u32 {
+pub(crate) fn sign_extend(value: u32, bits: u32) -> u32 {
     (((value << (32 - bits)) as i32) >> (32 - bits)) as u32
 }
 
@@ -101,7 +102,7 @@ fn bits(value: u16, high: u32, low: u32, destination: u32) -> u32 {
     (((value as u32) >> low) & ((1 << (high - low + 1)) - 1)) << destination
 }
 
-fn decompress(raw: u16) -> Result<u32, Rv32Error> {
+pub(crate) fn decompress(raw: u16) -> Result<u32, Rv32Error> {
     let quadrant = raw & 0b11;
     let funct3 = raw >> 13;
     let rd = ((raw >> 7) & 0x1f) as u32;
@@ -252,7 +253,7 @@ fn decompress(raw: u16) -> Result<u32, Rv32Error> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone)]
 struct Machine {
     memory: Vec<u8>,
     memory_known: Vec<bool>,
@@ -264,6 +265,10 @@ struct Machine {
     previous_pc: u32,
     event_count_address: u32,
     event_program_locations: Vec<u32>,
+    observed_reads: Vec<Rv32MemoryAccess>,
+    observed_writes: Vec<Rv32MemoryAccess>,
+    observed_register_reads: u32,
+    observed_register_writes: u32,
 }
 
 /// Opaque bounded RV32IMC state used by exact continuation certificates.
@@ -271,11 +276,34 @@ struct Machine {
 /// Callers can advance and compare states, but cannot manufacture or alter
 /// machine contents. Equality covers every field that can affect later
 /// execution or retained evidence, and never relies on a digest.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct Rv32ReplayMachine {
     machine: Machine,
     symbols: Rv32SymbolLayout,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Rv32MemoryAccess {
+    pub address: u32,
+    pub width: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Rv32StepObservation {
+    pub program_counter: u32,
+    pub register_reads: u32,
+    pub register_writes: u32,
+    pub reads: Vec<Rv32MemoryAccess>,
+    pub writes: Vec<Rv32MemoryAccess>,
+}
+
+impl PartialEq for Rv32ReplayMachine {
+    fn eq(&self, other: &Self) -> bool {
+        self.symbols == other.symbols && self.machine.same_state(&other.machine)
+    }
+}
+
+impl Eq for Rv32ReplayMachine {}
 
 impl Rv32ReplayMachine {
     pub fn new_with_a0(
@@ -302,10 +330,40 @@ impl Rv32ReplayMachine {
     }
 
     pub fn step(&mut self) -> Result<(), Rv32Error> {
+        self.step_observed().map(|_| ())
+    }
+
+    pub fn step_observed(&mut self) -> Result<Rv32StepObservation, Rv32Error> {
         if self.is_complete() {
             return Err(reject("cannot step a completed replay machine"));
         }
         self.machine.step()
+    }
+
+    /// Advance one scalar replay lane using an instruction decoded once by an
+    /// independent batch checker.
+    ///
+    /// The lane still fetches and compares its own instruction bytes before
+    /// executing the supplied decode. This prevents a forged shared trace from
+    /// skipping, replacing or relocating code.
+    pub(crate) fn step_predecoded(
+        &mut self,
+        expected_pc: u32,
+        expected_word: u32,
+        instruction_bytes: u8,
+        instruction: &Instruction,
+        image_end: u32,
+    ) -> Result<Rv32StepObservation, Rv32Error> {
+        if self.is_complete() {
+            return Err(reject("cannot step a completed replay machine"));
+        }
+        self.machine.step_predecoded(
+            expected_pc,
+            expected_word,
+            instruction_bytes,
+            instruction,
+            image_end,
+        )
     }
 
     pub fn finish(mut self) -> Result<Rv32Execution, Rv32Error> {
@@ -373,9 +431,102 @@ impl Rv32ReplayMachine {
         }
         None
     }
+
+    pub(crate) fn live_state_equal(
+        &self,
+        other: &Self,
+        live_memory: &[u64],
+    ) -> Result<bool, Rv32Error> {
+        if live_memory.len() != RV32_MEMORY_BITMAP_WORDS {
+            return Err(reject("live-memory bitmap length is outside policy"));
+        }
+        if self.symbols != other.symbols || !self.machine.same_non_memory_state(&other.machine) {
+            return Ok(false);
+        }
+        for (word_index, word) in live_memory.iter().copied().enumerate() {
+            let mut remaining = word;
+            while remaining != 0 {
+                let bit = remaining.trailing_zeros() as usize;
+                let index = word_index * 64 + bit;
+                if self.machine.memory[index] != other.machine.memory[index]
+                    || self.machine.memory_known[index] != other.machine.memory_known[index]
+                {
+                    return Ok(false);
+                }
+                remaining &= remaining - 1;
+            }
+        }
+        Ok(true)
+    }
+
+    pub(crate) fn non_memory_state_equal(&self, other: &Self) -> bool {
+        self.symbols == other.symbols && self.machine.same_non_memory_state(&other.machine)
+    }
+
+    pub(crate) fn control_state_equal(&self, other: &Self) -> bool {
+        self.symbols == other.symbols && self.machine.same_control_state(&other.machine)
+    }
+
+    pub(crate) fn live_slice_equal(
+        &self,
+        other: &Self,
+        live_registers: u32,
+        live_memory: &[u64],
+    ) -> Result<bool, Rv32Error> {
+        if live_memory.len() != RV32_MEMORY_BITMAP_WORDS {
+            return Err(reject("live-memory bitmap length is outside policy"));
+        }
+        if !self.control_state_equal(other) {
+            return Ok(false);
+        }
+        for register in 0..32 {
+            if live_registers & (1u32 << register) != 0
+                && (self.machine.registers[register] != other.machine.registers[register]
+                    || self.machine.register_known[register]
+                        != other.machine.register_known[register])
+            {
+                return Ok(false);
+            }
+        }
+        for (word_index, word) in live_memory.iter().copied().enumerate() {
+            let mut remaining = word;
+            while remaining != 0 {
+                let bit = remaining.trailing_zeros() as usize;
+                let index = word_index * 64 + bit;
+                if self.machine.memory[index] != other.machine.memory[index]
+                    || self.machine.memory_known[index] != other.machine.memory_known[index]
+                {
+                    return Ok(false);
+                }
+                remaining &= remaining - 1;
+            }
+        }
+        Ok(true)
+    }
 }
 
 impl Machine {
+    fn same_control_state(&self, other: &Self) -> bool {
+        self.pc == other.pc
+            && self.stop == other.stop
+            && self.steps == other.steps
+            && self.previous_pc == other.previous_pc
+            && self.event_count_address == other.event_count_address
+            && self.event_program_locations == other.event_program_locations
+    }
+
+    fn same_non_memory_state(&self, other: &Self) -> bool {
+        self.registers == other.registers
+            && self.register_known == other.register_known
+            && self.same_control_state(other)
+    }
+
+    fn same_state(&self, other: &Self) -> bool {
+        self.memory == other.memory
+            && self.memory_known == other.memory_known
+            && self.same_non_memory_state(other)
+    }
+
     fn index(&self, address: u32, width: usize) -> Result<usize, Rv32Error> {
         let offset = address
             .checked_sub(RV32_IMAGE_BASE)
@@ -433,6 +584,7 @@ impl Machine {
 
     fn set_reg(&mut self, index: u32, value: u32) {
         if index != 0 {
+            self.observed_register_writes |= 1u32 << index;
             self.registers[index as usize] = value;
             self.register_known[index as usize] = true;
         }
@@ -440,8 +592,13 @@ impl Machine {
 
     fn set_unknown(&mut self, index: u32) {
         if index != 0 {
+            self.observed_register_writes |= 1u32 << index;
             self.register_known[index as usize] = false;
         }
+    }
+
+    fn observe_register_read(&mut self, index: u32) {
+        self.observed_register_reads |= 1u32 << index;
     }
 
     fn require_reg(&self, current: u32, index: u32, role: &str) -> Result<u32, Rv32Error> {
@@ -454,15 +611,24 @@ impl Machine {
         }
     }
 
-    fn step(&mut self) -> Result<(), Rv32Error> {
+    fn step(&mut self) -> Result<Rv32StepObservation, Rv32Error> {
         if self.steps >= MAX_RV32_STEPS {
             return Err(reject("instruction step bound exceeded"));
         }
+        self.observed_reads.clear();
+        self.observed_writes.clear();
+        self.observed_register_reads = 0;
+        self.observed_register_writes = 0;
+        let observed_pc = self.pc;
         let low = self
             .load(self.pc, 2)
             .map_err(|error| reject(format!("fetch at PC 0x{:08x}: {error}", self.pc)))?
             as u16;
         let length = if low & 3 == 3 { 4 } else { 2 };
+        self.observed_reads.push(Rv32MemoryAccess {
+            address: self.pc,
+            width: length as u8,
+        });
         let word = if length == 2 {
             decompress(low).map_err(|error| {
                 reject(format!(
@@ -479,7 +645,87 @@ impl Machine {
         self.previous_pc = current;
         self.pc = self.pc.wrapping_add(length);
         self.steps += 1;
-        self.execute(current, instruction)
+        self.execute(current, instruction)?;
+        Ok(self.observation(observed_pc))
+    }
+
+    fn step_predecoded(
+        &mut self,
+        expected_pc: u32,
+        expected_word: u32,
+        instruction_bytes: u8,
+        instruction: &Instruction,
+        image_end: u32,
+    ) -> Result<Rv32StepObservation, Rv32Error> {
+        if self.steps >= MAX_RV32_STEPS {
+            return Err(reject("instruction step bound exceeded"));
+        }
+        if self.pc != expected_pc {
+            return Err(reject(format!(
+                "shared control trace expected PC 0x{expected_pc:08x}, lane reached 0x{:08x}",
+                self.pc
+            )));
+        }
+        if !matches!(instruction_bytes, 2 | 4) {
+            return Err(reject("shared control trace instruction width is invalid"));
+        }
+        self.observed_reads.clear();
+        self.observed_writes.clear();
+        self.observed_register_reads = 0;
+        self.observed_register_writes = 0;
+        let low = self
+            .load(self.pc, 2)
+            .map_err(|error| reject(format!("fetch at PC 0x{:08x}: {error}", self.pc)))?
+            as u16;
+        let actual_bytes = if low & 3 == 3 { 4 } else { 2 };
+        let actual_word = if actual_bytes == 2 {
+            decompress(low).map_err(|error| {
+                reject(format!(
+                    "compressed decode failed at 0x{:08x} after 0x{:08x}: {error}",
+                    self.pc, self.previous_pc
+                ))
+            })?
+        } else {
+            self.load(self.pc, 4)?
+        };
+        if actual_bytes != u32::from(instruction_bytes) || actual_word != expected_word {
+            return Err(reject(format!(
+                "shared control trace instruction mismatch at 0x{:08x}",
+                self.pc
+            )));
+        }
+        self.observed_reads.push(Rv32MemoryAccess {
+            address: self.pc,
+            width: instruction_bytes,
+        });
+        let current = self.pc;
+        self.previous_pc = current;
+        self.pc = self.pc.wrapping_add(actual_bytes);
+        self.steps += 1;
+        self.execute(current, *instruction)?;
+        for write in &self.observed_writes {
+            if write.address < image_end
+                && write
+                    .address
+                    .checked_add(u32::from(write.width))
+                    .is_some_and(|end| end > RV32_IMAGE_BASE)
+            {
+                return Err(reject(
+                    "self-modifying code is unsupported by shared control replay",
+                ));
+            }
+        }
+        Ok(self.observation(current))
+    }
+
+    fn observation(&self, program_counter: u32) -> Rv32StepObservation {
+        Rv32StepObservation {
+            program_counter,
+            register_reads: self.observed_register_reads,
+            register_writes: self.observed_register_writes,
+            reads: self.observed_reads.clone(),
+            writes: self.observed_writes.clone(),
+        }
     }
 
     fn execute(&mut self, current: u32, instruction: Instruction) -> Result<(), Rv32Error> {
@@ -492,6 +738,7 @@ impl Machine {
                 self.pc = current.wrapping_add(sign_extend(value.imm(), 21));
             }
             Jalr(value) => {
+                self.observe_register_read(value.rs1());
                 let target = self
                     .require_reg(current, value.rs1(), "jump target")?
                     .wrapping_add(sign_extend(value.imm(), 12))
@@ -556,6 +803,8 @@ impl Machine {
         value: BType,
         predicate: impl FnOnce(u32, u32) -> bool,
     ) -> Result<(), Rv32Error> {
+        self.observe_register_read(value.rs1());
+        self.observe_register_read(value.rs2());
         let left = self.require_reg(current, value.rs1(), "branch operand")?;
         let right = self.require_reg(current, value.rs2(), "branch operand")?;
         if predicate(left, right) {
@@ -571,6 +820,7 @@ impl Machine {
         width: usize,
         signed: bool,
     ) -> Result<(), Rv32Error> {
+        self.observe_register_read(value.rs1());
         let address = self
             .require_reg(current, value.rs1(), "load address")?
             .wrapping_add(sign_extend(value.imm(), 12));
@@ -581,6 +831,10 @@ impl Machine {
                 self.reg(value.rs1())
             ))
         })?;
+        self.observed_reads.push(Rv32MemoryAccess {
+            address,
+            width: width as u8,
+        });
         let result = if signed && width < 4 {
             sign_extend(loaded, (width * 8) as u32)
         } else {
@@ -595,11 +849,17 @@ impl Machine {
     }
 
     fn store_s(&mut self, current: u32, value: SType, width: usize) -> Result<(), Rv32Error> {
+        self.observe_register_read(value.rs1());
+        self.observe_register_read(value.rs2());
         let address = self
             .require_reg(current, value.rs1(), "store address")?
             .wrapping_add(sign_extend(value.imm(), 12));
         let stored = self.reg(value.rs2());
         let stored_known = self.register_known[value.rs2() as usize];
+        self.observed_writes.push(Rv32MemoryAccess {
+            address,
+            width: width as u8,
+        });
         self.store_with_knownness(address, width, stored, stored_known)
             .map_err(|error| {
                 reject(format!(
@@ -620,6 +880,7 @@ impl Machine {
     }
 
     fn op_i(&mut self, value: IType, operation: impl FnOnce(u32, u32) -> u32) {
+        self.observe_register_read(value.rs1());
         if self.register_known[value.rs1() as usize] {
             self.set_reg(
                 value.rd(),
@@ -631,6 +892,7 @@ impl Machine {
     }
 
     fn shift_i(&mut self, value: ShiftType, operation: impl FnOnce(u32, u32) -> u32) {
+        self.observe_register_read(value.rs1());
         if self.register_known[value.rs1() as usize] {
             self.set_reg(
                 value.rd(),
@@ -642,6 +904,8 @@ impl Machine {
     }
 
     fn op_r(&mut self, value: RType, operation: impl FnOnce(u32, u32) -> u32) {
+        self.observe_register_read(value.rs1());
+        self.observe_register_read(value.rs2());
         if self.register_known[value.rs1() as usize] && self.register_known[value.rs2() as usize] {
             self.set_reg(
                 value.rd(),
@@ -720,6 +984,10 @@ fn initialize_machine(
         previous_pc: symbols.entry,
         event_count_address: symbols.event_count,
         event_program_locations: Vec::new(),
+        observed_reads: Vec::new(),
+        observed_writes: Vec::new(),
+        observed_register_reads: 0,
+        observed_register_writes: 0,
     };
     machine.register_known[0] = true;
     machine.memory[..image.len()].copy_from_slice(image);

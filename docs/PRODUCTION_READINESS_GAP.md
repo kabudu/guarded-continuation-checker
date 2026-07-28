@@ -732,6 +732,33 @@ production-row change. A future live-state quotient remains research-only
 until dead-byte proofs, an independent checker, hostile read-after-merge
 controls and exact fallback all pass.
 
+The live-state follow-up is predeclared but unimplemented. It cannot change a
+production row until its independently checked dead-byte certificate,
+read-after-merge hostile controls, exact portfolio fallback, deterministic
+codec, resource policy, maintained-tool baselines, RTL composition and hosted
+evidence all pass.
+
+The live-memory candidate fails its fourfold gate and is slower than exact
+per-input verification on both authentic profiles. No certificate, RTL answer
+or production row changes. The exact portfolio route remains mandatory.
+
+The live-slice follow-up is unimplemented and changes no production row. Its
+register-and-memory slice checker, deterministic codec, hostile matrix, exact
+fallback, resource governance, maintained baselines, RTL binding and hosted
+evidence all remain open.
+
+The live-slice candidate fails its fourfold work gate on both authentic
+profiles. No certificate, RTL result or production row changes. Exact
+per-input fallback remains mandatory.
+
+The predicate-transducer follow-up now passes its local mechanism gate. The
+vector producer and a separate scalar replay checker preserve all 250 invalid
+inputs and reduce the frozen complete transition cycle by 24.63x at O0 and
+26.31x at O2. Canonical codec, complete hostile artifact matrix, exact
+portfolio admission and fallback, resource policy, maintained baselines, RTL
+composition, hosted evidence, compatibility history and independent
+assessment remain open. No production row closes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

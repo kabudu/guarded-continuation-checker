@@ -955,3 +955,52 @@ exclude a differing byte only after a checker proves that no remaining
 instruction path can read it. That follow-up requires a new predeclaration and
 closest-work comparison with compiler liveness, dead-store analysis, symbolic
 state subsumption and proof-carrying abstraction.
+
+A separate
+[proof-carrying live-state experiment](OPENTITAN_PWM_LIVE_STATE_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared before implementation. It requires a byte-precise,
+independently reconstructed read-before-overwrite proof over the bounded binary
+suffix. LLVM MemorySSA, CompCert liveness, symbolic state merging, dynamic
+slicing, observational equivalence and proof-carrying code are explicit
+closest-work families. The bounded firmware-to-RTL combination is the research
+question; no algorithmic novelty claim exists.
+
+The live-memory candidate is a retained negative result. Its byte-precise
+read-before-overwrite checker passes the dead-stack and read-after-merge
+controls, but authentic state convergence occurs only 77 O0 instructions and
+24 O2 instructions before return. Total quotient work exceeds the exact
+reference in both profiles. This adds no novelty evidence. A future live-slice
+candidate would also need independently reconstructed register liveness and a
+new predeclaration.
+
+The
+[live-slice follow-up](OPENTITAN_PWM_LIVE_SLICE_QUOTIENT_EXPERIMENT_V1.md)
+is predeclared before implementation. It extends the proof obligation to
+register use/def facts and chooses the earliest merge from one complete
+backward slice instead of trial-replaying suffixes. Compiler liveness, dynamic
+slicing and symbolic state subsumption remain direct prior art, so no novelty
+claim exists.
+
+The live-slice candidate is also retained negative. Register liveness removes
+the memory-only producer regression, but separately replaying 250 invalid
+prefixes limits authentic reduction to about 1.06× at O0 and 1.09× at O2.
+This adds no novelty evidence. A future candidate must certify a complete input
+predicate through the prefix rather than enumerate its members.
+
+The
+[finite-domain predicate transducer](OPENTITAN_PWM_PREDICATE_TRANSDUCER_EXPERIMENT_V1.md)
+is predeclared before implementation. It tests one exact symbolic state over
+all 250 invalid inputs, with separate symbolic-transition and lane-operation
+accounting. Finite-domain abstract interpretation, symbolic execution,
+multi-execution and explicit function tables are direct prior art. No novelty
+claim exists.
+
+The local mechanism is now a positive result. Its vector producer and separate
+250-machine scalar checker preserve all exact terminal behavior while reducing
+the complete measured transition cycle by 24.63x at O0 and 26.31x at O2.
+This establishes a useful bounded implementation result, not novelty. The
+closest-work question remains whether the proof-carrying binary-to-RTL
+composition differs materially from established finite-domain abstract
+interpretation, SIMD multi-execution, KLEE, Veritesting and CBMC workflows.
+Identical-scope maintained comparisons and independent expert review remain
+mandatory before any novelty claim.
