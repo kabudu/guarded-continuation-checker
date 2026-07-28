@@ -1,7 +1,8 @@
 # OpenTitan PWM MMIO-to-RTL maintained comparison v1
 
 Status: all local acceptance gates pass in two clean cycles. Hosted Linux
-reproduction is predeclared but has not run.
+attempt 1 fails the frozen raw-model byte-identity gate despite identical
+normalized semantics.
 
 ## Question
 
@@ -145,6 +146,23 @@ No threshold, horizon, input partition or expected digest may change after the
 first hosted result is observed. Hosted agreement will close platform
 reproduction only. It will not establish production readiness, novelty or a
 performance advantage.
+
+### Hosted attempt 1
+
+Hosted
+[run 30405783137](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30405783137)
+passes the complete maintained workflow, all eleven hostile controls and the
+normalized semantic identity. It fails the frozen manifest comparison because
+the Linux-generated SMT-LIB SHA-256 is
+`f69e09d2dfbdcecf7c56771d152f0519449af7a3247dd5a7f82717a43ecab78c`,
+while the Darwin-generated SHA-256 is
+`286078b59f7292b7b3b65f8ac1bb4462efd0b452a37e53bafae3637192361a15`.
+
+The raw models were not retained because the upload step was skipped after the
+comparison failed. This is a workflow evidence-retention defect, not a reason
+to reinterpret the result. The next run keeps the same failing criterion,
+copies the synthesized SMT-LIB model into the result directory and executes
+artifact upload under `always()`. The hosted gate remains open.
 
 ## Trust-boundary comparison
 

@@ -312,5 +312,7 @@ sha256_file() {
   echo "status=complete"
 } >"$scratch/result/semantic-manifest-v1.txt"
 
+cp "$scratch/firmware-trace-6.smt2" \
+  "$scratch/result/firmware-trace-6.smt2"
 mv "$scratch/result" "$output"
 echo "opentitan_pwm_mmio_rtl_maintained_comparison_v1=PASS output=$output"
