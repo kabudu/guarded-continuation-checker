@@ -114,6 +114,12 @@ for the bounded composition. Hosted Linux reproduction, process-resource
 governance, compatibility evidence and a maintained identical-scope comparison
 remain open.
 
+The identical-scope comparison is
+[predeclared separately](OPENTITAN_PWM_MMIO_RTL_MAINTAINED_COMPARISON_V1.md).
+It requires pinned angr to derive the complete firmware behavior partition and
+pinned Yosys plus Z3 to reconstruct every RTL observation without consuming
+GCC's certificate, mapper output or replay output.
+
 ## Claim boundary
 
 Firmware-aware RTL verification, transaction-level mapping, bounded trace
