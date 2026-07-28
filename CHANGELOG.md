@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.31.0 - 2026-07-28
+
 - Add a canonical bounded certificate and static portfolio for the exact
   finite-domain firmware predicate. Byte-starting verification independently
   replays all 250 invalid inputs with ordinary scalar machines, exhaustive
