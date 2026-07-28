@@ -1,0 +1,17 @@
+opentitan_pwm_mmio_rtl_maintained_comparison_version=1
+angr_version=9.3.0
+yosys_revision=b8e7da6f40ae8f552c116bf6c359b07c6533e159
+z3_version=Z3 version 4.16.0 - 64 bit
+firmware_behaviors=7
+valid_rtl_members=6
+invalid_rtl_members=0
+rtl_transitions=198
+rtl_observations=204
+phase_cycle_classes=2
+nonzero_traces=6
+hostile_controls=11
+profiles_semantically_identical=true
+gcc_maintained_agreement=true
+rtl_smt2_sha256=286078b59f7292b7b3b65f8ac1bb4462efd0b452a37e53bafae3637192361a15
+semantic_sha256=e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907abf
+status=complete
