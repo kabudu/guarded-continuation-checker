@@ -759,6 +759,13 @@ finishes in 0.47 seconds; O2 peaks at 4.39 MiB and finishes in 0.06 seconds on
 the local arm64 host. These are local mechanism measurements, not portable
 service limits.
 
+The next predeclared
+[predicate-to-RTL binding experiment](docs/OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
+requires every verified firmware MMIO schedule to determine a complete RTL
+input trace. Invalid inputs must create no RTL member or answer, and the
+verifier must reconstruct the connection from caller-owned firmware, mapping
+and BTOR2 sources. No implementation or result exists yet.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

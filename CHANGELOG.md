@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare a source-bound predicate-to-RTL binding experiment. It requires
+  each independently verified firmware MMIO schedule to determine a complete
+  bounded RTL input trace, requires invalid firmware inputs to create no RTL
+  member or answer, and requires independent replay from caller-owned firmware,
+  mapping and BTOR2 sources. No implementation, result, novelty or production
+  claim exists yet.
+
 - Add a canonical bounded certificate and static portfolio for the exact
   finite-domain firmware predicate. Byte-starting verification independently
   replays all 250 invalid inputs with ordinary scalar machines, exhaustive
