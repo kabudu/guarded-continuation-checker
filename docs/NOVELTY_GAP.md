@@ -1035,7 +1035,9 @@ The replacement
 [exact MMIO-to-RTL mapping](OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md) now translates
 and independently replays all six valid firmware schedules while mapping all
 250 invalid inputs to no RTL member. Its first bounded window produces only
-zero PWM observations, so it establishes no useful behavioral distinction and
-does not change the novelty assessment. The predeclared one-cycle continuation
-tests whether the source-derived phase horizon exposes a non-trivial relation
-without per-formula calibration.
+zero PWM observations. The predeclared one-cycle continuation now exposes two
+non-empty classes without per-formula calibration: input 0 overwrites channel
+0 with the selected configuration, while inputs 1 through 5 retain channel 0's
+first configuration. This strengthens the binary-to-RTL composition candidate
+but does not establish novelty. Comparable hardware-software trace validation,
+maintained-tool comparison and independent expert assessment remain mandatory.

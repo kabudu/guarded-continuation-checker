@@ -791,7 +791,8 @@ The replacement
 complete schedule translation, pinned-source replay, O0/O2 semantic agreement,
 six valid RTL members and zero invalid RTL members. Its first observation
 window is non-discriminating because all PWM outputs remain zero. The
-predeclared one-cycle continuation, hostile evidence controls, governed
+predeclared one-cycle continuation now exposes two non-empty behavioral classes
+with all continuation writes disabled. Hostile evidence controls, a governed
 artifact, hosted reproduction and maintained comparison remain open, so the
 valid-class RTL composition row does not close.
 

@@ -2,7 +2,8 @@ use guarded_continuation_checker::{
     compiled_mmio_certificate::parse_compiled_mmio_symbols,
     compiled_mmio_quotient::{build_predicate_mmio_workflow, verify_predicate_mmio_workflow},
     compiled_mmio_rtl_mapping::{
-        PWM_RTL_MODEL_SHA256, map_pwm_mmio_workflow, replay_pwm_rtl_trace,
+        PWM_RTL_MODEL_SHA256, extend_pwm_rtl_trace_one_phase_cycle, map_pwm_mmio_workflow,
+        replay_pwm_rtl_trace,
     },
 };
 use std::{env, fs, process::ExitCode};
@@ -42,15 +43,28 @@ fn run() -> Result<(), String> {
         verification.lane_value_operations
     );
     for trace in &family.traces {
-        let replay = replay_pwm_rtl_trace(&model, trace).map_err(|error| error.to_string())?;
-        let observations = replay
+        let base = replay_pwm_rtl_trace(&model, trace).map_err(|error| error.to_string())?;
+        let base_observations = base
             .observations
             .iter()
             .map(|observation| format!("{:x}:{:02x}", observation.step, observation.pwm))
             .collect::<Vec<_>>()
             .join(",");
         println!(
-            "rtl_trace={},transitions={},observations={observations}",
+            "rtl_trace_base={},transitions={},observations={base_observations}",
+            base.channel, base.transitions
+        );
+        let extended =
+            extend_pwm_rtl_trace_one_phase_cycle(trace).map_err(|error| error.to_string())?;
+        let replay = replay_pwm_rtl_trace(&model, &extended).map_err(|error| error.to_string())?;
+        let phase_observations = replay
+            .observations
+            .iter()
+            .map(|observation| format!("{:x}:{:02x}", observation.step, observation.pwm))
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "rtl_trace_phase_cycle={},transitions={},observations={phase_observations}",
             replay.channel, replay.transitions
         );
     }

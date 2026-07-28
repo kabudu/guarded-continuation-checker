@@ -1,8 +1,8 @@
 # OpenTitan PWM exact MMIO-to-RTL mapping v1
 
-Status: translation and independent replay pass locally. The first observation
-window is non-discriminating, so no RTL property, novelty or production claim
-results.
+Status: translation, independent replay and the predeclared one-phase-cycle
+follow-up pass locally. Evidence encoding, maintained comparison, hosted gates
+and independent assessment remain open.
 
 ## Question
 
@@ -50,7 +50,7 @@ advances the harness step from 0 through 15, but all 18 recorded six-channel
 PWM observations remain zero. The mapping and replay mechanism therefore
 passes, while the useful-observation gate fails.
 
-## Predeclared follow-up
+## Predeclared follow-up result
 
 The next cycle appends exactly 16 quiescent transitions after the canonical
 event schedule. Sixteen is one complete cycle of the harness's source-declared
@@ -67,13 +67,32 @@ The follow-up passes its observation gate only if:
    inputs; and
 5. model, schedule, valuation or observation drift refuses.
 
-If one complete phase cycle remains non-discriminating, this candidate is
-retained negative without extending or tuning the horizon.
+The clean O0 and O2 runs pass all five gates:
+
+- both profiles produce identical semantic replay summaries;
+- all 250 invalid inputs still produce zero RTL members;
+- all six valid traces contain non-zero PWM observations;
+- channel 0 forms one observation class and channels 1 through 5 form a second;
+- every trace contains exactly 33 transitions, including the frozen
+  17-transition base and the 16-transition quiescent continuation; and
+- write-enable or valuation drift in the continuation refuses.
+
+The distinction matches the firmware schedule. Input 0 configures channel 0
+twice, ending with duty values 6 and 10. Inputs 1 through 5 leave channel 0 at
+duty values 4 and 8 while configuring a disabled selected channel. The result
+therefore connects a concrete compiled-firmware choice to a distinct replayed
+RTL behavior without granting any RTL member to an invalid input.
+
+This is a positive bounded composition result, not yet a proof-carrying product
+artifact. The next gate must encode the mapping and observations, then have a
+byte-starting verifier reconstruct them from the firmware certificate, mapping
+policy and BTOR2 source.
 
 ## Claim boundary
 
 Firmware-aware RTL verification, transaction-level mapping, bounded trace
-replay and proof-carrying evidence are established. This result is useful
-integration engineering, not evidence that the mechanism is novel. A novelty
-claim still requires focused prior-art review, identical-scope maintained-tool
+replay and proof-carrying evidence are established. The positive behavioral
+composition is useful integration engineering and a stronger novelty
+candidate, but it is not proof that the mechanism is novel. A novelty claim
+still requires focused prior-art review, identical-scope maintained-tool
 comparison and independent expert assessment.

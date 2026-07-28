@@ -778,8 +778,10 @@ The first
 also passes its translation and independent replay gates. Authentic O0 and O2
 firmware produce six valid RTL traces and zero invalid members with identical
 semantics. Its 17-transition window is retained as non-discriminating because
-all PWM observations remain zero. A predeclared one-cycle quiescent
-continuation is the next gate.
+all PWM observations remain zero. The predeclared one-cycle quiescent
+continuation then passes: every valid trace becomes non-zero and exact replay
+separates channel 0 from channels 1 through 5. Evidence encoding, maintained
+comparison and hosted gates remain open.
 
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes

@@ -18,6 +18,8 @@ pub const PWM_RTL_MAPPING_VERSION: u32 = 1;
 pub const PWM_RTL_CHANNELS: usize = 6;
 pub const PWM_RTL_EVENT_FRAMES: usize = 16;
 pub const PWM_RTL_TRACE_FRAMES: usize = PWM_RTL_EVENT_FRAMES + 1;
+pub const PWM_RTL_PHASE_CYCLE_FRAMES: usize = 16;
+pub const PWM_RTL_EXTENDED_TRACE_FRAMES: usize = PWM_RTL_TRACE_FRAMES + PWM_RTL_PHASE_CYCLE_FRAMES;
 pub const PWM_RTL_MODEL_SHA256: [u8; 32] = [
     0x15, 0x9a, 0xdf, 0x69, 0xab, 0x63, 0x6d, 0x95, 0x19, 0x5b, 0x2a, 0x65, 0xdd, 0x5d, 0x7a, 0xfd,
     0x46, 0xf0, 0x5b, 0x3b, 0xad, 0x83, 0x26, 0x65, 0x9f, 0xe0, 0x79, 0x43, 0xcd, 0x42, 0x5f, 0x7b,
@@ -284,6 +286,27 @@ fn observe(
     })
 }
 
+fn validate_quiescent_extension(trace: &PwmRtlTrace) -> Result<(), PwmRtlMappingError> {
+    if trace.frames.len() != PWM_RTL_EXTENDED_TRACE_FRAMES {
+        return Ok(());
+    }
+    let mut expected = trace.frames[PWM_RTL_TRACE_FRAMES - 1];
+    expected.enable_write = 0;
+    expected.invert_write = 0;
+    expected.parameter_write = 0;
+    expected.duty_cycle_write = 0;
+    expected.blink_parameter_write = 0;
+    if trace.frames[PWM_RTL_TRACE_FRAMES..]
+        .iter()
+        .any(|frame| *frame != expected)
+    {
+        return Err(reject(
+            "phase-cycle continuation contains a write or valuation drift",
+        ));
+    }
+    Ok(())
+}
+
 /// Independently parse and replay one complete translated trace against the
 /// exact source-attested BTOR2 model.
 pub fn replay_pwm_rtl_trace(
@@ -297,10 +320,14 @@ pub fn replay_pwm_rtl_trace(
     }
     if trace.version != PWM_RTL_MAPPING_VERSION
         || usize::from(trace.channel) >= PWM_RTL_CHANNELS
-        || trace.frames.len() != PWM_RTL_TRACE_FRAMES
+        || !matches!(
+            trace.frames.len(),
+            PWM_RTL_TRACE_FRAMES | PWM_RTL_EXTENDED_TRACE_FRAMES
+        )
     {
         return Err(reject("RTL trace shape is outside the mapping policy"));
     }
+    validate_quiescent_extension(trace)?;
     let model =
         btor2::parse_component_bytes(model_bytes, &[PWM_RTL_STEP_ROOT, PWM_RTL_OUTPUT_ROOT])
             .map_err(|error| reject(format!("RTL model parse failed: {error}")))?;
@@ -446,6 +473,33 @@ pub fn map_pwm_mmio_workflow(
         traces,
         invalid_rtl_members: 0,
     })
+}
+
+/// Append one complete source-derived four-bit phase cycle without any
+/// additional firmware write.
+pub fn extend_pwm_rtl_trace_one_phase_cycle(
+    trace: &PwmRtlTrace,
+) -> Result<PwmRtlTrace, PwmRtlMappingError> {
+    if trace.version != PWM_RTL_MAPPING_VERSION
+        || usize::from(trace.channel) >= PWM_RTL_CHANNELS
+        || trace.frames.len() != PWM_RTL_TRACE_FRAMES
+    {
+        return Err(reject("base RTL trace shape is outside the mapping policy"));
+    }
+    let mut quiescent = *trace
+        .frames
+        .last()
+        .ok_or_else(|| reject("base RTL trace is empty"))?;
+    quiescent.enable_write = 0;
+    quiescent.invert_write = 0;
+    quiescent.parameter_write = 0;
+    quiescent.duty_cycle_write = 0;
+    quiescent.blink_parameter_write = 0;
+    let mut extended = trace.clone();
+    extended
+        .frames
+        .extend(std::iter::repeat_n(quiescent, PWM_RTL_PHASE_CYCLE_FRAMES));
+    Ok(extended)
 }
 
 #[cfg(test)]
@@ -624,5 +678,45 @@ mod tests {
             );
             assert_eq!(replay.observations.last().unwrap().step, 15);
         }
+    }
+
+    #[test]
+    fn one_phase_cycle_is_fixed_quiescent_and_discriminating() {
+        let model = include_bytes!(
+            "../corpus/rtl/opentitan-pwm-channel-family/generated/firmware-trace-6.btor2"
+        );
+        let replays = (0..6)
+            .map(|channel| {
+                let base = map_pwm_mmio_behavior(channel, &behavior(channel)).unwrap();
+                let extended = extend_pwm_rtl_trace_one_phase_cycle(&base).unwrap();
+                assert_eq!(extended.frames.len(), PWM_RTL_EXTENDED_TRACE_FRAMES);
+                assert!(extended.frames[PWM_RTL_TRACE_FRAMES..].iter().all(|frame| {
+                    frame.enable_write == 0
+                        && frame.invert_write == 0
+                        && frame.parameter_write == 0
+                        && frame.duty_cycle_write == 0
+                        && frame.blink_parameter_write == 0
+                }));
+                replay_pwm_rtl_trace(model, &extended).unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert!(replays.iter().all(|replay| {
+            replay
+                .observations
+                .iter()
+                .any(|observation| observation.pwm != 0)
+        }));
+        assert_ne!(replays[0].observations, replays[1].observations);
+        assert!(
+            replays[1..]
+                .windows(2)
+                .all(|pair| pair[0].observations == pair[1].observations)
+        );
+
+        let base = map_pwm_mmio_behavior(1, &behavior(1)).unwrap();
+        let mut changed = extend_pwm_rtl_trace_one_phase_cycle(&base).unwrap();
+        changed.frames[PWM_RTL_TRACE_FRAMES].parameter_write = 1;
+        assert!(replay_pwm_rtl_trace(model, &changed).is_err());
+        assert!(extend_pwm_rtl_trace_one_phase_cycle(&changed).is_err());
     }
 }

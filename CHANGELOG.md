@@ -7,7 +7,9 @@
   independent source-bound BTOR2 replay. Authentic O0 and O2 builds map six
   valid channels identically and map all 250 invalid channels to zero RTL
   members. The initial 17-transition observation window is retained as a
-  negative result because every PWM observation remains zero.
+  negative result because every PWM observation remains zero. Its predeclared
+  16-transition quiescent continuation then exposes two non-empty behavioral
+  classes without changing the MMIO schedule or tuning the horizon.
 
 - Add a pinned six-channel OpenTitan PWM RTL source boundary with independently
   driven per-channel configuration fields and five separate register write
