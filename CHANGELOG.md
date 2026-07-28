@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- Add an exact, fail-closed translator from the retained 16-event compiled
+  OpenTitan PWM MMIO schedule into complete per-frame RTL valuations, plus an
+  independent source-bound BTOR2 replay. Authentic O0 and O2 builds map six
+  valid channels identically and map all 250 invalid channels to zero RTL
+  members. The initial 17-transition observation window is retained as a
+  negative result because every PWM observation remains zero. Its predeclared
+  16-transition quiescent continuation then exposes two non-empty behavioral
+  classes without changing the MMIO schedule or tuning the horizon. A bounded
+  canonical composed certificate now binds the nested firmware evidence and
+  pinned RTL source, while byte-starting verification reconstructs six
+  members, 198 transitions and 204 observations. Exhaustive codec drift,
+  caller-source drift and checksum-valid semantic forgeries refuse.
+
+- Add a pinned six-channel OpenTitan PWM RTL source boundary with independently
+  driven per-channel configuration fields and five separate register write
+  domains. Its 39 semantic inputs all remain within the exact 64-bit word
+  policy, and a public regression test rejects missing, grouped or oversized
+  boundary words. MMIO translation and RTL evidence remain open, so no novelty
+  or production claim results.
+
+- Retain the first source-bound predicate-to-RTL binding experiment as a
+  fail-closed result. The existing RTL harness groups channels by parity, while
+  the authentic firmware configures one runtime-selected channel. No complete
+  semantics-preserving input translation exists, so all six valid schedules
+  refuse before RTL production and invalid inputs still create no RTL member.
+  The next candidate requires independently driven per-channel RTL inputs.
+
 ## 0.31.0 - 2026-07-28
 
 - Add a canonical bounded certificate and static portfolio for the exact

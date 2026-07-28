@@ -16,6 +16,17 @@ every odd channel consumes class 1 traffic. This is an explicit integration
 contract, not a discovered environmental assumption. The generated 2, 4, and
 6-channel models preserve those inputs and the complete channel equations.
 
+`firmware-trace-harness.sv` is the stricter source-binding boundary. It exposes
+independent enable, invert, parameter, duty-cycle and blink-parameter write
+domains plus complete per-channel values. The generated
+`firmware-trace-6.btor2` model retains 39 semantic input words, plus the clock,
+and does not group channels by parity or merge register write domains.
+Configuration values use the fixture's explicit four-bit beat-domain scale;
+the firmware mapping must reject phase-tick words that are not exactly
+divisible by 4,096.
+They are a prerequisite for exact MMIO-to-RTL translation, not evidence that
+such translation has passed.
+
 Pinned Yosys cannot consume the generated `pwm_reg2hw_t` structure. The build
 therefore authenticates the full package and mechanically lowers only the
 core's register-structure field references to width-equivalent ports. It
@@ -40,6 +51,14 @@ scripts/build-opentitan-pwm-symbolic-class-family-v1.sh \
   /tmp/symbolic-class-2.btor2 \
   /tmp/symbolic-class-4.btor2 \
   /tmp/symbolic-class-6.btor2
+```
+
+Regenerate the per-channel firmware-trace models with:
+
+```console
+scripts/build-opentitan-pwm-firmware-trace-family-v1.sh \
+  /path/to/pinned/yosys \
+  /tmp/firmware-trace-6.btor2
 ```
 
 The retained models are property-free source boundaries for extraction

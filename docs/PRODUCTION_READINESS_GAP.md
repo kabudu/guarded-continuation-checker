@@ -776,6 +776,37 @@ governance, valid-class RTL composition, hosted reproduction, compatibility
 history, maintained baselines and independent assessment remain open. No
 production row closes.
 
+The source-bound
+[predicate-to-RTL binding follow-up](OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
+fails before evidence production because the retained RTL harness groups
+channels by parity and cannot represent exact selected-channel firmware
+writes. The valid-class RTL composition row remains open. A replacement
+per-channel harness must still pass complete input mapping, zero invalid RTL
+members, independent replay, hostile controls, deterministic artifacts,
+resource governance, hosted reproduction, three-platform API checks, exact
+fallback, maintained comparison and independent assessment.
+
+The replacement
+[exact MMIO-to-RTL mapping](OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md) now passes
+complete schedule translation, pinned-source replay, O0/O2 semantic agreement,
+six valid RTL members and zero invalid RTL members. Its first observation
+window is non-discriminating because all PWM outputs remain zero. The
+predeclared one-cycle continuation now exposes two non-empty behavioral classes
+with all continuation writes disabled. Hostile evidence controls, a governed
+artifact, hosted reproduction and maintained comparison remain open, so the
+valid-class RTL composition row does not close.
+
+The proof-carrying follow-up closes the local artifact and hostile-control
+parts of that gap. Its bounded canonical O0 and O2 artifacts are 17,834 and
+7,889 bytes. A byte-starting verifier checks the nested firmware certificate,
+reconstructs the exact mapping and independently reparses and replays all six
+RTL members, 198 transitions and 204 observations. Every byte mutation,
+truncation and extension refuses, as do three caller-source drift cases and two
+checksum-valid semantic forgeries. Hosted Linux reproduction, process-resource
+governance, compatibility history, three-platform API evidence, maintained
+comparison and independent assessment remain open, so the production row still
+does not close.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

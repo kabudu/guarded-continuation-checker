@@ -759,6 +759,34 @@ finishes in 0.47 seconds; O2 peaks at 4.39 MiB and finishes in 0.06 seconds on
 the local arm64 host. These are local mechanism measurements, not portable
 service limits.
 
+The first
+[predicate-to-RTL binding experiment](docs/OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
+fails closed before evidence production. The retained RTL harness groups
+channels by parity, but the authentic firmware configures one selected
+channel. No complete semantics-preserving input translation exists. The next
+candidate requires independently driven per-channel inputs derived from the
+MMIO words.
+
+The replacement
+[per-channel RTL boundary](docs/OPENTITAN_PWM_PER_CHANNEL_RTL_BOUNDARY_V1.md)
+now passes its local source gate. Pinned Yosys produces a deterministic
+six-channel model with 39 independently addressable semantic inputs, all
+within the exact 64-bit word policy.
+
+The first
+[exact MMIO-to-RTL mapping cycle](docs/OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md)
+also passes its translation and independent replay gates. Authentic O0 and O2
+firmware produce six valid RTL traces and zero invalid members with identical
+semantics. Its 17-transition window is retained as non-discriminating because
+all PWM observations remain zero. The predeclared one-cycle quiescent
+continuation then passes: every valid trace becomes non-zero and exact replay
+separates channel 0 from channels 1 through 5. A bounded canonical composed
+certificate now nests the compiled-firmware evidence, binds the pinned RTL
+source and replays all six members from caller-supplied sources. O0 and O2
+artifacts are 17,834 and 7,889 bytes and reject exhaustive codec drift,
+source drift and checksum-valid semantic forgeries. Maintained comparison,
+hosted reproduction and independent assessment remain open.
+
 An isolated research extension explores
 [certified causal counterexample analysis](docs/CAUSAL_ANALYSIS.md). It computes
 a replay-checked, 1-minimal sufficient set of input segments for an earliest

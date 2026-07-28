@@ -1019,3 +1019,35 @@ preserves a static exact fallback. This improves the product mechanism but
 does not distinguish it from proof-carrying symbolic execution or established
 portfolio verification. Maintained identical-scope comparisons and independent
 expert review remain open, so the novelty status does not change.
+
+The
+[predicate-to-RTL binding follow-up](OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
+fails its source-binding gate. The retained RTL harness groups channels by
+parity, so its inputs cannot represent the firmware's exact selected-channel
+writes without also asserting writes to untouched siblings. No RTL answer is
+produced and the novelty status does not change.
+Firmware-aware hardware verification, hardware-software co-verification,
+transaction-level modeling and bounded trace validation are established
+closest work. No novelty claim exists without focused prior-art comparison,
+an identical-scope maintained-tool baseline and independent expert assessment.
+
+The replacement
+[exact MMIO-to-RTL mapping](OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md) now translates
+and independently replays all six valid firmware schedules while mapping all
+250 invalid inputs to no RTL member. Its first bounded window produces only
+zero PWM observations. The predeclared one-cycle continuation now exposes two
+non-empty classes without per-formula calibration: input 0 overwrites channel
+0 with the selected configuration, while inputs 1 through 5 retain channel 0's
+first configuration. This strengthens the binary-to-RTL composition candidate
+but does not establish novelty. Comparable hardware-software trace validation,
+maintained-tool comparison and independent expert assessment remain mandatory.
+
+The canonical composed-certificate follow-up makes that local result
+proof-carrying. It binds the nested compiled-firmware evidence and pinned RTL
+source, reconstructs six members from caller-supplied sources and rejects both
+byte-level corruption and checksum-valid semantic forgeries. This is stronger
+product evidence, but it does not by itself distinguish GCC from established
+proof-carrying hardware-software co-verification or transaction-level replay.
+The translator and verifier also share the same versioned mapping policy.
+Identical-scope maintained comparison, focused prior-art review and independent
+expert assessment therefore remain mandatory before any novelty claim.
