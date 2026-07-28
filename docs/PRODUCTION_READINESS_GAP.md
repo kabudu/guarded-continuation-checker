@@ -778,11 +778,13 @@ production row closes.
 
 The source-bound
 [predicate-to-RTL binding follow-up](OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
-is predeclared before implementation. It cannot close the valid-class RTL
-composition row until complete input mappings, zero invalid RTL members,
-independent BTOR2 replay, hostile controls, deterministic artifacts, resource
-governance, hosted reproduction, three-platform API checks, exact fallback,
-maintained comparison and independent assessment all pass.
+fails before evidence production because the retained RTL harness groups
+channels by parity and cannot represent exact selected-channel firmware
+writes. The valid-class RTL composition row remains open. A replacement
+per-channel harness must still pass complete input mapping, zero invalid RTL
+members, independent replay, hostile controls, deterministic artifacts,
+resource governance, hosted reproduction, three-platform API checks, exact
+fallback, maintained comparison and independent assessment.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
