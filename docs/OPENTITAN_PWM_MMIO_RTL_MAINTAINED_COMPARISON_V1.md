@@ -160,9 +160,9 @@ while the Darwin-generated SHA-256 is
 
 The raw models were not retained because the upload step was skipped after the
 comparison failed. This is a workflow evidence-retention defect, not a reason
-to reinterpret the result. The next run keeps the same failing criterion and
-changes only artifact upload to execute under `always()`. The hosted gate
-remains open.
+to reinterpret the result. The next run keeps the same failing criterion,
+copies the synthesized SMT-LIB model into the result directory and executes
+artifact upload under `always()`. The hosted gate remains open.
 
 ## Trust-boundary comparison
 

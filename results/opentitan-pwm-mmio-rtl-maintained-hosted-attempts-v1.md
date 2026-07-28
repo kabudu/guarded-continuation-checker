@@ -24,7 +24,8 @@ The raw SMT-LIB SHA-256 differed:
 The frozen v1 gate required the complete semantic manifest, including the raw
 SMT-LIB hash, to be byte-identical. The run therefore failed correctly. The
 upload step did not run after the failed comparison, exposing a separate
-workflow defect. The next workflow revision retains available evidence under
+workflow defect. The next workflow revision copies the synthesized SMT-LIB
+model into the result directory and retains available evidence under
 `always()` without changing any comparison criterion.
 
 No hosted gate closes from this attempt. A future portability-v2 criterion
