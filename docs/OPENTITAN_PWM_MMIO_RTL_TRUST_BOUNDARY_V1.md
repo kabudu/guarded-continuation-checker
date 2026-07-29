@@ -138,3 +138,34 @@ size is a setup observation until a reproducible published image exists.
 
 This refinement does not change the cohort, routes, payload definitions,
 trial count, semantic answer, hostile controls or performance thresholds.
+
+## Identity v2 result
+
+Two post-predeclaration cycles again pass every semantic, hostile and resource
+threshold. Their certificates and semantic summaries are byte-identical, but
+identity v2 fails because its clean GCC consumer executables differ:
+
+- cycle 3:
+  `e42806595114f252b27047db8c0830e53c607cc0f613898405c332db6dcfb888`;
+- cycle 4:
+  `e7545c5c20f2c2da5e05ea3b066a229532357e04e805426435f2afcde9fa81c8`.
+
+The binaries have the same Mach-O UUID. Byte comparison localizes the drift to
+target-directory-dependent build content. Compiler path-remapping flags do not
+remove it. Two diagnostic clean builds using one deleted-and-recreated stable
+target path are byte-identical with SHA-256
+`7403908f5ea71119c2fa24236cc167f44608c44588e5bcb64ceeb6fe6593bada`.
+No positive trust-boundary result is admitted from v2.
+
+## Predeclared identity v3
+
+Version 3 atomically reserves one fixed local target path, refuses concurrent
+use, removes it during bounded cleanup and rebuilds the consumer there from
+scratch. The complete executable remains retained and its SHA-256 remains an
+identity field. Two new complete cycles must produce byte-identical executable
+bytes, identity manifests, certificates and semantic summaries.
+
+The fixed path affects tool construction only. It does not change consumer
+code, transferred inputs, measured consumer commands, trial count, semantic
+answer, hostile controls or thresholds. Resource and freshly assembled image
+observations remain variable and fully retained.

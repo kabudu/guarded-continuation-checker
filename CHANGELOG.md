@@ -9,8 +9,10 @@
   rechecking with full angr, Yosys and Z3 regeneration. Two v1 cycles pass the
   semantic, hostile, wall-time and memory gates but fail a byte-identical
   manifest rule because resource observations and fresh angr image sizes vary.
-  Identity v2 is predeclared to separate deterministic identities from retained
-  variable resource observations. No positive result exists yet.
+  Identity v2 separates those classes but retains a clean Rust consumer binary
+  difference caused by Cargo's varying target path. Identity v3 is predeclared
+  to use an atomically reserved stable clean-build path while retaining the
+  executable as evidence. No positive result exists yet.
 
 - Add a manual hosted Linux evidence workflow for the maintained OpenTitan PWM
   MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the
