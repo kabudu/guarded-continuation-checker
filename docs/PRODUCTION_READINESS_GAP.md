@@ -622,9 +622,9 @@ measurements. Its 82,428-byte revision-batch envelope is 29.41% smaller than the
 retained zstd result. The maintained-proof-package negative control is 73.23%
 larger than zstd. Hosted run 29893368169 reproduces the exact envelope identity
 on Linux, macOS, and Windows and the Linux resource result with 68,968,448-byte
-peak RSS. QatQ 0.1.5 preserves the closed opaque-byte API boundary with exact-byte
-containers and a bounded byte-chunk visitor while preserving the frozen
-envelope.
+peak RSS. QatQ 0.3.0 preserves the closed opaque-byte API boundary with
+exact-byte containers and a bounded byte-chunk visitor while preserving the
+frozen envelope.
 Compatibility history and independent review remain open, so the transport is
 not in `firmware-rtl-v1` and no production-readiness row closes.
 
