@@ -22,6 +22,7 @@ pub mod btor2_region_equivalence;
 pub mod btor2_region_extract;
 pub mod btor2_region_property;
 pub mod btor2_search;
+pub mod compiled_mmio_branching_dag;
 pub mod compiled_mmio_certificate;
 pub mod compiled_mmio_explicit_transcript;
 pub mod compiled_mmio_file;
