@@ -227,3 +227,7 @@ Tool installation, model generation, solving, checking, artifact bytes and
 peak memory must all remain visible. Comparing GCC's exhaustive hostile-corpus
 verification with one maintained replay is not an equivalent task and remains
 prohibited.
+
+The exact consumer-task protocol, payload definitions, five-trial resource
+gate and claim boundary are
+[predeclared separately](OPENTITAN_PWM_MMIO_RTL_TRUST_BOUNDARY_V1.md).

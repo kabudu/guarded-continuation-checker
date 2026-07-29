@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Predeclare an identical-task trust-boundary comparison for the maintained
+  OpenTitan PWM MMIO-to-RTL cohort. It separates producer work and tool setup
+  from five fresh-process consumer trials, counts both transfer payloads,
+  requires the same complete semantic answer, and compares certificate
+  rechecking with full angr, Yosys and Z3 regeneration. No result exists yet.
+
 - Add a manual hosted Linux evidence workflow for the maintained OpenTitan PWM
   MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the
   complete angr and RTL workflow, and retains complete resource evidence.
