@@ -104,3 +104,40 @@ The result isolates a concrete product gap: exact RV32M division semantics are
 required before GCC can qualify this public OpenSBI UART path. Any such support
 must be specified, implemented and tested as a separate experiment before this
 unchanged cohort is retried.
+
+## Retry after separate RV32M support
+
+The separately specified RV32M division experiment adds exact `DIV`, `DIVU`,
+`REM` and `REMU` semantics. Retrying this unchanged cohort then advances past
+the retained input-16 refusal and constructs exact artifacts for all 256
+inputs.
+
+Two clean builds produce byte-identical firmware, symbols and graph bytes.
+Dense, tree, trace-family and explicit routes preserve the same 102,208 scalar
+steps and 12 canonical terminal behaviours:
+
+- dense graph: 56,032 bytes, 596 nodes, 653 edges and 596 unique decodes;
+- trace family: 108,502 bytes and 4,790 decoded transitions; and
+- explicit transcript: 2,124,996 bytes and 102,208 decoded transitions.
+
+The dense graph is 0.516 times the trace-family size and performs 0.124 times
+its decode work. The retained hostile qualifier refuses all 112,072 generated
+cases.
+
+However, the qualification fails its first and only frozen local resource
+cycle:
+
+| Route | Median elapsed | Median peak RSS |
+| --- | ---: | ---: |
+| Dense graph | 0.02 s | 8,601,600 bytes |
+| Tree graph | 0.02 s | 6,619,136 bytes |
+| Trace family | 0.01 s | 8,962,048 bytes |
+
+Dense memory remains within the predeclared limit and dense time equals the
+tree baseline. The dense-to-trace time ratio is 2.0, exceeding the frozen 1.25
+limit. Durations are close to local timer resolution, but the gate was fixed
+before measurement and is not relaxed after seeing the result.
+
+The cohort therefore establishes exact support, deterministic compression and
+hostile refusal, but not qualified consumer performance. No hosted
+qualification or production-support claim follows from this retry.
