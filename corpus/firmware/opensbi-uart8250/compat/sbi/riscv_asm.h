@@ -1,0 +1,6 @@
+#ifndef GCC_OPENSBI_RISCV_ASM_H
+#define GCC_OPENSBI_RISCV_ASM_H
+
+#define PAGE_SIZE 4096UL
+
+#endif

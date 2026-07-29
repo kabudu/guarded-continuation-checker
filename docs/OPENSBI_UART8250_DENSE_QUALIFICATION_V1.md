@@ -73,3 +73,34 @@ Passing would establish transfer to one pinned OpenSBI UART source under a
 GCC-authored bounded caller. It would add evidence for width-polymorphic MMIO
 and bounded polling, not arbitrary OpenSBI support, universal performance,
 production qualification or release readiness.
+
+## Local result
+
+The qualification is refused before graph construction, so it does not reach
+the representation or resource gates.
+
+The initial pre-measurement caller combined halfword register access with a
+byte register stride for input 1. That is not a hardware-valid 8250 layout and
+caused the real transmitter-ready loop to exceed the bounded step policy. The
+caller was corrected to retain all three widths and shifts while ensuring
+width-aligned register addresses.
+
+With that correction, inputs 0 through 15 are admitted. Input 16 selects the
+frozen nonzero-baud path. OpenSBI's exact baud-divisor expression compiles to
+RV32M `DIVU` at program counter `0x800000bc`. The existing bounded executor
+refuses that instruction:
+
+```text
+compiled-MMIO decode graph: input 16: bounded RV32IMC extraction:
+unsupported instruction at 0x800000bc: Divu(RType(47568307))
+```
+
+No timing cycle was run and no graph, trace-family or explicit artifact was
+claimed. Removing the nonzero-baud path after observing the refusal would
+change the frozen cohort. Adding division support inside this qualification
+would change the predeclared executor boundary. Both are disallowed.
+
+The result isolates a concrete product gap: exact RV32M division semantics are
+required before GCC can qualify this public OpenSBI UART path. Any such support
+must be specified, implemented and tested as a separate experiment before this
+unchanged cohort is retried.
