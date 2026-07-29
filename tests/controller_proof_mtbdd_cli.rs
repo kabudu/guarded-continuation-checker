@@ -1063,7 +1063,8 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
     );
     write_executable(&executable, script.as_bytes());
 
-    let tool = ControllerSplitEvidenceTool::discover(&executable).unwrap();
+    let tool =
+        retry_executable_busy(|| ControllerSplitEvidenceTool::discover(&executable)).unwrap();
     let failure = tool
         .verify_set_observed(
             Path::new("evidence"),
@@ -1079,7 +1080,8 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
         InvocationStatus::Failed(FailureClass::Response)
     );
 
-    let resource_tool = ControllerSplitResourceTool::discover(&executable).unwrap();
+    let resource_tool =
+        retry_executable_busy(|| ControllerSplitResourceTool::discover(&executable)).unwrap();
     let resource_failure = resource_tool
         .verify_set_observed(
             Path::new("evidence"),
@@ -1096,7 +1098,8 @@ fn typed_split_evidence_client_rejects_overflowing_helper_totals() {
         InvocationStatus::Failed(FailureClass::Response)
     );
 
-    let observability_tool = ControllerSplitObservabilityTool::discover(&executable).unwrap();
+    let observability_tool =
+        retry_executable_busy(|| ControllerSplitObservabilityTool::discover(&executable)).unwrap();
     let observability_failure = observability_tool
         .verify_set_observed(
             Path::new("evidence"),
