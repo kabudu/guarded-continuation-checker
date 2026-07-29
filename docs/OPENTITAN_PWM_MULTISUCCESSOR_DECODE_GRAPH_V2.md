@@ -131,3 +131,51 @@ solver acceleration, a safety proof independent of bounded execution,
 production readiness or superiority over established control-flow graph and
 trace-compression systems. A passing controlled result would require
 qualification on unrelated public firmware before any broader claim.
+
+## Local result
+
+Two clean sweeps are byte-identical across every firmware binary, symbol
+table, artifact and normalized result. All routes recover identical complete
+semantics for all 256 inputs.
+
+| Classes | Graph bytes | Trace-family bytes | Size ratio | Graph decodes | Trace-family decodes | Decode ratio |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 7,872 | 17,413 | 45.21% | 316 | 1,113 | 28.39% |
+| 2 | 8,759 | 23,332 | 37.54% | 367 | 1,568 | 23.41% |
+| 4 | 10,726 | 35,476 | 30.23% | 470 | 2,488 | 18.89% |
+| 8 | 13,979 | 59,314 | 23.57% | 667 | 4,334 | 15.39% |
+| 16 | 20,803 | 107,082 | 19.43% | 1,059 | 8,006 | 13.23% |
+| 32 | 34,451 | 202,618 | 17.00% | 1,843 | 15,350 | 12.01% |
+
+At 32 classes, the rejected single-successor DAG is 264,398 bytes. The
+multi-successor graph is 34,451 bytes. Graph nodes and bytes increase
+monotonically across the frozen cohort.
+
+The hostile matrix refuses 193,228 cases. These cover every single-byte
+mutation, every truncation, extensions, firmware and symbol substitutions,
+missing and additional edges, duplicate edges, missing nodes and terminal
+drift across all six artifacts.
+
+## Timing falsification
+
+The five-trial warm-consumer resource cycle fails the frozen time limit at two
+class counts and the RSS limit at one class count:
+
+| Classes | Graph median | Trace-family median | Graph maximum RSS | Trace-family minimum RSS | Time | RSS |
+| ---: | ---: | ---: | ---: | ---: | :--- | :--- |
+| 1 | 0.01 s | 0.01 s | 4,177,920 | 4,177,920 | pass | pass |
+| 2 | 0.01 s | 0.01 s | 10,485,760 | 4,259,840 | pass | fail |
+| 4 | 0.01 s | 0.01 s | 6,406,144 | 6,438,912 | pass | pass |
+| 8 | 0.01 s | 0.01 s | 4,358,144 | 6,586,368 | pass | pass |
+| 16 | 0.02 s | 0.01 s | 8,699,904 | 6,914,048 | fail | pass |
+| 32 | 0.02 s | 0.01 s | 8,962,048 | 7,569,408 | fail | pass |
+
+The process durations are near the local timer resolution, but the
+predeclared gate does not permit recalibration or omission. Version 2 is
+therefore not fully admitted.
+
+The implementation performs a balanced-tree program-counter lookup on every
+scalar replay step. The closest trace-family consumer advances directly
+through a vector. A separately predeclared successor may test a dense
+source-offset index while preserving the same graph bytes, scalar semantics
+and refusal boundary.
