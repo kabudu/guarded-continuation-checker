@@ -290,6 +290,13 @@ sha256_file() {
   fi
 }
 
+python3 "$repo/scripts/canonicalize-yosys-smt2-portable-v2.py" \
+  "$scratch/firmware-trace-6.smt2" \
+  "$scratch/result/firmware-trace-6.portable.smt2" \
+  "$scratch/result/smt2-generator-banner.txt" \
+  "$expected_yosys" \
+  opentitan_pwm_firmware_trace_harness
+
 {
   echo "opentitan_pwm_mmio_rtl_maintained_comparison_version=1"
   echo "angr_version=9.3.0"
@@ -311,6 +318,20 @@ sha256_file() {
     "$(sha256_file "$scratch/result/o0-maintained-semantics.txt")"
   echo "status=complete"
 } >"$scratch/result/semantic-manifest-v1.txt"
+
+{
+  echo "opentitan_pwm_mmio_rtl_portability_version=2"
+  echo "yosys_revision=$expected_yosys"
+  echo "banner_policy=remove_exactly_one_validated_generator_banner"
+  printf 'portable_smt2_sha256=%s\n' \
+    "$(sha256_file "$scratch/result/firmware-trace-6.portable.smt2")"
+  printf 'semantic_sha256=%s\n' \
+    "$(sha256_file "$scratch/result/o0-maintained-semantics.txt")"
+  echo "hostile_controls=11"
+  echo "profiles_semantically_identical=true"
+  echo "gcc_maintained_agreement=true"
+  echo "status=complete"
+} >"$scratch/result/portability-manifest-v2.txt"
 
 cp "$scratch/firmware-trace-6.smt2" \
   "$scratch/result/firmware-trace-6.smt2"

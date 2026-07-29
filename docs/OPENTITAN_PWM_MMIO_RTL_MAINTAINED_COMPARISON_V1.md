@@ -164,6 +164,32 @@ to reinterpret the result. The next run keeps the same failing criterion,
 copies the synthesized SMT-LIB model into the result directory and executes
 artifact upload under `always()`. The hosted gate remains open.
 
+### Hosted attempt 2 and portability v2
+
+Hosted
+[run 30408864467](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30408864467)
+fails the unchanged v1 gate and retains the complete Linux model. Exact
+comparison proves that only the first generator-comment line differs. It
+records AppleClang on Darwin and GNU C++ on Linux. The other 1,839 lines are
+byte-identical with SHA-256
+`bd0614bce84d54f935adb06ac7636ff3a3a1b67e1278ac71f3c3523024fcd03f`.
+
+Before a third hosted run, portability v2 is frozen as follows:
+
+1. validate that line one is a Yosys SMT-LIB generator banner binding the
+   pinned Yosys revision;
+2. validate that line two identifies the expected top module;
+3. retain the raw model, raw hash and complete generator banner;
+4. remove exactly line one from the portable comparison;
+5. require every remaining model byte and every normalized observation to
+   match the frozen local identities; and
+6. continue to require all eleven hostile controls and both-profile GCC
+   agreement.
+
+No other metadata or model content is normalized. This criterion establishes
+portable model-body reproduction if it passes; it does not establish
+production readiness or solver superiority.
+
 ## Trust-boundary comparison
 
 The maintained route answers the bounded semantic question by regenerating

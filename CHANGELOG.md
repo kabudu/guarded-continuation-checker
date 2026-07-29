@@ -4,11 +4,12 @@
 
 - Add a manual hosted Linux evidence workflow for the maintained OpenTitan PWM
   MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the
-  complete angr and RTL workflow, requires byte-identical semantic identity
-  with the local result, and retains complete resource evidence. No hosted
-  attempt preserves normalized semantics but fails the frozen raw SMT-LIB byte
-  identity. Failed-run artifact upload now executes unconditionally so the
-  exact platform difference can be diagnosed without weakening the gate.
+  complete angr and RTL workflow, and retains complete resource evidence.
+  Two hosted attempts preserve normalized semantics but fail the frozen raw
+  SMT-LIB byte identity. Retained models prove that only the host-specific
+  first-line generator banner differs. Portability v2 therefore validates and
+  retains that banner, removes exactly that line, and requires every remaining
+  model byte plus all semantic and hostile-control evidence to match.
 
 - Add an identical-scope maintained comparison for the proof-carrying OpenTitan
   PWM MMIO-to-RTL composition. Pinned angr independently derives the complete

@@ -32,8 +32,11 @@ jobs:
             scripts/build-opentitan-pwm-guarded-mmio-reference-v1.sh
           python3 -m py_compile \
             scripts/angr-guarded-mmio-domain-baseline-v1.py \
+            scripts/canonicalize-yosys-smt2-portable-v2.py \
             scripts/mmio-rtl-yosys-z3-baseline-v1.py \
-            scripts/test-mmio-rtl-maintained-hostile-v1.py
+            scripts/test-mmio-rtl-maintained-hostile-v1.py \
+            scripts/test-yosys-smt2-portable-v2.py
+          python3 scripts/test-yosys-smt2-portable-v2.py
       - name: Install pinned Z3
         run: |
           curl --fail --location --silent --show-error \
@@ -69,10 +72,12 @@ jobs:
             /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 \
             /tmp/opentitan-pwm-mmio-rtl-maintained-linux-v1
           diff -u \
-            results/opentitan-pwm-mmio-rtl-maintained-semantic-v1.txt \
-            /tmp/opentitan-pwm-mmio-rtl-maintained-linux-v1/semantic-manifest-v1.txt
+            results/opentitan-pwm-mmio-rtl-maintained-portability-v2.txt \
+            /tmp/opentitan-pwm-mmio-rtl-maintained-linux-v1/portability-manifest-v2.txt
           cat \
             /tmp/opentitan-pwm-mmio-rtl-maintained-linux-v1/semantic-manifest-v1.txt
+          cat \
+            /tmp/opentitan-pwm-mmio-rtl-maintained-linux-v1/portability-manifest-v2.txt
           cat \
             /tmp/opentitan-pwm-mmio-rtl-maintained-linux-v1/resources.csv
       - name: Retain hosted evidence
