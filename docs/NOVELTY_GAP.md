@@ -1056,3 +1056,12 @@ bounded semantics can be reproduced by a straightforward composition of
 established tools. A material mechanism distinction or advantage, focused
 prior-art review and independent expert assessment therefore remain mandatory
 before any novelty claim.
+
+The identical-consumer trust-boundary follow-up establishes a bounded
+deployment advantage, not a novelty result. On the frozen O2 cohort, GCC
+certificate verification is at least 71.50 times faster and uses at least 5.94
+times less peak RSS than regenerating the same answer with angr, Yosys and Z3.
+The GCC payload is about 3.50 times larger, and its clean tool build has a much
+higher observed memory peak. Proof-carrying verification is established prior
+art, so hosted reproduction, focused closest-system analysis and independent
+expert assessment remain mandatory before any novelty claim.

@@ -169,3 +169,33 @@ The fixed path affects tool construction only. It does not change consumer
 code, transferred inputs, measured consumer commands, trial count, semantic
 answer, hostile controls or thresholds. Resource and freshly assembled image
 observations remain variable and fully retained.
+
+## Identity v3 result
+
+Cycles 5 and 6 pass every predeclared gate. Their consumer executables,
+certificates, identity manifests and semantic summaries are byte-identical.
+The executable SHA-256 is
+`838a20e01092152058fc88aa1dd9c876de5a6a9082f37d1772be3e442befa8fb`,
+and the certificate SHA-256 is
+`90dfeff77ee5eeb32f0c578d3e9a37429bcf2b8665d79dea05983f83ab9c8cd3`.
+
+| Cycle | GCC median wall | Maintained median wall | GCC maximum RSS | Maintained minimum RSS |
+| --- | ---: | ---: | ---: | ---: |
+| 5 | 0.04 s | 2.89 s | 9,388,032 bytes | 68,075,520 bytes |
+| 6 | 0.04 s | 2.86 s | 11,436,032 bytes | 67,928,064 bytes |
+
+The least favorable observed advantage is 71.50 times in median warm wall time
+and 5.94 times in peak RSS. GCC transfers 110,831 bytes versus 31,679 bytes for
+the maintained route, a 3.50-times payload premium.
+
+The complete setup evidence remains material. Clean GCC consumer builds take
+21.64 and 21.33 seconds and peak near 1.88 GiB. Fresh angr image setup takes
+27.85 and 28.51 seconds; its observed image size still varies by 2,923 bytes.
+GCC certificate production takes 10.56 and 10.94 seconds. None of these costs
+is hidden inside the warm-consumer claim.
+
+The retained evidence is under
+[`results/opentitan-pwm-mmio-rtl-trust-boundary-v1`](../results/opentitan-pwm-mmio-rtl-trust-boundary-v1/README.md).
+This closes the local identical-consumer trust-boundary gate for the frozen
+cohort. Hosted reproduction, compatibility history and independent assessment
+remain open.
