@@ -1,0 +1,16 @@
+schema_version,route,trial,elapsed_seconds,peak_rss_bytes,time_backend,platform
+1,graph,1,0.27,10596352,gnu,Linux-x86_64
+1,graph,2,0.27,10596352,gnu,Linux-x86_64
+1,graph,3,0.03,10620928,gnu,Linux-x86_64
+1,graph,4,0.27,10481664,gnu,Linux-x86_64
+1,graph,5,0.27,10452992,gnu,Linux-x86_64
+1,graph-btree,1,0.27,10592256,gnu,Linux-x86_64
+1,graph-btree,2,0.28,10731520,gnu,Linux-x86_64
+1,graph-btree,3,0.27,10571776,gnu,Linux-x86_64
+1,graph-btree,4,0.27,10592256,gnu,Linux-x86_64
+1,graph-btree,5,0.27,10739712,gnu,Linux-x86_64
+1,trace-family,1,0.27,10510336,gnu,Linux-x86_64
+1,trace-family,2,0.04,10731520,gnu,Linux-x86_64
+1,trace-family,3,0.27,10498048,gnu,Linux-x86_64
+1,trace-family,4,0.27,10489856,gnu,Linux-x86_64
+1,trace-family,5,0.27,10547200,gnu,Linux-x86_64
