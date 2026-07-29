@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.32.0 - 2026-07-29
+## 0.32.0 - 2026-07-30
 
 - Add an artifact-compatible successor-index replay route for compiled-MMIO
   decode graphs. On the pinned OpenSBI UART cohort it preserves all 102,208

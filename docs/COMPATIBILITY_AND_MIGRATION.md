@@ -1,8 +1,8 @@
 # Compatibility and migration policy
 
 Status: release-candidate policy. The support clock begins only with the first
-production release. Guarded Continuation Checker v0.28.0 and the current
-unreleased work remain an evaluation-ready research prototype.
+production-qualified release. Guarded Continuation Checker releases through
+v0.32.0 remain evaluation-ready research prototypes.
 
 ## Compatibility boundary
 

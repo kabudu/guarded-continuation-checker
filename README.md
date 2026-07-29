@@ -172,12 +172,14 @@ CI runs do not substitute for external evaluation.
 The repository retains experimental mechanisms, closest baselines, negative
 results and retractions. Recent compiled-firmware work includes:
 
-- a [single-successor continuation DAG](docs/OPENTITAN_PWM_BRANCHING_CONTINUATION_DAG_V1.md)
-  that was rejected after its apparent compression proved to be whole-trace
-  grouping; and
-- a [multi-successor decode graph](docs/OPENTITAN_PWM_MULTISUCCESSOR_DECODE_GRAPH_V2.md)
-  that strongly reduced representation and unique decoding on a controlled
-  OpenTitan cohort but failed its frozen local resource gate.
+- a [source-bound MMIO-to-RTL certificate](docs/OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md)
+  that composes exact compiled-firmware behavior with independently rebuilt
+  RTL members;
+- a [dense decode graph](docs/ZEPHYR_SIFIVE_GPIO_DENSE_QUALIFICATION_V1.md)
+  reproduced on pinned public Zephyr firmware across arm64 and Linux x86-64;
+  and
+- an [OpenSBI successor-index replay](docs/MMIO_SUCCESSOR_INDEX_REPLAY_V1.md)
+  retained as a negative result after it missed the frozen improvement gate.
 
 These results narrow the next experiments. They do not alter the supported
 product profile or create a production claim.

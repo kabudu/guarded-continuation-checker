@@ -66,6 +66,16 @@ explicitly includes them.
 - [Live-slice quotient experiment v1](OPENTITAN_PWM_LIVE_SLICE_QUOTIENT_EXPERIMENT_V1.md)
 - [Branching continuation DAG v1](OPENTITAN_PWM_BRANCHING_CONTINUATION_DAG_V1.md)
 - [Multi-successor decode graph v2](OPENTITAN_PWM_MULTISUCCESSOR_DECODE_GRAPH_V2.md)
+- [Dense decode index v3](OPENTITAN_PWM_DENSE_DECODE_INDEX_V3.md)
+- [Zephyr SiFive GPIO qualification v1](ZEPHYR_SIFIVE_GPIO_DENSE_QUALIFICATION_V1.md)
+- [OpenSBI UART 8250 qualification v1](OPENSBI_UART8250_DENSE_QUALIFICATION_V1.md)
+- [Exact RV32M division semantics v1](RV32M_DIVISION_SEMANTICS_V1.md)
+- [Successor-index replay v1](MMIO_SUCCESSOR_INDEX_REPLAY_V1.md)
+- [Per-channel RTL boundary v1](OPENTITAN_PWM_PER_CHANNEL_RTL_BOUNDARY_V1.md)
+- [Predicate-to-RTL binding experiment v1](OPENTITAN_PWM_PREDICATE_RTL_BINDING_EXPERIMENT_V1.md)
+- [MMIO-to-RTL mapping v1](OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md)
+- [Maintained MMIO-to-RTL comparison v1](OPENTITAN_PWM_MMIO_RTL_MAINTAINED_COMPARISON_V1.md)
+- [MMIO-to-RTL trust boundary v1](OPENTITAN_PWM_MMIO_RTL_TRUST_BOUNDARY_V1.md)
 
 The documents retain both passing and falsified mechanisms. A research result
 does not enter the production support profile merely by existing in the
