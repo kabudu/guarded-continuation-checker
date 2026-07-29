@@ -96,4 +96,3 @@ cp "$stage/upstream/LICENSE" "$output/UPSTREAM_LICENSE.txt"
   echo "status=complete"
 } > "$output/summary.txt"
 cat "$output/summary.txt"
-

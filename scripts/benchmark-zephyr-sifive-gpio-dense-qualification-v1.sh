@@ -76,4 +76,3 @@ for route in graph graph-btree trace-family; do
 done
 
 echo "Zephyr SiFive GPIO resources status=MEASURED trials=$trials output=$output"
-
