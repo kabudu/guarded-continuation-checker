@@ -3,7 +3,10 @@ use guarded_continuation_checker::{
         verify_compiled_mmio_branching_dag_bytes, verify_compiled_mmio_trace_family_bytes,
     },
     compiled_mmio_certificate::parse_compiled_mmio_symbols,
-    compiled_mmio_decode_graph::verify_compiled_mmio_decode_graph_bytes,
+    compiled_mmio_decode_graph::{
+        verify_compiled_mmio_decode_graph_bytes,
+        verify_compiled_mmio_decode_graph_bytes_btree_baseline,
+    },
     compiled_mmio_explicit_transcript::verify_explicit_compiled_mmio_transcript,
 };
 use std::{env, fs, process::ExitCode};
@@ -34,6 +37,16 @@ fn run() -> Result<(), String> {
                 verified.scalar_path_steps,
             )
         }
+        "graph-btree" => {
+            let verified =
+                verify_compiled_mmio_decode_graph_bytes_btree_baseline(&artifact, &image, symbols)
+                    .map_err(|error| error.to_string())?;
+            println!("graph_edges={}", verified.graph_edges);
+            (
+                verified.unique_instruction_decodes,
+                verified.scalar_path_steps,
+            )
+        }
         "dag" => {
             let verified = verify_compiled_mmio_branching_dag_bytes(&artifact, &image, symbols)
                 .map_err(|error| error.to_string())?;
@@ -52,7 +65,11 @@ fn run() -> Result<(), String> {
                 verified.decoded_instruction_transitions,
             )
         }
-        _ => return Err("route must be graph, dag, trace-family or explicit".to_string()),
+        _ => {
+            return Err(
+                "route must be graph, graph-btree, dag, trace-family or explicit".to_string(),
+            );
+        }
     };
     println!("route={route}");
     println!("decoded_transitions={decoded}");
