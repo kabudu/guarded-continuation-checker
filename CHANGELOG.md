@@ -6,7 +6,11 @@
   OpenTitan PWM MMIO-to-RTL cohort. It separates producer work and tool setup
   from five fresh-process consumer trials, counts both transfer payloads,
   requires the same complete semantic answer, and compares certificate
-  rechecking with full angr, Yosys and Z3 regeneration. No result exists yet.
+  rechecking with full angr, Yosys and Z3 regeneration. Two v1 cycles pass the
+  semantic, hostile, wall-time and memory gates but fail a byte-identical
+  manifest rule because resource observations and fresh angr image sizes vary.
+  Identity v2 is predeclared to separate deterministic identities from retained
+  variable resource observations. No positive result exists yet.
 
 - Add a manual hosted Linux evidence workflow for the maintained OpenTitan PWM
   MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the

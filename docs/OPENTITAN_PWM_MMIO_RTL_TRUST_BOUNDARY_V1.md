@@ -96,3 +96,45 @@ memory than regenerating the same answer with this maintained workflow.
 It would not establish universal superiority, production readiness or
 novelty. The result applies only to this frozen cohort and toolchain and must
 retain any setup-time or payload-size disadvantages.
+
+## Trust-boundary v1 result
+
+Two complete Darwin arm64 cycles pass the semantic, hostile-control, wall-time
+and memory thresholds:
+
+| Cycle | GCC median wall | Maintained median wall | GCC maximum RSS | Maintained minimum RSS |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 0.04 s | 3.64 s | 11,452,416 bytes | 68,042,752 bytes |
+| 2 | 0.04 s | 2.81 s | 9,273,344 bytes | 68,042,752 bytes |
+
+Both cycles recover the frozen semantic SHA-256, pass all five trials, refuse
+all four GCC and ten maintained hostile cases, and report the same payloads:
+110,831 bytes for GCC and 31,679 bytes for maintained regeneration. GCC's
+payload is about 3.50 times larger.
+
+Version 1 nevertheless fails gate 2. Its result manifest includes variable
+timings and peak memory, so the two manifests are not byte-identical. The two
+fresh angr image builds also differ in reported size by 677 bytes despite the
+same Dockerfile, base-image digest and pinned package version. The semantic
+summaries are byte-identical, but the complete manifest and setup description
+are not. No positive trust-boundary result is admitted from v1.
+
+## Predeclared identity v2
+
+Before any further cycle, v2 separates two different evidence classes:
+
+- an identity manifest containing only deterministic source digests, pinned
+  tool policies, transferred-input digests and sizes, consumer executable
+  digest, complete semantic digest and hostile-control counts; and
+- a resource report containing observed setup and consumer measurements,
+  including the variable built-image size.
+
+Two new complete cycles must produce byte-identical identity manifests and
+semantic summaries. Their resource reports must remain fully retained but are
+not required to be byte-identical. Each cycle independently retains the same
+five-trial twofold wall and memory gates. The Dockerfile digest, base-image
+digest and angr version are identity fields; the locally assembled image byte
+size is a setup observation until a reproducible published image exists.
+
+This refinement does not change the cohort, routes, payload definitions,
+trial count, semantic answer, hostile controls or performance thresholds.
