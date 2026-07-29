@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Predeclare a two-cycle GitHub-hosted Ubuntu 24.04 x86-64 reproduction for the
+  OpenTitan PWM MMIO-to-RTL trust-boundary comparison. Each cycle retains five
+  fresh-process trials per route, all fourteen hostile refusals, the unchanged
+  twofold wall and memory gates, and complete setup and payload observations.
+  The two hosted cycles must produce byte-identical Linux consumer,
+  certificate, semantic-summary and identity-manifest bytes.
+
 - Predeclare an identical-task trust-boundary comparison for the maintained
   OpenTitan PWM MMIO-to-RTL cohort. It separates producer work and tool setup
   from five fresh-process consumer trials, counts both transfer payloads,

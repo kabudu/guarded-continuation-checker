@@ -199,3 +199,33 @@ The retained evidence is under
 This closes the local identical-consumer trust-boundary gate for the frozen
 cohort. Hosted reproduction, compatibility history and independent assessment
 remain open.
+
+## Predeclared hosted reproduction v1
+
+Before observing any hosted trust-boundary result, the Ubuntu 24.04 x86-64
+gate is frozen as follows:
+
+1. one GitHub-hosted job builds pinned Yosys revision
+   `b8e7da6f40ae8f552c116bf6c359b07c6533e159`, verifies the pinned Z3 4.16.0
+   archive and uses the repository's pinned Rust 1.97.0 toolchain;
+2. the job runs two complete clean cycles from the checked-out public
+   repository, without consuming retained local result artifacts;
+3. each cycle retains one warm-up and five fresh-process measurements for each
+   route, recovers the frozen complete semantic answer, refuses all four GCC
+   and ten maintained hostile changes, and independently passes the unchanged
+   twofold wall-time and memory gates;
+4. the two hosted cycles must produce byte-identical Linux consumer
+   executables, certificates, semantic summaries and identity manifests; and
+5. all setup, producer, payload and measured-process observations remain
+   retained even when a gate fails.
+
+The hosted executable is not required to match the Darwin Mach-O executable.
+The gate tests clean-build identity within one hosted architecture, while the
+certificate and semantic identities remain architecture-neutral.
+
+No hosted threshold, trial count, input, tool revision, identity field,
+payload definition, hostile control or expected answer may change after the
+first complete hosted result is observed. A passing run would close bounded
+Ubuntu platform reproduction for this comparison. It would not close
+compatibility history, external independent assessment, production readiness,
+novelty or general performance.

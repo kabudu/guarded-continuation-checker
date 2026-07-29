@@ -1,0 +1,104 @@
+name: MMIO trust-boundary evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mmio-trust-boundary-evidence-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Install pinned-tool build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            bison cmake flex gawk libffi-dev libreadline-dev pkg-config \
+            shellcheck tcl-dev time unzip zlib1g-dev
+      - name: Check hosted evidence scripts
+        run: |
+          shellcheck -s bash \
+            scripts/build-opentitan-pwm-authentic-channel-family-v1.sh \
+            scripts/run-opentitan-pwm-mmio-rtl-maintained-consumer-v1.sh \
+            scripts/run-opentitan-pwm-mmio-rtl-trust-boundary-v1.sh
+          shellcheck -s sh \
+            scripts/build-opentitan-pwm-guarded-mmio-reference-v1.sh
+          python3 -m py_compile \
+            scripts/angr-guarded-mmio-domain-baseline-v1.py \
+            scripts/canonicalize-yosys-smt2-portable-v2.py \
+            scripts/mmio-rtl-yosys-z3-baseline-v1.py \
+            scripts/test-mmio-rtl-maintained-hostile-v1.py
+      - name: Install pinned Z3
+        run: |
+          curl --fail --location --silent --show-error \
+            --output /tmp/z3-4.16.0.zip \
+            https://github.com/Z3Prover/z3/releases/download/z3-4.16.0/z3-4.16.0-x64-glibc-2.39.zip
+          echo \
+            "7288c49a5bd6dbafd7b0b0d1f65956b91672da24b08f09242919af159be3418e  /tmp/z3-4.16.0.zip" \
+            | sha256sum --check
+          unzip -q /tmp/z3-4.16.0.zip -d /tmp/z3-4.16.0
+          /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 --version
+      - name: Build pinned Yosys
+        run: |
+          git init /tmp/yosys-attestation
+          git -C /tmp/yosys-attestation remote add origin \
+            https://github.com/YosysHQ/yosys.git
+          git -C /tmp/yosys-attestation fetch --depth 1 origin \
+            b8e7da6f40ae8f552c116bf6c359b07c6533e159
+          git -C /tmp/yosys-attestation checkout --detach FETCH_HEAD
+          git -C /tmp/yosys-attestation submodule update --init --depth 1 -- \
+            libs/cxxopts libs/fmt libs/tomlplusplus libs/boost_regex \
+            libs/slang frontends/slang/lib
+          cmake -S /tmp/yosys-attestation -B /tmp/yosys-attestation/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DYOSYS_CHECKOUT_INFO=b8e7da6f40ae8f552c116bf6c359b07c6533e159 \
+            -DYOSYS_WITHOUT_ABC=ON
+          cmake --build /tmp/yosys-attestation/build \
+            --parallel 2 \
+            --target yosys
+      - name: Run two clean trust-boundary cycles
+        run: |
+          scripts/run-opentitan-pwm-mmio-rtl-trust-boundary-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1
+          scripts/run-opentitan-pwm-mmio-rtl-trust-boundary-v1.sh \
+            /tmp/yosys-attestation/build/yosys \
+            /tmp/z3-4.16.0/z3-4.16.0-x64-glibc-2.39/bin/z3 \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-2
+      - name: Enforce hosted identity and semantic gates
+        run: |
+          cmp \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1/identity-manifest-v3.txt \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-2/identity-manifest-v3.txt
+          cmp \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1/semantic-summary.txt \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-2/semantic-summary.txt
+          cmp \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1/compiled-mmio-rtl-certificate-v1.bin \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-2/compiled-mmio-rtl-certificate-v1.bin
+          cmp \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1/verify-compiled-mmio-pwm-rtl \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-2/verify-compiled-mmio-pwm-rtl
+          cat \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1/identity-manifest-v3.txt
+          cat \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-1/manifest-v1.txt
+          cat \
+            /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-2/manifest-v1.txt
+      - name: Retain hosted trust-boundary evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: opentitan-pwm-mmio-rtl-trust-boundary-linux-v1
+          path: /tmp/opentitan-pwm-mmio-rtl-trust-boundary-linux-cycle-*
+          if-no-files-found: error
+          retention-days: 14
