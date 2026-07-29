@@ -9,7 +9,8 @@
   SMT-LIB byte identity. Retained models prove that only the host-specific
   first-line generator banner differs. Portability v2 therefore validates and
   retains that banner, removes exactly that line, and requires every remaining
-  model byte plus all semantic and hostile-control evidence to match.
+  model byte plus all semantic and hostile-control evidence to match. A third
+  predeclared hosted run passes this bounded portability gate on Ubuntu 24.04.
 
 - Add an identical-scope maintained comparison for the proof-carrying OpenTitan
   PWM MMIO-to-RTL composition. Pinned angr independently derives the complete

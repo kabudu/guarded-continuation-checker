@@ -190,6 +190,25 @@ No other metadata or model content is normalized. This criterion establishes
 portable model-body reproduction if it passes; it does not establish
 production readiness or solver superiority.
 
+### Hosted attempt 3
+
+Hosted
+[run 30411812266](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30411812266)
+passes the frozen portability-v2 manifest on merged revision
+`7c003315f8773de7929c08164ca382ec5742ccd4`. The Linux raw model retains its
+platform-specific SHA-256
+`f69e09d2dfbdcecf7c56771d152f0519449af7a3247dd5a7f82717a43ecab78c`;
+the validated model body matches the frozen
+`bd0614bce84d54f935adb06ac7636ff3a3a1b67e1278ac71f3c3523024fcd03f`
+identity, and normalized observations match the frozen
+`e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907abf`
+identity. Both compiler profiles agree with GCC and all eleven hostile controls
+pass.
+
+The bounded hosted platform-reproduction gate for this cohort is closed.
+External assessment, compatibility history and production qualification remain
+open.
+
 ## Trust-boundary comparison
 
 The maintained route answers the bounded semantic question by regenerating
