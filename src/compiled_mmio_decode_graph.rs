@@ -3,8 +3,8 @@
 use crate::{
     compiled_mmio_branching_dag::BranchingTerminal,
     riscv32imc::{
-        MAX_RV32_IMAGE_BYTES, RV32_IMAGE_BASE, Rv32Execution, Rv32ReplayMachine, Rv32SymbolLayout,
-        decompress,
+        CompiledMmioEvent, MAX_RV32_IMAGE_BYTES, MAX_RV32_STEPS, RV32_IMAGE_BASE, Rv32Execution,
+        Rv32ReplayMachine, Rv32SymbolLayout, decompress,
     },
 };
 use riscv_decode::{Instruction, decode};
@@ -17,6 +17,13 @@ use std::{
 
 pub const DECODE_GRAPH_VERSION: u32 = 2;
 pub const DECODE_GRAPH_INPUTS: usize = 256;
+pub const MAX_DECODE_GRAPH_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_DECODE_GRAPH_NODES: usize = 1024 * 1024;
+pub const MAX_DECODE_GRAPH_EDGES: usize = 4 * 1024 * 1024;
+const MAGIC: &[u8; 8] = b"GCCMDG02";
+const CHECKSUM_BYTES: usize = 32;
+const MAX_TERMINALS: usize = DECODE_GRAPH_INPUTS;
+const MAX_EVENTS: usize = 32;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct DecodeGraphNode {
@@ -317,6 +324,293 @@ pub fn verify_compiled_mmio_decode_graph(
     })
 }
 
+fn push_u16(bytes: &mut Vec<u8>, value: u16) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u64(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+pub fn encode_compiled_mmio_decode_graph(
+    graph: &CompiledMmioDecodeGraph,
+) -> Result<Vec<u8>, DecodeGraphError> {
+    if graph.version != DECODE_GRAPH_VERSION
+        || graph.terminal_indices.len() != DECODE_GRAPH_INPUTS
+        || graph.nodes.is_empty()
+        || graph.nodes.len() > MAX_DECODE_GRAPH_NODES
+        || graph.terminals.is_empty()
+        || graph.terminals.len() > MAX_TERMINALS
+    {
+        return Err(reject("graph fields are outside encoding policy"));
+    }
+
+    let mut total_edges = 0usize;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(MAGIC);
+    push_u32(&mut bytes, graph.version);
+    bytes.extend_from_slice(&graph.image_sha256);
+    push_u32(&mut bytes, graph.symbols.entry);
+    push_u32(&mut bytes, graph.symbols.event_count);
+    push_u32(&mut bytes, graph.symbols.events);
+    push_u64(&mut bytes, graph.scalar_path_steps);
+    push_u32(&mut bytes, graph.nodes.len() as u32);
+    push_u32(&mut bytes, graph.terminals.len() as u32);
+    for terminal in &graph.terminal_indices {
+        push_u16(&mut bytes, *terminal);
+    }
+    for node in &graph.nodes {
+        total_edges = total_edges
+            .checked_add(node.next_program_counters.len())
+            .ok_or_else(|| reject("graph edge count overflow"))?;
+        if node.next_program_counters.is_empty()
+            || total_edges > MAX_DECODE_GRAPH_EDGES
+            || node.next_program_counters.len() > u32::MAX as usize
+        {
+            return Err(reject("graph edges exceed encoding policy"));
+        }
+        push_u32(&mut bytes, node.program_counter);
+        push_u32(&mut bytes, node.instruction_word);
+        bytes.push(node.instruction_bytes);
+        push_u32(&mut bytes, node.next_program_counters.len() as u32);
+        for next in &node.next_program_counters {
+            push_u32(&mut bytes, *next);
+        }
+    }
+    for terminal in &graph.terminals {
+        let execution = &terminal.execution;
+        if execution.steps > MAX_RV32_STEPS
+            || execution.events.len() > MAX_EVENTS
+            || execution.events.len() != execution.event_program_locations.len()
+        {
+            return Err(reject("terminal execution exceeds encoding policy"));
+        }
+        push_u32(&mut bytes, execution.return_value);
+        push_u64(&mut bytes, execution.steps);
+        push_u32(&mut bytes, execution.events.len() as u32);
+        for event in &execution.events {
+            push_u32(&mut bytes, event.operation);
+            push_u32(&mut bytes, event.offset);
+            push_u32(&mut bytes, event.value);
+        }
+        for location in &execution.event_program_locations {
+            push_u32(&mut bytes, *location);
+        }
+    }
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_DECODE_GRAPH_BYTES {
+        return Err(reject("encoded graph exceeds byte policy"));
+    }
+    Ok(bytes)
+}
+
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn take(&mut self, count: usize) -> Result<&'a [u8], DecodeGraphError> {
+        let end = self
+            .offset
+            .checked_add(count)
+            .ok_or_else(|| reject("graph offset overflow"))?;
+        let value = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or_else(|| reject("graph artifact is truncated"))?;
+        self.offset = end;
+        Ok(value)
+    }
+
+    fn u8(&mut self) -> Result<u8, DecodeGraphError> {
+        Ok(self.take(1)?[0])
+    }
+
+    fn u16(&mut self) -> Result<u16, DecodeGraphError> {
+        Ok(u16::from_le_bytes(
+            self.take(2)?
+                .try_into()
+                .map_err(|_| reject("invalid u16 field"))?,
+        ))
+    }
+
+    fn u32(&mut self) -> Result<u32, DecodeGraphError> {
+        Ok(u32::from_le_bytes(
+            self.take(4)?
+                .try_into()
+                .map_err(|_| reject("invalid u32 field"))?,
+        ))
+    }
+
+    fn u64(&mut self) -> Result<u64, DecodeGraphError> {
+        Ok(u64::from_le_bytes(
+            self.take(8)?
+                .try_into()
+                .map_err(|_| reject("invalid u64 field"))?,
+        ))
+    }
+}
+
+pub fn decode_compiled_mmio_decode_graph(
+    bytes: &[u8],
+) -> Result<CompiledMmioDecodeGraph, DecodeGraphError> {
+    if bytes.len() < 640 || bytes.len() > MAX_DECODE_GRAPH_BYTES {
+        return Err(reject("graph artifact size is outside policy"));
+    }
+    let content_len = bytes
+        .len()
+        .checked_sub(CHECKSUM_BYTES)
+        .ok_or_else(|| reject("graph artifact is truncated"))?;
+    let checksum: [u8; 32] = Sha256::digest(&bytes[..content_len]).into();
+    if checksum != bytes[content_len..] {
+        return Err(reject("graph artifact checksum mismatch"));
+    }
+
+    let mut cursor = Cursor {
+        bytes: &bytes[..content_len],
+        offset: 0,
+    };
+    if cursor.take(MAGIC.len())? != MAGIC {
+        return Err(reject("graph artifact magic mismatch"));
+    }
+    let version = cursor.u32()?;
+    let image_sha256 = cursor
+        .take(32)?
+        .try_into()
+        .map_err(|_| reject("invalid image digest"))?;
+    let symbols = Rv32SymbolLayout {
+        entry: cursor.u32()?,
+        event_count: cursor.u32()?,
+        events: cursor.u32()?,
+    };
+    let scalar_path_steps = cursor.u64()?;
+    let node_count =
+        usize::try_from(cursor.u32()?).map_err(|_| reject("node count exceeds platform"))?;
+    let terminal_count =
+        usize::try_from(cursor.u32()?).map_err(|_| reject("terminal count exceeds platform"))?;
+    if node_count == 0
+        || node_count > MAX_DECODE_GRAPH_NODES
+        || terminal_count == 0
+        || terminal_count > MAX_TERMINALS
+    {
+        return Err(reject("graph counts are outside policy"));
+    }
+    let minimum = DECODE_GRAPH_INPUTS
+        .checked_mul(2)
+        .and_then(|fixed| {
+            node_count
+                .checked_mul(17)
+                .and_then(|nodes| fixed.checked_add(nodes))
+        })
+        .and_then(|bytes| {
+            terminal_count
+                .checked_mul(16)
+                .and_then(|terminals| bytes.checked_add(terminals))
+        })
+        .ok_or_else(|| reject("graph minimum size overflow"))?;
+    if minimum > cursor.bytes.len().saturating_sub(cursor.offset) {
+        return Err(reject("graph counts exceed remaining bytes"));
+    }
+
+    let mut terminal_indices = Vec::with_capacity(DECODE_GRAPH_INPUTS);
+    for _ in 0..DECODE_GRAPH_INPUTS {
+        terminal_indices.push(cursor.u16()?);
+    }
+    let mut nodes = Vec::with_capacity(node_count);
+    let mut total_edges = 0usize;
+    for _ in 0..node_count {
+        let program_counter = cursor.u32()?;
+        let instruction_word = cursor.u32()?;
+        let instruction_bytes = cursor.u8()?;
+        let edge_count =
+            usize::try_from(cursor.u32()?).map_err(|_| reject("edge count exceeds platform"))?;
+        total_edges = total_edges
+            .checked_add(edge_count)
+            .ok_or_else(|| reject("graph edge count overflow"))?;
+        if edge_count == 0
+            || total_edges > MAX_DECODE_GRAPH_EDGES
+            || edge_count > cursor.bytes.len().saturating_sub(cursor.offset) / 4
+        {
+            return Err(reject("graph edge count exceeds policy"));
+        }
+        let mut next_program_counters = Vec::with_capacity(edge_count);
+        for _ in 0..edge_count {
+            next_program_counters.push(cursor.u32()?);
+        }
+        nodes.push(DecodeGraphNode {
+            program_counter,
+            instruction_word,
+            instruction_bytes,
+            next_program_counters,
+        });
+    }
+
+    let mut terminals = Vec::with_capacity(terminal_count);
+    for _ in 0..terminal_count {
+        let return_value = cursor.u32()?;
+        let steps = cursor.u64()?;
+        let event_count =
+            usize::try_from(cursor.u32()?).map_err(|_| reject("event count exceeds platform"))?;
+        if steps > MAX_RV32_STEPS
+            || event_count > MAX_EVENTS
+            || event_count > cursor.bytes.len().saturating_sub(cursor.offset) / 16
+        {
+            return Err(reject("terminal fields exceed policy"));
+        }
+        let mut events = Vec::with_capacity(event_count);
+        for _ in 0..event_count {
+            events.push(CompiledMmioEvent {
+                operation: cursor.u32()?,
+                offset: cursor.u32()?,
+                value: cursor.u32()?,
+            });
+        }
+        let mut event_program_locations = Vec::with_capacity(event_count);
+        for _ in 0..event_count {
+            event_program_locations.push(cursor.u32()?);
+        }
+        terminals.push(BranchingTerminal {
+            execution: Rv32Execution {
+                return_value,
+                steps,
+                events,
+                event_program_locations,
+            },
+        });
+    }
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject("graph artifact has trailing content"));
+    }
+
+    let graph = CompiledMmioDecodeGraph {
+        version,
+        image_sha256,
+        symbols,
+        terminal_indices,
+        nodes,
+        terminals,
+        scalar_path_steps,
+    };
+    if encode_compiled_mmio_decode_graph(&graph)? != bytes {
+        return Err(reject("graph artifact encoding is not canonical"));
+    }
+    Ok(graph)
+}
+
+pub fn verify_compiled_mmio_decode_graph_bytes(
+    bytes: &[u8],
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<DecodeGraphVerification, DecodeGraphError> {
+    let graph = decode_compiled_mmio_decode_graph(bytes)?;
+    verify_compiled_mmio_decode_graph(&graph, image, symbols)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,6 +660,12 @@ mod tests {
         assert_eq!(verified.graph_edges, 7);
         assert_eq!(verified.scalar_path_steps, 1_152);
         assert_eq!(verified.inputs_checked, 256);
+        let bytes = encode_compiled_mmio_decode_graph(&graph).unwrap();
+        assert_eq!(decode_compiled_mmio_decode_graph(&bytes).unwrap(), graph);
+        assert_eq!(
+            verify_compiled_mmio_decode_graph_bytes(&bytes, &image, symbols).unwrap(),
+            verified
+        );
     }
 
     #[test]
@@ -395,5 +695,12 @@ mod tests {
         let mut changed_image = image.clone();
         changed_image[0] ^= 1;
         assert!(verify_compiled_mmio_decode_graph(&original, &changed_image, symbols).is_err());
+
+        let bytes = encode_compiled_mmio_decode_graph(&original).unwrap();
+        let mut mutation = bytes.clone();
+        let middle = mutation.len() / 2;
+        mutation[middle] ^= 1;
+        assert!(decode_compiled_mmio_decode_graph(&mutation).is_err());
+        assert!(decode_compiled_mmio_decode_graph(&bytes[..bytes.len() - 1]).is_err());
     }
 }
