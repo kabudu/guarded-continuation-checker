@@ -209,11 +209,15 @@ pub fn verify_compiled_mmio_branching_dag(
     }
 
     let mut reachable = BTreeSet::new();
+    let mut canonical_nodes = Vec::new();
+    let mut canonical_interned = BTreeMap::new();
+    let mut canonical_terminals = Vec::new();
     let mut scalar_path_steps = 0u64;
     for input in 0u8..=u8::MAX {
         let mut machine = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
             .map_err(|error| reject(format!("input {input}: {error}")))?;
         let mut node_index = dag.roots[usize::from(input)];
+        let mut path = Vec::new();
         loop {
             let index = usize::try_from(node_index).map_err(|_| reject("node index overflow"))?;
             let node = dag
@@ -221,6 +225,7 @@ pub fn verify_compiled_mmio_branching_dag(
                 .get(index)
                 .ok_or_else(|| reject(format!("input {input} root or edge is outside DAG")))?;
             reachable.insert(node_index);
+            path.push(*node);
             machine
                 .step_predecoded(
                     node.program_counter,
@@ -247,15 +252,47 @@ pub fn verify_compiled_mmio_branching_dag(
         let execution = machine
             .finish()
             .map_err(|error| reject(format!("input {input}: {error}")))?;
+        let claimed_terminal_index = dag.terminal_indices[usize::from(input)];
         let terminal = dag
             .terminals
-            .get(usize::from(dag.terminal_indices[usize::from(input)]))
+            .get(usize::from(claimed_terminal_index))
             .ok_or_else(|| reject(format!("input {input} terminal is outside table")))?;
         if execution != terminal.execution {
             return Err(reject(format!("input {input} terminal mismatch")));
         }
+        let canonical_terminal_index = terminal_index(&mut canonical_terminals, execution.clone())?;
+        if claimed_terminal_index != canonical_terminal_index {
+            return Err(reject(format!(
+                "input {input} terminal index is not canonical"
+            )));
+        }
+
+        let mut canonical_next = None;
+        for observed in path.into_iter().rev() {
+            let canonical = BranchingControlStep {
+                next: canonical_next,
+                ..observed
+            };
+            let canonical_index = if let Some(index) = canonical_interned.get(&canonical) {
+                *index
+            } else {
+                let index = u32::try_from(canonical_nodes.len())
+                    .map_err(|_| reject("canonical node count exceeds u32"))?;
+                canonical_nodes.push(canonical);
+                canonical_interned.insert(canonical, index);
+                index
+            };
+            canonical_next = Some(canonical_index);
+        }
+        if canonical_next != Some(dag.roots[usize::from(input)]) {
+            return Err(reject(format!("input {input} root is not canonical")));
+        }
     }
-    if reachable.len() != dag.nodes.len() || scalar_path_steps != dag.scalar_path_steps {
+    if reachable.len() != dag.nodes.len()
+        || canonical_nodes != dag.nodes
+        || canonical_terminals != dag.terminals
+        || scalar_path_steps != dag.scalar_path_steps
+    {
         return Err(reject("DAG reachability or work count is inconsistent"));
     }
     Ok(BranchingDagVerification {
