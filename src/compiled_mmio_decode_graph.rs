@@ -324,7 +324,7 @@ pub fn verify_compiled_mmio_decode_graph_btree_baseline(
     })
 }
 
-pub fn verify_compiled_mmio_decode_graph(
+fn verify_compiled_mmio_decode_graph_strategy<const CARRY_SUCCESSOR_INDEX: bool>(
     graph: &CompiledMmioDecodeGraph,
     image: &[u8],
     symbols: Rv32SymbolLayout,
@@ -409,6 +409,27 @@ pub fn verify_compiled_mmio_decode_graph(
     let graph_edges = *edge_offsets
         .last()
         .ok_or_else(|| reject("graph edge offsets are empty"))?;
+    let successor_indices: Vec<Vec<u32>> = if CARRY_SUCCESSOR_INDEX {
+        graph
+            .nodes
+            .iter()
+            .map(|node| {
+                node.next_program_counters
+                    .iter()
+                    .map(|program_counter| {
+                        program_counter
+                            .checked_sub(RV32_IMAGE_BASE)
+                            .filter(|offset| offset % 2 == 0)
+                            .and_then(|offset| usize::try_from(offset / 2).ok())
+                            .and_then(|slot| node_by_halfword.get(slot).copied())
+                            .unwrap_or(u32::MAX)
+                    })
+                    .collect()
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let mut covered_edges = vec![false; graph_edges];
     let mut canonical_terminals = Vec::new();
     let mut scalar_path_steps = 0u64;
@@ -416,21 +437,29 @@ pub fn verify_compiled_mmio_decode_graph(
     for input in 0u8..=u8::MAX {
         let mut machine = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
             .map_err(|error| reject(format!("input {input}: {error}")))?;
+        let mut carried_index = u32::MAX;
         while !machine.is_complete() {
             let program_counter = machine.program_counter();
-            let source_offset = program_counter
-                .checked_sub(RV32_IMAGE_BASE)
-                .ok_or_else(|| reject(format!("input {input} program counter is below image")))?;
-            if source_offset % 2 != 0 {
-                return Err(reject(format!(
-                    "input {input} program counter is not halfword aligned"
-                )));
-            }
-            let slot = usize::try_from(source_offset / 2)
-                .map_err(|_| reject(format!("input {input} source offset exceeds platform")))?;
-            let encoded_index = *node_by_halfword
-                .get(slot)
-                .ok_or_else(|| reject(format!("input {input} program counter is outside image")))?;
+            let encoded_index = if CARRY_SUCCESSOR_INDEX && carried_index != u32::MAX {
+                carried_index
+            } else {
+                let source_offset =
+                    program_counter
+                        .checked_sub(RV32_IMAGE_BASE)
+                        .ok_or_else(|| {
+                            reject(format!("input {input} program counter is below image"))
+                        })?;
+                if source_offset % 2 != 0 {
+                    return Err(reject(format!(
+                        "input {input} program counter is not halfword aligned"
+                    )));
+                }
+                let slot = usize::try_from(source_offset / 2)
+                    .map_err(|_| reject(format!("input {input} source offset exceeds platform")))?;
+                *node_by_halfword.get(slot).ok_or_else(|| {
+                    reject(format!("input {input} program counter is outside image"))
+                })?
+            };
             let index = usize::try_from(encoded_index)
                 .ok()
                 .filter(|_| encoded_index != u32::MAX)
@@ -457,6 +486,20 @@ pub fn verify_compiled_mmio_decode_graph(
                     ))
                 })?;
             covered_edges[edge_offsets[index] + edge_index] = true;
+            if CARRY_SUCCESSOR_INDEX {
+                carried_index = successor_indices[index][edge_index];
+                if machine.is_complete() {
+                    if carried_index != u32::MAX {
+                        return Err(reject(format!(
+                            "input {input}, node {index} completes on a nonterminal edge"
+                        )));
+                    }
+                } else if carried_index == u32::MAX {
+                    return Err(reject(format!(
+                        "input {input}, node {index} takes an unresolved nonterminal edge"
+                    )));
+                }
+            }
             scalar_path_steps = scalar_path_steps
                 .checked_add(1)
                 .ok_or_else(|| reject("scalar path step count overflow"))?;
@@ -496,6 +539,22 @@ pub fn verify_compiled_mmio_decode_graph(
         scalar_path_steps,
         inputs_checked: DECODE_GRAPH_INPUTS as u16,
     })
+}
+
+pub fn verify_compiled_mmio_decode_graph(
+    graph: &CompiledMmioDecodeGraph,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<DecodeGraphVerification, DecodeGraphError> {
+    verify_compiled_mmio_decode_graph_strategy::<false>(graph, image, symbols)
+}
+
+pub fn verify_compiled_mmio_decode_graph_successor_index(
+    graph: &CompiledMmioDecodeGraph,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<DecodeGraphVerification, DecodeGraphError> {
+    verify_compiled_mmio_decode_graph_strategy::<true>(graph, image, symbols)
 }
 
 fn push_u16(bytes: &mut Vec<u8>, value: u16) {
@@ -839,9 +898,12 @@ mod tests {
         );
 
         let verified = verify_compiled_mmio_decode_graph(&graph, &image, symbols).unwrap();
+        let successor =
+            verify_compiled_mmio_decode_graph_successor_index(&graph, &image, symbols).unwrap();
         let baseline =
             verify_compiled_mmio_decode_graph_btree_baseline(&graph, &image, symbols).unwrap();
         assert_eq!(verified, baseline);
+        assert_eq!(verified, successor);
         assert_eq!(verified.unique_instruction_decodes, 6);
         assert_eq!(verified.graph_edges, 7);
         assert_eq!(verified.scalar_path_steps, 1_152);
@@ -872,20 +934,35 @@ mod tests {
         let mut missing_edge = original.clone();
         missing_edge.nodes[branch_index].next_program_counters.pop();
         assert!(verify_compiled_mmio_decode_graph(&missing_edge, &image, symbols).is_err());
+        assert!(
+            verify_compiled_mmio_decode_graph_successor_index(&missing_edge, &image, symbols)
+                .is_err()
+        );
 
         let mut additional_edge = original.clone();
         additional_edge.nodes[branch_index]
             .next_program_counters
             .push(RV32_IMAGE_BASE + 24);
         assert!(verify_compiled_mmio_decode_graph(&additional_edge, &image, symbols).is_err());
+        assert!(
+            verify_compiled_mmio_decode_graph_successor_index(&additional_edge, &image, symbols)
+                .is_err()
+        );
 
         let mut terminal = original.clone();
         terminal.terminals[0].execution.return_value ^= 1;
         assert!(verify_compiled_mmio_decode_graph(&terminal, &image, symbols).is_err());
+        assert!(
+            verify_compiled_mmio_decode_graph_successor_index(&terminal, &image, symbols).is_err()
+        );
 
         let mut changed_image = image.clone();
         changed_image[0] ^= 1;
         assert!(verify_compiled_mmio_decode_graph(&original, &changed_image, symbols).is_err());
+        assert!(
+            verify_compiled_mmio_decode_graph_successor_index(&original, &changed_image, symbols)
+                .is_err()
+        );
 
         let bytes = encode_compiled_mmio_decode_graph(&original).unwrap();
         let mut mutation = bytes.clone();
