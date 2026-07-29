@@ -1,0 +1,33 @@
+name: MMIO explicit transcript evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mmio-explicit-transcript-evidence-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Check hosted evidence script
+        run: shellcheck -s bash scripts/run-opentitan-pwm-explicit-transcript-baseline-v1.sh
+      - name: Run two clean hosted cycles
+        run: |
+          scripts/run-opentitan-pwm-explicit-transcript-baseline-v1.sh \
+            /tmp/opentitan-pwm-explicit-transcript-linux-v1
+      - name: Retain hosted evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: opentitan-pwm-explicit-transcript-linux-v1
+          path: /tmp/opentitan-pwm-explicit-transcript-linux-v1
+          if-no-files-found: error
+          retention-days: 14
