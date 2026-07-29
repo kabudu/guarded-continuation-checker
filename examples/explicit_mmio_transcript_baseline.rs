@@ -19,6 +19,54 @@ fn digest(bytes: &[u8]) -> String {
         .collect()
 }
 
+fn compare_semantics(
+    predicate: &guarded_continuation_checker::compiled_mmio_predicate_certificate::CompiledMmioPredicateCertificate,
+    explicit: &guarded_continuation_checker::compiled_mmio_explicit_transcript::ExplicitCompiledMmioTranscript,
+) -> Result<String, String> {
+    let mut normalized = Vec::new();
+    for execution in &explicit.executions {
+        let expected = if usize::from(execution.input) < predicate.workflow.valid_behaviors.len() {
+            &predicate.workflow.valid_behaviors[usize::from(execution.input)]
+        } else {
+            let invalid = &predicate.workflow.invalid;
+            if execution.execution.return_value != invalid.return_value
+                || execution.execution.events != invalid.events
+            {
+                return Err(format!(
+                    "explicit input {} differs from predicate semantics",
+                    execution.input
+                ));
+            }
+            normalized.push(execution.input);
+            normalized.extend_from_slice(&invalid.return_value.to_le_bytes());
+            normalized.extend_from_slice(&(invalid.events.len() as u32).to_le_bytes());
+            for event in &invalid.events {
+                normalized.extend_from_slice(&event.operation.to_le_bytes());
+                normalized.extend_from_slice(&event.offset.to_le_bytes());
+                normalized.extend_from_slice(&event.value.to_le_bytes());
+            }
+            continue;
+        };
+        if execution.execution.return_value != expected.return_value
+            || execution.execution.events != expected.events
+        {
+            return Err(format!(
+                "explicit input {} differs from predicate semantics",
+                execution.input
+            ));
+        }
+        normalized.push(execution.input);
+        normalized.extend_from_slice(&expected.return_value.to_le_bytes());
+        normalized.extend_from_slice(&(expected.events.len() as u32).to_le_bytes());
+        for event in &expected.events {
+            normalized.extend_from_slice(&event.operation.to_le_bytes());
+            normalized.extend_from_slice(&event.offset.to_le_bytes());
+            normalized.extend_from_slice(&event.value.to_le_bytes());
+        }
+    }
+    Ok(digest(&normalized))
+}
+
 fn run() -> Result<(), String> {
     let arguments = env::args_os().collect::<Vec<_>>();
     if arguments.len() != 5 {
@@ -46,11 +94,14 @@ fn run() -> Result<(), String> {
     let explicit_verification =
         verify_explicit_compiled_mmio_transcript(&explicit_bytes, &image, symbols)
             .map_err(|error| error.to_string())?;
+    let semantic_sha256 = compare_semantics(&predicate, &explicit)?;
     fs::write(&arguments[3], &predicate_bytes).map_err(|error| error.to_string())?;
     fs::write(&arguments[4], &explicit_bytes).map_err(|error| error.to_string())?;
 
     println!("explicit_transcript_baseline_version=1");
     println!("input_count={}", explicit.executions.len());
+    println!("semantic_agreement=true");
+    println!("semantic_sha256={semantic_sha256}");
     println!("predicate_artifact_bytes={}", predicate_bytes.len());
     println!("predicate_artifact_sha256={}", digest(&predicate_bytes));
     println!(

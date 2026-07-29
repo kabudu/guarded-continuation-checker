@@ -139,3 +139,38 @@ It would not establish algorithmic novelty, universal compression, solver
 superiority, production readiness, or an advantage over all proof-carrying
 software and hardware systems. External assessment and broader cohorts would
 remain necessary.
+
+## Initial local result
+
+The first Darwin arm64 O2 cycle passes the semantic, representation,
+transition, warm-consumer wall-time and memory gates:
+
+| Measure | GCC predicate | Explicit transcript | GCC advantage |
+| --- | ---: | ---: | ---: |
+| Artifact bytes | 7,339 | 2,440,530 | 332.54 times smaller |
+| Producer decoded transitions | 4,408 | 115,960 | 26.31 times fewer |
+| Verifier decoded transitions | 4,408 | 115,960 | 26.31 times fewer |
+| Median warm-consumer wall time | 0.01 s | 0.02 s | 2.00 times lower |
+| Maximum / minimum measured RSS | 6,225,920 bytes maximum | 22,282,240 bytes minimum | 3.58 times lower |
+
+Both routes recover all 256 input behaviors with normalized semantic SHA-256
+`b7bd4c74c62427a9c2c8ffe294960dfc8db61325299ebe15726b9d6934f15f9c`.
+Two clean production cycles are byte-identical:
+
+- GCC predicate artifact SHA-256:
+  `b3fa53d46b09125383cb4e47d211444c461c9b8f526c319a87b01ec9050d146b`;
+- explicit transcript SHA-256:
+  `9ffccef0879de96c6e3c34aaf9635dd5728ebddd1fda04d666e4b11af90dc066`.
+
+The GCC result still performs 112,000 scalar-equivalent lane operations. The
+transition result therefore concerns shared instruction decoding, not constant
+total semantic work. The explicit artifact also retains substantially more
+consumer memory because it parses 2.44 MB of step observations.
+
+This is a promising result, not yet an admitted completed gate. The new codec
+unit suite refuses mutation, truncation and source substitution, and the
+repository's complete all-target test and strict Clippy matrices pass. The
+predeclared exhaustive hostile check over every byte and truncation of the
+2,440,530-byte authentic transcript has not yet completed. Producer wall time,
+a retained reproducible result bundle and hosted Linux reproduction also
+remain open. No novelty conclusion is admitted until those controls close.
