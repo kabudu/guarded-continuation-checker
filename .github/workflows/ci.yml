@@ -50,7 +50,7 @@ jobs:
           full=false
           for path in "${changed_files[@]}"; do
             case "$path" in
-              README.md|CRATE_README.md|CHANGELOG.md|LICENSE|docs/*|assets/brand/*)
+              README.md|CRATE_README.md|CHANGELOG.md|LICENSE|docs/*|results/*|assets/brand/*)
                 ;;
               *)
                 full=true

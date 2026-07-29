@@ -100,5 +100,24 @@ Darwin arm64:
 
 The elapsed results are at local timer resolution, so they establish
 non-regression rather than a speedup. Dense median memory is below both
-baselines. The public-source transfer result is admitted to hosted Linux
-reproduction, but the production support profile remains unchanged.
+baselines.
+
+The dedicated hosted Linux x86-64 qualification in
+[run 30481063544](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30481063544)
+also passes. It rebuilt the source and exact artifacts twice, refused the
+hostile corpus and enforced the frozen resource gates:
+
+| Route | Hosted median elapsed | Hosted median peak RSS |
+| --- | ---: | ---: |
+| Dense graph | 0.27 s | 10,596,352 bytes |
+| Tree graph | 0.27 s | 10,592,256 bytes |
+| Trace family | 0.27 s | 10,510,336 bytes |
+
+Hosted durations also establish non-regression rather than a speedup. Dense
+median RSS is 1.008 times the trace-family median and remains within the
+predeclared 1.25 limit. The complete protected matrix, including the focused
+qualification job, passed before merge.
+
+The public-source transfer result is therefore reproduced on both local macOS
+arm64 and hosted Linux x86-64. The production support profile remains
+unchanged.
