@@ -52,3 +52,22 @@ Passing would add exact support for four standard RV32M arithmetic
 instructions. It would not establish complete RV32IMC emulation, arbitrary
 OpenSBI support or production qualification. The unchanged OpenSBI UART cohort
 must be rerun separately after this experiment passes.
+
+## Local result
+
+The focused semantics experiment passes.
+
+- `DIV`, `DIVU`, `REM` and `REMU` execute through their decoded RV32M variants.
+- Zero-divisor and signed-overflow cases match the frozen table without host
+  panics.
+- A 12-by-12 deterministic operand cross-product agrees with independent
+  signed and unsigned reference expressions.
+- Predicate lanes and scalar semantics agree for all 250 predicate-domain
+  inputs across five divisors and all four operations.
+- Both machines retain the existing `op_r` knownness and observation paths.
+- Strict clippy passes with warnings denied.
+
+The unchanged OpenSBI UART cohort subsequently advances past its retained
+`DIVU` refusal and constructs exact artifacts for all 256 inputs. That is
+follow-up evidence, not part of the arithmetic semantics claim. Complete
+repository and hosted validation remain required.

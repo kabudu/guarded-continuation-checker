@@ -6,7 +6,8 @@
 
 use crate::riscv32imc::{
     CompiledMmioEvent, MAX_RV32_IMAGE_BYTES, MAX_RV32_MEMORY_BYTES, MAX_RV32_STEPS,
-    RV32_IMAGE_BASE, Rv32Error, Rv32SymbolLayout, decompress, sign_extend,
+    RV32_IMAGE_BASE, Rv32Error, Rv32SymbolLayout, decompress, rv32_div, rv32_divu, rv32_rem,
+    rv32_remu, sign_extend,
 };
 use riscv_decode::{
     Instruction, decode,
@@ -313,6 +314,10 @@ impl PredicateMachine {
             Or(value) => self.op_r(value, |left, right| left | right),
             And(value) => self.op_r(value, |left, right| left & right),
             Mul(value) => self.op_r(value, |left, right| left.wrapping_mul(right)),
+            Div(value) => self.op_r(value, rv32_div),
+            Divu(value) => self.op_r(value, rv32_divu),
+            Rem(value) => self.op_r(value, rv32_rem),
+            Remu(value) => self.op_r(value, rv32_remu),
             Fence(_) | FenceI => {}
             Ebreak if current == self.stop => {}
             unsupported => {
@@ -516,5 +521,25 @@ mod tests {
         image[..4].copy_from_slice(&sltiu_a0_128.to_le_bytes());
         image[4..8].copy_from_slice(&branch.to_le_bytes());
         assert!(execute_invalid_channel_predicate(&image, symbols).is_err());
+    }
+
+    #[test]
+    fn predicate_lanes_share_exact_rv32m_division_semantics() {
+        let dividends = LaneWord::input_domain();
+        for divisor in [0, 1, 3, u32::MAX, i32::MIN as u32] {
+            let divisors = LaneWord::constant(divisor);
+            for operation in [
+                rv32_div as fn(u32, u32) -> u32,
+                rv32_divu,
+                rv32_rem,
+                rv32_remu,
+            ] {
+                let result = dividends.map_binary(&divisors, operation);
+                for (index, input) in (INVALID_PREDICATE_FIRST..=u8::MAX).enumerate() {
+                    assert!(result.known[index]);
+                    assert_eq!(result.values[index], operation(u32::from(input), divisor));
+                }
+            }
+        }
     }
 }

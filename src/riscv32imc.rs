@@ -58,6 +58,34 @@ pub(crate) fn sign_extend(value: u32, bits: u32) -> u32 {
     (((value << (32 - bits)) as i32) >> (32 - bits)) as u32
 }
 
+pub(crate) fn rv32_div(dividend: u32, divisor: u32) -> u32 {
+    if divisor == 0 {
+        u32::MAX
+    } else if dividend == i32::MIN as u32 && divisor == (-1i32) as u32 {
+        dividend
+    } else {
+        ((dividend as i32) / (divisor as i32)) as u32
+    }
+}
+
+pub(crate) fn rv32_divu(dividend: u32, divisor: u32) -> u32 {
+    dividend.checked_div(divisor).unwrap_or(u32::MAX)
+}
+
+pub(crate) fn rv32_rem(dividend: u32, divisor: u32) -> u32 {
+    if divisor == 0 {
+        dividend
+    } else if dividend == i32::MIN as u32 && divisor == (-1i32) as u32 {
+        0
+    } else {
+        ((dividend as i32) % (divisor as i32)) as u32
+    }
+}
+
+pub(crate) fn rv32_remu(dividend: u32, divisor: u32) -> u32 {
+    dividend.checked_rem(divisor).unwrap_or(dividend)
+}
+
 fn encode_i(opcode: u32, funct3: u32, rd: u32, rs1: u32, imm: u32) -> u32 {
     ((imm & 0xfff) << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
 }
@@ -786,6 +814,10 @@ impl Machine {
             Or(value) => self.op_r(value, |a, b| a | b),
             And(value) => self.op_r(value, |a, b| a & b),
             Mul(value) => self.op_r(value, |a, b| a.wrapping_mul(b)),
+            Div(value) => self.op_r(value, rv32_div),
+            Divu(value) => self.op_r(value, rv32_divu),
+            Rem(value) => self.op_r(value, rv32_rem),
+            Remu(value) => self.op_r(value, rv32_remu),
             Fence(_) | FenceI => {}
             Ebreak if current == self.stop => {}
             unsupported => {
@@ -1051,6 +1083,86 @@ mod tests {
     fn sign_extension_is_exact() {
         assert_eq!(sign_extend(0x7ff, 12), 0x7ff);
         assert_eq!(sign_extend(0x800, 12), 0xffff_f800);
+    }
+
+    #[test]
+    fn rv32m_division_edges_match_the_frozen_semantics() {
+        assert_eq!(rv32_div(7, 0), u32::MAX);
+        assert_eq!(rv32_divu(7, 0), u32::MAX);
+        assert_eq!(rv32_rem(7, 0), 7);
+        assert_eq!(rv32_remu(7, 0), 7);
+        assert_eq!(rv32_div(i32::MIN as u32, (-1i32) as u32), i32::MIN as u32);
+        assert_eq!(rv32_rem(i32::MIN as u32, (-1i32) as u32), 0);
+        assert_eq!(rv32_div((-7i32) as u32, 3), (-2i32) as u32);
+        assert_eq!(rv32_rem((-7i32) as u32, 3), (-1i32) as u32);
+    }
+
+    #[test]
+    fn rv32m_division_cross_product_matches_independent_references() {
+        let operands = [
+            0,
+            1,
+            2,
+            3,
+            7,
+            31,
+            i32::MAX as u32,
+            i32::MIN as u32,
+            u32::MAX,
+            (-2i32) as u32,
+            0x1234_5678,
+            0x8765_4321,
+        ];
+        for dividend in operands {
+            for divisor in operands {
+                let signed_quotient = if divisor == 0 {
+                    u32::MAX
+                } else if dividend == i32::MIN as u32 && divisor == (-1i32) as u32 {
+                    dividend
+                } else {
+                    ((dividend as i32) / (divisor as i32)) as u32
+                };
+                let signed_remainder = if divisor == 0 {
+                    dividend
+                } else if dividend == i32::MIN as u32 && divisor == (-1i32) as u32 {
+                    0
+                } else {
+                    ((dividend as i32) % (divisor as i32)) as u32
+                };
+                assert_eq!(rv32_div(dividend, divisor), signed_quotient);
+                assert_eq!(rv32_rem(dividend, divisor), signed_remainder);
+                assert_eq!(
+                    rv32_divu(dividend, divisor),
+                    dividend.checked_div(divisor).unwrap_or(u32::MAX)
+                );
+                assert_eq!(
+                    rv32_remu(dividend, divisor),
+                    dividend.checked_rem(divisor).unwrap_or(dividend)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn executes_all_four_rv32m_division_instructions() {
+        let cases = [(4, 21, 4, 5), (5, 21, 4, 5), (6, 21, 4, 1), (7, 21, 4, 1)];
+        for (funct3, dividend, divisor, expected) in cases {
+            let mut image = vec![0; 0x110];
+            image[..4].copy_from_slice(&encode_i(0x13, 0, 5, 0, dividend).to_le_bytes());
+            image[4..8].copy_from_slice(&encode_i(0x13, 0, 6, 0, divisor).to_le_bytes());
+            image[8..12].copy_from_slice(&encode_r(1, funct3, 10, 5, 6).to_le_bytes());
+            image[12..16].copy_from_slice(&encode_i(0x67, 0, 0, 1, 0).to_le_bytes());
+            let result = execute_compiled_mmio(
+                &image,
+                Rv32SymbolLayout {
+                    entry: RV32_IMAGE_BASE,
+                    event_count: RV32_IMAGE_BASE + 0x100,
+                    events: RV32_IMAGE_BASE + 0x104,
+                },
+            )
+            .unwrap();
+            assert_eq!(result.return_value, expected);
+        }
     }
 
     #[test]
