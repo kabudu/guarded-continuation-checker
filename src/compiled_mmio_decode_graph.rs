@@ -175,7 +175,7 @@ pub fn build_compiled_mmio_decode_graph(
     })
 }
 
-pub fn verify_compiled_mmio_decode_graph(
+pub fn verify_compiled_mmio_decode_graph_btree_baseline(
     graph: &CompiledMmioDecodeGraph,
     image: &[u8],
     symbols: Rv32SymbolLayout,
@@ -319,6 +319,180 @@ pub fn verify_compiled_mmio_decode_graph(
     Ok(DecodeGraphVerification {
         unique_instruction_decodes: graph.nodes.len() as u64,
         graph_edges,
+        scalar_path_steps,
+        inputs_checked: DECODE_GRAPH_INPUTS as u16,
+    })
+}
+
+pub fn verify_compiled_mmio_decode_graph(
+    graph: &CompiledMmioDecodeGraph,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<DecodeGraphVerification, DecodeGraphError> {
+    let image_sha256: [u8; 32] = Sha256::digest(image).into();
+    if graph.version != DECODE_GRAPH_VERSION
+        || graph.image_sha256 != image_sha256
+        || graph.symbols != symbols
+        || graph.terminal_indices.len() != DECODE_GRAPH_INPUTS
+        || graph.nodes.is_empty()
+        || graph.nodes.len() > MAX_DECODE_GRAPH_NODES
+        || graph.terminals.is_empty()
+        || graph.terminals.len() > MAX_TERMINALS
+        || image.is_empty()
+        || image.len() > MAX_RV32_IMAGE_BYTES
+    {
+        return Err(reject("graph shape or identity is not canonical"));
+    }
+
+    let image_end = RV32_IMAGE_BASE
+        .checked_add(image.len() as u32)
+        .ok_or_else(|| reject("image end overflow"))?;
+    let slot_count = image
+        .len()
+        .checked_add(1)
+        .map(|bytes| bytes / 2)
+        .ok_or_else(|| reject("dense source index size overflow"))?;
+    let mut node_by_halfword = vec![u32::MAX; slot_count];
+    let mut decoded = Vec::<Instruction>::with_capacity(graph.nodes.len());
+    let mut edge_offsets = Vec::with_capacity(graph.nodes.len() + 1);
+    edge_offsets.push(0usize);
+    let mut previous_key = None;
+
+    for (index, node) in graph.nodes.iter().enumerate() {
+        let key = (
+            node.program_counter,
+            node.instruction_word,
+            node.instruction_bytes,
+        );
+        let source_offset = node
+            .program_counter
+            .checked_sub(RV32_IMAGE_BASE)
+            .ok_or_else(|| reject(format!("node {index} is below the source image")))?;
+        if source_offset % 2 != 0 {
+            return Err(reject(format!("node {index} is not halfword aligned")));
+        }
+        let slot = usize::try_from(source_offset / 2)
+            .map_err(|_| reject(format!("node {index} source offset exceeds platform")))?;
+        let encoded_index =
+            u32::try_from(index).map_err(|_| reject("node index exceeds u32 policy"))?;
+        if !matches!(node.instruction_bytes, 2 | 4)
+            || node.next_program_counters.is_empty()
+            || previous_key.is_some_and(|previous| previous >= key)
+            || node
+                .next_program_counters
+                .windows(2)
+                .any(|pair| pair[0] >= pair[1])
+            || node_by_halfword
+                .get_mut(slot)
+                .is_none_or(|entry| std::mem::replace(entry, encoded_index) != u32::MAX)
+        {
+            return Err(reject(format!("node {index} is not canonical")));
+        }
+        let fetched = fetch_step(image, node.program_counter)?;
+        if fetched != (node.instruction_word, node.instruction_bytes) {
+            return Err(reject(format!("node {index} differs from source image")));
+        }
+        decoded.push(
+            decode(node.instruction_word)
+                .map_err(|error| reject(format!("node {index} does not decode: {error:?}")))?,
+        );
+        let next_offset = edge_offsets[index]
+            .checked_add(node.next_program_counters.len())
+            .ok_or_else(|| reject("graph edge count overflow"))?;
+        if next_offset > MAX_DECODE_GRAPH_EDGES {
+            return Err(reject("graph edge count exceeds policy"));
+        }
+        edge_offsets.push(next_offset);
+        previous_key = Some(key);
+    }
+
+    let graph_edges = *edge_offsets
+        .last()
+        .ok_or_else(|| reject("graph edge offsets are empty"))?;
+    let mut covered_edges = vec![false; graph_edges];
+    let mut canonical_terminals = Vec::new();
+    let mut scalar_path_steps = 0u64;
+
+    for input in 0u8..=u8::MAX {
+        let mut machine = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("input {input}: {error}")))?;
+        while !machine.is_complete() {
+            let program_counter = machine.program_counter();
+            let source_offset = program_counter
+                .checked_sub(RV32_IMAGE_BASE)
+                .ok_or_else(|| reject(format!("input {input} program counter is below image")))?;
+            if source_offset % 2 != 0 {
+                return Err(reject(format!(
+                    "input {input} program counter is not halfword aligned"
+                )));
+            }
+            let slot = usize::try_from(source_offset / 2)
+                .map_err(|_| reject(format!("input {input} source offset exceeds platform")))?;
+            let encoded_index = *node_by_halfword
+                .get(slot)
+                .ok_or_else(|| reject(format!("input {input} program counter is outside image")))?;
+            let index = usize::try_from(encoded_index)
+                .ok()
+                .filter(|_| encoded_index != u32::MAX)
+                .ok_or_else(|| {
+                    reject(format!("input {input} has no node at {program_counter:#x}"))
+                })?;
+            let node = &graph.nodes[index];
+            machine
+                .step_predecoded(
+                    node.program_counter,
+                    node.instruction_word,
+                    node.instruction_bytes,
+                    &decoded[index],
+                    image_end,
+                )
+                .map_err(|error| reject(format!("input {input}, node {index}: {error}")))?;
+            let next_program_counter = machine.program_counter();
+            let edge_index = node
+                .next_program_counters
+                .binary_search(&next_program_counter)
+                .map_err(|_| {
+                    reject(format!(
+                        "input {input}, node {index} takes an undeclared edge"
+                    ))
+                })?;
+            covered_edges[edge_offsets[index] + edge_index] = true;
+            scalar_path_steps = scalar_path_steps
+                .checked_add(1)
+                .ok_or_else(|| reject("scalar path step count overflow"))?;
+        }
+
+        let execution = machine
+            .finish()
+            .map_err(|error| reject(format!("input {input}: {error}")))?;
+        let claimed_terminal = graph.terminal_indices[usize::from(input)];
+        if graph
+            .terminals
+            .get(usize::from(claimed_terminal))
+            .is_none_or(|terminal| terminal.execution != execution)
+        {
+            return Err(reject(format!("input {input} terminal mismatch")));
+        }
+        let canonical_terminal = terminal_index(&mut canonical_terminals, execution)?;
+        if claimed_terminal != canonical_terminal {
+            return Err(reject(format!(
+                "input {input} terminal index is not canonical"
+            )));
+        }
+    }
+
+    if covered_edges.iter().any(|covered| !covered)
+        || canonical_terminals != graph.terminals
+        || scalar_path_steps != graph.scalar_path_steps
+    {
+        return Err(reject(
+            "graph coverage, terminal table or scalar work is inconsistent",
+        ));
+    }
+
+    Ok(DecodeGraphVerification {
+        unique_instruction_decodes: graph.nodes.len() as u64,
+        graph_edges: graph_edges as u64,
         scalar_path_steps,
         inputs_checked: DECODE_GRAPH_INPUTS as u16,
     })
@@ -611,6 +785,15 @@ pub fn verify_compiled_mmio_decode_graph_bytes(
     verify_compiled_mmio_decode_graph(&graph, image, symbols)
 }
 
+pub fn verify_compiled_mmio_decode_graph_bytes_btree_baseline(
+    bytes: &[u8],
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<DecodeGraphVerification, DecodeGraphError> {
+    let graph = decode_compiled_mmio_decode_graph(bytes)?;
+    verify_compiled_mmio_decode_graph_btree_baseline(&graph, image, symbols)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -656,6 +839,9 @@ mod tests {
         );
 
         let verified = verify_compiled_mmio_decode_graph(&graph, &image, symbols).unwrap();
+        let baseline =
+            verify_compiled_mmio_decode_graph_btree_baseline(&graph, &image, symbols).unwrap();
+        assert_eq!(verified, baseline);
         assert_eq!(verified.unique_instruction_decodes, 6);
         assert_eq!(verified.graph_edges, 7);
         assert_eq!(verified.scalar_path_steps, 1_152);
@@ -664,6 +850,11 @@ mod tests {
         assert_eq!(decode_compiled_mmio_decode_graph(&bytes).unwrap(), graph);
         assert_eq!(
             verify_compiled_mmio_decode_graph_bytes(&bytes, &image, symbols).unwrap(),
+            verified
+        );
+        assert_eq!(
+            verify_compiled_mmio_decode_graph_bytes_btree_baseline(&bytes, &image, symbols)
+                .unwrap(),
             verified
         );
     }
