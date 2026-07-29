@@ -24,8 +24,14 @@ expected_semantic=e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907a
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/gcc-mmio-trust-boundary.XXXXXXXX")
 angr_image="gcc-angr-mmio-maintained-v1:$(basename "$scratch" | tr '[:upper:]' '[:lower:]')"
+gcc_target="${TMPDIR:-/tmp}/gcc-mmio-trust-boundary-gcc-target-v1"
+mkdir "$gcc_target" 2>/dev/null || {
+  echo "stable GCC target path is already in use" >&2
+  exit 2
+}
 cleanup() {
   docker image rm --force "$angr_image" >/dev/null 2>&1 || true
+  rm -rf "$gcc_target"
   rm -rf "$scratch"
 }
 trap cleanup EXIT HUP INT TERM
@@ -93,18 +99,18 @@ run_timed input-preparation setup 0 "$scratch/result/input-preparation.txt" \
   "$scratch/build"
 
 run_timed gcc-consumer-tool setup 0 "$scratch/result/gcc-tool-build.txt" \
-  env CARGO_TARGET_DIR="$scratch/gcc-target" \
+  env CARGO_TARGET_DIR="$gcc_target" \
   cargo build --quiet --release \
     --manifest-path "$repo/Cargo.toml" \
     --example verify_compiled_mmio_pwm_rtl
-gcc_consumer="$scratch/gcc-target/release/examples/verify_compiled_mmio_pwm_rtl"
+gcc_consumer="$gcc_target/release/examples/verify_compiled_mmio_pwm_rtl"
 
 run_timed gcc-producer-tool setup 0 "$scratch/result/gcc-producer-build.txt" \
-  env CARGO_TARGET_DIR="$scratch/gcc-target" \
+  env CARGO_TARGET_DIR="$gcc_target" \
   cargo build --quiet \
     --manifest-path "$repo/Cargo.toml" \
     --example compiled_mmio_pwm_rtl
-gcc_producer="$scratch/gcc-target/debug/examples/compiled_mmio_pwm_rtl"
+gcc_producer="$gcc_target/debug/examples/compiled_mmio_pwm_rtl"
 
 run_timed maintained-consumer-tool setup 0 "$scratch/result/angr-image-build.txt" \
   docker build --no-cache \
@@ -358,8 +364,9 @@ printf '%s\n' \
 } >"$scratch/result/manifest-v1.txt"
 
 {
-  echo "trust_boundary_identity_version=2"
+  echo "trust_boundary_identity_version=3"
   echo "repository_revision=$(git -C "$repo" rev-parse HEAD)"
+  echo "gcc_target_policy=atomically_reserved_stable_clean_path_v1"
   echo "profile=o2"
   echo "trials=5"
   echo "semantic_sha256=$trace_hash"
@@ -383,8 +390,9 @@ printf '%s\n' \
   echo "gcc_hostile_controls=4"
   echo "maintained_hostile_controls=10"
   echo "status=complete"
-} >"$scratch/result/identity-manifest-v2.txt"
+} >"$scratch/result/identity-manifest-v3.txt"
 
 cp "$certificate" "$scratch/result/"
+cp "$gcc_consumer" "$scratch/result/verify-compiled-mmio-pwm-rtl"
 mv "$scratch/result" "$output"
 echo "opentitan_pwm_mmio_rtl_trust_boundary_v1=PASS output=$output"
