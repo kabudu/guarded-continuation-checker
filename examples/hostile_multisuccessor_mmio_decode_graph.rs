@@ -2,7 +2,7 @@ use guarded_continuation_checker::{
     compiled_mmio_certificate::parse_compiled_mmio_symbols,
     compiled_mmio_decode_graph::{
         decode_compiled_mmio_decode_graph, verify_compiled_mmio_decode_graph,
-        verify_compiled_mmio_decode_graph_bytes,
+        verify_compiled_mmio_decode_graph_bytes, verify_compiled_mmio_decode_graph_successor_index,
     },
 };
 use std::{env, fs, process::ExitCode, time::Instant};
@@ -57,6 +57,8 @@ fn run() -> Result<(), String> {
     }
 
     let graph = decode_compiled_mmio_decode_graph(&bytes).map_err(|error| error.to_string())?;
+    verify_compiled_mmio_decode_graph_successor_index(&graph, &image, symbols)
+        .map_err(|error| error.to_string())?;
     let branch_index = graph
         .nodes
         .iter()
@@ -68,12 +70,19 @@ fn run() -> Result<(), String> {
     if verify_compiled_mmio_decode_graph(&missing_edge, &image, symbols).is_ok() {
         return Err("accepted missing edge".to_string());
     }
+    if verify_compiled_mmio_decode_graph_successor_index(&missing_edge, &image, symbols).is_ok() {
+        return Err("successor replay accepted missing edge".to_string());
+    }
     let mut additional_edge = graph.clone();
     additional_edge.nodes[branch_index]
         .next_program_counters
         .push(u32::MAX);
     if verify_compiled_mmio_decode_graph(&additional_edge, &image, symbols).is_ok() {
         return Err("accepted additional edge".to_string());
+    }
+    if verify_compiled_mmio_decode_graph_successor_index(&additional_edge, &image, symbols).is_ok()
+    {
+        return Err("successor replay accepted additional edge".to_string());
     }
     let mut duplicate_edge = graph.clone();
     let edge = duplicate_edge.nodes[branch_index].next_program_counters[0];
@@ -83,15 +92,24 @@ fn run() -> Result<(), String> {
     if verify_compiled_mmio_decode_graph(&duplicate_edge, &image, symbols).is_ok() {
         return Err("accepted duplicate edge".to_string());
     }
+    if verify_compiled_mmio_decode_graph_successor_index(&duplicate_edge, &image, symbols).is_ok() {
+        return Err("successor replay accepted duplicate edge".to_string());
+    }
     let mut missing_node = graph.clone();
     missing_node.nodes.remove(branch_index);
     if verify_compiled_mmio_decode_graph(&missing_node, &image, symbols).is_ok() {
         return Err("accepted missing node".to_string());
     }
+    if verify_compiled_mmio_decode_graph_successor_index(&missing_node, &image, symbols).is_ok() {
+        return Err("successor replay accepted missing node".to_string());
+    }
     let mut terminal = graph.clone();
     terminal.terminals[0].execution.return_value ^= 1;
     if verify_compiled_mmio_decode_graph(&terminal, &image, symbols).is_ok() {
         return Err("accepted terminal drift".to_string());
+    }
+    if verify_compiled_mmio_decode_graph_successor_index(&terminal, &image, symbols).is_ok() {
+        return Err("successor replay accepted terminal drift".to_string());
     }
 
     println!("multisuccessor_decode_graph_hostile_version=2");

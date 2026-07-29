@@ -1,6 +1,6 @@
 # MMIO successor-index replay v1
 
-Status: predeclared, not yet measured.
+Status: measured locally, frozen performance gate failed.
 
 ## Question
 
@@ -72,3 +72,28 @@ OpenSBI cohort without changing evidence bytes. It would not establish
 arbitrary firmware support, universal performance, production qualification
 or release readiness. Failure is retained without changing the thresholds or
 rerunning a tuned cohort.
+
+## Local result
+
+The mechanism preserves identical terminal semantics, 102,208 scalar replay
+steps, 596 nodes and 653 edges for all 256 inputs. Two clean builds reproduce
+byte-identical firmware, symbols, graph and trace-family artifacts. The
+successor route also refuses all 112,072 retained hostile cases.
+
+The first and only frozen resource cycle produced these medians:
+
+| Route | Median elapsed | Median peak RSS |
+| --- | ---: | ---: |
+| Current dense graph | 1.84 s | 10,895,360 bytes |
+| Successor-index graph | 1.65 s | 10,928,128 bytes |
+| Trace family | 1.67 s | 11,354,112 bytes |
+
+Successor-index replay uses 0.897 times the current dense elapsed time and
+0.988 times the trace-family elapsed time. Its peak RSS is 1.003 times current
+dense RSS.
+
+The trace-family and memory gates pass. The mechanism closes the earlier
+consumer-time gap on this cycle, but the predeclared improvement gate requires
+successor time to be no more than 0.80 times current dense time. The observed
+0.897 ratio fails that gate. The experiment therefore remains a negative
+qualification and does not justify replacing the production route.

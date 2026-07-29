@@ -4,8 +4,9 @@ use guarded_continuation_checker::{
     },
     compiled_mmio_certificate::parse_compiled_mmio_symbols,
     compiled_mmio_decode_graph::{
-        verify_compiled_mmio_decode_graph_bytes,
+        decode_compiled_mmio_decode_graph, verify_compiled_mmio_decode_graph_bytes,
         verify_compiled_mmio_decode_graph_bytes_btree_baseline,
+        verify_compiled_mmio_decode_graph_successor_index,
     },
     compiled_mmio_explicit_transcript::verify_explicit_compiled_mmio_transcript,
 };
@@ -47,6 +48,18 @@ fn run() -> Result<(), String> {
                 verified.scalar_path_steps,
             )
         }
+        "graph-successor" => {
+            let graph =
+                decode_compiled_mmio_decode_graph(&artifact).map_err(|error| error.to_string())?;
+            let verified =
+                verify_compiled_mmio_decode_graph_successor_index(&graph, &image, symbols)
+                    .map_err(|error| error.to_string())?;
+            println!("graph_edges={}", verified.graph_edges);
+            (
+                verified.unique_instruction_decodes,
+                verified.scalar_path_steps,
+            )
+        }
         "dag" => {
             let verified = verify_compiled_mmio_branching_dag_bytes(&artifact, &image, symbols)
                 .map_err(|error| error.to_string())?;
@@ -67,7 +80,8 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "route must be graph, graph-btree, dag, trace-family or explicit".to_string(),
+                "route must be graph, graph-btree, graph-successor, dag, trace-family or explicit"
+                    .to_string(),
             );
         }
     };
