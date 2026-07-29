@@ -113,3 +113,62 @@ It would not establish universal compression, arbitrary firmware support,
 algorithmic novelty, production readiness or superiority over all software and
 hardware witness systems. The cohort deliberately controls branch structure
 and must be followed by unrelated public firmware if it passes.
+
+## Local result
+
+Two clean sweeps produce byte-identical complete semantics and artifacts at
+all six class counts. The DAG remains substantially smaller than the explicit
+per-input transcript:
+
+| Classes | DAG bytes | Explicit bytes | Size reduction | Decode reduction |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 22,369 | 2,455,008 | 109.75 times | 104.87 times |
+| 2 | 30,104 | 2,464,508 | 81.87 times | 74.76 times |
+| 4 | 45,920 | 2,481,114 | 54.03 times | 47.47 times |
+| 8 | 77,126 | 2,494,258 | 32.34 times | 27.39 times |
+| 16 | 139,550 | 2,494,258 | 17.87 times | 14.83 times |
+| 32 | 264,398 | 2,494,258 | 9.43 times | 7.73 times |
+
+The exhaustive hostile matrix refuses all 1,158,952 tested DAG mutations,
+truncations, extensions, firmware substitutions and symbol substitutions.
+
+## Closest-baseline falsification
+
+The canonical non-sharing trace-family codec changes the conclusion. It
+contains one full trace per distinct control path and uses the same image
+binding, terminal evidence and independent scalar replay:
+
+| Classes | DAG nodes | Trace-family decoded transitions | DAG bytes | Trace-family bytes |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1,113 | 1,113 | 22,369 | 17,413 |
+| 2 | 1,568 | 1,568 | 30,104 | 23,332 |
+| 4 | 2,488 | 2,488 | 45,920 | 35,476 |
+| 8 | 4,334 | 4,334 | 77,126 | 59,314 |
+| 16 | 8,006 | 8,006 | 139,550 | 107,082 |
+| 32 | 15,350 | 15,350 | 264,398 | 202,618 |
+
+No continuation suffix is shared beyond complete-trace grouping. Different
+wrapper return addresses keep the future control suffixes distinct even while
+the paths temporarily execute common code. The DAG therefore performs no
+fewer unique decodes and is about 30 percent larger because each node carries
+an edge field.
+
+The local resource cycle also fails the strict no-slower gate at two classes:
+the DAG median is 0.03 seconds versus 0.02 seconds for the explicit consumer.
+These process durations are near timer resolution, but the frozen gate does
+not permit recalibration or discarding the result.
+
+## Conclusion
+
+Version 1 fails gates 6 through 8 as a continuation-sharing mechanism and is
+not admitted. It does establish a useful negative boundary: grouping inputs
+by identical complete control traces creates the large representation and
+decode advantage over per-input transcripts, while a single-successor suffix
+DAG adds no benefit for temporarily reconvergent code with different hidden
+return state.
+
+The appropriate successor is a source-bound multi-successor decode graph.
+Such a graph may share one decoded instruction at a common program counter
+while the independently replayed machine state selects and validates the
+actual next edge. That is a different mechanism and requires a new
+predeclaration.
