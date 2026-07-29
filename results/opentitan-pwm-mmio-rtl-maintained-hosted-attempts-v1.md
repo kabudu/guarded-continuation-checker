@@ -64,3 +64,26 @@ SHA-256 above, the normalized observations retain their complete frozen
 SHA-256, all eleven hostile controls pass and GCC agrees with both compiler
 profiles. No other comment, whitespace, ordering or model-body difference is
 normalized.
+
+## Attempt 3
+
+- Run:
+  [30411812266](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30411812266)
+- Revision: `7c003315f8773de7929c08164ca382ec5742ccd4`
+- Platform: GitHub-hosted Ubuntu 24.04 x86-64
+- Result: passed the predeclared portability-v2 gate
+
+The retained raw model again has SHA-256
+`f69e09d2dfbdcecf7c56771d152f0519449af7a3247dd5a7f82717a43ecab78c`.
+After the one validated generator banner is removed, its model-body SHA-256 is
+the frozen
+`bd0614bce84d54f935adb06ac7636ff3a3a1b67e1278ac71f3c3523024fcd03f`.
+The semantic SHA-256 is the frozen
+`e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907abf`.
+Both firmware compiler profiles agree with each other and GCC, and all eleven
+hostile controls pass.
+
+This closes the bounded hosted platform-reproduction gate for this maintained
+OpenTitan PWM MMIO-to-RTL cohort. It does not close independent external
+assessment, compatibility history, production readiness, novelty or general
+performance gates.

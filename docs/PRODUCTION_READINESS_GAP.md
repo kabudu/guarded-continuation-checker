@@ -824,8 +824,11 @@ upload, so the exact model-text difference is not yet available for diagnosis.
 The local gate remains closed, but hosted reproduction remains open. A second
 hosted run retains both raw models and proves that only the host compiler in
 the first-line Yosys generator comment differs; the other 1,839 lines are
-byte-identical. A narrowly scoped portability-v2 gate is predeclared but
-untested. No production row changes.
+byte-identical. A narrowly scoped portability-v2 gate then passes a third
+hosted run with the frozen model-body and semantic identities, both compiler
+profiles, and all eleven hostile controls. This closes bounded platform
+reproduction for the cohort. Independent assessment and compatibility history
+remain open, so no production row changes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
