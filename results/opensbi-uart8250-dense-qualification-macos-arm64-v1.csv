@@ -1,0 +1,16 @@
+schema_version,route,trial,elapsed_seconds,peak_rss_bytes,time_backend,platform
+1,graph,1,0.02,8601600,bsd,Darwin-arm64
+1,graph,2,0.02,10665984,bsd,Darwin-arm64
+1,graph,3,0.02,8617984,bsd,Darwin-arm64
+1,graph,4,0.02,8601600,bsd,Darwin-arm64
+1,graph,5,0.02,8601600,bsd,Darwin-arm64
+1,graph-btree,1,0.02,6602752,bsd,Darwin-arm64
+1,graph-btree,2,0.02,8749056,bsd,Darwin-arm64
+1,graph-btree,3,0.02,6619136,bsd,Darwin-arm64
+1,graph-btree,4,0.02,8781824,bsd,Darwin-arm64
+1,graph-btree,5,0.02,6602752,bsd,Darwin-arm64
+1,trace-family,1,0.01,6815744,bsd,Darwin-arm64
+1,trace-family,2,0.01,8962048,bsd,Darwin-arm64
+1,trace-family,3,0.01,8994816,bsd,Darwin-arm64
+1,trace-family,4,0.01,8962048,bsd,Darwin-arm64
+1,trace-family,5,0.01,8945664,bsd,Darwin-arm64
