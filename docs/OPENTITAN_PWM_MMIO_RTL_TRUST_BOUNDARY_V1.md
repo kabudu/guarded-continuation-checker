@@ -229,3 +229,29 @@ first complete hosted result is observed. A passing run would close bounded
 Ubuntu platform reproduction for this comparison. It would not close
 compatibility history, external independent assessment, production readiness,
 novelty or general performance.
+
+## Hosted reproduction v1 result
+
+[Hosted run 30438790163](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30438790163)
+passes every predeclared gate on Ubuntu 24.04 x86-64 at revision
+`f44bc350d21a8747dbbe91b419bb61b7f86722ef`.
+
+| Cycle | GCC median wall | Maintained median wall | GCC maximum RSS | Maintained minimum RSS |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 0.06 s | 4.95 s | 8,761,344 bytes | 67,084,288 bytes |
+| 2 | 0.06 s | 4.96 s | 8,945,664 bytes | 67,076,096 bytes |
+
+The least favorable hosted advantage is 82.50 times in median warm-consumer
+wall time and 7.50 times in peak RSS. Both cycles reproduce the frozen semantic
+and certificate identities, refuse all fourteen hostile changes and produce
+byte-identical Linux executables, certificates, semantic summaries and
+identity manifests.
+
+The negative tradeoffs remain visible. GCC transfers about 3.50 times more
+payload bytes, its clean consumer build takes about 41 seconds and peaks near
+1.49 GB RSS, and certificate production takes about 19 seconds. Complete
+retained evidence is under
+[`results/opentitan-pwm-mmio-rtl-trust-boundary-hosted-v1`](../results/opentitan-pwm-mmio-rtl-trust-boundary-hosted-v1/README.md).
+
+This closes bounded Ubuntu platform reproduction for the frozen comparison.
+Compatibility history and external independent assessment remain open.

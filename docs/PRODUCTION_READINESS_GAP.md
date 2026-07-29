@@ -842,6 +842,15 @@ near 1.88 GiB, and the fresh angr image remains byte-size-variable. Hosted
 trust-boundary reproduction, compatibility history and independent assessment
 remain open, so no production row changes.
 
+Hosted trust-boundary run 30438790163 then passes the unchanged two-cycle
+Ubuntu 24.04 x86-64 gate. It reproduces the frozen certificate and semantics,
+all fourteen hostile refusals, byte-identical within-platform consumer and
+identity bytes, and at least 82.50 times lower median warm wall time plus 7.50
+times lower peak RSS. The 3.50-times payload premium and substantial clean
+build and producer costs remain retained. This closes bounded hosted
+reproduction for the comparison, but compatibility history and independent
+external assessment remain open, so no production row changes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

@@ -7,7 +7,12 @@
   fresh-process trials per route, all fourteen hostile refusals, the unchanged
   twofold wall and memory gates, and complete setup and payload observations.
   The two hosted cycles must produce byte-identical Linux consumer,
-  certificate, semantic-summary and identity-manifest bytes.
+  certificate, semantic-summary and identity-manifest bytes. Hosted run
+  30438790163 passes every gate with byte-identical evidence and the frozen
+  semantic and certificate identities. The least favorable hosted advantage
+  is 82.50 times in median warm wall time and 7.50 times in peak RSS; the
+  3.50-times payload premium and substantial setup and producer costs remain
+  retained.
 
 - Predeclare an identical-task trust-boundary comparison for the maintained
   OpenTitan PWM MMIO-to-RTL cohort. It separates producer work and tool setup

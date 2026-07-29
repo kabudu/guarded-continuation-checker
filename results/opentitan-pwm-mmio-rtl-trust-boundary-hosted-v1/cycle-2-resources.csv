@@ -1,0 +1,16 @@
+schema_version,operation,phase,profile,trial,wall_seconds,user_seconds,system_seconds,peak_rss_bytes,time_backend,platform,status
+1,input-preparation,setup,o2,0,12.11,11.33,0.06,34844672,gnu,Linux-x86_64,complete
+1,gcc-consumer-tool,setup,o2,0,41.28,129.97,4.13,1483784192,gnu,Linux-x86_64,complete
+1,gcc-producer-tool,setup,o2,0,18.09,45.26,3.28,1256796160,gnu,Linux-x86_64,complete
+1,maintained-consumer-tool,setup,o2,0,25.12,0.10,0.08,56692736,gnu,Linux-x86_64,complete
+1,gcc-certificate-production,producer,o2,0,18.92,18.91,0.00,9932800,gnu,Linux-x86_64,complete
+1,gcc-consumer,measured,o2,1,0.06,0.06,0.00,8925184,gnu,Linux-x86_64,complete
+1,maintained-consumer,measured,o2,1,4.96,1.79,0.22,67096576,gnu,Linux-x86_64,complete
+1,gcc-consumer,measured,o2,2,0.06,0.06,0.00,8744960,gnu,Linux-x86_64,complete
+1,maintained-consumer,measured,o2,2,4.98,1.78,0.23,67166208,gnu,Linux-x86_64,complete
+1,gcc-consumer,measured,o2,3,0.06,0.06,0.00,8945664,gnu,Linux-x86_64,complete
+1,maintained-consumer,measured,o2,3,4.96,1.80,0.21,67076096,gnu,Linux-x86_64,complete
+1,gcc-consumer,measured,o2,4,0.06,0.06,0.00,8720384,gnu,Linux-x86_64,complete
+1,maintained-consumer,measured,o2,4,4.96,1.80,0.22,67125248,gnu,Linux-x86_64,complete
+1,gcc-consumer,measured,o2,5,0.06,0.06,0.00,8720384,gnu,Linux-x86_64,complete
+1,maintained-consumer,measured,o2,5,4.95,1.79,0.23,67125248,gnu,Linux-x86_64,complete
