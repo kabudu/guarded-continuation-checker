@@ -522,7 +522,10 @@ fn split_evidence_cli_admits_once_and_verifies_multiple_batches() {
             )
             .as_bytes(),
         );
-        let hostile_tool = ControllerSplitCacheObservabilityTool::discover(&hostile_cache).unwrap();
+        let hostile_tool = retry_executable_busy(|| {
+            ControllerSplitCacheObservabilityTool::discover(&hostile_cache)
+        })
+        .unwrap();
         let failure = hostile_tool
             .verify_set(
                 &evidence,

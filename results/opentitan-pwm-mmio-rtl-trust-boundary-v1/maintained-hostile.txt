@@ -1,0 +1,7 @@
+hostile_control=firmware,status=refused
+hostile_control=rtl-source,status=refused
+hostile_control=yosys-identity,status=refused
+hostile_control=z3-identity,status=refused
+hostile_control=report-schema,status=refused,count=6
+hostile_controls=10
+status=complete

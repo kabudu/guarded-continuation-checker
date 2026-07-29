@@ -1,0 +1,12 @@
+schema_version=1
+gcc_certificate_bytes=7889
+gcc_firmware_bytes=5372
+gcc_symbols_bytes=534
+gcc_btor2_bytes=97036
+gcc_payload_bytes=110831
+maintained_firmware_elf_bytes=6816
+maintained_rtl_source_bytes=24863
+maintained_payload_bytes=31679
+gcc_consumer_executable_bytes=763056
+maintained_angr_image_bytes=192388264
+status=complete

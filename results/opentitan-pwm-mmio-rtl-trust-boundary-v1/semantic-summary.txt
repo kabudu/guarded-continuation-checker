@@ -1,0 +1,13 @@
+firmware_behaviors=7
+valid_rtl_members=6
+invalid_rtl_members=0
+rtl_transitions=198
+rtl_observations=204
+phase_cycle_classes=2
+nonzero_traces=6
+rtl_trace_phase_cycle=0,transitions=33,observations=0:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00,9:00,a:00,b:00,c:00,d:00,e:00,f:00,f:00,f:00,f:00,f:00,f:00,f:01,f:01,f:01,f:01,f:01,f:01,f:00,f:00,f:00,f:00,f:00,f:00,f:00
+rtl_trace_phase_cycle=1,transitions=33,observations=0:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00,9:00,a:00,b:00,c:00,d:00,e:00,f:00,f:00,f:00,f:00,f:01,f:01,f:01,f:01,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00
+rtl_trace_phase_cycle=2,transitions=33,observations=0:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00,9:00,a:00,b:00,c:00,d:00,e:00,f:00,f:00,f:00,f:00,f:01,f:01,f:01,f:01,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00
+rtl_trace_phase_cycle=3,transitions=33,observations=0:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00,9:00,a:00,b:00,c:00,d:00,e:00,f:00,f:00,f:00,f:00,f:01,f:01,f:01,f:01,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00
+rtl_trace_phase_cycle=4,transitions=33,observations=0:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00,9:00,a:00,b:00,c:00,d:00,e:00,f:00,f:00,f:00,f:00,f:01,f:01,f:01,f:01,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00
+rtl_trace_phase_cycle=5,transitions=33,observations=0:00,1:00,2:00,3:00,4:00,5:00,6:00,7:00,8:00,9:00,a:00,b:00,c:00,d:00,e:00,f:00,f:00,f:00,f:00,f:01,f:01,f:01,f:01,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00,f:00

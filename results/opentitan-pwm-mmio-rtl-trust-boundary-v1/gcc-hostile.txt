@@ -1,0 +1,6 @@
+hostile_control=certificate,status=refused
+hostile_control=firmware,status=refused
+hostile_control=symbols,status=refused
+hostile_control=btor2,status=refused
+hostile_controls=4
+status=complete

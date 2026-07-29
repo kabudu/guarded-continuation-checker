@@ -830,6 +830,18 @@ profiles, and all eleven hostile controls. This closes bounded platform
 reproduction for the cohort. Independent assessment and compatibility history
 remain open, so no production row changes.
 
+The local identical-consumer
+[trust-boundary comparison](OPENTITAN_PWM_MMIO_RTL_TRUST_BOUNDARY_V1.md) now
+passes after retaining two failed reproducibility protocols. Identity v3
+produces byte-identical clean consumer executables, certificates, semantic
+summaries and source/tool manifests across two cycles. Five fresh-process
+trials per route show at least 71.50 times lower median wall time and 5.94 times
+lower peak RSS for GCC certificate verification than complete maintained
+regeneration. GCC's payload is about 3.50 times larger, its clean build peaks
+near 1.88 GiB, and the fresh angr image remains byte-size-variable. Hosted
+trust-boundary reproduction, compatibility history and independent assessment
+remain open, so no production row changes.
+
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
 byte-identical and aligned with the implemented trust boundary.

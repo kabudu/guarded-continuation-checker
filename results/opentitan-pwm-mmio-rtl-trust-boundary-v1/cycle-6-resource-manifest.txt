@@ -1,0 +1,15 @@
+trust_boundary_comparison_version=1
+profile=o2
+trials=5
+semantic_sha256=e7a87b007d82f2c7cee41d4b005066c4ba94f8c690df5f0e38f423ff65907abf
+gcc_payload_bytes=110831
+maintained_payload_bytes=31679
+gcc_median_wall_seconds=0.04
+maintained_median_wall_seconds=2.86
+gcc_max_peak_rss_bytes=11436032
+maintained_min_peak_rss_bytes=67928064
+gcc_wall_gate=true
+gcc_memory_gate=true
+gcc_hostile_controls=4
+maintained_hostile_controls=10
+status=complete

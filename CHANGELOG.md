@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Predeclare an identical-task trust-boundary comparison for the maintained
+  OpenTitan PWM MMIO-to-RTL cohort. It separates producer work and tool setup
+  from five fresh-process consumer trials, counts both transfer payloads,
+  requires the same complete semantic answer, and compares certificate
+  rechecking with full angr, Yosys and Z3 regeneration. Two v1 cycles pass the
+  semantic, hostile, wall-time and memory gates but fail a byte-identical
+  manifest rule because resource observations and fresh angr image sizes vary.
+  Identity v2 separates those classes but retains a clean Rust consumer binary
+  difference caused by Cargo's varying target path. Identity v3 is predeclared
+  and passes using an atomically reserved stable clean-build path. Two clean
+  cycles retain byte-identical executables, certificates, identities and
+  semantics. GCC warm verification is at least 71.50 times faster and uses at
+  least 5.94 times less peak RSS in the observed cycles, while transferring
+  about 3.50 times more bytes and retaining substantial clean-build cost.
+
 - Add a manual hosted Linux evidence workflow for the maintained OpenTitan PWM
   MMIO-to-RTL comparison. It builds pinned Yosys, verifies pinned Z3, runs the
   complete angr and RTL workflow, and retains complete resource evidence.
