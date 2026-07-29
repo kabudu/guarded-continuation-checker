@@ -17,6 +17,7 @@ pub const BRANCHING_DAG_INPUTS: usize = 256;
 pub const MAX_BRANCHING_DAG_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_BRANCHING_DAG_NODES: usize = 1024 * 1024;
 const MAGIC: &[u8; 8] = b"GCCBDG01";
+const TRACE_FAMILY_MAGIC: &[u8; 8] = b"GCCTRF01";
 const CHECKSUM_BYTES: usize = 32;
 const MAX_TERMINALS: usize = BRANCHING_DAG_INPUTS;
 const MAX_EVENTS: usize = 32;
@@ -415,6 +416,81 @@ pub fn projected_compiled_mmio_trace_family_size(
         .ok_or_else(|| reject("trace-family encoded size overflow"))
 }
 
+pub fn encode_compiled_mmio_trace_family(
+    family: &CompiledMmioTraceFamily,
+) -> Result<Vec<u8>, BranchingDagError> {
+    if family.version != BRANCHING_DAG_VERSION
+        || family.input_trace_indices.len() != BRANCHING_DAG_INPUTS
+        || family.terminal_indices.len() != BRANCHING_DAG_INPUTS
+        || family.traces.is_empty()
+        || family.traces.len() > BRANCHING_DAG_INPUTS
+        || family.terminals.is_empty()
+        || family.terminals.len() > MAX_TERMINALS
+    {
+        return Err(reject("trace-family fields are outside encoding policy"));
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(TRACE_FAMILY_MAGIC);
+    push_u32(&mut bytes, family.version);
+    bytes.extend_from_slice(&family.image_sha256);
+    push_u32(&mut bytes, family.symbols.entry);
+    push_u32(&mut bytes, family.symbols.event_count);
+    push_u32(&mut bytes, family.symbols.events);
+    push_u64(&mut bytes, family.scalar_path_steps);
+    push_u32(&mut bytes, family.traces.len() as u32);
+    push_u32(&mut bytes, family.terminals.len() as u32);
+    for trace in &family.input_trace_indices {
+        push_u16(&mut bytes, *trace);
+    }
+    for terminal in &family.terminal_indices {
+        push_u16(&mut bytes, *terminal);
+    }
+    let mut total_steps = 0usize;
+    for trace in &family.traces {
+        if trace.is_empty() {
+            return Err(reject("trace-family member is empty"));
+        }
+        total_steps = total_steps
+            .checked_add(trace.len())
+            .ok_or_else(|| reject("trace-family step count overflow"))?;
+        if total_steps > MAX_BRANCHING_DAG_NODES {
+            return Err(reject("trace-family step count exceeds policy"));
+        }
+        push_u32(&mut bytes, trace.len() as u32);
+        for step in trace {
+            push_u32(&mut bytes, step.program_counter);
+            push_u32(&mut bytes, step.instruction_word);
+            bytes.push(step.instruction_bytes);
+            push_u32(&mut bytes, step.next_program_counter);
+        }
+    }
+    for terminal in &family.terminals {
+        let execution = &terminal.execution;
+        if execution.steps > MAX_RV32_STEPS
+            || execution.events.len() > MAX_EVENTS
+            || execution.events.len() != execution.event_program_locations.len()
+        {
+            return Err(reject("trace-family terminal exceeds encoding policy"));
+        }
+        push_u32(&mut bytes, execution.return_value);
+        push_u64(&mut bytes, execution.steps);
+        push_u32(&mut bytes, execution.events.len() as u32);
+        for event in &execution.events {
+            push_u32(&mut bytes, event.operation);
+            push_u32(&mut bytes, event.offset);
+            push_u32(&mut bytes, event.value);
+        }
+        for location in &execution.event_program_locations {
+            push_u32(&mut bytes, *location);
+        }
+    }
+    bytes.extend_from_slice(&Sha256::digest(&bytes));
+    if bytes.len() > MAX_BRANCHING_DAG_BYTES {
+        return Err(reject("encoded trace family exceeds byte policy"));
+    }
+    Ok(bytes)
+}
+
 pub fn verify_compiled_mmio_branching_dag(
     dag: &CompiledMmioBranchingDag,
     image: &[u8],
@@ -664,6 +740,143 @@ impl<'a> Cursor<'a> {
     }
 }
 
+pub fn decode_compiled_mmio_trace_family(
+    bytes: &[u8],
+) -> Result<CompiledMmioTraceFamily, BranchingDagError> {
+    if bytes.len() < 1100 || bytes.len() > MAX_BRANCHING_DAG_BYTES {
+        return Err(reject("trace-family artifact size is outside policy"));
+    }
+    let content_len = bytes
+        .len()
+        .checked_sub(CHECKSUM_BYTES)
+        .ok_or_else(|| reject("trace-family artifact is truncated"))?;
+    let checksum: [u8; 32] = Sha256::digest(&bytes[..content_len]).into();
+    if checksum != bytes[content_len..] {
+        return Err(reject("trace-family checksum mismatch"));
+    }
+    let mut cursor = Cursor {
+        bytes: &bytes[..content_len],
+        offset: 0,
+    };
+    if cursor.take(TRACE_FAMILY_MAGIC.len())? != TRACE_FAMILY_MAGIC {
+        return Err(reject("trace-family magic mismatch"));
+    }
+    let version = cursor.u32()?;
+    let image_sha256 = cursor
+        .take(32)?
+        .try_into()
+        .map_err(|_| reject("invalid image digest"))?;
+    let symbols = Rv32SymbolLayout {
+        entry: cursor.u32()?,
+        event_count: cursor.u32()?,
+        events: cursor.u32()?,
+    };
+    let scalar_path_steps = cursor.u64()?;
+    let trace_count =
+        usize::try_from(cursor.u32()?).map_err(|_| reject("trace count exceeds platform"))?;
+    let terminal_count =
+        usize::try_from(cursor.u32()?).map_err(|_| reject("terminal count exceeds platform"))?;
+    if trace_count == 0
+        || trace_count > BRANCHING_DAG_INPUTS
+        || terminal_count == 0
+        || terminal_count > MAX_TERMINALS
+    {
+        return Err(reject("trace-family counts are outside policy"));
+    }
+    let mut input_trace_indices = Vec::with_capacity(BRANCHING_DAG_INPUTS);
+    for _ in 0..BRANCHING_DAG_INPUTS {
+        input_trace_indices.push(cursor.u16()?);
+    }
+    let mut terminal_indices = Vec::with_capacity(BRANCHING_DAG_INPUTS);
+    for _ in 0..BRANCHING_DAG_INPUTS {
+        terminal_indices.push(cursor.u16()?);
+    }
+    let mut traces = Vec::with_capacity(trace_count);
+    let mut total_steps = 0usize;
+    for _ in 0..trace_count {
+        let step_count =
+            usize::try_from(cursor.u32()?).map_err(|_| reject("step count exceeds platform"))?;
+        total_steps = total_steps
+            .checked_add(step_count)
+            .ok_or_else(|| reject("trace-family step count overflow"))?;
+        if step_count == 0
+            || total_steps > MAX_BRANCHING_DAG_NODES
+            || step_count > cursor.bytes.len().saturating_sub(cursor.offset) / 13
+        {
+            return Err(reject("trace-family step count exceeds policy"));
+        }
+        let mut trace = Vec::with_capacity(step_count);
+        for _ in 0..step_count {
+            trace.push(TraceFamilyStep {
+                program_counter: cursor.u32()?,
+                instruction_word: cursor.u32()?,
+                instruction_bytes: cursor.u8()?,
+                next_program_counter: cursor.u32()?,
+            });
+        }
+        traces.push(trace);
+    }
+    let mut terminals = Vec::with_capacity(terminal_count);
+    for _ in 0..terminal_count {
+        let return_value = cursor.u32()?;
+        let steps = cursor.u64()?;
+        let event_count =
+            usize::try_from(cursor.u32()?).map_err(|_| reject("event count exceeds platform"))?;
+        if steps > MAX_RV32_STEPS
+            || event_count > MAX_EVENTS
+            || event_count > cursor.bytes.len().saturating_sub(cursor.offset) / 16
+        {
+            return Err(reject("trace-family terminal exceeds policy"));
+        }
+        let mut events = Vec::with_capacity(event_count);
+        for _ in 0..event_count {
+            events.push(CompiledMmioEvent {
+                operation: cursor.u32()?,
+                offset: cursor.u32()?,
+                value: cursor.u32()?,
+            });
+        }
+        let mut event_program_locations = Vec::with_capacity(event_count);
+        for _ in 0..event_count {
+            event_program_locations.push(cursor.u32()?);
+        }
+        terminals.push(BranchingTerminal {
+            execution: Rv32Execution {
+                return_value,
+                steps,
+                events,
+                event_program_locations,
+            },
+        });
+    }
+    if cursor.offset != cursor.bytes.len() {
+        return Err(reject("trace-family artifact has trailing content"));
+    }
+    let family = CompiledMmioTraceFamily {
+        version,
+        image_sha256,
+        symbols,
+        input_trace_indices,
+        terminal_indices,
+        traces,
+        terminals,
+        scalar_path_steps,
+    };
+    if encode_compiled_mmio_trace_family(&family)? != bytes {
+        return Err(reject("trace-family encoding is not canonical"));
+    }
+    Ok(family)
+}
+
+pub fn verify_compiled_mmio_trace_family_bytes(
+    bytes: &[u8],
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<TraceFamilyVerification, BranchingDagError> {
+    let family = decode_compiled_mmio_trace_family(bytes)?;
+    verify_compiled_mmio_trace_family(&family, image, symbols)
+}
+
 pub fn decode_compiled_mmio_branching_dag(
     bytes: &[u8],
 ) -> Result<CompiledMmioBranchingDag, BranchingDagError> {
@@ -836,7 +1049,19 @@ mod tests {
         let family_verified = verify_compiled_mmio_trace_family(&family, &image, symbols).unwrap();
         assert_eq!(family.traces.len(), 1);
         assert_eq!(family_verified.decoded_transitions, 2);
-        assert!(projected_compiled_mmio_trace_family_size(&family).unwrap() > 0);
+        let family_bytes = encode_compiled_mmio_trace_family(&family).unwrap();
+        assert_eq!(
+            family_bytes.len(),
+            projected_compiled_mmio_trace_family_size(&family).unwrap()
+        );
+        assert_eq!(
+            decode_compiled_mmio_trace_family(&family_bytes).unwrap(),
+            family
+        );
+        assert_eq!(
+            verify_compiled_mmio_trace_family_bytes(&family_bytes, &image, symbols).unwrap(),
+            family_verified
+        );
     }
 
     #[test]

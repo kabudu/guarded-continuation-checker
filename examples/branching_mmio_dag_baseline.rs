@@ -1,8 +1,8 @@
 use guarded_continuation_checker::{
     compiled_mmio_branching_dag::{
         build_compiled_mmio_branching_dag, build_compiled_mmio_trace_family,
-        encode_compiled_mmio_branching_dag, projected_compiled_mmio_trace_family_size,
-        verify_compiled_mmio_branching_dag_bytes, verify_compiled_mmio_trace_family,
+        encode_compiled_mmio_branching_dag, encode_compiled_mmio_trace_family,
+        verify_compiled_mmio_branching_dag_bytes, verify_compiled_mmio_trace_family_bytes,
     },
     compiled_mmio_certificate::parse_compiled_mmio_symbols,
     compiled_mmio_explicit_transcript::{
@@ -22,10 +22,9 @@ fn hex_digest(bytes: &[u8]) -> String {
 
 fn run() -> Result<(), String> {
     let arguments = env::args_os().collect::<Vec<_>>();
-    if arguments.len() != 5 {
+    if arguments.len() != 6 {
         return Err(
-            "usage: branching_mmio_dag_baseline FIRMWARE_BIN SYMBOLS_TXT DAG_OUT EXPLICIT_OUT"
-                .to_string(),
+            "usage: branching_mmio_dag_baseline FIRMWARE_BIN SYMBOLS_TXT DAG_OUT TRACE_FAMILY_OUT EXPLICIT_OUT".to_string(),
         );
     }
     let image = fs::read(&arguments[1]).map_err(|error| error.to_string())?;
@@ -38,10 +37,11 @@ fn run() -> Result<(), String> {
     let dag_verification = verify_compiled_mmio_branching_dag_bytes(&dag_bytes, &image, symbols)
         .map_err(|error| error.to_string())?;
     let trace_family = build_compiled_mmio_trace_family(&dag).map_err(|error| error.to_string())?;
-    let trace_verification = verify_compiled_mmio_trace_family(&trace_family, &image, symbols)
-        .map_err(|error| error.to_string())?;
-    let trace_family_bytes = projected_compiled_mmio_trace_family_size(&trace_family)
-        .map_err(|error| error.to_string())?;
+    let trace_family_bytes =
+        encode_compiled_mmio_trace_family(&trace_family).map_err(|error| error.to_string())?;
+    let trace_verification =
+        verify_compiled_mmio_trace_family_bytes(&trace_family_bytes, &image, symbols)
+            .map_err(|error| error.to_string())?;
 
     let explicit = build_explicit_compiled_mmio_transcript(&image, symbols)
         .map_err(|error| error.to_string())?;
@@ -60,7 +60,8 @@ fn run() -> Result<(), String> {
         }
     }
     fs::write(&arguments[3], &dag_bytes).map_err(|error| error.to_string())?;
-    fs::write(&arguments[4], &explicit_bytes).map_err(|error| error.to_string())?;
+    fs::write(&arguments[4], &trace_family_bytes).map_err(|error| error.to_string())?;
+    fs::write(&arguments[5], &explicit_bytes).map_err(|error| error.to_string())?;
 
     println!("branching_mmio_dag_baseline_version=1");
     println!("input_count=256");
@@ -75,7 +76,11 @@ fn run() -> Result<(), String> {
     );
     println!("dag_scalar_path_steps={}", dag.scalar_path_steps);
     println!("trace_family_count={}", trace_family.traces.len());
-    println!("trace_family_projected_bytes={trace_family_bytes}");
+    println!("trace_family_artifact_bytes={}", trace_family_bytes.len());
+    println!(
+        "trace_family_artifact_sha256={}",
+        hex_digest(&trace_family_bytes)
+    );
     println!(
         "trace_family_decoded_transitions={}",
         trace_verification.decoded_transitions

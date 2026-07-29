@@ -70,6 +70,7 @@ for classes in 1 2 4 8 16 32; do
     "$cohort/firmware.bin" \
     "$cohort/firmware.symbols.txt" \
     "$cohort/branching-dag-v1.bin" \
+    "$cohort/trace-family-v1.bin" \
     "$cohort/explicit-transcript-v1.bin" \
     > "$cohort/result.txt"
 done
