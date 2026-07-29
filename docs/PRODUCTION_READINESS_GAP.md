@@ -821,8 +821,11 @@ Hosted maintained-comparison run 30405783137 preserves every normalized
 semantic result and all eleven hostile refusals, but fails the predeclared
 cross-platform raw SMT-LIB byte identity. Its failed step also skipped artifact
 upload, so the exact model-text difference is not yet available for diagnosis.
-The local gate remains closed, but hosted reproduction remains open. No
-production row changes.
+The local gate remains closed, but hosted reproduction remains open. A second
+hosted run retains both raw models and proves that only the host compiler in
+the first-line Yosys generator comment differs; the other 1,839 lines are
+byte-identical. A narrowly scoped portability-v2 gate is predeclared but
+untested. No production row changes.
 
 The accessible platform architecture diagram is complete and embedded in this
 repository and guardedcontinuation.org. Future releases must keep both copies
