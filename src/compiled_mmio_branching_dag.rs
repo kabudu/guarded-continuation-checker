@@ -54,6 +54,33 @@ pub struct BranchingDagVerification {
     pub inputs_checked: u16,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct TraceFamilyStep {
+    pub program_counter: u32,
+    pub instruction_word: u32,
+    pub instruction_bytes: u8,
+    pub next_program_counter: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompiledMmioTraceFamily {
+    pub version: u32,
+    pub image_sha256: [u8; 32],
+    pub symbols: Rv32SymbolLayout,
+    pub input_trace_indices: Vec<u16>,
+    pub terminal_indices: Vec<u16>,
+    pub traces: Vec<Vec<TraceFamilyStep>>,
+    pub terminals: Vec<BranchingTerminal>,
+    pub scalar_path_steps: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TraceFamilyVerification {
+    pub decoded_transitions: u64,
+    pub scalar_path_steps: u64,
+    pub inputs_checked: u16,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BranchingDagError(pub String);
 
@@ -188,6 +215,204 @@ pub fn build_compiled_mmio_branching_dag(
         terminals,
         scalar_path_steps,
     })
+}
+
+pub fn build_compiled_mmio_trace_family(
+    dag: &CompiledMmioBranchingDag,
+) -> Result<CompiledMmioTraceFamily, BranchingDagError> {
+    let mut traces = Vec::new();
+    let mut interned = BTreeMap::new();
+    let mut input_trace_indices = Vec::with_capacity(BRANCHING_DAG_INPUTS);
+    for (input, root) in dag.roots.iter().copied().enumerate() {
+        let mut trace = Vec::new();
+        let mut next = Some(root);
+        while let Some(node_index) = next {
+            let node = dag
+                .nodes
+                .get(node_index as usize)
+                .ok_or_else(|| reject(format!("input {input} edge is outside DAG")))?;
+            trace.push(TraceFamilyStep {
+                program_counter: node.program_counter,
+                instruction_word: node.instruction_word,
+                instruction_bytes: node.instruction_bytes,
+                next_program_counter: node.next_program_counter,
+            });
+            next = node.next;
+        }
+        let trace_index = if let Some(index) = interned.get(&trace) {
+            *index
+        } else {
+            let index =
+                u16::try_from(traces.len()).map_err(|_| reject("trace count exceeds u16"))?;
+            traces.push(trace.clone());
+            interned.insert(trace, index);
+            index
+        };
+        input_trace_indices.push(trace_index);
+    }
+    Ok(CompiledMmioTraceFamily {
+        version: BRANCHING_DAG_VERSION,
+        image_sha256: dag.image_sha256,
+        symbols: dag.symbols,
+        input_trace_indices,
+        terminal_indices: dag.terminal_indices.clone(),
+        traces,
+        terminals: dag.terminals.clone(),
+        scalar_path_steps: dag.scalar_path_steps,
+    })
+}
+
+pub fn verify_compiled_mmio_trace_family(
+    family: &CompiledMmioTraceFamily,
+    image: &[u8],
+    symbols: Rv32SymbolLayout,
+) -> Result<TraceFamilyVerification, BranchingDagError> {
+    let image_sha256: [u8; 32] = Sha256::digest(image).into();
+    if family.version != BRANCHING_DAG_VERSION
+        || family.image_sha256 != image_sha256
+        || family.symbols != symbols
+        || family.input_trace_indices.len() != BRANCHING_DAG_INPUTS
+        || family.terminal_indices.len() != BRANCHING_DAG_INPUTS
+        || family.traces.is_empty()
+        || family.terminals.is_empty()
+    {
+        return Err(reject("trace-family shape or identity is not canonical"));
+    }
+    let image_end = RV32_IMAGE_BASE
+        .checked_add(image.len() as u32)
+        .ok_or_else(|| reject("image end overflow"))?;
+    let mut decoded_traces = Vec::with_capacity(family.traces.len());
+    let mut decoded_transitions = 0u64;
+    for (trace_index, trace) in family.traces.iter().enumerate() {
+        if trace.is_empty() {
+            return Err(reject(format!("trace {trace_index} is empty")));
+        }
+        let mut decoded = Vec::with_capacity(trace.len());
+        for (step_index, step) in trace.iter().enumerate() {
+            if !matches!(step.instruction_bytes, 2 | 4)
+                || (step_index > 0
+                    && trace[step_index - 1].next_program_counter != step.program_counter)
+            {
+                return Err(reject(format!(
+                    "trace {trace_index} step {step_index} is not canonical"
+                )));
+            }
+            decoded.push(decode(step.instruction_word).map_err(|error| {
+                reject(format!(
+                    "trace {trace_index} step {step_index} does not decode: {error:?}"
+                ))
+            })?);
+        }
+        decoded_transitions = decoded_transitions
+            .checked_add(trace.len() as u64)
+            .ok_or_else(|| reject("trace-family decode count overflow"))?;
+        decoded_traces.push(decoded);
+    }
+
+    let mut canonical_traces = Vec::new();
+    let mut canonical_interned = BTreeMap::new();
+    let mut canonical_terminals = Vec::new();
+    let mut scalar_path_steps = 0u64;
+    for input in 0u8..=u8::MAX {
+        let trace_index = usize::from(family.input_trace_indices[usize::from(input)]);
+        let trace = family
+            .traces
+            .get(trace_index)
+            .ok_or_else(|| reject(format!("input {input} trace is outside table")))?;
+        let mut machine = Rv32ReplayMachine::new_with_a0(image, symbols, u32::from(input))
+            .map_err(|error| reject(format!("input {input}: {error}")))?;
+        for (step, instruction) in trace.iter().zip(&decoded_traces[trace_index]) {
+            machine
+                .step_predecoded(
+                    step.program_counter,
+                    step.instruction_word,
+                    step.instruction_bytes,
+                    instruction,
+                    image_end,
+                )
+                .map_err(|error| reject(format!("input {input}: {error}")))?;
+            if machine.program_counter() != step.next_program_counter {
+                return Err(reject(format!("input {input} diverges from trace")));
+            }
+            scalar_path_steps = scalar_path_steps
+                .checked_add(1)
+                .ok_or_else(|| reject("trace-family scalar work overflow"))?;
+        }
+        if !machine.is_complete() {
+            return Err(reject(format!("input {input} trace terminates early")));
+        }
+        let execution = machine
+            .finish()
+            .map_err(|error| reject(format!("input {input}: {error}")))?;
+        let claimed_terminal = family.terminal_indices[usize::from(input)];
+        if family
+            .terminals
+            .get(usize::from(claimed_terminal))
+            .is_none_or(|terminal| terminal.execution != execution)
+        {
+            return Err(reject(format!("input {input} terminal mismatch")));
+        }
+        let canonical_terminal = terminal_index(&mut canonical_terminals, execution)?;
+        if claimed_terminal != canonical_terminal {
+            return Err(reject(format!("input {input} terminal is not canonical")));
+        }
+        let canonical_trace = if let Some(index) = canonical_interned.get(trace) {
+            *index
+        } else {
+            let index = u16::try_from(canonical_traces.len())
+                .map_err(|_| reject("canonical trace count exceeds u16"))?;
+            canonical_traces.push(trace.clone());
+            canonical_interned.insert(trace.clone(), index);
+            index
+        };
+        if family.input_trace_indices[usize::from(input)] != canonical_trace {
+            return Err(reject(format!(
+                "input {input} trace index is not canonical"
+            )));
+        }
+    }
+    if canonical_traces != family.traces
+        || canonical_terminals != family.terminals
+        || scalar_path_steps != family.scalar_path_steps
+    {
+        return Err(reject("trace-family canonical reconstruction differs"));
+    }
+    Ok(TraceFamilyVerification {
+        decoded_transitions,
+        scalar_path_steps,
+        inputs_checked: BRANCHING_DAG_INPUTS as u16,
+    })
+}
+
+pub fn projected_compiled_mmio_trace_family_size(
+    family: &CompiledMmioTraceFamily,
+) -> Result<usize, BranchingDagError> {
+    let trace_steps = family
+        .traces
+        .iter()
+        .try_fold(0usize, |total, trace| total.checked_add(trace.len()))
+        .ok_or_else(|| reject("trace step count overflow"))?;
+    let terminal_bytes = family
+        .terminals
+        .iter()
+        .try_fold(0usize, |total, terminal| {
+            terminal
+                .execution
+                .events
+                .len()
+                .checked_mul(16)
+                .and_then(|events| events.checked_add(16))
+                .and_then(|member| total.checked_add(member))
+        })
+        .ok_or_else(|| reject("terminal byte count overflow"))?;
+    8usize
+        .checked_add(4 + 32 + 12 + 8 + 8)
+        .and_then(|bytes| bytes.checked_add(BRANCHING_DAG_INPUTS * 4))
+        .and_then(|bytes| bytes.checked_add(family.traces.len() * 4))
+        .and_then(|bytes| bytes.checked_add(trace_steps * 13))
+        .and_then(|bytes| bytes.checked_add(terminal_bytes))
+        .and_then(|bytes| bytes.checked_add(CHECKSUM_BYTES))
+        .ok_or_else(|| reject("trace-family encoded size overflow"))
 }
 
 pub fn verify_compiled_mmio_branching_dag(
@@ -607,6 +832,11 @@ mod tests {
             verify_compiled_mmio_branching_dag_bytes(&bytes, &image, symbols).unwrap(),
             verified
         );
+        let family = build_compiled_mmio_trace_family(&dag).unwrap();
+        let family_verified = verify_compiled_mmio_trace_family(&family, &image, symbols).unwrap();
+        assert_eq!(family.traces.len(), 1);
+        assert_eq!(family_verified.decoded_transitions, 2);
+        assert!(projected_compiled_mmio_trace_family_size(&family).unwrap() > 0);
     }
 
     #[test]
