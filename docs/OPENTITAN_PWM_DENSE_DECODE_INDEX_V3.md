@@ -101,3 +101,33 @@ It would not broaden firmware support, establish universal performance,
 validate arbitrary control-flow graphs, change the production support profile
 or qualify the mechanism for release. An unrelated public-firmware cohort and
 hosted reproduction would remain necessary.
+
+## Local result
+
+Version 3 passes all predeclared local gates.
+
+The producer emits the exact version 2 bytes and SHA-256 identity at every
+class count. Dense and balanced-tree verification return identical terminal
+semantics, scalar replay work, unique decode counts and edge counts for all six
+artifacts. The rebuilt dense hostile qualifier refuses all 193,228 retained
+cases.
+
+Five warm whole-process trials produce:
+
+| Classes | Dense median | Tree median | Trace median | Dense median RSS | Tree median RSS | Trace median RSS |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.01 s | 0.01 s | 0.01 s | 4,145,152 | 4,194,304 | 4,210,688 |
+| 2 | 0.01 s | 0.01 s | 0.01 s | 4,145,152 | 4,227,072 | 4,259,840 |
+| 4 | 0.01 s | 0.01 s | 0.01 s | 4,161,536 | 4,292,608 | 6,471,680 |
+| 8 | 0.01 s | 0.01 s | 0.02 s | 4,177,920 | 4,341,760 | 6,619,136 |
+| 16 | 0.01 s | 0.02 s | 0.01 s | 6,356,992 | 6,586,368 | 6,946,816 |
+| 32 | 0.01 s | 0.02 s | 0.01 s | 6,471,680 | 6,815,744 | 7,602,176 |
+
+At the two class counts that falsified version 2's time gate, dense
+verification falls from 0.02 seconds to 0.01 and matches the trace-family
+median. Dense verification is never slower than the tree baseline and its
+median RSS remains below the trace-family median at every class count.
+
+These process durations remain close to local timer resolution. The result is
+an admission to unrelated public-firmware and hosted-reproduction follow-up,
+not a universal speed claim or production-profile change.
