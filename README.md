@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/kabudu/guarded-continuation-checker/actions/workflows/ci.yml?query=branch%3Amaster"><img src="https://img.shields.io/github/actions/workflow/status/kabudu/guarded-continuation-checker/ci.yml?branch=master&amp;label=CI&amp;style=flat-square" alt="CI workflow status"></a>
-  <a href="https://crates.io/crates/guarded-continuation-checker"><img src="https://img.shields.io/crates/v/guarded-continuation-checker?style=flat-square&amp;cache=v0.31.0" alt="Latest crates.io version"></a>
+  <a href="https://crates.io/crates/guarded-continuation-checker"><img src="https://img.shields.io/crates/v/guarded-continuation-checker?style=flat-square&amp;cache=v0.32.0" alt="Latest crates.io version"></a>
   <a href="https://docs.rs/guarded-continuation-checker"><img src="https://img.shields.io/docsrs/guarded-continuation-checker?label=docs.rs&amp;style=flat-square" alt="docs.rs documentation"></a>
   <a href="https://github.com/kabudu/guarded-continuation-checker/blob/master/Cargo.toml"><img src="https://img.shields.io/badge/rust-1.97%2B-CE412B?style=flat-square&amp;logo=rust" alt="Rust 1.97 or newer"></a>
   <a href="https://github.com/kabudu/guarded-continuation-checker/blob/master/LICENSE"><img src="https://img.shields.io/github/license/kabudu/guarded-continuation-checker?style=flat-square" alt="Apache-2.0 licence"></a>
@@ -172,12 +172,14 @@ CI runs do not substitute for external evaluation.
 The repository retains experimental mechanisms, closest baselines, negative
 results and retractions. Recent compiled-firmware work includes:
 
-- a [single-successor continuation DAG](docs/OPENTITAN_PWM_BRANCHING_CONTINUATION_DAG_V1.md)
-  that was rejected after its apparent compression proved to be whole-trace
-  grouping; and
-- a [multi-successor decode graph](docs/OPENTITAN_PWM_MULTISUCCESSOR_DECODE_GRAPH_V2.md)
-  that strongly reduced representation and unique decoding on a controlled
-  OpenTitan cohort but failed its frozen local resource gate.
+- a [source-bound MMIO-to-RTL certificate](docs/OPENTITAN_PWM_MMIO_RTL_MAPPING_V1.md)
+  that composes exact compiled-firmware behavior with independently rebuilt
+  RTL members;
+- a [dense decode graph](docs/ZEPHYR_SIFIVE_GPIO_DENSE_QUALIFICATION_V1.md)
+  reproduced on pinned public Zephyr firmware across arm64 and Linux x86-64;
+  and
+- an [OpenSBI successor-index replay](docs/MMIO_SUCCESSOR_INDEX_REPLAY_V1.md)
+  retained as a negative result after it missed the frozen improvement gate.
 
 These results narrow the next experiments. They do not alter the supported
 product profile or create a production claim.

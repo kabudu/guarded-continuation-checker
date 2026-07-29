@@ -1,8 +1,8 @@
 # Compatibility and migration policy
 
 Status: release-candidate policy. The support clock begins only with the first
-production release. Guarded Continuation Checker v0.28.0 and the current
-unreleased work remain an evaluation-ready research prototype.
+production-qualified release. Guarded Continuation Checker releases through
+v0.32.0 remain evaluation-ready research prototypes.
 
 ## Compatibility boundary
 
@@ -50,6 +50,15 @@ add the new cases when moving from 0.30.0. Existing `BinaryOp` variants keep
 their 0.30.0 implicit discriminants; `Sll` and `Srl` are appended after them.
 This is an intentional pre-1.0 minor API transition, not a patch-compatible
 change. Artifact and CLI contract versions are unaffected.
+
+The 0.32.0 research candidate adds public compiled-MMIO decode-graph,
+transcript, branching-DAG, RTL-mapping and composed-certificate modules.
+Existing module paths, command contracts and artifact decoders are unchanged.
+The successor-index verifier consumes the existing version-2 decode-graph
+bytes and does not introduce a new wire format. Exact RV32M division and
+remainder execution expands which compiled inputs can be admitted, but does
+not reinterpret any previously admitted execution. Optional QatQ transport
+advances to 0.3.0 and remains excluded from `production-firmware`.
 
 Property-free BTOR2 component ingestion is additive. The new component parser
 requires caller-selected semantic roots and does not change the retained

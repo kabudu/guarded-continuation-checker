@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## 0.32.0 - 2026-07-30
+
+- Add an artifact-compatible successor-index replay route for compiled-MMIO
+  decode graphs. On the pinned OpenSBI UART cohort it preserves all 102,208
+  scalar steps, 596 nodes, 653 edges, byte identity and 112,072 hostile
+  refusals. Its 0.897 dense-time ratio misses the frozen 0.80 improvement gate,
+  so the existing dense route remains selected and the result is retained as a
+  negative qualification.
+
+- Add exact RV32M `DIV`, `DIVU`, `REM` and `REMU` semantics, including
+  divide-by-zero and signed-overflow behavior, then retry the unchanged pinned
+  OpenSBI v1.8.1 UART 8250 source. All 256 inputs now produce deterministic
+  graph, trace-family and explicit evidence with identical terminal behavior.
+  The graph compresses bytes and decode work but misses its frozen local
+  consumer-time gate, so no hosted or production-route claim follows.
+
+- Replace balanced-tree lookup and reconstruction in compiled-MMIO graph
+  verification with a source-bounded dense halfword index and flat edge
+  coverage. The existing graph bytes, scalar semantics, coverage and refusal
+  policy remain unchanged. The controlled OpenTitan cohort passes its local
+  gates, including refusal of all 193,228 retained hostile cases.
+
+- Qualify the dense graph on the independently maintained Zephyr v4.2.0 SiFive
+  GPIO driver across all 256 bounded inputs. Local arm64 and hosted Linux
+  x86-64 runs reproduce byte-identical source-bound evidence, 16 terminal
+  behaviors, 94 nodes, 99 covered edges and 22,908 hostile refusals. Hosted
+  timings establish non-regression rather than a universal speedup.
+
+- Add a canonical source-bound compiled-MMIO-to-RTL certificate for the pinned
+  OpenTitan PWM cohort. Byte-starting verification reconstructs six members,
+  198 transitions and 204 observations from the nested firmware evidence and
+  RTL source, while source, codec and checksum-valid semantic forgeries fail
+  closed.
+
+- Add an identical-scope maintained comparison that reconstructs the complete
+  256-input firmware partition with pinned angr and all six RTL members with
+  pinned Yosys and Z3. Two clean cycles agree byte-for-byte with GCC and reject
+  all eleven hostile drift controls. A separate trust-boundary measurement
+  retains GCC's lower warm verification time and peak RSS together with its
+  larger payload and substantial producer and setup costs.
+
+- Update the optional research-only QatQ transport dependency from 0.1.5 to
+  0.3.0 after the complete protected compatibility, audit and evidence matrix
+  passes. QatQ remains outside the frozen production firmware feature.
+
 - Predeclare a two-cycle GitHub-hosted Ubuntu 24.04 x86-64 reproduction for the
   OpenTitan PWM MMIO-to-RTL trust-boundary comparison. Each cycle retains five
   fresh-process trials per route, all fourteen hostile refusals, the unchanged

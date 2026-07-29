@@ -143,6 +143,8 @@ history across at least two GCC releases and independent review.
 
 GCC subsequently upgraded its optional dependency to QatQ 0.1.5. The original
 v1 measurements above remain a historical 0.1.4 qualification record. The
-local 0.1.5 compatibility run preserves the frozen envelope digest, exact round trips,
-hostile-input rejection, resource bounds, atomic publication, and exclusion
-from the production feature graph.
+local 0.1.5 compatibility run preserves the frozen envelope digest, exact round
+trips, hostile-input rejection, resource bounds, atomic publication, and
+exclusion from the production feature graph.
+GCC 0.32.0 advances the optional dependency to QatQ 0.3.0 under the same
+exact-byte API, deterministic fixture and protected compatibility gates.
