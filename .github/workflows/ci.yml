@@ -952,6 +952,67 @@ jobs:
       - name: Rebuild and verify the frozen production candidate twice
         run: scripts/test-linux-production-candidate.sh /tmp/gcc-linux-production-repro
 
+  zephyr-sifive-gpio-dense:
+    name: Zephyr SiFive GPIO dense qualification
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@35a842e360814583e976785eeda0bd0655cb8e83 # 1.97.0
+      - name: Check qualification scripts
+        run: |
+          shellcheck -s bash \
+            scripts/run-zephyr-sifive-gpio-dense-qualification-v1.sh \
+            scripts/benchmark-zephyr-sifive-gpio-dense-qualification-v1.sh
+      - name: Rebuild twice and compare exact artifacts
+        run: |
+          scripts/run-zephyr-sifive-gpio-dense-qualification-v1.sh \
+            /tmp/zephyr-gpio-a
+          scripts/run-zephyr-sifive-gpio-dense-qualification-v1.sh \
+            /tmp/zephyr-gpio-b
+          cmp /tmp/zephyr-gpio-a/firmware.bin \
+            /tmp/zephyr-gpio-b/firmware.bin
+          cmp /tmp/zephyr-gpio-a/firmware.symbols.txt \
+            /tmp/zephyr-gpio-b/firmware.symbols.txt
+          cmp /tmp/zephyr-gpio-a/decode-graph-v2.bin \
+            /tmp/zephyr-gpio-b/decode-graph-v2.bin
+      - name: Reject hostile graph changes
+        run: |
+          cargo build --quiet --release \
+            --example hostile_multisuccessor_mmio_decode_graph
+          target/release/examples/hostile_multisuccessor_mmio_decode_graph \
+            /tmp/zephyr-gpio-a/decode-graph-v2.bin \
+            /tmp/zephyr-gpio-a/firmware.bin \
+            /tmp/zephyr-gpio-a/firmware.symbols.txt
+      - name: Enforce frozen Linux resource gates
+        shell: bash
+        run: |
+          scripts/benchmark-zephyr-sifive-gpio-dense-qualification-v1.sh \
+            /tmp/zephyr-gpio-a \
+            /tmp/zephyr-gpio-resources.csv
+          median() {
+            local route=$1
+            local column=$2
+            awk -F, -v route="$route" -v column="$column" \
+              '$2 == route { print $column }' \
+              /tmp/zephyr-gpio-resources.csv |
+              sort -n |
+              sed -n '3p'
+          }
+          dense_time=$(median graph 4)
+          tree_time=$(median graph-btree 4)
+          trace_time=$(median trace-family 4)
+          dense_rss=$(median graph 5)
+          trace_rss=$(median trace-family 5)
+          awk -v dense="$dense_time" -v tree="$tree_time" \
+            'BEGIN { exit !(dense <= tree) }'
+          awk -v dense="$dense_time" -v trace="$trace_time" \
+            'BEGIN { exit !(dense <= 1.25 * trace) }'
+          awk -v dense="$dense_rss" -v trace="$trace_rss" \
+            'BEGIN { exit !(dense <= 1.25 * trace) }'
+          cat /tmp/zephyr-gpio-resources.csv
+
   ci-gate:
     name: CI gate
     if: always()
@@ -967,6 +1028,7 @@ jobs:
       - public-api-semver
       - bitwuzla-phase-baseline
       - reproducible-linux-bundle
+      - zephyr-sifive-gpio-dense
     runs-on: ubuntu-latest
     steps:
       - name: Require every applicable check
@@ -984,6 +1046,7 @@ jobs:
           SEMVER: ${{ needs.public-api-semver.result }}
           BITWUZLA: ${{ needs.bitwuzla-phase-baseline.result }}
           BUNDLE: ${{ needs.reproducible-linux-bundle.result }}
+          ZEPHYR_GPIO: ${{ needs.zephyr-sifive-gpio-dense.result }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           require_result() {
@@ -1011,6 +1074,7 @@ jobs:
           require_result public-api-semver "$SEMVER" "$expected"
           require_result bitwuzla-phase-baseline "$BITWUZLA" "$expected"
           require_result reproducible-linux-bundle "$BUNDLE" "$expected"
+          require_result zephyr-sifive-gpio-dense "$ZEPHYR_GPIO" "$expected"
 
           certified_expected=skipped
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$FULL" == "true" ]]; then
