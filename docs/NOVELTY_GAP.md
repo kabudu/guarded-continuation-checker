@@ -1065,3 +1065,11 @@ The GCC payload is about 3.50 times larger, and its clean tool build has a much
 higher observed memory peak. Proof-carrying verification is established prior
 art, so hosted reproduction, focused closest-system analysis and independent
 expert assessment remain mandatory before any novelty claim.
+
+The predeclared hosted reproduction strengthens that bounded deployment result
+without changing its novelty status. Two Ubuntu 24.04 x86-64 cycles reproduce
+the same certificate and semantics, all hostile refusals and byte-identical
+within-platform evidence. Their least favorable observed warm-consumer ratios
+are 82.50 times in wall time and 7.50 times in peak RSS. This removes one
+platform-reproduction concern, but proof-carrying verification remains
+established prior art and independent closest-system review is still required.
