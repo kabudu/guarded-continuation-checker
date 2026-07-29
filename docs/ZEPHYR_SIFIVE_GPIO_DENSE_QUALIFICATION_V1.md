@@ -68,3 +68,37 @@ pinned public driver under a GCC-authored bounded caller. It would not
 establish arbitrary Zephyr support, universal speed, production qualification
 or release readiness.
 
+## Local result
+
+The qualification passes every predeclared local gate.
+
+Two clean builds produced identical firmware, symbol and graph bytes. The
+pinned source and licence matched their frozen SHA-256 identities. The
+resulting 256-input image has 16 canonical terminal behaviours:
+
+- dense graph: 11,450 bytes, 94 nodes, 99 edges and 94 unique instruction
+  decodes;
+- trace family: 27,620 bytes, 16 traces and 1,324 decoded transitions; and
+- explicit transcript: 458,148 bytes and 21,184 decoded transitions.
+
+All routes independently replay the same 21,184 scalar path steps. Dense and
+tree-backed graph verification agree on all 94 nodes, 99 edges, scalar work
+and canonical terminals. The dense verifier covers every declared edge.
+
+The retained hostile qualifier refused 22,908 cases: every single-bit
+artifact mutation, every truncation, an extension, image drift, symbol drift,
+missing/additional/duplicate edges, a missing node and terminal drift.
+
+The first and only frozen five-trial resource cycle produced these medians on
+Darwin arm64:
+
+| Route | Median elapsed | Median peak RSS |
+| --- | ---: | ---: |
+| Dense graph | 0.01 s | 4,079,616 bytes |
+| Tree graph | 0.01 s | 4,112,384 bytes |
+| Trace family | 0.01 s | 4,259,840 bytes |
+
+The elapsed results are at local timer resolution, so they establish
+non-regression rather than a speedup. Dense median memory is below both
+baselines. The public-source transfer result is admitted to hosted Linux
+reproduction, but the production support profile remains unchanged.
