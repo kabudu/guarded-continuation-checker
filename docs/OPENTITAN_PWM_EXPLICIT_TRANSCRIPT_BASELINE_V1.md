@@ -167,10 +167,63 @@ transition result therefore concerns shared instruction decoding, not constant
 total semantic work. The explicit artifact also retains substantially more
 consumer memory because it parses 2.44 MB of step observations.
 
-This is a promising result, not yet an admitted completed gate. The new codec
+At this initial stage, the result was promising but not yet an admitted
+completed gate. The new codec
 unit suite refuses mutation, truncation and source substitution, and the
 repository's complete all-target test and strict Clippy matrices pass. The
 predeclared exhaustive hostile check over every byte and truncation of the
 2,440,530-byte authentic transcript has not yet completed. Producer wall time,
 a retained reproducible result bundle and hosted Linux reproduction also
-remain open. No novelty conclusion is admitted until those controls close.
+remained open. No conclusion was admitted before those controls closed below.
+
+## Exhaustive hostile result
+
+The authentic 2,440,530-byte transcript passes the literal finite hostile
+matrix with eight local workers:
+
+- 2,440,530 single-bit byte mutations refused;
+- 2,440,530 truncations refused;
+- one-byte extension refused;
+- firmware-image drift refused; and
+- symbol-layout drift refused.
+
+All 4,881,063 cases refuse. Mutations take 341,805 milliseconds and
+truncations take 169,508 milliseconds. This cost is retained because the
+explicit artifact's size materially increases exhaustive qualification work.
+
+## Hosted Ubuntu result
+
+[Hosted run 30448898533](https://github.com/kabudu/guarded-continuation-checker/actions/runs/30448898533)
+passes on Linux x86-64 at master revision
+`867f91be648deb1b528e4de2d35db691864047b2`.
+
+Two clean production cycles are byte-identical and reproduce the Darwin
+semantic and artifact identities exactly. Five warm-consumer trials per route
+produce:
+
+| Measure | GCC predicate | Explicit transcript | GCC advantage |
+| --- | ---: | ---: | ---: |
+| Artifact bytes | 7,339 | 2,440,530 | 332.54 times smaller |
+| Verifier decoded transitions | 4,408 | 115,960 | 26.31 times fewer |
+| Median warm-consumer wall time | 0.02 s | 0.04 s | 2.00 times lower |
+| Maximum / minimum measured RSS | 8,340 KiB maximum | 20,192 KiB minimum | 2.42 times lower |
+
+The hosted run retains both canonical artifacts, the rebuilt firmware inputs,
+all ten consumer reports and resource measurements as a GitHub Actions
+artifact.
+
+## Admitted bounded conclusion
+
+All eight predeclared gates pass for the frozen O2 cohort. GCC's predicate
+certificate is therefore a substantially smaller, lower-decoding
+independently checkable representation than a faithful explicit execution
+transcript at the same complete eight-bit compiled-firmware boundary. The
+advantage reproduces on Darwin arm64 and hosted Linux x86-64 without a
+warm-consumer time or memory regression.
+
+This is a measured closest-system result, not a broad novelty claim.
+Proof-carrying software and hardware, firmware-guided RTL reduction and
+cross-layer validation remain prior art. The surviving distinction is the
+specific finite-domain predicate representation and its measured deployment
+properties for this cohort. Broader firmware shapes, nonuniform control flow
+and independent external evaluation remain open.
