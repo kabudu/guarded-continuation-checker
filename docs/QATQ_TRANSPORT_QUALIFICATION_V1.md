@@ -148,3 +148,8 @@ trips, hostile-input rejection, resource bounds, atomic publication, and
 exclusion from the production feature graph.
 GCC 0.32.0 advances the optional dependency to QatQ 0.3.0 under the same
 exact-byte API, deterministic fixture and protected compatibility gates.
+
+GCC 0.32.1 advances the optional dependency to QatQ 0.4.2 under the same
+exact-byte API, deterministic fixture and protected compatibility gates.
+The original v1 measurements remain historical results, not new performance
+measurements for this dependency refresh.
