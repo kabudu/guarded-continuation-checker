@@ -2,7 +2,7 @@
 
 Status: release-candidate policy. The support clock begins only with the first
 production-qualified release. Guarded Continuation Checker releases through
-v0.32.0 remain evaluation-ready research prototypes.
+v0.32.1 remain evaluation-ready research prototypes.
 
 ## Compatibility boundary
 
@@ -217,3 +217,7 @@ version regression, treats an unchanged version as patch-level, and forces
 minor-level checking for pre-1.0 minor transitions. Every other default
 major-change lint therefore remains active instead of treating a pre-1.0 minor
 release as unconstrained.
+
+The 0.32.1 patch refreshes libc and SHA-2 dependencies and advances the optional
+research transport to QatQ 0.4.2. Public APIs, CLI contracts and evidence
+formats are unchanged; QatQ remains excluded from `production-firmware`.

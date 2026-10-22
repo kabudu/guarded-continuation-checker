@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.32.1 - 2026-10-22
+
+- Refresh libc from 0.2.189 to 0.2.191 and SHA-2 from 0.11.0 to 0.11.1.
+- Update optional research-only QatQ transport from 0.3.0 to 0.4.2 while
+  preserving its exclusion from the production firmware feature.
+- Update pinned artifact upload and attestation actions to 7.0.2 and 4.2.2.
+  Public APIs, CLI contracts and evidence formats are unchanged.
+
 ## 0.32.0 - 2026-07-30
 
 - Add an artifact-compatible successor-index replay route for compiled-MMIO
